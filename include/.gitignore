@@ -1,0 +1,8 @@
+/eza/arch
+/include/arch
+bochs/floppy.img
+vmjari
+tags
+*~
+*.o
+*.a

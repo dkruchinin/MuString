@@ -1,0 +1,9 @@
+# MuiString 
+# config: file with MuiString configuration
+
+ARCH = amd64
+
+DEBUG = y
+
+CONFIG_SMP = y
+# CONFIG_RPC = n
