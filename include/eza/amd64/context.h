@@ -166,12 +166,11 @@ typedef struct __arch_context_t {
  */
 typedef struct __regs {
   /* Kernel-saved registers. */
-  uint64_t rbp, rsi, rdi, rdx, rcx, rbx, flags;
+  uint64_t rbp, rsi, rdi, rdx, rcx, rbx;
   uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
-  uint64_t rax;
 
   /* CPU-saved registers. */
-  uint64_t err_code, rip, cs, rflags, old_rsp, old_ss;
+  uint64_t rip, cs, rflags, old_rsp, old_ss;
 } regs_t;
 
 #endif /* __ASM__ */

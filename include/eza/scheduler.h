@@ -88,7 +88,7 @@ void scheduler_tick(void);
 void schedule(void);
 void idle_loop(void);
 
-extern kernel_task_data_t * idle_tasks[];
+extern task_t *idle_tasks[];
 
 #endif
 

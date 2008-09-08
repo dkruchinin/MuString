@@ -1,3 +1,24 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ *
+ * mm/pageaccs.c: Common page accessors live here.
+ */
 
 #include <mm/pt.h>
 #include <eza/pageaccs.h>
@@ -66,7 +87,7 @@ static page_idx_t list_pa_next_frame(void *ctx)
   if( lctx->pages_left != 0 ) {
     page_frame_t *f = container_of(lctx->curr,page_frame_t,active_list);
 
-    lctx->curr = lctx->curr->active_list.next;
+    lctx->curr = lctx->curr->next;
     lctx->pages_left--;
     return f->idx;
   } else {
@@ -78,7 +99,7 @@ static void list_pa_reset(void *ctx)
 {
   pageaccs_list_pa_ctx_t *lctx = (pageaccs_list_pa_ctx_t*)ctx;
 
-  lctx->curr = lctx->head;
+  lctx->curr = &(lctx->head->active_list);
   lctx->pages_left = lctx->num_pages;
 }
 

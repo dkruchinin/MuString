@@ -171,7 +171,7 @@ void install_fault_handlers(void)
   /* Install all known fault handlers. */
   for( idx = 0; faults_to_install[idx].handler != NULL; idx++ ) {
     r = install_trap_gate(faults_to_install[idx].slot,
-                          faults_to_install[idx].handler,PROT_RING_0,0);
+                          (uintptr_t)faults_to_install[idx].handler,PROT_RING_0,0);
     if(r != 0) {
       panic( "Can't install fault handler #%d", faults_to_install[idx].slot );
     }

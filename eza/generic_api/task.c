@@ -1,3 +1,24 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ *
+ * eza/generic_api/task.c: generic functions for dealing with task creation.
+ */
 
 #include <eza/task.h>
 #include <mm/pt.h>
@@ -12,26 +33,7 @@
 #include <eza/kernel.h>
 #include <eza/pageaccs.h>
 #include <eza/list.h>
-
-int initialize_stack_system_area(kernel_task_data_t *t)
-{
-  uintptr_t task_vaddr = t->task.kernel_stack.low_address & KERNEL_STACK_MASK;
-  page_idx_t tidx = virt_to_pframe_id(t);
-
-  kprintf( "== Stack base: 0x%X, Page ID: 0x%X\n", task_vaddr, tidx );
-//  mm_map_pages( &(t->task.page_dir));
-//  kprintf( "== Vaddr of page 0x%X is 0x%X\n", pidx, vaddr );
-//  page_idx_t pidx = mm_pin_virtual_address( &task->page_dir,
-//                                            task->kernel_stack.low_address & KERNEL_STACK_MASK );
-//  if( pidx != INVALID_PAGE_IDX ) {
-//    void *vaddr = pframe_id_to_virt(pidx);
-
-//    kprintf( "== Vaddr of page 0x%X is 0x%X\n", pidx, vaddr );
-
-    return 0;
-//  }
-//  return -EFAULT;
-}
+#include <eza/arch/task.h>
 
 int setup_task_kernel_stack(task_t *task)
 {
@@ -74,17 +76,23 @@ static page_frame_t *alloc_stack_pages(void)
   return first;
 }
 
-static status_t initialize_pagedir( task_t *orig, task_t *target,
-                                     task_creation_flags_t flags )
+static status_t initialize_mm( task_t *orig, task_t *target,
+                               task_creation_flags_t flags )
 {
   status_t r;
 
-  /* TODO: Add normal MM sharing on task cloning. */
+  initialize_page_directory(&target->page_dir);
+
+  if(orig == NULL) {
+    target->page_dir.entries = kernel_pt_directory.entries; 
+    return 0;
+  }
+
+  /* TODO: [mt] Add normal MM sharing on task cloning. */
   if(flags & CLONE_MM) {
     /* Initialize new page directory. */
-      initialize_page_directory(&target->page_dir);
-      target->page_dir.entries = orig->page_dir.entries;
-      r = 0;
+    target->page_dir.entries = orig->page_dir.entries;
+    r = 0;
   } else {
     r = -EINVAL;
   }
@@ -94,26 +102,7 @@ static status_t initialize_pagedir( task_t *orig, task_t *target,
 
 static pid_t pid = 1;
 
-status_t do_fork(void *arch_ctx, task_creation_flags_t flags)
-{
-  task_t *new_task;
-  status_t r;
-  task_t *parent = current_task();
-
-  r = create_new_task(parent,&new_task,flags);
-  if(r == 0) {
-    r = arch_copy_process(parent,new_task,arch_ctx,flags);
-    if(r == 0) {
-      /* New task is ready. */
-    } else {
-  
-    }
-  }
-
-  return r;
-}
-
-status_t create_new_task( task_t *parent, task_t **t, task_creation_flags_t flags )
+status_t create_new_task( task_t *parent, task_t **t, task_creation_flags_t flags,task_privelege_t priv)
 {
   task_t *task;
   page_frame_t *ts_page;
@@ -121,6 +110,7 @@ status_t create_new_task( task_t *parent, task_t **t, task_creation_flags_t flag
   page_frame_t *stack_pages;
   kernel_task_data_t * td;
   pageaccs_list_pa_ctx_t pa_ctx;
+  pageaccs_linear_pa_ctx_t l_ctx;
 
   /* TODO: Add memory limit check. */
   ts_page = alloc_page(GENERIC_KERNEL_PAGE,1);
@@ -137,12 +127,18 @@ status_t create_new_task( task_t *parent, task_t **t, task_creation_flags_t flag
     goto free_task;
   }
 
-  r = initialize_pagedir(parent,task,flags);
+  /* Initialize task's MM. */
+  r = initialize_mm(parent,task,flags);
+  if( r != 0 ) {
+    goto free_stack;
+  }
 
   /* Prepare kernel stack. */
+  /* TODO: [mt] Implement normal stack allocation. */
   stack_pages = alloc_stack_pages();
   if(stack_pages == NULL) {
-    goto free_stack;
+    r = -ENOMEM;
+    goto free_mm;
   }
 
   /* Map kernel stack. */
@@ -157,25 +153,38 @@ status_t create_new_task( task_t *parent, task_t **t, task_creation_flags_t flag
     goto free_stack_pages;
   }
 
+  /* Map task struct into the stack area. */
+  l_ctx.start_page = l_ctx.end_page = ts_page->idx;
+  pageaccs_linear_pa.reset(&l_ctx);
+
+  r = mm_map_pages( &task->page_dir, &pageaccs_linear_pa,
+                    task->kernel_stack.low_address & KERNEL_STACK_MASK, 1,
+                    KERNEL_STACK_PAGE_FLAGS, &l_ctx );
+  if( r != 0 ) {
+    goto unmap_stack_pages;
+  }
+
   /* Initialize task system data. */
   initialize_task_system_data(td,cpu_id());
 
-  /* Now perform arch-specific task creation manipulations. */
-
-  kprintf( ">>>> Stack: high address: 0x%X, Low address: 0x%X <<<<\n",
-           task->kernel_stack.high_address, task->kernel_stack.low_address );
-
+  /* TODO: [mt] Handle process PIDs properly. */
   task->pid = pid++;
   task->ppid = parent->pid;
 
   *t = task;
   return 0;
+unmap_task_struct:
+  /* TODO: Unmap task struct here. [mt] */
+unmap_stack_pages:
+  /* TODO: Unmap stack pages here. [mt] */
 free_stack_pages:
-  /* TODO: Free all stack pages here. */  
+  /* TODO: Free all stack pages here. [mt] */  
+free_mm:
+  /* TODO: Free mm here. [mt] */
 free_stack:
   free_kernel_stack(task->kernel_stack.id);  
 free_task:
-  /* TODO: Free task struct page here. */
+  /* TODO: Free task struct page here. [mt] */
 task_alloc_fault:
   *t = NULL;
   return r;

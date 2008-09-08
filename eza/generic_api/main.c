@@ -102,7 +102,7 @@ void main_routine(void) /* this function called from boostrap assembler code */
   initialize_timer();
 
   /* Now we can switch stack to our new kernel stack. */
-  load_stack_pointer(idle_tasks[0]->task.kernel_stack.high_address-PAGE_SIZE);
+  load_stack_pointer(idle_tasks[0]->kernel_stack.high_address-512);
 
   /* Now we can continue initialization with properly initialized kernel
    * stack frame.

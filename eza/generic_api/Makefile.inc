@@ -12,4 +12,5 @@ LIBEZA_OBJS=eza/generic_api/main.o \
 	eza/generic_api/kstack.o \
 	eza/generic_api/task.o \
 	eza/generic_api/idletask.o \
-	eza/generic_api/panic.o
+	eza/generic_api/panic.o \
+	eza/generic_api/process.o

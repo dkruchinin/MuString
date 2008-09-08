@@ -31,7 +31,6 @@
 #include <mlibc/kprintf.h>
 #include <mlibc/string.h>
 #include <eza/smp.h>
-#include <eza/time.h>
 
 /* Here it is ! */
 swks_t swks;
@@ -48,6 +47,8 @@ void initialize_swks(void)
   swks.system_ticks_64 = INITIAL_TICKS_VALUE;
   swks.nr_cpus = NR_CPUS;
   swks.timer_frequency = HZ;
-  swks.delay_loop=delay_loop;
+  kprintf("[LW] Calibrating delay loop ...");
+  swks.delay_loop=arch_calibrate_delay_loop();
+  kprintf("%ld.\n",swks.delay_loop);
 }
 

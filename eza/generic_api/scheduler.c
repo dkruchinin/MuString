@@ -36,7 +36,7 @@
 #include <eza/swks.h>
 #include <eza/kstack.h>
 
-static DEFINE_PER_CPU(cpu_metadata,cpu_sched_meta_data_t);
+//static DEFINE_PER_CPU(cpu_metadata,cpu_sched_meta_data_t);
 EXTERN_PER_CPU(idle_tasks,task_t);
 
 extern void initialize_idle_tasks(void);
@@ -61,9 +61,9 @@ void scheduler_tick(void)
 
 void schedule(void)
 {
-  task_t *current = current_task();
-  task_t *next = NULL;
+//  task_t *current = current_task();
+// task_t *next = NULL;
 
-  arch_activate_task(next);
+//  arch_activate_task(next);
 }
 
