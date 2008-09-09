@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copytight 2008 Dan Kruchinin <dan.kruchinin@gmai.com>
  *
  * include/eza/smp.h: main kernel SMP-related macros,types and prototypes
  *
@@ -24,57 +25,47 @@
 #ifndef __SMP_H__
 #define __SMP_H__
 
+#include <config.h>
+#include <eza/arch/cpu.h>
 #include <eza/arch/types.h>
 
 extern cpu_id_t online_cpus;
 
 #ifdef CONFIG_SMP
+#define cpu_id() 0 /* TODO: Handle it in a more beatiful way. */
+#define __CPUS MAX_CPUS
+#else
+#define cpu_id() 0
+#define __CPUS 1
+#endif /* CONFIG_SMP */
 
-  #ifndef NR_CPUS
-    #define NR_CPUS 2
-  #endif
+#define PER_CPU_VAR(name)                       \
+  __percpu_var_##name[MAX_CPUS] __percpu__
 
-  /* TODO: Handle it in a more beatiful way. */
-  #define cpu_id() 0 /* arch_cpu_id() */
+#define percpu_get_var(name)                    \
+  ({ __percpu_var_##name[cpu_id()]; })
 
-  #define define_per_cpu_var(var,type,cpu) \
-    __attribute__((__section__(".data"))) type var##cpu
+#define percpu_set_var(name, value)             \
+  (__percpu_var_##name[cpu_id()] = (value))
 
-  #define DEFINE_PER_CPU(var,type) \
-    define_per_cpu_var(var##_cpu_,type,0); \
-    define_per_cpu_var(var##_cpu_,type,1)
+#define for_each_percpu_var(ptr, name)          \
+  for ((ptr) = __percpu_var_##name;             \
+       (ptr) < (__percpu_var_##name + __CPUS - 1);  \
+       (ptr)++)
 
-  #define cpu_var(var,type) (type *)((char *)(&var##_cpu_0) + sizeof(type)*cpu_id());
+static inline void set_cpu_online(cpu_id_t cpu, uint32_t online)
+{
+  cpu_id_t mask = 1 << cpu;
 
-  #define for_each_cpu_var(ptr,var,type) \
-    for( ptr = (type *)(&var##_cpu_0); \
-         ptr < (type *)((char *)&var##_cpu_0 + sizeof(*ptr)*NR_CPUS); ptr++ )
-
-  #define EXTERN_PER_CPU(var,type) \
-         extern type var##_cpu_0
-
-#else /* CONFIG_SMP */
-  #undef NR_CPUS
-  #define NR_CPUS 1
-
-  #define DEFINE_PER_CPU(var,type) type var##_cpu_0
-  #define cpu_var(var,type) &var##_cpu_0
-
-#endif
-
-  static inline void set_cpu_online(cpu_id_t cpu, uint32_t online)
-  {
-    cpu_id_t mask = 1 << cpu;
-
-    if( online ) {
-      online_cpus |= mask;
-    } else {
-      online_cpus &= ~mask;
-    }
+  if( online ) {
+    online_cpus |= mask;
+  } else {
+    online_cpus &= ~mask;
   }
+}
 
-  #define for_each_cpu(c) \
-    for(c = 0; c < NR_CPUS; c++ ) \
+#define for_each_cpu(c)           \
+  for(c = 0; c < NR_CPUS; c++ )   \
 
 #endif /* __SMP_H__ */
 

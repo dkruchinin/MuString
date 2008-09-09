@@ -37,7 +37,7 @@ static page_idx_t dma_pages;
 /* Here they are ! */
 page_frame_t *page_frames_array;
 memory_zone_t memory_zones[NUM_MEMORY_ZONES];
-DEFINE_PER_CPU(percpu_page_cache,percpu_page_cache_t);
+percpu_page_cache_t PER_CPU_VAR(percpu_page_cache);
 
 static void detect_physical_memory(void) {
   int idx, found;
@@ -219,7 +219,7 @@ static void initialize_percpu_caches(void)
   memory_zone_t *zone = &memory_zones[ZONE_NORMAL];
   page_idx_t cpupages = zone->num_total_pages / NR_CPUS;
 
-  for_each_cpu_var(cache,percpu_page_cache,percpu_page_cache_t) {
+  for_each_percpu_var(cache,percpu_page_cache) {
     page_idx_t p = 0;
 
     spinlock_initialize(&cache->lock, "<percpu cache spinlock>");

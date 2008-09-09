@@ -30,7 +30,7 @@
 #include <mlibc/string.h>
 #include <eza/arch/page.h>
 
-EXTERN_PER_CPU(percpu_page_cache,percpu_page_cache_t);
+extern percpu_page_cache_t PER_CPU_VAR(percpu_page_cache);
 
 #define LOCK_CACHE(c)
 #define UNLOCK_CACHE(c)
@@ -44,7 +44,7 @@ page_frame_t *alloc_page( page_flags_t flags, int clean_page )
     return NULL;
   } else {
     /* First, try to allocate from a per-CPU page cache */
-    percpu_page_cache_t *cpu_cache = cpu_var(percpu_page_cache,percpu_page_cache_t);
+    percpu_page_cache_t *cpu_cache = &percpu_get_var(percpu_page_cache);
 
     LOCK_CACHE(cpu_cache);
     if(cpu_cache->num_free_pages > 0 ) {

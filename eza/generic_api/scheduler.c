@@ -37,7 +37,7 @@
 #include <eza/kstack.h>
 
 //static DEFINE_PER_CPU(cpu_metadata,cpu_sched_meta_data_t);
-EXTERN_PER_CPU(idle_tasks,task_t);
+extern task_t PER_CPU_VAR(idle_tasks);
 
 extern void initialize_idle_tasks(void);
 

@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2005,2008 Tirra <tirra.newly@gmail.com>
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
  * include/eza/amd64/cpu.h: defines used for cpu and cpuid functionality, also
  *                          used in bootstrap and cpu identification
@@ -53,6 +54,15 @@
 #define INTEL_FXSAVE         24
 
 #ifndef __ASM__
+
+#include <config.h>
+
+/*#ifdef CONFIG_SMP
+#define __percpu__ __attribute__((__section__(".percpu_data")))
+#else*/
+#define __percpu__
+/*#endif*/ /* CONFIG_SMP */
+
 /* varios CPU functions from cpu.c */
 void cpu_setup_fpu(void);
 
