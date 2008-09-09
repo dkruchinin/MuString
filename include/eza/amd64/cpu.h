@@ -57,11 +57,11 @@
 
 #include <config.h>
 
-/*#ifdef CONFIG_SMP
+#ifdef CONFIG_SMP
 #define __percpu__ __attribute__((__section__(".percpu_data")))
-#else*/
+#else
 #define __percpu__
-/*#endif*/ /* CONFIG_SMP */
+#endif /* CONFIG_SMP */
 
 /* varios CPU functions from cpu.c */
 void cpu_setup_fpu(void);
