@@ -53,6 +53,10 @@ context_t crsc;
 
 static void main_routine_stage1(void)
 {
+  kconsole_t *kcons = default_console();
+  kcons->enable();
+  kprintf("[LW] MuiString starts ...\n");
+
   /* Initialize PICs and setup common interrupt handlers. */
   arch_initialize_irqs();
 
@@ -86,13 +90,11 @@ static void main_routine_stage1(void)
 
 void main_routine(void) /* this function called from boostrap assembler code */
 {
-  kconsole_t *kcons = default_console();
+  
 
   /* After initializing memory stuff, the master CPU should perform
    * the final initializations.
    */
-  kcons->enable();
-  kprintf("[LW] MuiString starts ...\n");
   /* init memory manager stuff - stage 0 */
   arch_mm_stage0_init(0);
   kprintf("[MM] Stage0 memory manager initied.\n");    

@@ -28,8 +28,6 @@
 #include <eza/arch/page.h>
 #include <eza/arch/types.h>
 #include <mm/pagealloc.h>
-#include <eza/container.h>
-#include <eza/list.h>
 
 #define PTE_ENTRIES_PER_PAGE  512
 

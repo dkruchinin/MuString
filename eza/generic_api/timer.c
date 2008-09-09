@@ -22,8 +22,8 @@
  *
  */
 
+#include <ds/list.h>
 #include <eza/interrupt.h>
-#include <eza/list.h>
 #include <eza/errno.h>
 #include <eza/spinlock.h>
 #include <mlibc/string.h>
@@ -34,14 +34,14 @@
 /*spinlock*/
 static spinlock_declare(timer_lock);
 /*list of the timers*/
-static LIST_HEAD(known_hw_timers);
+static LIST_DEFINE(known_hw_timers);
 
 #define GRAB_TIMER_LOCK() spinlock_lock(&timer_lock)
 #define RELEASE_TIMER_LOCK() spinlock_unlock(&timer_lock)
 
 void init_hw_timers (void)
 {
-  init_list_head(&known_hw_timers);
+  list_init_head(&known_hw_timers);
 }
 
 void hw_timer_register (hw_timer_t *ctrl)
@@ -49,7 +49,7 @@ void hw_timer_register (hw_timer_t *ctrl)
   int idx;
 
   GRAB_TIMER_LOCK();
-  list_add(&ctrl->l, &known_hw_timers);
+  list_add(list_node_first(&known_hw_timers), &ctrl->l);
 
   RELEASE_TIMER_LOCK();
 }

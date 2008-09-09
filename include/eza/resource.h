@@ -24,8 +24,8 @@
 #ifndef __RESOURCE_H__
 #define __RESOURCE_H__
 
+#include <ds/list.h>
 #include <eza/arch/types.h>
-#include <eza/list.h>
 #include <eza/spinlock.h>
 
 typedef enum __resource_type {
@@ -34,7 +34,7 @@ typedef enum __resource_type {
 
 typedef struct __resource {
   atomic_t ref_count;
-  list_head_t l;
+  list_node_t l;
   resource_type_t type;
 
   void (*add_ref)(struct __resource *r); 
@@ -49,7 +49,7 @@ static inline void init_resource(resource_t *resource,resource_type_t type)
 {
   resource->type = type;
   atomic_set(&resource->ref_count, 1);
-  init_list_head(&resource->l);
+  list_init_node(&resource->l);
   resource->add_ref = resource->release = NULL;
 }
 

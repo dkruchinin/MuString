@@ -20,6 +20,7 @@
  * eza/generic_api/task.c: generic functions for dealing with task creation.
  */
 
+#include <ds/list.h>
 #include <eza/task.h>
 #include <mm/pt.h>
 #include <eza/smp.h>
@@ -32,7 +33,6 @@
 #include <eza/arch/types.h>
 #include <eza/kernel.h>
 #include <eza/pageaccs.h>
-#include <eza/list.h>
 #include <eza/arch/task.h>
 
 int setup_task_kernel_stack(task_t *task)
@@ -64,11 +64,11 @@ static page_frame_t *alloc_stack_pages(void)
     if( p == NULL ) {
       return NULL;
     } else {
-      init_list_head( &p->active_list );
+      list_init_node( &p->page_next );
       if(first == NULL) {
         first = p;
       } else {
-        list_add_tail(&p->active_list,&first->active_list);
+        list_add2tail(&first->active_list,&p->page_next);
       }
     }
   }

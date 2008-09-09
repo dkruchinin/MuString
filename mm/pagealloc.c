@@ -22,6 +22,7 @@
  */
 
 
+#include <ds/list.h>
 #include <mm/mm.h>
 #include <mm/pagealloc.h>
 #include <eza/smp.h>
@@ -48,10 +49,10 @@ page_frame_t *alloc_page( page_flags_t flags, int clean_page )
 
     LOCK_CACHE(cpu_cache);
     if(cpu_cache->num_free_pages > 0 ) {
-      list_head_t *l = cpu_cache->pages.next;
+      list_node_t *l = list_node_first(&cpu_cache->pages);
       list_del(l);
       cpu_cache->num_free_pages--;
-      page = container_of(l, page_frame_t,active_list);
+      page = list_entry(l, page_frame_t, active_list);
     } else {
       page = NULL;
     }

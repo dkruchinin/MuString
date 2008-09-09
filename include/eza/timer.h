@@ -25,12 +25,12 @@
 #ifndef __EZA_TIMER_H__
 #define __EZA_TIMER_H__
 
-#include <eza/list.h>
+#include <ds/list.h>
 #include <eza/arch/types.h>
 #include <eza/interrupt.h>
 
 typedef struct __hw_timer_type {
-  list_head_t l;
+  list_node_t l;
   const char *descr;
   void (*calibrate)(uint32_t hz);
   void (*resume)(void);

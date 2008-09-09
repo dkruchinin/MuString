@@ -28,7 +28,6 @@
 #include <eza/arch/types.h>
 #include <eza/spinlock.h>
 #include <eza/arch/page.h>
-#include <eza/list.h>
 #include <mm/mm.h>
 
 /* Page that never exists */

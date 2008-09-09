@@ -10,8 +10,8 @@ OUTPUT_FORMAT("elf64-x86-64")
 SECTIONS {
 	.unmapped BOOT_OFFSET: AT (0) {
 		unmapped_ktext_start = .;
-        . = ALIGN(0x1000);
-        _low_kernel_start = p2k(BOOT_OFFSET);
+/*        . = ALIGN(0x1000);
+        _low_kernel_start = p2k(BOOT_OFFSET);*/
 		*(K_TEXT_START);
 		unmapped_ktext_end = .;
 

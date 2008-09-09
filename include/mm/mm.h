@@ -25,7 +25,7 @@
 #ifndef __MM_H__
 #define __MM_H__
 
-#include <eza/list.h>
+#include <ds/list.h>
 #include <eza/arch/types.h>
 #include <eza/spinlock.h>
 #include <eza/arch/e820map.h>
@@ -69,6 +69,7 @@ typedef struct __memory_zone {
 } memory_zone_t;
 
 typedef struct __page_frame {
+  list_node_t page_next;
   list_head_t active_list;
   page_idx_t idx;
   atomic_t refcount;

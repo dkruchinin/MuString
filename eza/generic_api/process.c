@@ -10,7 +10,6 @@
 #include <eza/arch/types.h>
 #include <eza/kernel.h>
 #include <eza/pageaccs.h>
-#include <eza/list.h>
 #include <eza/arch/task.h>
 
 extern task_t *kthread1;

@@ -15,19 +15,31 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * include/kernel.h: contains main kernel types and prototypes for common
- *                   kernel routines.
+ * include/mlibc/assert.h: defines ASSERT macro similar to libc's assert(...)
  *
  */
 
-#ifndef __KERNEL_H__
-#define __KERNEL_H__ 
 
-#define LOGBUFFER_LEN  32768
+#ifndef __ASSERT_H__
+#define __ASSERT_H__
 
-void panic(const char *format, ...);
-   
-#endif
+#include <config.h>
+#include <mlibc/kprintf.h>
+#include <eza/kernel.h>
 
+#ifdef DEBUG_GENERAL
+#define ASSERT(cond)                                    \
+  do {                                                  \
+    if (!(cond)) {                                      \
+    kprintf("[KERNEL ASSERT] " #cond "\n" );            \
+    kprintf("   in: %s:%d\n", __FILE__, __LINE__);      \
+    for (;;);                                           \
+  }                                                     \
+} while (0)
+#else
+#define ASSERT(cond)
+#endif /* DEBUG_DENERAL */
+
+#endif /* __ASSERT_H__ */
