@@ -10,8 +10,6 @@ OUTPUT_FORMAT("elf64-x86-64")
 SECTIONS {
 	.unmapped BOOT_OFFSET: AT (0) {
 		unmapped_ktext_start = .;
-/*        . = ALIGN(0x1000);
-        _low_kernel_start = p2k(BOOT_OFFSET);*/
 		*(K_TEXT_START);
 		unmapped_ktext_end = .;
 
@@ -21,12 +19,9 @@ SECTIONS {
 		unmapped_kdata_end = .;
 	}
 
-    . = ALIGN(0x1000);
-    _low_kernel_end = p2k(BOOT_OFFSET) + SIZEOF(.unmapped);
-
-	.mapped (_low_kernel_end) : AT (unmapped_kdata_end) {        
-        _kernel_start = .;
+	.mapped (p2k(BOOT_OFFSET)+SIZEOF(.unmapped)) : AT (SIZEOF(.unmapped)) {
 		ktext_start = .;
+        _kernel_start = .;        
 		*(.text);
 		ktext_end = .;
 
@@ -52,21 +47,15 @@ SECTIONS {
 
 		*(.bss);		/* uninitialized static variables */
 
-        . = ALIGN(0x1000);
 		kdata_end = .;
+        _kernel_end = .;
 	}
 
 #ifdef CONFIG_SMP
-    .percpu_data (kdata_end) : AT (k2p(kdata_end)) {
-       *(.percpu_data);
-    }
-
-    _hardcoded_unmapped_size = (unmapped_ktext_end - unmapped_ktext_start) + (unmapped_kdata_end - unmapped_kdata_start);
-    ap_boot = unmapped_ap_boot - (BOOT_OFFSET + AP_BOOT_OFFSET);
-    ap_gdtr = unmapped_ap_gdtr - (BOOT_OFFSET + AP_BOOT_OFFSET);
-    protected_ap_gdtr = p2k(ap_gdtr);
+       _hardcoded_unmapped_size = (unmapped_ktext_end - unmapped_ktext_start) + (unmapped_kdata_end - unmapped_kdata_start);
+       ap_boot = unmapped_ap_boot - (BOOT_OFFSET + AP_BOOT_OFFSET);
+       ap_gdtr = unmapped_ap_gdtr - (BOOT_OFFSET + AP_BOOT_OFFSET);
+       protected_ap_gdtr = p2k(ap_gdtr);
 #endif
-   
-   . = ALIGN(0x1000);
-   _kernel_end = .;	
+	
 }
