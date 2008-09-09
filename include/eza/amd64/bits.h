@@ -70,8 +70,10 @@ static inline bit_idx_t find_first_bit_mem_64( uint64_t *ptr, uint64_t count )
   return idx;
 }
 
-static inline void reset_bit_mem_64( uint64_t *ptr, bit_idx_t bit )
+static inline bit_idx_t reset_and_test_bit_mem_64( uint64_t *ptr, bit_idx_t bit )
 {
+  bit_idx_t prev_state;
+
   __asm__ volatile (
     "mov %%rbx, %%rax\n"
     "and $0x3f, %%rax\n" /* Get offset within a word. */
@@ -79,7 +81,29 @@ static inline void reset_bit_mem_64( uint64_t *ptr, bit_idx_t bit )
     "shr $3, %%rbx\n"   /* Transform offset into dword index. */
     "add %%rbx, %%rdx\n"
     "btr %%rax, (%%rdx)\n"
-  :: "b" (bit), "d" (ptr) );
+    "movq $0, %%rax\n"
+    "adc $0, %%rax\n"
+  : "=r"(prev_state) : "b" (bit), "d" (ptr) );
+
+  return prev_state;
+}
+
+static inline bit_idx_t set_and_test_bit_mem_64( uint64_t *ptr, bit_idx_t bit )
+{
+  bit_idx_t prev_state;
+
+  __asm__ volatile (
+    "mov %%rbx, %%rax\n"
+    "and $0x3f, %%rax\n" /* Get offset within a word. */
+    "and $0xffffffffffffffc0, %%rbx\n" /* Leave word number. */
+    "shr $3, %%rbx\n"   /* Transform offset into dword index. */
+    "add %%rbx, %%rdx\n"
+    "bts %%rax, (%%rdx)\n"
+    "movq $0, %%rax\n"
+    "adc $0, %%rax\n"
+  : "=r"(prev_state) : "b" (bit), "d" (ptr) );
+
+  return prev_state;
 }
 
 #endif

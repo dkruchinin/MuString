@@ -33,7 +33,8 @@ static inline bit_idx_t find_first_bit64( uint64_t v );
 
 static inline bit_idx_t find_first_bit_mem_64( uint64_t *ptr, uint64_t count );
 
-static inline void reset_bit_mem_64( uint64_t *ptr, bit_idx_t bit );
+static inline bit_idx_t reset_and_test_bit_mem_64( uint64_t *ptr, bit_idx_t bit );
+static inline bit_idx_t set_and_test_bit_mem_64( uint64_t *ptr, bit_idx_t bit );
 
 #endif
 
