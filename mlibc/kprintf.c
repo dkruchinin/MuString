@@ -98,11 +98,13 @@ void vkprintf(const char *fmt, va_list ap)
   /*if (sl > TMPBUF_SIZE) {
 	kcons->display_string("\nvkprintf error\n");
 	return;
-    }*/
+    }
+  }*/
   if (kbuf_insert(tmp_buf, sl) != sl) {
     kcons->display_string("\n__kbuf error\n");
     return;
   }
+
   if (kcons->is_enabled)
     kcons->display_string(tmp_buf);
 }

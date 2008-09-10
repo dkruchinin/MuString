@@ -35,9 +35,8 @@
 #include <eza/scheduler.h>
 #include <eza/swks.h>
 #include <eza/kstack.h>
-
-//static DEFINE_PER_CPU(cpu_metadata,cpu_sched_meta_data_t);
-extern task_t PER_CPU_VAR(idle_tasks);
+#include <mlibc/index_array.h>
+#include <eza/task.h>
 
 extern void initialize_idle_tasks(void);
 
@@ -46,6 +45,7 @@ cpu_id_t online_cpus;
 void initialize_scheduler(void)
 {
   initialize_kernel_stack_allocator();
+  initialize_task_subsystem();
   initialize_idle_tasks();
 }
 

@@ -42,9 +42,6 @@ extern percpu_page_cache_t percpu_page_cache_cpu_0;
 page_directory_t kernel_pt_directory;
 uint8_t k_entries[PAGE_SIZE] __attribute__((aligned(PAGE_SIZE)));
 
-/* Frame counter for initial kernel remapping. */
-static page_idx_t frame_idx;
-
 static void initialize_kernel_page_directory(void)
 {
   initialize_page_directory(&kernel_pt_directory);

@@ -29,6 +29,10 @@
 #include <eza/kstack.h>
 #include <eza/arch/context.h>
 #include <eza/arch/task.h>
+#include <mlibc/index_array.h>
+
+#define INVALID_PID  IA_INVALID_VALUE
+#define NUM_PIDS  65536
 
 typedef enum __task_creation_flag_t {
   CLONE_MM = 0x1,
@@ -38,6 +42,8 @@ typedef struct __uspace_thread_creation_data {
   uintptr_t entry_point, stack_pointer;
 } uspace_thread_creation_data_t;
 
+void initialize_task_subsystem(void);
+
 int setup_task_kernel_stack(task_t *task);
 void initialize_task_system_data(kernel_task_data_t *task, cpu_id_t cpu);
 
@@ -46,9 +52,12 @@ status_t kernel_thread(void (*fn)(void *), void *data);
 status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t flags,
                                  task_privelege_t priv);
 
+
 status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t priv,
                      task_t **new_task);
+
 status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags,task_privelege_t priv);
+
 void free_task_struct(task_t *task);
 
 #endif
