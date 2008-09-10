@@ -28,7 +28,7 @@
 #include <eza/arch/types.h>
 #include <eza/spinlock.h>
 #include <eza/arch/page.h>
-#include <eza/list.h>
+#include <ds/list.h>
 
 #define KS_AF_DONT_EXPAND  0x1  /* Don't allocate additional bitmap arrays. */
 
@@ -49,7 +49,7 @@ extern uintptr_t starting_kernel_stack_address;
 
 /* NOTE: This structure _must_ be 64-bit aligned ! */
 typedef struct __kernel_stack_chunk {
-  list_head_t l;
+  list_node_t l;
   uint32_t total_items, free_items;
   uintptr_t high_address, low_address; /* Range of virtual memory this chunk covers. */
   uint64_t bitmap[];    /* Must be 64-bit aligned ! */

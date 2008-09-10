@@ -23,6 +23,7 @@
  */
 
 
+#include <config.h>
 #include <eza/arch/boot.h>
 #include <eza/arch/e820map.h>
 #include <eza/arch/page.h>

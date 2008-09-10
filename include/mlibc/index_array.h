@@ -36,7 +36,7 @@
 #define __INDEX_ARRAY_H__ 
 
 #include <eza/arch/types.h>
-#include <eza/list.h>
+#include <ds/list.h>
 #include <eza/arch/bits.h>
 #include <eza/arch/page.h>
 
@@ -58,7 +58,7 @@ typedef uint32_t range_type_t;
 typedef struct __index_array_entry {
   range_type_t id,values_left,range_start;
   uint64_t *bitmap;
-  list_head_t l;
+  list_node_t l;
 } index_array_entry_t;
 
 typedef struct __index_array {

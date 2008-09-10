@@ -22,12 +22,12 @@
  */
 
 
+#include <ds/list.h>
 #include <mlibc/kprintf.h>
 #include <eza/kernel.h>
 #include <eza/arch/page.h>
 #include <mm/mm.h>
 #include <eza/swks.h>
-#include <eza/list.h>
 #include <eza/smp.h>
 
 extern uint8_t e820count;
@@ -37,7 +37,7 @@ static page_idx_t dma_pages;
 /* Here they are ! */
 page_frame_t *page_frames_array;
 memory_zone_t memory_zones[NUM_MEMORY_ZONES];
-DEFINE_PER_CPU(percpu_page_cache,percpu_page_cache_t);
+percpu_page_cache_t PER_CPU_VAR(percpu_page_cache);
 
 static void detect_physical_memory(void) {
   int idx, found;
@@ -81,7 +81,8 @@ static void detect_physical_memory(void) {
 
 static void reset_page_frame(page_frame_t *page)
 {
-  init_list_head(&page->active_list);
+  list_init_head(&page->active_list);
+  list_init_node(&page->page_next);
   page->flags &= PERMANENT_PAGE_FLAG_MASK;  /* Reset all flags but special ones. */
   atomic_set(&page->refcount,0);
 }
@@ -179,7 +180,7 @@ static void initialize_page_array(void)
     page->flags = flags;
 
     /* Insert page into the list. */
-    list_add_tail(&page->active_list,page_list);
+    list_add2tail(page_list, &page->page_next);
     zone->num_total_pages++;
     if(flags & PAGE_RESERVED) {
       zone->num_reserved_pages++;
@@ -202,8 +203,8 @@ static void initialize_zones(void)
 
     zone->type = types[idx];
     zone->num_total_pages = zone->num_free_pages = zone->num_reserved_pages = 0;
-    init_list_head(&zone->pages);
-    init_list_head(&zone->reserved_pages);
+    list_init_head(&zone->pages);
+    list_init_head(&zone->reserved_pages);
     spinlock_initialize(&zone->lock, "" );
   }
 }
@@ -218,30 +219,28 @@ static void initialize_percpu_caches(void)
   percpu_page_cache_t *cache;
   memory_zone_t *zone = &memory_zones[ZONE_NORMAL];
   page_idx_t cpupages = zone->num_total_pages / NR_CPUS;
+  page_idx_t p = 0;
 
-  for_each_cpu_var(cache,percpu_page_cache,percpu_page_cache_t) {
-    page_idx_t p = 0;
+  cache = percpu_get_var(percpu_page_cache);
+  spinlock_initialize(&cache->lock, "<percpu cache spinlock>");
+  list_init_head(&cache->pages);
 
-    spinlock_initialize(&cache->lock, "<percpu cache spinlock>");
-    init_list_head(&cache->pages);
-
-    /* Take into account the last cache. */
-    if( cpupages + NR_CPUS >= zone->num_total_pages ) {
+  /* Take into account the last cache. */
+  if( cpupages + NR_CPUS >= zone->num_total_pages ) {
       cpupages = zone->num_total_pages;
-    }
+  }
 
-    /* Now move all pages to the cache. */
-    for(p = 0; p < cpupages && (zone->pages.next != &zone->pages); p++ ) {
-      list_head_t *l = zone->pages.next;
+  /* Now move all pages to the cache. */
+  for(p = 0; p < cpupages && !list_is_empty(&zone->pages); p++ ) {      
+      list_node_t *l = list_node_first(&zone->pages);
       list_del(l);
-      list_add_tail(l,&cache->pages);
+      list_add2tail(&cache->pages, l);
       zone->num_free_pages--;
       zone->num_total_pages--;
       p++;
-    }
-
-    cache->num_free_pages = cache->total_pages = p;
   }
+
+  cache->num_free_pages = cache->total_pages = p;
 }
 
 void build_page_array(void)

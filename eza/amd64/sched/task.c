@@ -46,7 +46,7 @@ extern void kthread_fork_path(void);
 #define KERNEL_THREAD_FLAGS  (CLONE_MM)
 
 /* Per-CPU glabal structure that reflects the most important kernel states. */
-DEFINE_PER_CPU(cpu_sched_stat,cpu_sched_stat_t);
+cpu_sched_stat_t PER_CPU_VAR(cpu_sched_stat);
 
 static void __arch_setup_ctx(task_t *newtask,uint64_t rsp)
 {
@@ -94,7 +94,7 @@ void initialize_idle_tasks(void)
   int r, cpu;
   cpu_sched_stat_t *sched_stat;
 
-  for( cpu = 0; cpu < NR_CPUS; cpu++ ) {
+  for( cpu = 0; cpu < MAX_CPUS; cpu++ ) {
     ts_page = alloc_page(0,1);
     if( ts_page == NULL ) {
       panic( "initialize_idle_tasks(): Can't allocate main structure for idle task !" );  
@@ -146,7 +146,7 @@ void initialize_idle_tasks(void)
 
   /* Now initialize per-CPU scheduler statistics. */
   cpu = 0;
-  for_each_cpu_var(sched_stat,cpu_sched_stat,cpu_sched_stat_t) {
+  for_each_percpu_var(sched_stat,cpu_sched_stat) {
     sched_stat->cpu = cpu;
     sched_stat->current_task = idle_tasks[cpu];
     sched_stat->kstack_top = idle_tasks[cpu]->kernel_stack.high_address;

@@ -65,7 +65,7 @@ typedef struct __task_struct {
 
   kernel_stack_t kernel_stack;
   page_directory_t page_dir;
-  list_head_t pid_list;
+  list_node_t pid_list;
 
   spinlock_t lock;
 

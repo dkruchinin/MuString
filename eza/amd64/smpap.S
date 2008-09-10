@@ -22,6 +22,7 @@
  *
  */
 
+#include <config.h>
 #include <eza/arch/boot.h>
 #include <eza/arch/cpu.h>
 #include <eza/arch/page.h>

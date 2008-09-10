@@ -4,7 +4,7 @@
 
 #include <eza/arch/types.h>
 #include <mm/mm.h>
-#include <eza/list.h>
+#include <ds/list.h>
 
 /* Context for linear area page accessor. */
 typedef struct __pageaccs_linear_pa_ctx {
@@ -20,7 +20,7 @@ extern page_frame_accessor_t pageaccs_linear_pa;
  */
 typedef struct __pageaccs_list_pa_ctx {
   page_frame_t *head;
-  list_head_t *curr;
+  list_node_t *curr;
   page_idx_t num_pages, pages_left;
 } pageaccs_list_pa_ctx_t;
 

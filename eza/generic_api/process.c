@@ -10,7 +10,6 @@
 #include <eza/arch/types.h>
 #include <eza/kernel.h>
 #include <eza/pageaccs.h>
-#include <eza/list.h>
 #include <eza/arch/task.h>
 #include <eza/spinlock.h>
 
@@ -36,7 +35,7 @@ void initialize_process_subsystem(void)
   /* Now initialize PID-hash arrays. */
   for( i=0; i<PID_HASH_LEVELS; i++ ) {
     spinlock_initialize(&pid_to_struct_locks[i], "PID-to-task lock");
-    init_list_head(&pid_to_struct_hash[i]);
+    list_init_head(&pid_to_struct_hash[i]);
   }
 }
 
@@ -49,11 +48,11 @@ task_t *pid_to_task(pid_t pid)
 {
   if( pid < NUM_PIDS ) {
     hash_level_t l = pid_to_hash_level(pid);
-    list_head_t *p;
+    list_node_t *n;
 
     LOCK_PID_HASH_LEVEL_R(l);
-    list_for_each(p,&pid_to_struct_hash[l]) {
-      task_t *t = container_of(p,task_t,pid_list);
+    list_for_each(&pid_to_struct_hash[l],n) {
+      task_t *t = container_of(n,task_t,pid_list);
       if(t->pid == pid) {
         UNLOCK_PID_HASH_LEVEL_R(l);
         return t;
@@ -77,7 +76,7 @@ status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t
     if(r == 0) {
       hash_level_t l = pid_to_hash_level(new_task->pid);
       LOCK_PID_HASH_LEVEL_W(l);
-      list_add_tail(&new_task->pid_list,&pid_to_struct_hash[l]);
+      list_add2tail(&pid_to_struct_hash[l],&new_task->pid_list);
       UNLOCK_PID_HASH_LEVEL_W(l);
 
       kthread1 = new_task;

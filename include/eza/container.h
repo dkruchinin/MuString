@@ -8,8 +8,10 @@
 #define offset_of(type, member) \
    ((uintptr_t)&(((type *)0)->member))
 
-#define container_of(ptr, type, member) \
+/* 
+  #define container_of(ptr, type, member) \
    (type *)((uintptr_t)ptr - offset_of(type,member))
+*/
 
 
 #endif

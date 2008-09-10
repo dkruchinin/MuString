@@ -21,6 +21,7 @@
  *
  */
 
+#include <config.h>
 #include <eza/arch/types.h>
 #include <eza/arch/apic.h>
 #include <eza/arch/ioapic.h>

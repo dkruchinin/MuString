@@ -24,8 +24,8 @@
 #include <eza/kernel.h>
 #include <eza/arch/bits.h>
 #include <eza/errno.h>
-#include <eza/container.h>
 #include <mlibc/kprintf.h>
+#include <mlibc/stddef.h>
 #include <eza/arch/page.h>
 #include <eza/kstack.h>
 
@@ -52,7 +52,7 @@ static void initialize_bitmap( uint64_t *bitmap, uint32_t size )
 
 static void initialize_stack_chunk( kernel_stack_chunk_t *chunk )
 {
-  init_list_head(&chunk->l);
+  list_init_node(&chunk->l);
   chunk->total_items = chunk->free_items = BITMAP_ENTRIES_COUNT;
   chunk->high_address = chunk->high_address;
   chunk->low_address = starting_kernel_stack_address -
@@ -69,14 +69,14 @@ static void initialize_stack_allocator_context(kernel_stack_allocator_context_t 
   }
 
   spinlock_initialize(&ctx->lock, "Main kernel stack context lock");
-  init_list_head(&ctx->chunks);
+  list_init_head(&ctx->chunks);
   initialize_stack_chunk(ch1);
 
   ctx->total_items = ch1->total_items;
   ctx->free_items = ch1->free_items;
   ctx->num_chunks = 1;
 
-  list_add_tail(&ch1->l,&ctx->chunks);
+  list_add2tail(&ctx->chunks, &ch1->l);
 }
 
 int allocate_kernel_stack(kernel_stack_t *stack)
@@ -87,7 +87,7 @@ int allocate_kernel_stack(kernel_stack_t *stack)
   LOCK_STACK_CTX(&main_stack_ctx);
 
   if(main_stack_ctx.free_items > 0) {
-    kernel_stack_chunk_t *chunk = container_of( main_stack_ctx.chunks.next,
+      kernel_stack_chunk_t *chunk = container_of( list_node_first(&main_stack_ctx.chunks),
                                                 kernel_stack_chunk_t, l );
     idx = find_first_bit_mem_64( chunk->bitmap, BITMAP_ENTRIES_COUNT );
 

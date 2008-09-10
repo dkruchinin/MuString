@@ -20,6 +20,7 @@
  * eza/generic_api/task.c: generic functions for dealing with task creation.
  */
 
+#include <ds/list.h>
 #include <eza/task.h>
 #include <mm/pt.h>
 #include <eza/smp.h>
@@ -32,7 +33,6 @@
 #include <eza/arch/types.h>
 #include <eza/kernel.h>
 #include <eza/pageaccs.h>
-#include <eza/list.h>
 #include <eza/arch/task.h>
 #include <mlibc/index_array.h>
 #include <eza/spinlock.h>
@@ -111,11 +111,11 @@ static page_frame_t *alloc_stack_pages(void)
     if( p == NULL ) {
       return NULL;
     } else {
-      init_list_head( &p->active_list );
+      list_init_node( &p->page_next );
       if(first == NULL) {
         first = p;
       } else {
-        list_add_tail(&p->active_list,&first->active_list);
+        list_add2tail(&first->active_list,&p->page_next);
       }
     }
   }
@@ -208,7 +208,7 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
   /* Map task struct into the stack area. */
   l_ctx.start_page = l_ctx.end_page = ts_page->idx;
   pageaccs_linear_pa.reset(&l_ctx);
-
+  
   r = mm_map_pages( &task->page_dir, &pageaccs_linear_pa,
                     task->kernel_stack.low_address & KERNEL_STACK_MASK, 1,
                     KERNEL_STACK_PAGE_FLAGS, &l_ctx );
@@ -225,7 +225,7 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
   task->pid = pid;
   task->ppid = ppid; 
 
-  init_list_head(&task->pid_list);
+  list_init_node(&task->pid_list);
   spinlock_initialize(&task->lock, "Task lock");
 
   /* Setup task's initial state. */
@@ -233,8 +233,6 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
 
   *t = task;
   return 0;
-unmap_task_struct:
-  /* TODO: Unmap task struct here. [mt] */
 unmap_stack_pages:
   /* TODO: Unmap stack pages here. [mt] */
 free_stack_pages:

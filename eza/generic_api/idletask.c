@@ -39,7 +39,7 @@ void clone_fn(void *data)
 
   for( ;; ) {
     if( swks.system_ticks_64 == target_tick ) {
-      kprintf( " + Tick, tick ! ( %d, PID: %d, CPU ID: %d\n",
+      kprintf( " + Tick, tick ! (Ticks: %d, PID: %d, CPU ID: %d)\n",
                swks.system_ticks_64, current_task()->pid, 1024 );
       target_tick += 10150;
       rounds ++;
@@ -67,7 +67,7 @@ void idle_loop(void)
   /* TODO: [mt] Enable rescheduling interrupts here. */
   for( ;; ) {
     if( swks.system_ticks_64 == target_tick ) {
-      kprintf( " - Tick, tick ! ( %d, PID: %d, CPU ID: %d\n",
+      kprintf( " - Tick, tick ! (Ticks: %d, PID: %d, CPU ID: %d)\n",
                swks.system_ticks_64, current_task()->pid, 1024 );
       target_tick += 10000;
       rounds++;
