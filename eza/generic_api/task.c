@@ -100,12 +100,6 @@ int setup_task_kernel_stack(task_t *task)
   return r;
 }
 
-void initialize_task_system_data(kernel_task_data_t *task, cpu_id_t cpu)
-{
-  task->system_data.cpu_id = cpu;
-  task->system_data.irq_num = 0;
-}
-
 static page_frame_t *alloc_stack_pages(void)
 {
   int i;
@@ -159,7 +153,6 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
   page_frame_t *ts_page;
   status_t r = -ENOMEM;
   page_frame_t *stack_pages;
-  kernel_task_data_t * td;
   pageaccs_list_pa_ctx_t pa_ctx;
   pageaccs_linear_pa_ctx_t l_ctx;
   pid_t pid, ppid;
@@ -178,8 +171,7 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
     goto free_pid;
   }
 
-  td = (kernel_task_data_t *)pframe_to_virt(ts_page);
-  task = &td->task;
+  task = pframe_to_virt(ts_page);
 
   /* Create kernel stack for the new task. */
   r = allocate_kernel_stack(&task->kernel_stack) != 0;
@@ -223,9 +215,6 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
   if( r != 0 ) {
     goto unmap_stack_pages;
   }
-
-  /* Initialize task system data. */
-  initialize_task_system_data(td,cpu_id());
 
   if(parent != NULL) {
     ppid = parent->pid;

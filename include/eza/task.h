@@ -50,7 +50,6 @@ typedef struct __uspace_thread_creation_data {
 void initialize_task_subsystem(void);
 
 int setup_task_kernel_stack(task_t *task);
-void initialize_task_system_data(kernel_task_data_t *task, cpu_id_t cpu);
 
 status_t kernel_thread(void (*fn)(void *), void *data);
 

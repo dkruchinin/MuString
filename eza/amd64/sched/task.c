@@ -93,7 +93,6 @@ void initialize_idle_tasks(void)
   task_t *task;
   page_frame_t *ts_page;
   int r, cpu;
-  kernel_task_data_t *td;
   cpu_sched_stat_t *sched_stat;
 
   for( cpu = 0; cpu < NR_CPUS; cpu++ ) {
@@ -102,8 +101,7 @@ void initialize_idle_tasks(void)
       panic( "initialize_idle_tasks(): Can't allocate main structure for idle task !" );  
     }
 
-    td = (kernel_task_data_t *)pframe_to_virt(ts_page);
-    task = &(td->task);
+    task = pframe_to_virt(ts_page);
     idle_tasks[cpu] = task;
 
     /* Setup PIDs and default priorities. */
@@ -145,11 +143,6 @@ void initialize_idle_tasks(void)
 
     /* Setup arch-specific task context. */
     __arch_setup_ctx(task,0);
-
-    /* OK, now kernel stack is ready for this idle task. Finally, initialize its
-     * 'system_data' structure.
-     */
-    initialize_task_system_data(td, cpu);
   }
 
   /* Now initialize per-CPU scheduler statistics. */

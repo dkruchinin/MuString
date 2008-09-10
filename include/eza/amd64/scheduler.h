@@ -32,7 +32,7 @@
 #include <eza/amd64/context.h>
 #include <eza/arch/current.h>
 
-static inline task_t *arch_current_task(void)
+static inline task_t *current_task(void)
 {
   uintptr_t ct;
 
