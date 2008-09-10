@@ -24,6 +24,7 @@
  */
 
 #include <eza/arch/context.h>
+#include <eza/arch/page.h>
 
 .code64
 
@@ -55,7 +56,7 @@
 .global security_exception_fault_handler
 .global hi_level_fault_handlers 
 
-.global child_fork_path
+.global kthread_fork_path
 
 arch_delay_loop:
 0:	dec %rdi
@@ -101,7 +102,8 @@ syscall_point:
 	
         sysretq
 
-child_fork_path:
+kthread_fork_path:
+    sti
     RESTORE_ALL
     iretq
 
@@ -129,11 +131,30 @@ low_irq_stubs:
 v=v+1
 .endr
 
+/* extra bytes on the stack after CPU exception stack frame: %rax */
+#define INT_STACK_EXTRA_PUSHES  8
+
 common_interrupt:
+  /* Upon entering this point on the stack we have got exception stack frame 
+   * and saved %rax since at this moment %rax contains IRQ line number.
+   */
+  cmp $gdtselector(KTEXT_DES),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)
+  je kernel_space_interrupt
+  /* If we have come from user space, perform 'swapgs'.*/
+  swapgs
+
+kernel_space_interrupt:
   SAVE_ALL
   movq %rax,%rdi
   call do_irq
   RESTORE_ALL
+
+  cmp $gdtselector(KTEXT_DES),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)
+  je ret_from_int
+  /* If we have come from user space, restore %gs.*/
+  swapgs
+
+ret_from_int:
   popq %rax
   iretq
 
@@ -144,7 +165,6 @@ divide_by_zero_fault_handler:
   movl $0x0,%eax
 common_exception_path:
   SAVE_ALL
-  
   /* No we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to
    * skip %rax on the stack since we saved it before calling SAVE_ALL

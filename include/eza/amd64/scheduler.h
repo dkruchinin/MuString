@@ -40,29 +40,16 @@ static inline task_t *current_task(void)
   return (task_t*)ct;
 }
 
-
-/*
-static inline system_sched_data_t *arch_system_sched_data(void)
-{
-  kernel_task_data_t *t;
-
-  __asm__ volatile( "movq %%rsp, %%rbx\n"
-                    "andq %%rax, %%rbx\n"
-                     : "=b" (t) : "a" (KERNEL_STACK_MASK) );
-  return &t->system_data;
-}
-*/
-
-void arch_hw_activate_task( uintptr_t sp, uintptr_t cr3, uintptr_t *saved_sp );
+void arch_hw_activate_task(arch_context_t *new_ctx, task_t *new_task,
+                           arch_context_t *old_ctx, uintptr_t kstack);
 
 static inline void arch_activate_task(task_t *to)
 {
-  task_t *from = current_task();
-  arch_context_t *from_ctx = (arch_context_t*)&from->arch_context[0];
   arch_context_t *to_ctx = (arch_context_t*)&to->arch_context[0];
+  arch_context_t *from_ctx = (arch_context_t*)&(current_task()->arch_context[0]);
 
   /* Let's jump ! */
-  arch_hw_activate_task(to_ctx->cr3,to_ctx->rsp,&from_ctx->rsp);
+  arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
 }
 
 #endif

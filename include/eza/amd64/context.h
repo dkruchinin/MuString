@@ -80,6 +80,7 @@
  */
 #define SAVE_MM \
   mov %rsp, %r8; \
+  mov %rsp, %r10; \
   and $0xfffffffffffffe00, %r8; \
   mov %rsp, %r9; \
   sub %r8, %r9; \
@@ -106,6 +107,9 @@
 
 #define SAVED_REGISTERS_SIZE \
    ((NUM_GPR_SAVED)*8)
+
+/* Offsets to parts of CPU exception stack frames. */
+#define INT_STACK_FRAME_CS_OFFT 8
 
 /* assembler macros for save and restore context */
 #ifdef __ASM__
@@ -139,6 +143,12 @@
  */
 #define SP_DELTA  16
 
+/* Kernel-space task context related stuff. */
+#define ARCH_CTX_CR3_OFFSET  0x0
+#define ARCH_CTX_RSP_OFFSET  0x8
+#define ARCH_CTX_FS_OFFSET   0x10
+#define ARCH_CTX_GS_OFFSET   0x18
+
 #ifndef __ASM__
 
 #include <eza/arch/types.h>
@@ -158,7 +168,7 @@ typedef struct __context_t { /* others don't interesting... */
 } __attribute__ ((packed)) context_t;
 
 typedef struct __arch_context_t {
-  uintptr_t cr3, rsp;
+  uintptr_t cr3, rsp, fs, gs;
 } arch_context_t;
 
 /* Structure that represents GPRs on the stack upon entering

@@ -73,25 +73,6 @@ typedef struct __task_struct {
   uint8_t arch_context[];
 } task_t;
 
-
-/*
-typedef struct __cpu_sched_meta_data {
-  task_t *idle_task;
-} cpu_sched_meta_data_t;
-
-typedef struct __system_sched_data {
-  cpu_id_t cpu_id;
-  uint32_t flags;
-  uint32_t irq_num;
-} system_sched_data_t;
-
-
-typedef struct __kernel_task_data {
-  system_sched_data_t system_data;
-  task_t task;
-} kernel_task_data_t;
-*/
-
 void initialize_scheduler(void);
 void scheduler_tick(void);
 void schedule(void);

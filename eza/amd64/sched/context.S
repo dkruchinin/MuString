@@ -31,7 +31,9 @@
 .global arch_hw_activate_task1
 
 #include <eza/arch/context.h>
-	
+#include <eza/container.h>
+#include <eza/arch/current.h>
+
 arch_context_save:
 	movq (%rsp), %rdx
 
@@ -50,9 +52,10 @@ arch_context_restore:
 	ret
 
 /* 
- * %rdi: contains TLB4 value (%cr3) of the task being activated. 
- * %rsi: contains %rsp of the task being activated. 
- * %rdx: pointer to area where to save %rsp of current task.
+ * %rdi: pointer to the context of new task. 
+ * %rsi: pointer to new task itself.
+ * %rdx: pointer to the context of current task.
+ * %rcx: top of kernel stack of new task.
  */
 arch_hw_activate_task:
   pushq %rax
@@ -60,19 +63,33 @@ arch_hw_activate_task:
 
   pushq $__return_from_sleep
 
-  movq %cr3, %rax;
-  cmp %rdi, %rax;
-  je lcr3;
+  cli
+  /* Update this CPU's 'current' and its kernel stack. */
+  movq %rsi, %gs:(CPU_SCHED_STAT_CURRENT_OFFT)
+  movq %rcx, %gs:(CPU_SCHED_STAT_KSTACK_OFFT)
 
-  movq %rdi, %rax
+  /* First, save fs and rsp */
+  mov %fs,ARCH_CTX_FS_OFFSET(%rdx)
+  mov %rsp,ARCH_CTX_RSP_OFFSET(%rdx) 
+
+  /* Determine if we need to reload %cr3 */
+  movq %cr3, %rax;
+  cmp %rax,ARCH_CTX_CR3_OFFSET(%rdi)
+  jz leave_cr3
+
+  movq ARCH_CTX_CR3_OFFSET(%rdi),%rax
   movq %rax, %cr3
 
-lcr3:
-  mov %rsp, (%rdx)
-  mov %rsi, %rsp
+leave_cr3:
+
+  /* Now we can reload %rsp and %fs and return to perform actual context switch. */
+  movq ARCH_CTX_RSP_OFFSET(%rdi), %rsp
+  mov ARCH_CTX_FS_OFFSET(%rdi), %fs
+
   retq
 
 __return_from_sleep:
+  sti
   RESTORE_ALL
   popq %rax
   sti
