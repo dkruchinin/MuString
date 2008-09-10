@@ -39,10 +39,8 @@
 #include <eza/interrupt.h>
 #include <eza/scheduler.h>
 #include <eza/arch/fault.h>
-#include <eza/arch/asm.h>
 #include <eza/arch/platform.h>
-
-#define CONFIG_STACK_SIZE  ((1 << 0) * PAGE_SIZE)
+#include <eza/arch/task.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
@@ -101,8 +99,10 @@ void main_routine(void) /* this function called from boostrap assembler code */
   initialize_scheduler();
   initialize_timer();
 
-  /* Now we can switch stack to our new kernel stack. */
-  load_stack_pointer(idle_tasks[0]->kernel_stack.high_address-512);
+  /* Now we can switch stack to our new kernel stack, setup any arch-specific
+   * contexts, etc.
+   */
+  arch_activate_idle_task(0);
 
   /* Now we can continue initialization with properly initialized kernel
    * stack frame.
@@ -116,3 +116,4 @@ void main_smpap_routine(void)
   for(;;);
 }
 #endif
+

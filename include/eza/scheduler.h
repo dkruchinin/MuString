@@ -29,12 +29,15 @@
 #include <eza/resource.h>
 #include <mm/pt.h>
 #include <eza/kstack.h>
+#include <eza/spinlock.h>
+#include <eza/arch/current.h>
 
 #define PRIORITY_MAX  128
 #define IDLE_TASK_PRIORITY (PRIORITY_MAX+1)
 
-#define current_task()  arch_current_task()
-#define system_sched_data()  arch_system_sched_data()
+/* Macros for locking task structure. */
+#define LOCK_TASK_STRUCT(t) spinlock_lock(&t->lock)
+#define UNLOCK_TASK_STRUCT(t) spinlock_unlock(&t->lock)
 
 typedef uint32_t time_slice_t;
 
@@ -43,7 +46,8 @@ typedef enum __task_state {
   TASK_STATE_RUNNABLE = 1,
   TASK_STATE_RUNNING = 2,
   TASK_STATE_SLEEPING = 3,
-  TASK_STATE_ZOMBIE = 4,
+  TASK_STATE_STOPPED = 4,
+  TASK_STATE_ZOMBIE = 5,
 } task_state_t;
 
 typedef uint8_t priority_t;
@@ -61,12 +65,16 @@ typedef struct __task_struct {
 
   kernel_stack_t kernel_stack;
   page_directory_t page_dir;
+  list_head_t pid_list;
+
+  spinlock_t lock;
 
   /* Arch-dependent context is located here */
   uint8_t arch_context[];
 } task_t;
 
 
+/*
 typedef struct __cpu_sched_meta_data {
   task_t *idle_task;
 } cpu_sched_meta_data_t;
@@ -77,11 +85,12 @@ typedef struct __system_sched_data {
   uint32_t irq_num;
 } system_sched_data_t;
 
+
 typedef struct __kernel_task_data {
   system_sched_data_t system_data;
   task_t task;
 } kernel_task_data_t;
-
+*/
 
 void initialize_scheduler(void);
 void scheduler_tick(void);
@@ -89,6 +98,11 @@ void schedule(void);
 void idle_loop(void);
 
 extern task_t *idle_tasks[];
+
+status_t do_change_task_state(task_t *task,task_state_t state);
+status_t activate_task(task_t *task);
+status_t deactivate_task(task_t *task,task_state_t state);
+void reschedule_task(task_t *task);
 
 #endif
 

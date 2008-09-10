@@ -44,7 +44,8 @@ extern cpu_id_t online_cpus;
     define_per_cpu_var(var##_cpu_,type,0); \
     define_per_cpu_var(var##_cpu_,type,1)
 
-  #define cpu_var(var,type) (type *)((char *)(&var##_cpu_0) + sizeof(type)*cpu_id());
+  #define __raw_cpu_var(var,type,cpu) (type *)((char *)(&var##_cpu_0) + sizeof(type)*cpu)
+  #define cpu_var(var,type) __raw_cpu_var(var,type,cpu_id());
 
   #define for_each_cpu_var(ptr,var,type) \
     for( ptr = (type *)(&var##_cpu_0); \

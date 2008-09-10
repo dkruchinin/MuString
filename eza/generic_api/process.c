@@ -12,8 +12,58 @@
 #include <eza/pageaccs.h>
 #include <eza/list.h>
 #include <eza/arch/task.h>
+#include <eza/spinlock.h>
 
 extern task_t *kthread1;
+
+typedef uint32_t hash_level_t;
+
+/* Stuff related to PID-to-task translation. */
+static spinlock_t pid_to_struct_locks[PID_HASH_LEVELS];
+static list_head_t pid_to_struct_hash[PID_HASH_LEVELS];
+
+/* Macros for dealing with PID-to-task hash locks.
+ * _W means 'for writing', '_R' means 'for reading' */
+#define LOCK_PID_HASH_LEVEL_R(l) spinlock_lock(&pid_to_struct_locks[l])
+#define UNLOCK_PID_HASH_LEVEL_R(l) spinlock_unlock(&pid_to_struct_locks[l])
+#define LOCK_PID_HASH_LEVEL_W(l) spinlock_lock(&pid_to_struct_locks[l])
+#define UNLOCK_PID_HASH_LEVEL_W(l) spinlock_unlock(&pid_to_struct_locks[l])
+
+void initialize_process_subsystem(void)
+{
+  uint32_t i;
+
+  /* Now initialize PID-hash arrays. */
+  for( i=0; i<PID_HASH_LEVELS; i++ ) {
+    spinlock_initialize(&pid_to_struct_locks[i], "PID-to-task lock");
+    init_list_head(&pid_to_struct_hash[i]);
+  }
+}
+
+static hash_level_t pid_to_hash_level(pid_t pid)
+{
+  return (pid & PID_HASH_LEVEL_MASK);
+}
+
+task_t *pid_to_task(pid_t pid)
+{
+  if( pid < NUM_PIDS ) {
+    hash_level_t l = pid_to_hash_level(pid);
+    list_head_t *p;
+
+    LOCK_PID_HASH_LEVEL_R(l);
+    list_for_each(p,&pid_to_struct_hash[l]) {
+      task_t *t = container_of(p,task_t,pid_list);
+      if(t->pid == pid) {
+        UNLOCK_PID_HASH_LEVEL_R(l);
+        return t;
+      }
+    }
+    UNLOCK_PID_HASH_LEVEL_R(l);
+  }
+
+  return NULL;
+}
 
 status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t priv,
                      task_t **newtask)
@@ -25,9 +75,14 @@ status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t
   if(r == 0) {
     r = arch_setup_task_context(new_task,flags,priv);
     if(r == 0) {
-      /* New task is ready. */
+      hash_level_t l = pid_to_hash_level(new_task->pid);
+      LOCK_PID_HASH_LEVEL_W(l);
+      list_add_tail(&new_task->pid_list,&pid_to_struct_hash[l]);
+      UNLOCK_PID_HASH_LEVEL_W(l);
+
       kthread1 = new_task;
     } else {
+      /* TODO: [mt] deallocate task struct properly. */
     }
   }
 
@@ -40,4 +95,5 @@ status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t
 
   return r;
 }
+
 

@@ -5,8 +5,12 @@
 #ifndef __CONTAINER_H__
 #define __CONTAINER_H__ 
 
+#define offset_of(type, member) \
+   ((uintptr_t)&(((type *)0)->member))
+
 #define container_of(ptr, type, member) \
-   (type *)((char *)ptr - ((char *)&((type *)(0))->member - (char *)0))
+   (type *)((uintptr_t)ptr - offset_of(type,member))
+
 
 #endif
 

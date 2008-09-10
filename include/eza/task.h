@@ -34,6 +34,11 @@
 #define INVALID_PID  IA_INVALID_VALUE
 #define NUM_PIDS  65536
 
+/* PID-to-task_t translation hash stuff */
+#define PID_HASH_LEVEL_SHIFT  9 /* Levels of PID-to-task cache. */
+#define PID_HASH_LEVELS  (1 << PID_HASH_LEVEL_SHIFT)
+#define PID_HASH_LEVEL_MASK  (PID_HASH_LEVELS-1)
+
 typedef enum __task_creation_flag_t {
   CLONE_MM = 0x1,
 } task_creation_flags_t;

@@ -23,10 +23,24 @@
 #ifndef __ARCH_TASK_H__
 #define __ARCH_TASK_H__ 
 
+#include <eza/smp.h>
+#include <eza/arch/current.h>
+#include <eza/arch/asm.h>
+#include <eza/scheduler.h>
+#include <eza/arch/cpu.h>
+
 typedef enum __task_privilege {
   TPL_KERNEL = 0,  /* Kernel task - the most serious level. */
   TPL_USER = 1,    /* User task - the least serious level */
 } task_privelege_t;
+
+EXTERN_PER_CPU(cpu_sched_stat,cpu_sched_stat_t);
+
+#define arch_activate_idle_task(cpu) \
+  { register task_t *t = idle_tasks[cpu]; \
+    write_msr(AMD_MSR_GS,__raw_cpu_var(cpu_sched_stat,cpu_sched_stat_t,cpu) ); \
+    load_stack_pointer(t->kernel_stack.high_address-128); \
+  }
 
 #endif
 

@@ -37,15 +37,19 @@
 #include <mlibc/index_array.h>
 #include <eza/spinlock.h>
 
+
 /* Available PIDs live here. */
 static index_array_t pid_array;
 static spinlock_t pid_array_lock;
 
+/* Macros for dealing with PID array locks. */
 #define LOCK_PID_ARRAY spinlock_lock(&pid_array_lock)
 #define UNLOCK_PID_ARRAY spinlock_unlock(&pid_array_lock)
 
 static pid_t allocate_pid(void);
 static void free_pid(pid_t pid);
+
+void initialize_process_subsystem(void);
 
 void initialize_task_subsystem(void)
 {
@@ -65,6 +69,8 @@ void initialize_task_subsystem(void)
     panic( "initialize_task_subsystem(): Can't allocate PID for idle tasks ! (%d returned)",
            idle );
   }
+
+  initialize_process_subsystem();
 }
 
 static pid_t allocate_pid(void)
@@ -80,7 +86,6 @@ static void free_pid(pid_t pid)
   LOCK_PID_ARRAY;
   index_array_free_value(&pid_array,pid);
   UNLOCK_PID_ARRAY;
-  return pid;
 }
 
 int setup_task_kernel_stack(task_t *task)
@@ -230,6 +235,12 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
 
   task->pid = pid;
   task->ppid = ppid; 
+
+  init_list_head(&task->pid_list);
+  spinlock_initialize(&task->lock, "Task lock");
+
+  /* Setup task's initial state. */
+  task->state = TASK_STATE_JUST_BORN;
 
   *t = task;
   return 0;

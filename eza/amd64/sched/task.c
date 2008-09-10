@@ -34,6 +34,7 @@
 #include <eza/kernel.h>
 #include <eza/scheduler.h>
 #include <eza/arch/scheduler.h>
+#include <eza/arch/current.h>
 
 /* Located on 'amd64/asm.S' */
 extern void child_fork_path(void);
@@ -43,6 +44,9 @@ extern void child_fork_path(void);
 
 /* Default kernel threads flags. */
 #define KERNEL_THREAD_FLAGS  (CLONE_MM)
+
+/* Per-CPU glabal structure that reflects the most important kernel states. */
+DEFINE_PER_CPU(cpu_sched_stat,cpu_sched_stat_t);
 
 static void __arch_setup_ctx(task_t *newtask,uint64_t rsp)
 {
@@ -90,6 +94,7 @@ void initialize_idle_tasks(void)
   page_frame_t *ts_page;
   int r, cpu;
   kernel_task_data_t *td;
+  cpu_sched_stat_t *sched_stat;
 
   for( cpu = 0; cpu < NR_CPUS; cpu++ ) {
     ts_page = alloc_page(0,1);
@@ -145,6 +150,15 @@ void initialize_idle_tasks(void)
      * 'system_data' structure.
      */
     initialize_task_system_data(td, cpu);
+  }
+
+  /* Now initialize per-CPU scheduler statistics. */
+  cpu = 0;
+  for_each_cpu_var(sched_stat,cpu_sched_stat,cpu_sched_stat_t) {
+    sched_stat->cpu = cpu;
+    sched_stat->current_task = idle_tasks[cpu];
+    sched_stat->kstack_top = idle_tasks[cpu]->kernel_stack.high_address;
+    cpu++;
   }
 }
 

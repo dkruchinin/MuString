@@ -30,17 +30,18 @@
 #include <eza/scheduler.h>
 #include <eza/kstack.h>
 #include <eza/amd64/context.h>
+#include <eza/arch/current.h>
 
 static inline task_t *arch_current_task(void)
 {
-  kernel_task_data_t *t;
+  uintptr_t ct;
 
-  __asm__ volatile( "movq %%rsp, %%rbx\n"
-                    "andq %%rax, %%rbx\n"
-                     : "=b" (t) : "a" (KERNEL_STACK_MASK) );
-  return &t->task;
+  read_css_field(current_task,ct);
+  return (task_t*)ct;
 }
 
+
+/*
 static inline system_sched_data_t *arch_system_sched_data(void)
 {
   kernel_task_data_t *t;
@@ -50,6 +51,7 @@ static inline system_sched_data_t *arch_system_sched_data(void)
                      : "=b" (t) : "a" (KERNEL_STACK_MASK) );
   return &t->system_data;
 }
+*/
 
 void arch_hw_activate_task( uintptr_t sp, uintptr_t cr3, uintptr_t *saved_sp );
 
