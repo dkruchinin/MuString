@@ -25,6 +25,8 @@
 #ifndef __AMD64__TYPES_H__
 #define __AMD64__TYPES_H__
 
+#include <config.h>
+
 #define NULL ((void *)0)
 #define TRUE   1
 #define FALSE  0

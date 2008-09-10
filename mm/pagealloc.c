@@ -23,6 +23,7 @@
 
 
 #include <ds/list.h>
+#include <mlibc/assert.h>
 #include <mm/mm.h>
 #include <mm/pagealloc.h>
 #include <eza/smp.h>
@@ -44,15 +45,15 @@ page_frame_t *alloc_page( page_flags_t flags, int clean_page )
     /* DMA page requested. */
     return NULL;
   } else {
-    /* First, try to allocate from a per-CPU page cache */
-    percpu_page_cache_t *cpu_cache = &percpu_get_var(percpu_page_cache);
+    /* First, try to allocate from a per-CPU page cache */      
+    percpu_page_cache_t *cpu_cache = percpu_get_var(percpu_page_cache);
 
-    LOCK_CACHE(cpu_cache);
+    LOCK_CACHE(cpu_cache);    
     if(cpu_cache->num_free_pages > 0 ) {
       list_node_t *l = list_node_first(&cpu_cache->pages);
       list_del(l);
       cpu_cache->num_free_pages--;
-      page = list_entry(l, page_frame_t, active_list);
+      page = list_entry(l, page_frame_t, page_next);
     } else {
       page = NULL;
     }

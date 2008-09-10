@@ -219,30 +219,28 @@ static void initialize_percpu_caches(void)
   percpu_page_cache_t *cache;
   memory_zone_t *zone = &memory_zones[ZONE_NORMAL];
   page_idx_t cpupages = zone->num_total_pages / NR_CPUS;
+  page_idx_t p = 0;
 
-  for_each_percpu_var(cache,percpu_page_cache) {
-    page_idx_t p = 0;
+  cache = percpu_get_var(percpu_page_cache);
+  spinlock_initialize(&cache->lock, "<percpu cache spinlock>");
+  list_init_head(&cache->pages);
 
-    spinlock_initialize(&cache->lock, "<percpu cache spinlock>");
-    list_init_head(&cache->pages);
-
-    /* Take into account the last cache. */
-    if( cpupages + NR_CPUS >= zone->num_total_pages ) {
+  /* Take into account the last cache. */
+  if( cpupages + NR_CPUS >= zone->num_total_pages ) {
       cpupages = zone->num_total_pages;
-    }
+  }
 
-    /* Now move all pages to the cache. */
-    for(p = 0; p < cpupages && !list_is_empty(&zone->pages); p++ ) {
+  /* Now move all pages to the cache. */
+  for(p = 0; p < cpupages && !list_is_empty(&zone->pages); p++ ) {      
       list_node_t *l = list_node_first(&zone->pages);
       list_del(l);
       list_add2tail(&cache->pages, l);
       zone->num_free_pages--;
       zone->num_total_pages--;
       p++;
-    }
-
-    cache->num_free_pages = cache->total_pages = p;
   }
+
+  cache->num_free_pages = cache->total_pages = p;
 }
 
 void build_page_array(void)

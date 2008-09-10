@@ -43,14 +43,14 @@ extern cpu_id_t online_cpus;
   __percpu_var_##name[MAX_CPUS] __percpu__
 
 #define percpu_get_var(name)                    \
-  ({ __percpu_var_##name[cpu_id()]; })
+  ({ __percpu_var_##name + cpu_id(); })
 
 #define percpu_set_var(name, value)             \
   (__percpu_var_##name[cpu_id()] = (value))
 
 #define for_each_percpu_var(ptr, name)          \
   for ((ptr) = __percpu_var_##name;             \
-       (ptr) < (__percpu_var_##name + __CPUS - 1);  \
+       (ptr) < (__percpu_var_##name + __CPUS);  \
        (ptr)++)
 
 static inline void set_cpu_online(cpu_id_t cpu, uint32_t online)

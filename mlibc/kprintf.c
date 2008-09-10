@@ -54,6 +54,7 @@ static struct kbuffer __kbuf = {
 
 size_t kbuf_insert(const char *s, const size_t slen)
 {
+  return slen; /* FIXME: this is only temporary solution */
   if(slen > __kbuf.size)
 	return -1;
   if(slen > (__kbuf.size - __kbuf.cur_size)) {
@@ -93,10 +94,11 @@ void vkprintf(const char *fmt, va_list ap)
 
   memset(tmp_buf, '\0', TMPBUF_SIZE);
   sl = vsprintf(tmp_buf, fmt, ap);
-  if (sl > TMPBUF_SIZE) {
+  /* FIXME: fix this shit... */
+  /*if (sl > TMPBUF_SIZE) {
 	kcons->display_string("\nvkprintf error\n");
 	return;
-  }
+    }*/
   if (kbuf_insert(tmp_buf, sl) != sl) {
     kcons->display_string("\n__kbuf error\n");
     return;

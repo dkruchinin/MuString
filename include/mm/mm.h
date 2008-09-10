@@ -32,11 +32,11 @@
 #include <eza/arch/page.h>
 //#include <eza/swks.h>
 
-extern int kdata_end;
-extern int ktext_start;
+extern int _kernel_end;
+extern int _kernel_start;
 
-#define KERNEL_FIRST_FREE_ADDRESS ((char *)&kdata_end)
-#define KERNEL_FIRST_ADDRESS ((char *)&ktext_start)
+#define KERNEL_FIRST_FREE_ADDRESS ((char *)&_kernel_end)
+#define KERNEL_FIRST_ADDRESS ((char *)&_kernel_start)
 
 #define NUM_MEMORY_ZONES  2
 

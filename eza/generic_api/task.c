@@ -120,7 +120,6 @@ status_t create_new_task( task_t *parent, task_t **t, task_creation_flags_t flag
 
   td = (kernel_task_data_t *)pframe_to_virt(ts_page);
   task = &td->task;
-
   /* Create kernel stack for the new task. */
   r = allocate_kernel_stack(&task->kernel_stack) != 0;
   if( r != 0 ) {
@@ -142,7 +141,7 @@ status_t create_new_task( task_t *parent, task_t **t, task_creation_flags_t flag
   }
 
   /* Map kernel stack. */
-  pa_ctx.head = stack_pages;
+  pa_ctx.head = list_node_first(&stack_pages->active_list);
   pa_ctx.num_pages = KERNEL_STACK_PAGES;
   pageaccs_list_pa.reset(&pa_ctx);
 
@@ -156,7 +155,7 @@ status_t create_new_task( task_t *parent, task_t **t, task_creation_flags_t flag
   /* Map task struct into the stack area. */
   l_ctx.start_page = l_ctx.end_page = ts_page->idx;
   pageaccs_linear_pa.reset(&l_ctx);
-
+  
   r = mm_map_pages( &task->page_dir, &pageaccs_linear_pa,
                     task->kernel_stack.low_address & KERNEL_STACK_MASK, 1,
                     KERNEL_STACK_PAGE_FLAGS, &l_ctx );
@@ -166,7 +165,6 @@ status_t create_new_task( task_t *parent, task_t **t, task_creation_flags_t flag
 
   /* Initialize task system data. */
   initialize_task_system_data(td,cpu_id());
-
   /* TODO: [mt] Handle process PIDs properly. */
   task->pid = pid++;
   task->ppid = parent->pid;

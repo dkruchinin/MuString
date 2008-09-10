@@ -2,6 +2,7 @@
  * preprocessed while compilation
  */
 
+#include <config.h>
 #include <eza/arch/boot.h>
 #include <eza/arch/page.h>
 
@@ -10,8 +11,6 @@ OUTPUT_FORMAT("elf64-x86-64")
 SECTIONS {
 	.unmapped BOOT_OFFSET: AT (0) {
 		unmapped_ktext_start = .;
-/*        . = ALIGN(0x1000);
-        _low_kernel_start = p2k(BOOT_OFFSET);*/
 		*(K_TEXT_START);
 		unmapped_ktext_end = .;
 
@@ -21,10 +20,9 @@ SECTIONS {
 		unmapped_kdata_end = .;
 	}
 
-    . = ALIGN(0x1000);
     _low_kernel_end = p2k(BOOT_OFFSET) + SIZEOF(.unmapped);
 
-	.mapped (_low_kernel_end) : AT (unmapped_kdata_end) {        
+	.mapped(_low_kernel_end) : AT (SIZEOF(.unmapped)) {        
         _kernel_start = .;
 		ktext_start = .;
 		*(.text);
@@ -52,7 +50,6 @@ SECTIONS {
 
 		*(.bss);		/* uninitialized static variables */
 
-        . = ALIGN(0x1000);
 		kdata_end = .;
 	}
 
