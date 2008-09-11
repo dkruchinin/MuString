@@ -50,7 +50,7 @@ static void install_irq_handlers(void)
 
 void arch_initialize_irqs(void)
 {
-  int idx, r,i;
+  int idx, r;
 
   /* Initialize the PIC */
   i8259a_init();
