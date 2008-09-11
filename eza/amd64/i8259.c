@@ -82,7 +82,7 @@ static void i8259a_ack_irq(uint32_t irq) /*end of irq*/
 
 static bool i8259a_handles_irq(uint32_t irq)
 {
-  return ( irq < MAX_IRQ_NUM );
+  return ( irq < 16 );
 }
 
 

@@ -39,6 +39,7 @@ static spinlock_declare(irq_lock);
 
 static LIST_HEAD(known_hw_int_controllers);
 static irq_line_t irqs[NUM_IRQS];
+static irq_action_t descs[1024];
 
 #define GRAB_IRQ_LOCK() spinlock_lock(&irq_lock)
 #define RELEASE_IRQ_LOCK() spinlock_unlock(&irq_lock)
@@ -46,7 +47,7 @@ static irq_line_t irqs[NUM_IRQS];
 
 static irq_action_t *allocate_irq_action( void )
 {
-  static irq_action_t descs[128];
+  //  static irq_action_t descs[1024];
   static int idx = 0;
   static irq_action_t *desc;
 
@@ -56,7 +57,10 @@ static irq_action_t *allocate_irq_action( void )
   return desc;
 }
 
-static void install_irq_action( uint32_t irq, irq_action_t *desc ) {
+static void install_irq_action( uint32_t irq, irq_action_t *desc ) 
+{
+  irqs[irq].actions.next=irqs[irq].actions.prev;
+
   list_add_tail( &desc->l, &irqs[irq].actions);
 }
 
@@ -71,7 +75,7 @@ void register_hw_interrupt_controller(hw_interrupt_controller_t *ctrl)
   GRAB_IRQ_LOCK();
   list_add(&ctrl->l, &known_hw_int_controllers);
 
-  for( idx = 0; idx < NUM_IRQS; idx++ ) {
+  for( idx = 0; idx < 256; idx++ ) {
     if( irqs[idx].controller == NULL ) {
       if( ctrl->handles_irq(idx) ) {
         irqs[idx].controller = ctrl;
@@ -120,7 +124,7 @@ int register_irq(irq_t irq, irq_handler_t handler, void *data, uint32_t flags)
   hw_interrupt_controller_t *p;
   int retval = -EINVAL;
 
-  if( irq < NUM_IRQS && handler != NULL ) {
+  if( irq < 256 && handler != NULL ) {
     GRAB_IRQ_LOCK();
   
     irq_action_t *desc = allocate_irq_action();
@@ -147,7 +151,7 @@ int unregister_irq(irq_t irq, void *data)
   int retval = -EINVAL;
   irq_action_t *desc;
 
-  if( irq < NUM_IRQS ) {
+  if( irq < 256 ) {
     GRAB_IRQ_LOCK();
     list_for_each_entry( desc, &irqs[irq].actions, l ) {
       if( desc->private_data == data ) {
@@ -163,7 +167,7 @@ void initialize_irqs( void )
 {
   int i;
 
-  for( i = 0; i < NUM_IRQS; i++ ) {
+  for( i = 0; i < 256; i++ ) {
     init_list_head(&irqs[i].actions);
     irqs[i].controller = NULL;
     irqs[i].flags = 0;
@@ -198,7 +202,11 @@ void enable_all_irqs(void)
 
 void do_irq(irq_t irq)
 {
-  if( irq < NUM_IRQS ) {
+#if 0
+  test_handler(irq);
+  return;
+#endif
+  if( irq < 256 ) {
     int cpu = cpu_id();
     int handlers = 0;
     cpu_stats_t *cpu_stat = &swks.cpu_stat[cpu];

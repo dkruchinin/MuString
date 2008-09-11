@@ -189,7 +189,7 @@ static inline void _set_pt_flags(pte_t *p,index_t i,int f)
  * there are no segmantation in long mode
  */
 
-#define IDT_ITEMS  64  /* interrupt descriptors */
+#define IDT_ITEMS  256  /* interrupt descriptors */
 #define GDT_ITEMS  8   /* GDT */
 
 #define NIL_DES  0  /* nil(null) descriptor */

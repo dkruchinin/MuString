@@ -26,30 +26,38 @@
 #include <eza/interrupt.h>
 #include <eza/time.h>
 #include <eza/arch/8259.h>
+#include <eza/arch/ioapic.h>
+#include <eza/arch/apic.h>
 #include <eza/arch/mm_types.h>
 #include <eza/kernel.h>
 
-/*static*/ void timer_interrupt_handler(void *data)
+static void timer_interrupt_handler(void *data)
 {
+  apic_timer_hack();
   timer_tick();
   scheduler_tick();
 }
 
 static void install_irq_handlers(void)
 {
-  register_irq( TIMER_IRQ_LINE, timer_interrupt_handler, NULL, 0 );
+  //  register_irq( TIMER_IRQ_LINE, timer_interrupt_handler, NULL, 0 );
+
+  register_irq(17, timer_interrupt_handler, NULL, 0 );
+
+  //  io_apic_enable_irq(0);
 }
 
 
 void arch_initialize_irqs(void)
 {
-  int idx, r;
+  int idx, r,i;
 
   /* Initialize the PIC */
   i8259a_init();
+  fake_apic_init();
 
   /* Initialize all possible IRQ handlers to stubs. */
-  for(idx=0;idx<NUM_IRQS;idx++) {
+  for(idx=0;idx<256-IRQ_BASE;idx++) {
     r = install_interrupt_gate(idx+IRQ_BASE, irq_entrypoints_array[idx],
                                PROT_RING_0, 0 );
     if( r != 0 ) {
@@ -59,5 +67,6 @@ void arch_initialize_irqs(void)
 
   /* Setup all known interrupt handlers. */
   install_irq_handlers();  
+
 }
 

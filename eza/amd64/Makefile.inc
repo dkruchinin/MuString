@@ -10,6 +10,8 @@ LIBARCHEZA_OBJS=eza/amd64/pmm.o eza/amd64/e820map.o \
 	eza/amd64/i8259.o \
 	eza/amd64/i8254.o \
 	eza/amd64/apic.o \
+	eza/amd64/ioapic.o \
+	eza/amd64/fake_apic.o \
 	eza/amd64/timer.o \
 	eza/amd64/platform.o \
 	eza/amd64/strmem.o \

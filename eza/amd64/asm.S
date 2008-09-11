@@ -117,7 +117,7 @@ irq_entrypoints_array:
 v=0
 low_irq_stubs:
 
-.rept 16
+.rept 256
 1:  pushq %rax
     movq $v,%rax
     jmp common_interrupt
