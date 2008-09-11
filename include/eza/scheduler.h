@@ -31,6 +31,7 @@
 #include <eza/kstack.h>
 #include <eza/spinlock.h>
 #include <eza/arch/current.h>
+#include <ds/list.h>
 
 #define PRIORITY_MAX  128
 #define IDLE_TASK_PRIORITY (PRIORITY_MAX+1)
@@ -51,17 +52,18 @@ typedef enum __task_state {
 } task_state_t;
 
 typedef uint8_t priority_t;
-typedef uint32_t cpu_affinity_array_t;
+typedef uint32_t cpu_array_t;
 
 #define CPU_AFFINITY_ALL_CPUS 0
 
+/* Abstract object for scheduling. */
 typedef struct __task_struct {
   pid_t pid, ppid;
   
   priority_t static_priority, priority;
   time_slice_t time_slice;
   task_state_t state;
-  cpu_affinity_array_t cpu_affinity;
+  cpu_array_t cpu_affinity;
 
   kernel_stack_t kernel_stack;
   page_directory_t page_dir;
@@ -73,17 +75,35 @@ typedef struct __task_struct {
   uint8_t arch_context[];
 } task_t;
 
+/* Abstract scheduler. */
+typedef struct __scheduler {
+  const char *id;
+  list_head_t l;
+  bool (*is_smp)(void);
+  void (*add_cpu)(cpu_id_t cpu);
+  cpu_array_t (*scheduler_tick)(void);
+  void (*add_task)(task_t *task);
+  void (*schedule)(void);
+  task_t *(*get_running_task)(cpu_id_t cpu);
+} scheduler_t;
+
+
 void initialize_scheduler(void);
-void scheduler_tick(void);
-void schedule(void);
+
+bool sched_register_scheduler(scheduler_t *sched);
+bool sched_unregister_scheduler(scheduler_t *sched);
+scheduler_t *sched_get_scheduler(const char *name);
+
+void sched_timer_tick(void);
+
 void idle_loop(void);
 
 extern task_t *idle_tasks[];
 
-status_t do_change_task_state(task_t *task,task_state_t state);
-status_t activate_task(task_t *task);
-status_t deactivate_task(task_t *task,task_state_t state);
-void reschedule_task(task_t *task);
+status_t sched_do_change_task_state(task_t *task,task_state_t state);
+status_t sched_activate_task(task_t *task);
+status_t sched_deactivate_task(task_t *task,task_state_t state);
+void sched_reschedule_task(task_t *task);
 
 #endif
 

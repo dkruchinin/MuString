@@ -32,7 +32,7 @@
 /*static*/ void timer_interrupt_handler(void *data)
 {
   timer_tick();
-  scheduler_tick();
+  sched_timer_tick();
 }
 
 static void install_irq_handlers(void)

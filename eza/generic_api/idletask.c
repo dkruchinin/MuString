@@ -29,6 +29,7 @@
 #include <eza/scheduler.h>
 #include <eza/swks.h>
 #include <mlibc/string.h>
+#include <eza/arch/mm_types.h>
 
 task_t *idle_tasks[NR_CPUS];
 
