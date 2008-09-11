@@ -58,8 +58,9 @@ extern void initialize_timer(void);
 static void main_routine_stage1(void)
 {
   /* Initialize PICs and setup common interrupt handlers. */
-  arch_initialize_irqs();
 
+  arch_specific_init();
+  arch_initialize_irqs();
   /* Initialize known hardware devices. */
   initialize_common_hardware();
     
@@ -72,7 +73,6 @@ static void main_routine_stage1(void)
 
   set_cpu_online(0,1);  /* We're online. */
   initialize_swks();
-  arch_specific_init();
 
   /* The other CPUs are running, the scheduler is ready, so we can
    * enable all interrupts.
@@ -119,6 +119,8 @@ void main_routine(void) /* this function called from boostrap assembler code */
 #ifdef CONFIG_SMP
 void main_smpap_routine(void)
 {
+  kprintf("[SMP] Hello folks! I'm here\n");
+  kprintf("{ZZzzz} going for(;;)\n");
   for(;;);
 }
 #endif

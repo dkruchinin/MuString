@@ -78,6 +78,42 @@ uint64_t i8254_calibrate_delay_loop(void)
     (((MAGIC_CLOCKN*DCLOCK)/1000) % ((tt1-tt2)-(oo1-oo2)) ? 1 : 0);
 }
 
+uint64_t i8254_calibrate_delay_loop0(void)
+{
+  uint8_t cnt;
+  uint32_t tt1,tt2,oo1,oo2;
+
+  outb(I8254_BASE+3,0x30);
+  outb(I8254_BASE,0xff);
+  outb(I8254_BASE,0xff);
+
+  do {
+    outb(I8254_BASE+3,0xc2);
+    cnt=(uint8_t)((inb(I8254_BASE) >> 6) & 1);
+    tt1=inb(I8254_BASE);
+    tt1|=inb(I8254_BASE) << 8;
+  } while(cnt);
+  
+  usleep(DCLOCK);
+
+  outb(I8254_BASE+3,0xd2);
+  tt2=inb(I8254_BASE);
+  tt2|=inb(I8254_BASE) << 8;
+
+  outb(I8254_BASE+3,0xd2);
+  oo1=inb(I8254_BASE);
+  oo1|=inb(I8254_BASE) << 8;
+
+  usleep(DCLOCK);
+
+  outb(I8254_BASE+3,0xd2);
+  oo2=inb(I8254_BASE);
+  oo2|=inb(I8254_BASE) << 8;
+
+  return (((MAGIC_CLOCKN*DCLOCK)/1000) / ((tt1-tt2)-(oo1-oo2)))+
+    (((MAGIC_CLOCKN*DCLOCK)/1000) % ((tt1-tt2)-(oo1-oo2)) ? 1 : 0);
+}
+
 static void i8254_register_callback(irq_t irq,irq_handler_t handler)
 {
   register_irq(irq,handler,NULL,0);

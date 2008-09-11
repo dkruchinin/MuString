@@ -59,9 +59,10 @@ SECTIONS {
     }
 
     _hardcoded_unmapped_size = (unmapped_ktext_end - unmapped_ktext_start) + (unmapped_kdata_end - unmapped_kdata_start);
-    ap_boot = unmapped_ap_boot - (BOOT_OFFSET + AP_BOOT_OFFSET);
-    ap_gdtr = unmapped_ap_gdtr - (BOOT_OFFSET + AP_BOOT_OFFSET);
+    ap_boot = unmapped_ap_boot - BOOT_OFFSET + AP_BOOT_OFFSET;
+    ap_gdtr = unmapped_ap_gdtr - BOOT_OFFSET + AP_BOOT_OFFSET;
     protected_ap_gdtr = p2k(ap_gdtr);
+
 #endif
    
    . = ALIGN(0x1000);

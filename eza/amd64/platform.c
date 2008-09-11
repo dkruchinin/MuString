@@ -32,6 +32,7 @@
 #include <eza/arch/page.h>
 #include <eza/pageaccs.h>
 #include <mlibc/kprintf.h>
+#include <mlibc/unistd.h>
 
 static int __map_apic_page(void)
 {
@@ -89,15 +90,21 @@ void arch_specific_init(void)
   } else
     kprintf("OK\n");
 
+  //io_apic_bsp_init();
+
   local_bsp_apic_init();
+
+  //local_apic_timer_init();
 
   local_apic_bsp_switch();
 
-  local_apic_timer_init();
+  //  local_apic_timer_init();
 
 #ifdef CONFIG_SMP
 
   arch_smp_init();
+  //usleep(50000);
 
 #endif
+  //local_apic_timer_init();
 }

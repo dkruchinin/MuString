@@ -43,6 +43,7 @@ void clone_fn(void *data)
       kprintf( " + Tick, tick ! (Ticks: %d, PID: %d, CPU ID: %d)\n",
                swks.system_ticks_64, current_task()->pid, 1024 );
       target_tick += 10150;
+
       rounds ++;
 
       if( rounds >= 3 ) {
@@ -71,6 +72,7 @@ void idle_loop(void)
       kprintf( " - Tick, tick ! (Ticks: %d, PID: %d, CPU ID: %d)\n",
                swks.system_ticks_64, current_task()->pid, 1024 );
       target_tick += 10000;
+
       rounds++;
 
       if( rounds >= 3 ) {

@@ -59,8 +59,9 @@ jump_to_kernel:
 	movl %cr4, %eax
 	btsl $5, %eax
 	movl %eax, %cr4
+	/* setup paging tables */
 	leal ptl_0, %eax
-	movl %eax, %cr4
+	movl %eax, %cr3
 	/* enable long mode */
 	movl $EFER_MSR_NUM, %ecx
 	rdmsr
@@ -75,7 +76,7 @@ jump_to_kernel:
 .code64
 start64:
 	/* here we're go - call C code */
-	movq (crsc), %rsp
+	movq $ap_stack+2048, %rsp
 	call main_smpap_routine-AP_BOOT_OFFSET+BOOT_OFFSET
 	/* will never returns */
 	
@@ -85,6 +86,12 @@ start64:
 	
 #ifdef CONFIG_SMP
 
+.global ap_stack
+ap_stack:
+	.rept 1024
+	.quad 0
+	.endr
+	
 .global unmapped_ap_gdtr
 unmapped_ap_gdtr:
 	.word 0

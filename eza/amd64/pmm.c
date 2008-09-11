@@ -173,6 +173,7 @@ void arch_pmm_init(cpu_id_t cpu)
   /* Remap memory using 4K page frames. All CPUs has to do this. */
   arch_remap_memory(cpu);
 
+
   return;
 }
 
