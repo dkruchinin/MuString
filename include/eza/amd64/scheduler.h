@@ -31,6 +31,7 @@
 #include <eza/kstack.h>
 #include <eza/amd64/context.h>
 #include <eza/arch/current.h>
+#include <eza/smp.h>
 
 static inline task_t *current_task(void)
 {
@@ -38,6 +39,35 @@ static inline task_t *current_task(void)
 
   read_css_field(current_task,ct);
   return (task_t*)ct;
+}
+
+static inline void set_cpu_online(cpu_id_t cpu, uint32_t online)
+{
+  cpu_id_t mask = 1 << cpu;
+
+  if( online ) {
+    online_cpus |= mask;
+  } else {
+    online_cpus &= ~mask;
+  }
+}
+
+static inline bool is_cpu_online(cpu_id_t cpu)
+{
+  return (online_cpus & (1 << cpu)) ? true : false;
+}
+
+static inline cpu_id_t cpu_id(void)
+{
+  cpu_id_t c;
+
+  if( online_cpus != 0 ) {
+    read_css_field(cpu,c);
+  } else {
+    c = 0;
+  }
+
+  return c;  
 }
 
 void arch_hw_activate_task(arch_context_t *new_ctx, task_t *new_task,

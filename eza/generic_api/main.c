@@ -42,6 +42,7 @@
 #include <eza/arch/platform.h>
 #include <eza/arch/task.h>
 #include <eza/swks.h>
+#include <eza/arch/scheduler.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
@@ -63,7 +64,7 @@ static void main_routine_stage1(void)
   arch_initialize_irqs();
   /* Initialize known hardware devices. */
   initialize_common_hardware();
-    
+ 
   /* Since the PIC is initialized, all interrupts from the hardware
    * is disabled. So we can enable local interrupts since we will
    * receive interrups from the other CPUs via LAPIC upon unleashing
@@ -73,6 +74,7 @@ static void main_routine_stage1(void)
 
   set_cpu_online(0,1);  /* We're online. */
   initialize_swks();
+
 
   /* The other CPUs are running, the scheduler is ready, so we can
    * enable all interrupts.
@@ -85,6 +87,7 @@ static void main_routine_stage1(void)
   start_init();
  
   /* Enter idle loop. */
+  kprintf( "CPU #0d is entering idle loop. Current task: %p\n", current_task() );
   idle_loop();
 }
 
@@ -103,13 +106,14 @@ void main_routine(void) /* this function called from boostrap assembler code */
   install_fault_handlers();
   initialize_irqs();
   initialize_scheduler();
+
   initialize_timer();
 
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.
    */
   arch_activate_idle_task(0);
- 
+
   /* Now we can continue initialization with properly initialized kernel
    * stack frame.
    */
@@ -117,11 +121,48 @@ void main_routine(void) /* this function called from boostrap assembler code */
 }
 
 #ifdef CONFIG_SMP
+static void main_smpap_routine_stage1(cpu_id_t cpu)
+{
+  cpu_id_t c;
+
+  install_fault_handlers();
+//  interrupts_enable();
+
+  /* We're online. */
+  set_cpu_online(cpu,1);
+
+/*
+  __asm__ volatile( "xor %rax, %rax\n"
+                    "movq $8, %rbx\n"
+                     "movq %gs:8, %rax\n" );
+  //read_css_field(cpu,c);
+  l56: goto l56;
+*/
+  /* Entering idle loop. */
+  kprintf( "CPU #%d is entering idle loop. Current task: %p, CPUID: %d <<<\n",
+           cpu, current_task(), cpu_id() );
+
+  for( ;; ) {
+  }
+}
+
 void main_smpap_routine(void)
 {
-  kprintf("[SMP] Hello folks! I'm here\n");
-  kprintf("{ZZzzz} going for(;;)\n");
-  for(;;);
+  static cpu_id_t cpu = 1;
+
+  kprintf("CPU#%d Hello folks! I'm here\n", cpu);
+
+  /* Now we can switch stack to our new kernel stack, setup any arch-specific
+   * contexts, etc.
+   */
+  arch_mm_stage0_init(cpu);
+  arch_activate_idle_task(cpu);
+
+  /* Continue CPU initialization in new context. All kernel memory is now
+   * visible to us.
+   */
+  cpu++;
+  main_smpap_routine_stage1(1);
 }
 #endif
 

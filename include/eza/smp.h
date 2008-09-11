@@ -32,7 +32,8 @@
 extern cpu_id_t online_cpus;
 
 #ifdef CONFIG_SMP
-#define cpu_id() 0 /* TODO: Handle it in a more beatiful way. */
+/* Real cpu_id() is defined in include/<arch>/scheduler.h  */
+  #include <eza/arch/scheduler.h>
 #define __CPUS MAX_CPUS
 #else
 #define cpu_id() 0
@@ -56,16 +57,9 @@ extern cpu_id_t online_cpus;
        (ptr) < (__percpu_var_##name + __CPUS);  \
        (ptr)++)
 
-static inline void set_cpu_online(cpu_id_t cpu, uint32_t online)
-{
-  cpu_id_t mask = 1 << cpu;
+static void set_cpu_online(cpu_id_t cpu, uint32_t online);
+static bool is_cpu_online(cpu_id_t cpu);
 
-  if( online ) {
-    online_cpus |= mask;
-  } else {
-    online_cpus &= ~mask;
-  }
-}
 
 #define for_each_cpu(c)           \
   for(c = 0; c < NR_CPUS; c++ )   \

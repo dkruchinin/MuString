@@ -23,11 +23,11 @@ typedef struct __cpu_sched_stat {
 
 #define read_css_field(field,v) \
   __asm__ volatile(  "movq %%gs:(%%rbx), %%rax" \
-                     :"=r"(v) :"b" ( offset_of(cpu_sched_stat_t,current_task)) );
+                     :"=r"(v) :"b" ( offset_of(cpu_sched_stat_t,field)) );
 
 #define write_css_field(field,v) \
   __asm__ volatile(  "movq %%rax, %%gs:(%%rbx)" \
-                     ::"a"(v), "b"( offset_of(cpu_sched_stat_t,current_task)) );
+                     ::"a"(v), "b"( offset_of(cpu_sched_stat_t,field)) );
 
 #endif
 
