@@ -20,6 +20,7 @@
  * eza/generic_api/task.c: generic functions for dealing with task creation.
  */
 
+#include <ds/list.h>
 #include <eza/task.h>
 #include <mm/pt.h>
 #include <eza/smp.h>
@@ -32,8 +33,60 @@
 #include <eza/arch/types.h>
 #include <eza/kernel.h>
 #include <eza/pageaccs.h>
-#include <eza/list.h>
 #include <eza/arch/task.h>
+#include <mlibc/index_array.h>
+#include <eza/spinlock.h>
+
+
+/* Available PIDs live here. */
+static index_array_t pid_array;
+static spinlock_t pid_array_lock;
+
+/* Macros for dealing with PID array locks. */
+#define LOCK_PID_ARRAY spinlock_lock(&pid_array_lock)
+#define UNLOCK_PID_ARRAY spinlock_unlock(&pid_array_lock)
+
+static pid_t allocate_pid(void);
+static void free_pid(pid_t pid);
+
+void initialize_process_subsystem(void);
+
+void initialize_task_subsystem(void)
+{
+  pid_t idle;
+
+  spinlock_initialize(&pid_array_lock,"PID array spinlock");
+
+  if( !index_array_initialize(&pid_array, NUM_PIDS) ) {
+    panic( "initialize_task_subsystem(): Can't initialize PID index array !" );
+  }
+
+  /* Sanity check: allocate PID 0 for idle tasks, so the next available PID
+   * will be 1 (init).
+   */
+  idle = allocate_pid();
+  if(idle != 0) {
+    panic( "initialize_task_subsystem(): Can't allocate PID for idle tasks ! (%d returned)",
+           idle );
+  }
+
+  initialize_process_subsystem();
+}
+
+static pid_t allocate_pid(void)
+{
+  LOCK_PID_ARRAY;
+  pid_t pid = index_array_alloc_value(&pid_array);
+  UNLOCK_PID_ARRAY;
+  return pid;
+}
+
+static void free_pid(pid_t pid)
+{
+  LOCK_PID_ARRAY;
+  index_array_free_value(&pid_array,pid);
+  UNLOCK_PID_ARRAY;
+}
 
 int setup_task_kernel_stack(task_t *task)
 {
@@ -47,12 +100,6 @@ int setup_task_kernel_stack(task_t *task)
   return r;
 }
 
-void initialize_task_system_data(kernel_task_data_t *task, cpu_id_t cpu)
-{
-  task->system_data.cpu_id = cpu;
-  task->system_data.irq_num = 0;
-}
-
 static page_frame_t *alloc_stack_pages(void)
 {
   int i;
@@ -64,11 +111,11 @@ static page_frame_t *alloc_stack_pages(void)
     if( p == NULL ) {
       return NULL;
     } else {
-      init_list_head( &p->active_list );
+      list_init_node( &p->page_next );
       if(first == NULL) {
         first = p;
       } else {
-        list_add_tail(&p->active_list,&first->active_list);
+        list_add2tail(&first->active_list,&p->page_next);
       }
     }
   }
@@ -100,26 +147,31 @@ static status_t initialize_mm( task_t *orig, task_t *target,
   return r;
 }
 
-static pid_t pid = 1;
-
-status_t create_new_task( task_t *parent, task_t **t, task_creation_flags_t flags,task_privelege_t priv)
+status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags,task_privelege_t priv)
 {
   task_t *task;
   page_frame_t *ts_page;
   status_t r = -ENOMEM;
   page_frame_t *stack_pages;
-  kernel_task_data_t * td;
   pageaccs_list_pa_ctx_t pa_ctx;
   pageaccs_linear_pa_ctx_t l_ctx;
+  pid_t pid, ppid;
 
-  /* TODO: Add memory limit check. */
-  ts_page = alloc_page(GENERIC_KERNEL_PAGE,1);
-  if( ts_page == NULL ) {
-    goto task_alloc_fault;
+  /* TODO: [mt] Add memory limit check. */
+  /* goto task_create_fault; */  
+
+  /* First, try to allocate a PID. */
+  pid = allocate_pid();
+  if( pid == INVALID_PID ) {
+    goto task_create_fault;
   }
 
-  td = (kernel_task_data_t *)pframe_to_virt(ts_page);
-  task = &td->task;
+  ts_page = alloc_page(GENERIC_KERNEL_PAGE,1);
+  if( ts_page == NULL ) {
+    goto free_pid;
+  }
+
+  task = pframe_to_virt(ts_page);
 
   /* Create kernel stack for the new task. */
   r = allocate_kernel_stack(&task->kernel_stack) != 0;
@@ -153,29 +205,23 @@ status_t create_new_task( task_t *parent, task_t **t, task_creation_flags_t flag
     goto free_stack_pages;
   }
 
-  /* Map task struct into the stack area. */
-  l_ctx.start_page = l_ctx.end_page = ts_page->idx;
-  pageaccs_linear_pa.reset(&l_ctx);
-
-  r = mm_map_pages( &task->page_dir, &pageaccs_linear_pa,
-                    task->kernel_stack.low_address & KERNEL_STACK_MASK, 1,
-                    KERNEL_STACK_PAGE_FLAGS, &l_ctx );
-  if( r != 0 ) {
-    goto unmap_stack_pages;
+  if(parent != NULL) {
+    ppid = parent->pid;
+  } else {
+    ppid = 0;
   }
 
-  /* Initialize task system data. */
-  initialize_task_system_data(td,cpu_id());
+  task->pid = pid;
+  task->ppid = ppid; 
 
-  /* TODO: [mt] Handle process PIDs properly. */
-  task->pid = pid++;
-  task->ppid = parent->pid;
+  list_init_node(&task->pid_list);
+  spinlock_initialize(&task->lock, "Task lock");
+
+  /* Setup task's initial state. */
+  task->state = TASK_STATE_JUST_BORN;
 
   *t = task;
   return 0;
-unmap_task_struct:
-  /* TODO: Unmap task struct here. [mt] */
-unmap_stack_pages:
   /* TODO: Unmap stack pages here. [mt] */
 free_stack_pages:
   /* TODO: Free all stack pages here. [mt] */  
@@ -185,7 +231,9 @@ free_stack:
   free_kernel_stack(task->kernel_stack.id);  
 free_task:
   /* TODO: Free task struct page here. [mt] */
-task_alloc_fault:
+free_pid:
+  free_pid(pid);
+task_create_fault:
   *t = NULL;
   return r;
 }

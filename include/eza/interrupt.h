@@ -25,14 +25,14 @@
 #ifndef __INTERRUPT_H__
 #define __INTERRUPT_H__ 
 
-#include <eza/list.h>
+#include <ds/list.h>
 #include <eza/arch/interrupt.h>
 #include <eza/arch/types.h>
 
 /* Structure that describes abstract hardware interrupt controller.
  */
 typedef struct __hw_interrupt_controller {
-  list_head_t l; /*head of list*/
+  list_node_t l; /*head of list*/
   const char *descr; /*symboluc name*/
   bool (*handles_irq)( uint32_t irq ); /*Can this PIC use this irq*/
   void (*enable_all)(void); /*globally enable/dissble all irqs*/
@@ -56,7 +56,7 @@ typedef struct __irq_action {
   irq_handler_t handler;
   uint32_t flags;
   void *private_data;
-  list_head_t l;
+  list_node_t l;
 } irq_action_t;
 
 /* Low-level IRQ entrypoints. */

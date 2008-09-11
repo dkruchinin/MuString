@@ -39,10 +39,9 @@
 #include <eza/interrupt.h>
 #include <eza/scheduler.h>
 #include <eza/arch/fault.h>
-#include <eza/arch/asm.h>
 #include <eza/arch/platform.h>
-
-#define CONFIG_STACK_SIZE  ((1 << 0) * PAGE_SIZE)
+#include <eza/arch/task.h>
+#include <eza/swks.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
@@ -50,6 +49,11 @@ init_t init={ /* initially created for userspace task, requered for servers load
 
 /* current context safe */
 context_t crsc;
+
+extern void initialize_common_hardware(void);
+extern void start_init(void);
+extern void initialize_timer(void);
+
 
 static void main_routine_stage1(void)
 {
@@ -86,7 +90,7 @@ static void main_routine_stage1(void)
 
 void main_routine(void) /* this function called from boostrap assembler code */
 {
-  kconsole_t *kcons = default_console();
+  kconsole_t *kcons = default_console();  
 
   /* After initializing memory stuff, the master CPU should perform
    * the final initializations.
@@ -101,9 +105,11 @@ void main_routine(void) /* this function called from boostrap assembler code */
   initialize_scheduler();
   initialize_timer();
 
-  /* Now we can switch stack to our new kernel stack. */
-  load_stack_pointer(idle_tasks[0]->kernel_stack.high_address-512);
-
+  /* Now we can switch stack to our new kernel stack, setup any arch-specific
+   * contexts, etc.
+   */
+  arch_activate_idle_task(0);
+ 
   /* Now we can continue initialization with properly initialized kernel
    * stack frame.
    */
@@ -118,3 +124,4 @@ void main_smpap_routine(void)
   for(;;);
 }
 #endif
+

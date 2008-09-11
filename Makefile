@@ -18,10 +18,6 @@
 
 CFLAGS+=-Iinclude/
 
-ifeq ($(CONFIG_SMP),y)
-	EXTRFL += -DCONFIG_SMP
-endif
-
 ifeq ($(PARANOIC),y)
      CFLAGS += -Werror
 endif

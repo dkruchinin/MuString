@@ -22,6 +22,8 @@
  */
 
 
+#include <ds/list.h>
+#include <mlibc/assert.h>
 #include <mm/mm.h>
 #include <mm/pagealloc.h>
 #include <eza/smp.h>
@@ -30,7 +32,7 @@
 #include <mlibc/string.h>
 #include <eza/arch/page.h>
 
-EXTERN_PER_CPU(percpu_page_cache,percpu_page_cache_t);
+extern percpu_page_cache_t PER_CPU_VAR(percpu_page_cache);
 
 #define LOCK_CACHE(c)
 #define UNLOCK_CACHE(c)
@@ -43,15 +45,15 @@ page_frame_t *alloc_page( page_flags_t flags, int clean_page )
     /* DMA page requested. */
     return NULL;
   } else {
-    /* First, try to allocate from a per-CPU page cache */
-    percpu_page_cache_t *cpu_cache = cpu_var(percpu_page_cache,percpu_page_cache_t);
+    /* First, try to allocate from a per-CPU page cache */      
+    percpu_page_cache_t *cpu_cache = percpu_get_var(percpu_page_cache);
 
-    LOCK_CACHE(cpu_cache);
+    LOCK_CACHE(cpu_cache);    
     if(cpu_cache->num_free_pages > 0 ) {
-      list_head_t *l = cpu_cache->pages.next;
+      list_node_t *l = list_node_first(&cpu_cache->pages);
       list_del(l);
       cpu_cache->num_free_pages--;
-      page = container_of(l, page_frame_t,active_list);
+      page = list_entry(l, page_frame_t, page_next);
     } else {
       page = NULL;
     }

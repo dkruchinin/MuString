@@ -25,18 +25,18 @@
 #ifndef __MM_H__
 #define __MM_H__
 
-#include <eza/list.h>
+#include <ds/list.h>
 #include <eza/arch/types.h>
 #include <eza/spinlock.h>
 #include <eza/arch/e820map.h>
 #include <eza/arch/page.h>
 //#include <eza/swks.h>
 
-extern int kdata_end;
-extern int ktext_start;
+extern int _kernel_end;
+extern int _kernel_start;
 
-#define KERNEL_FIRST_FREE_ADDRESS ((char *)&kdata_end)
-#define KERNEL_FIRST_ADDRESS ((char *)&ktext_start)
+#define KERNEL_FIRST_FREE_ADDRESS ((char *)&_kernel_end)
+#define KERNEL_FIRST_ADDRESS ((char *)&_kernel_start)
 
 #define NUM_MEMORY_ZONES  2
 
@@ -69,6 +69,7 @@ typedef struct __memory_zone {
 } memory_zone_t;
 
 typedef struct __page_frame {
+  list_node_t page_next;
   list_head_t active_list;
   page_idx_t idx;
   atomic_t refcount;

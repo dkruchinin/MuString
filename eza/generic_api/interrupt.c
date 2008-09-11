@@ -26,8 +26,8 @@
  *  - Tirra
  */
 
+#include <ds/list.h>
 #include <eza/interrupt.h>
-#include <eza/list.h>
 #include <eza/errno.h>
 #include <eza/spinlock.h>
 #include <eza/arch/interrupt.h> /* Arch-specific constants. */
@@ -37,7 +37,7 @@
 
 static spinlock_declare(irq_lock);
 
-static LIST_HEAD(known_hw_int_controllers);
+static LIST_DEFINE(known_hw_int_controllers);
 static irq_line_t irqs[NUM_IRQS];
 static irq_action_t descs[1024];
 
@@ -52,7 +52,7 @@ static irq_action_t *allocate_irq_action( void )
   static irq_action_t *desc;
 
   desc = &descs[idx];
-  init_list_head( &desc->l );
+  list_init_node( &desc->l );
   idx++;
   return desc;
 }
@@ -60,8 +60,7 @@ static irq_action_t *allocate_irq_action( void )
 static void install_irq_action( uint32_t irq, irq_action_t *desc ) 
 {
   irqs[irq].actions.next=irqs[irq].actions.prev;
-
-  list_add_tail( &desc->l, &irqs[irq].actions);
+  list_add2tail(&irqs[irq].actions, &desc->l);
 }
 
 static void remove_irq_action( irq_action_t *desc ) {
@@ -73,7 +72,7 @@ void register_hw_interrupt_controller(hw_interrupt_controller_t *ctrl)
   int idx;
 
   GRAB_IRQ_LOCK();
-  list_add(&ctrl->l, &known_hw_int_controllers);
+  list_add2tail(&known_hw_int_controllers, &ctrl->l);
 
   for( idx = 0; idx < 256; idx++ ) {
     if( irqs[idx].controller == NULL ) {
@@ -121,7 +120,6 @@ int enable_hw_irq(irq_t irq)
 
 int register_irq(irq_t irq, irq_handler_t handler, void *data, uint32_t flags)
 {
-  hw_interrupt_controller_t *p;
   int retval = -EINVAL;
 
   if( irq < 256 && handler != NULL ) {
@@ -153,7 +151,7 @@ int unregister_irq(irq_t irq, void *data)
 
   if( irq < 256 ) {
     GRAB_IRQ_LOCK();
-    list_for_each_entry( desc, &irqs[irq].actions, l ) {
+    list_for_each_entry(&irqs[irq].actions, desc, l) {
       if( desc->private_data == data ) {
         remove_irq_action(desc);
       }
@@ -168,7 +166,8 @@ void initialize_irqs( void )
   int i;
 
   for( i = 0; i < 256; i++ ) {
-    init_list_head(&irqs[i].actions);
+    list_init_head(&irqs[i].actions);
+
     irqs[i].controller = NULL;
     irqs[i].flags = 0;
   }
@@ -181,7 +180,7 @@ void disable_all_irqs(void)
   hw_interrupt_controller_t *p;
 
   GRAB_IRQ_LOCK();
-  list_for_each_entry( p, &known_hw_int_controllers, l ) {
+  list_for_each_entry(&known_hw_int_controllers, p, l) {
     p->disable_all();
   }
   RELEASE_IRQ_LOCK();
@@ -190,10 +189,9 @@ void disable_all_irqs(void)
 void enable_all_irqs(void)
 {
   hw_interrupt_controller_t *p;
-  list_head_t *ll;
 
   GRAB_IRQ_LOCK();
-  list_for_each_entry( p, &known_hw_int_controllers, l ) {
+  list_for_each_entry(&known_hw_int_controllers, p, l) {
     p->enable_all();
   }
   RELEASE_IRQ_LOCK();
@@ -215,7 +213,7 @@ void do_irq(irq_t irq)
     cpu_stat->irq_stat[irq]++;
 
     /* Call all handlers. */
-    list_for_each_entry( action, &irqs[irq].actions, l ) {
+    list_for_each_entry(&irqs[irq].actions, action, l) {
       action->handler( action->private_data );
       handlers++;
     }

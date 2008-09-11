@@ -28,8 +28,6 @@
 #include <eza/arch/page.h>
 #include <eza/arch/types.h>
 #include <mm/pagealloc.h>
-#include <eza/container.h>
-#include <eza/list.h>
 
 #define PTE_ENTRIES_PER_PAGE  512
 
@@ -89,7 +87,7 @@ static inline pml4_entry_t *vaddr_to_pml4(uintptr_t vaddr,page_directory_t *pd)
 
 static int populate_pdp3_entry(pdp3_entry_t *entry, page_frame_accessor_t *pacc, page_flags_t flags,
                                void *pacc_ctx)
-{
+{  
   page_frame_t *pf = pacc->alloc_page(pacc_ctx,flags,1);
   if( pf != NULL ) {
     register uintptr_t pfn = pframe_number(pf);
@@ -198,13 +196,13 @@ static int map_pdp3_range(pdp3_entry_t *pdp3, uintptr_t virt_addr, uintptr_t end
   pde2 = (pde2_entry_t *)v + ((virt_addr >> 21) & 0x1ff);
 
   do {
-    if( !tlb_entry_valid(pde2) ) {
+     if( !tlb_entry_valid(pde2) ) {
       if( populate_pde2_entry(pde2,pacc,flags,pacc_ctx) != 0 ) {
         return -ENOMEM;
       }
     }
 
-    to_addr = virt_addr + length;
+     to_addr = virt_addr + length;
     if( to_addr > ((virt_addr + L2_ENTRY_RANGE) & L2_ADDR_MASK) ) {
       to_addr = ((virt_addr + L2_ENTRY_RANGE) & L2_ADDR_MASK);
     }
@@ -215,7 +213,7 @@ static int map_pdp3_range(pdp3_entry_t *pdp3, uintptr_t virt_addr, uintptr_t end
       return -ENOMEM;
     }
 
-    virt_addr = to_addr;
+     virt_addr = to_addr;
     pde2++;
   } while(virt_addr < end_addr);
 
@@ -233,7 +231,7 @@ static int map_pml4_range(pml4_entry_t *pml4, uintptr_t virt_addr, uintptr_t end
 
   pdp3 = (pdp3_entry_t *)p2k_code(v) + ((virt_addr >> 30) & 0x1ff); 
 
-  do { 
+  do {
     if( !tlb_entry_valid(pdp3)) {
       if( populate_pdp3_entry( pdp3,pacc,flags,pacc_ctx) != 0) {
         return -ENOMEM;
@@ -249,7 +247,6 @@ static int map_pml4_range(pml4_entry_t *pml4, uintptr_t virt_addr, uintptr_t end
     if( map_pdp3_range(pdp3,virt_addr,to_addr,pacc,flags,pacc_ctx) != 0) {
       return -ENOMEM;
     }
-
     virt_addr = to_addr;
     pdp3++;
   } while(virt_addr < end_addr);
@@ -258,7 +255,7 @@ static int map_pml4_range(pml4_entry_t *pml4, uintptr_t virt_addr, uintptr_t end
 
 static int populate_pml4_entry(pml4_entry_t *entry, page_frame_accessor_t *pacc,
                                page_flags_t flags, void *pacc_ctx)
-{
+{  
   page_frame_t *pf = pacc->alloc_page(pacc_ctx,flags,1);
   if( pf != NULL ) {
     register uintptr_t pfn = pframe_number(pf);
@@ -313,7 +310,7 @@ int mm_map_pages( page_directory_t *pd, page_frame_accessor_t *pacc, uintptr_t v
         return -ENOMEM;
       }
     }
-
+    
     to_addr = virt_addr + length;
 
     /* Make sure we are not inside the last L4 entry. */
@@ -323,7 +320,6 @@ int mm_map_pages( page_directory_t *pd, page_frame_accessor_t *pacc, uintptr_t v
     }
 
     length -= (to_addr - virt_addr);
-
     if( map_pml4_range(pml4,virt_addr,to_addr,pacc,flags,pacc_ctx) != 0 ) {
       return -ENOMEM;
     }

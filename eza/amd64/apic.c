@@ -21,6 +21,7 @@
  *
  */
 
+#include <config.h>
 #include <eza/interrupt.h>
 #include <eza/arch/8259.h>
 #include <eza/arch/i8254.h>

@@ -20,11 +20,11 @@
  * mm/pageaccs.c: Common page accessors live here.
  */
 
+#include <mlibc/stddef.h>
 #include <mm/pt.h>
 #include <eza/pageaccs.h>
 #include <mm/pagealloc.h>
 #include <eza/swks.h>
-#include <eza/container.h>
 
 void pageaccs_reset_stub(void *ctx)
 {
@@ -85,7 +85,7 @@ static page_idx_t list_pa_next_frame(void *ctx)
   pageaccs_list_pa_ctx_t *lctx = (pageaccs_list_pa_ctx_t*)ctx;
 
   if( lctx->pages_left != 0 ) {
-    page_frame_t *f = container_of(lctx->curr,page_frame_t,active_list);
+    page_frame_t *f = container_of(lctx->curr,page_frame_t,page_next);
 
     lctx->curr = lctx->curr->next;
     lctx->pages_left--;
@@ -99,7 +99,7 @@ static void list_pa_reset(void *ctx)
 {
   pageaccs_list_pa_ctx_t *lctx = (pageaccs_list_pa_ctx_t*)ctx;
 
-  lctx->curr = &(lctx->head->active_list);
+  lctx->curr = list_node_first(&lctx->head->active_list);
   lctx->pages_left = lctx->num_pages;
 }
 

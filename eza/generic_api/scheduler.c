@@ -35,9 +35,9 @@
 #include <eza/scheduler.h>
 #include <eza/swks.h>
 #include <eza/kstack.h>
-
-//static DEFINE_PER_CPU(cpu_metadata,cpu_sched_meta_data_t);
-EXTERN_PER_CPU(idle_tasks,task_t);
+#include <mlibc/index_array.h>
+#include <eza/task.h>
+#include <eza/errno.h>
 
 extern void initialize_idle_tasks(void);
 
@@ -46,24 +46,69 @@ cpu_id_t online_cpus;
 void initialize_scheduler(void)
 {
   initialize_kernel_stack_allocator();
+  initialize_task_subsystem();
   initialize_idle_tasks();
 }
 
 void scheduler_tick(void)
 {
-//  task_t *current = arch_current_task();
-//  cpu_sched_meta_data_t *meta_data = cpu_var(cpu_metadata,cpu_sched_meta_data_t);
+}
 
-//  if( current == meta_data->idle_task ) {
-//    return;
-//  }
+status_t activate_task(task_t *task)
+{
+  if( task->state == TASK_STATE_JUST_BORN ||
+    task->state == TASK_STATE_STOPPED ) {
+
+    LOCK_TASK_STRUCT(task);
+    task->state = TASK_STATE_RUNNABLE;
+    UNLOCK_TASK_STRUCT(task);
+    return 0;
+  }
+  return -EINVAL;
+}
+
+void reschedule_task(task_t *task) {
+}
+
+status_t deactivate_task(task_t *task, task_state_t state)
+{
+  if( task->state == TASK_STATE_RUNNABLE ||
+    task->state == TASK_STATE_RUNNING ) {
+    task_state_t prev_state = task->state;
+
+    task->state = state;
+    if( prev_state == TASK_STATE_RUNNABLE ) {
+      /* Move targe task to the list of stopped tasks. */
+    }
+    UNLOCK_TASK_STRUCT(task);
+
+    /* In case target task is running, we must reschedule it. */
+    if( prev_state == TASK_STATE_RUNNING ) {
+      reschedule_task(task);
+    }
+
+    return 0;
+  }
+  return -EINVAL;
+}
+
+
+status_t do_change_task_state(task_t *task,task_state_t state)
+{
+  /* TODO: [mt] implement security check on task state change. */
+  switch(state) {
+    case TASK_STATE_RUNNABLE:
+      return activate_task(task);
+    case TASK_STATE_STOPPED:
+      return deactivate_task(task,TASK_STATE_STOPPED);
+    default:
+      break;
+  }
+
+  return -EINVAL;
 }
 
 void schedule(void)
 {
-//  task_t *current = current_task();
-// task_t *next = NULL;
-
-//  arch_activate_task(next);
 }
 

@@ -78,6 +78,9 @@ static inline void spinlock_unlock(spinlock_t *s)
 #else /* just disable preemption while spin is locked */
 /* on UP systems you can just disable preemtion and/or interrupts to make a spinlock */
 /*FIXME: include all preemtion enable/disable stuff */
+
+typedef long spinlock_t;
+
 #define spinlock_declare(s)  
 #define spinlock_extern(s)   
 #define spinlock_initialize_macro(s)  

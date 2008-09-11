@@ -24,6 +24,7 @@
 #ifndef __ARCH_APIC_H__
 #define __ARCH_APIC_H__
 
+#include <config.h>
 #include <eza/arch/types.h>
 
 #define APIC_BASE    0xfee00000

@@ -37,7 +37,8 @@ void panic(const char *fmt, ...)
   va_start(ap, fmt);
   vsnprintf(panic_buf, sizeof(panic_buf), fmt, ap);
   va_end(ap);
-  kprintf(KO_PANIC "%s\n", panic_buf);
+  kprintf("\n========[!!PANIC!!]=========\n");
+  kprintf("%s\n", panic_buf);  
 
   for(;;);
 }
