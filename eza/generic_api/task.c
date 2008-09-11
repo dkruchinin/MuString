@@ -157,7 +157,7 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
   pageaccs_linear_pa_ctx_t l_ctx;
   pid_t pid, ppid;
 
-  /* TODO: Add memory limit check. */
+  /* TODO: [mt] Add memory limit check. */
   /* goto task_create_fault; */  
 
   /* First, try to allocate a PID. */
@@ -205,17 +205,6 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
     goto free_stack_pages;
   }
 
-  /* Map task struct into the stack area. */
-  l_ctx.start_page = l_ctx.end_page = ts_page->idx;
-  pageaccs_linear_pa.reset(&l_ctx);
-  
-  r = mm_map_pages( &task->page_dir, &pageaccs_linear_pa,
-                    task->kernel_stack.low_address & KERNEL_STACK_MASK, 1,
-                    KERNEL_STACK_PAGE_FLAGS, &l_ctx );
-  if( r != 0 ) {
-    goto unmap_stack_pages;
-  }
-
   if(parent != NULL) {
     ppid = parent->pid;
   } else {
@@ -233,7 +222,6 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
 
   *t = task;
   return 0;
-unmap_stack_pages:
   /* TODO: Unmap stack pages here. [mt] */
 free_stack_pages:
   /* TODO: Free all stack pages here. [mt] */  

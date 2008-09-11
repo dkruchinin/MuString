@@ -128,18 +128,6 @@ void initialize_idle_tasks(void)
     if( r != 0 ) {
       panic( "initialize_idle_tasks(): Can't map kernel stack for idle task !" );
     }
-
-    /* OK, stack is already mapped, so we can map task struct into this task's address
-     * space.
-     */
-    next_frame = ts_page;
-    r = mm_map_pages( &task->page_dir, &idle_pacc,
-                      task->kernel_stack.low_address & KERNEL_STACK_MASK, 1,
-                      KERNEL_STACK_PAGE_FLAGS, NULL );
-    if( r != 0 ) {
-      panic( "initialize_idle_tasks(): Can't map kernel stack for idle task !" );
-    }
-
     /* Setup arch-specific task context. */
     __arch_setup_ctx(task,0);
   }

@@ -50,13 +50,12 @@ static void initialize_bitmap( uint64_t *bitmap, uint32_t size )
   }
 }
 
-static void initialize_stack_chunk( kernel_stack_chunk_t *chunk )
+static void initialize_stack_chunk(kernel_stack_chunk_t *chunk, uint32_t id)
 {
   list_init_node(&chunk->l);
   chunk->total_items = chunk->free_items = BITMAP_ENTRIES_COUNT;
-  chunk->high_address = chunk->high_address;
-  chunk->low_address = starting_kernel_stack_address -
-                       (KERNEL_STACK_SIZE + KERNEL_STACK_GAP) * BITMAP_ENTRIES_COUNT;
+  chunk->high_address = starting_kernel_stack_address - id*KERNEL_STACK_CHUNK_SIZE;
+  chunk->low_address = chunk->high_address - KERNEL_STACK_CHUNK_SIZE;
   initialize_bitmap(chunk->bitmap, BITMAP_ENTRIES_COUNT);
 }
 
@@ -70,7 +69,7 @@ static void initialize_stack_allocator_context(kernel_stack_allocator_context_t 
 
   spinlock_initialize(&ctx->lock, "Main kernel stack context lock");
   list_init_head(&ctx->chunks);
-  initialize_stack_chunk(ch1);
+  initialize_stack_chunk(ch1,0);
 
   ctx->total_items = ch1->total_items;
   ctx->free_items = ch1->free_items;
@@ -83,17 +82,17 @@ int allocate_kernel_stack(kernel_stack_t *stack)
 {
   int r = -ENOENT;
   bit_idx_t idx;
+  kernel_stack_chunk_t *chunk;
 
   LOCK_STACK_CTX(&main_stack_ctx);
 
   if(main_stack_ctx.free_items > 0) {
-      kernel_stack_chunk_t *chunk = container_of( list_node_first(&main_stack_ctx.chunks),
+    chunk = container_of( list_node_first(&main_stack_ctx.chunks),
                                                 kernel_stack_chunk_t, l );
     idx = find_first_bit_mem_64( chunk->bitmap, BITMAP_ENTRIES_COUNT );
 
     if( idx != INVALID_BIT_INDEX ) {
       main_stack_ctx.free_items--;
-
       reset_and_test_bit_mem_64( chunk->bitmap, idx );
       r = 0;
     }
@@ -102,8 +101,7 @@ int allocate_kernel_stack(kernel_stack_t *stack)
   UNLOCK_STACK_CTX(&main_stack_ctx);
 
   if( r == 0 ) {
-    stack->high_address = starting_kernel_stack_address -
-                          idx * KERNEL_STACK_STEP - KERNEL_STACK_GAP;
+    stack->high_address = chunk->high_address - idx*KERNEL_STACK_STEP - KERNEL_STACK_FRONT_GAP;
     stack->low_address = stack->high_address - KERNEL_STACK_SIZE;
     stack->id = idx;
   } else {

@@ -34,8 +34,10 @@
 
 #define KERNEL_STACK_PAGES  4   /* Pages per kernel stack. */
 #define KERNEL_STACK_SIZE  (KERNEL_STACK_PAGES * PAGE_SIZE)
-#define KERNEL_STACK_GAP  PAGE_SIZE
-#define KERNEL_STACK_STEP (8 * PAGE_SIZE)
+#define KERNEL_STACK_FRONT_GAP  PAGE_SIZE
+#define KERNEL_STACK_REAR_GAP  0
+#define KERNEL_STACK_STEP (KERNEL_STACK_SIZE + KERNEL_STACK_FRONT_GAP +\
+                           KERNEL_STACK_REAR_GAP)
 #define KERNEL_STACK_MASK  ~((uintptr_t)KERNEL_STACK_STEP - 1)
 
 #define KERNEL_STACK_PAGE_FLAGS  0
@@ -43,6 +45,9 @@
 #define BITMAP_INIT_PATTERN ~((uintptr_t)0) /* Initial bitmap pattern. */
 #define BITMAP_ADDRESS_CHECK_MASK (0x7) /* For checking bitmap alignment */
 #define INVALID_STACK_ID  INVALID_BIT_INDEX
+
+#define BITMAP_ENTRIES_COUNT ( (PAGE_SIZE - (sizeof(kernel_stack_chunk_t))) / sizeof(uint64_t) )
+#define KERNEL_STACK_CHUNK_SIZE  (BITMAP_ENTRIES_COUNT*KERNEL_STACK_STEP)
 
 /* Starting address for kernel stack allocation (will grow down) */
 extern uintptr_t starting_kernel_stack_address;
@@ -69,8 +74,6 @@ typedef struct __kernel_stack_allocator_context {
 int allocate_kernel_stack(kernel_stack_t *stack);
 int free_kernel_stack(uint32_t id);
 void initialize_kernel_stack_allocator(void);
-
-#define BITMAP_ENTRIES_COUNT ( (PAGE_SIZE - (sizeof(kernel_stack_chunk_t))) / sizeof(uint64_t) )
 
 #endif
 
