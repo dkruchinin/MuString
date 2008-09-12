@@ -87,7 +87,8 @@ static void main_routine_stage1(void)
   start_init();
  
   /* Enter idle loop. */
-  kprintf( "CPU #0d is entering idle loop. Current task: %p\n", current_task() );
+  kprintf( "CPU #0 is entering idle loop. Current task: %p, CPU ID: %d\n",
+           current_task(), cpu_id() );
   idle_loop();
 }
 
@@ -126,20 +127,13 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
   cpu_id_t c;
 
   install_fault_handlers();
-//  interrupts_enable();
+  interrupts_enable();
 
   /* We're online. */
   set_cpu_online(cpu,1);
 
-/*
-  __asm__ volatile( "xor %rax, %rax\n"
-                    "movq $8, %rbx\n"
-                     "movq %gs:8, %rax\n" );
-  //read_css_field(cpu,c);
-  l56: goto l56;
-*/
   /* Entering idle loop. */
-  kprintf( "CPU #%d is entering idle loop. Current task: %p, CPUID: %d <<<\n",
+  kprintf( "CPU #%d is entering idle loop. Current task: %p, CPU ID: %d\n",
            cpu, current_task(), cpu_id() );
 
   for( ;; ) {
@@ -152,15 +146,15 @@ void main_smpap_routine(void)
 
   kprintf("CPU#%d Hello folks! I'm here\n", cpu);
 
+  /* Ramap physical memory using page directory preparead be master CPU. */
+  arch_mm_stage0_init(cpu); 
+
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.
    */
-  arch_mm_stage0_init(cpu);
   arch_activate_idle_task(cpu);
 
-  /* Continue CPU initialization in new context. All kernel memory is now
-   * visible to us.
-   */
+  /* Continue CPU initialization in new context. */
   cpu++;
   main_smpap_routine_stage1(1);
 }
