@@ -59,7 +59,7 @@ static irq_action_t *allocate_irq_action( void )
 
 static void install_irq_action( uint32_t irq, irq_action_t *desc ) 
 {
-  irqs[irq].actions.next=irqs[irq].actions.prev;
+  list_init_head(&irqs[irq].actions);
   list_add2tail(&irqs[irq].actions, &desc->l);
 }
 
