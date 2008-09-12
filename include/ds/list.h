@@ -84,17 +84,6 @@ static inline void list_init_node(list_node_t *node)
 }
 
 /**
- * @fn static inline int list_is_empty(list_t *list)
- * @brief Determines if list @a list is empty
- * @param list - A pointer to list to test
- * @return True if list is empty, false otherwise
- */
-static inline int list_is_empty(list_head_t *list)
-{
-  return (list_node_first(list) == list_head(list));
-}
-
-/**
  * @def list_entry(lst, nptr)
  * @brief Get item that holds @a nptr node
  * @param list - A pointer to the list
@@ -237,6 +226,17 @@ static inline int list_is_empty(list_head_t *list)
   for (iter = list_entry(list_node_first(lst), typeof(*iter), member); \
        &iter->member != list_head(lst);                                \
        iter = list_entry(iter->member.next, typeof(*iter), member))
+
+/**
+ * @fn static inline int list_is_empty(list_t *list)
+ * @brief Determines if list @a list is empty
+ * @param list - A pointer to list to test
+ * @return True if list is empty, false otherwise
+ */
+static inline int list_is_empty(list_head_t *list)
+{
+  return (list_node_first(list) == list_head(list));
+}
 
 /**
  * @fn static inline void list_add_range(list_node_t *first, list_node_t *last,
