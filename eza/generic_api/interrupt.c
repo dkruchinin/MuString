@@ -39,16 +39,16 @@ static spinlock_declare(irq_lock);
 
 static LIST_DEFINE(known_hw_int_controllers);
 static irq_line_t irqs[NUM_IRQS];
-static irq_action_t descs[1024];
 
 #define GRAB_IRQ_LOCK() spinlock_lock(&irq_lock)
 #define RELEASE_IRQ_LOCK() spinlock_unlock(&irq_lock)
 
+list_head_t thead;
 
 static irq_action_t *allocate_irq_action( void )
 {
-  //  static irq_action_t descs[1024];
-  static int idx = 0;
+  static irq_action_t descs[512];
+  static int idx = 5;
   static irq_action_t *desc;
 
   desc = &descs[idx];
@@ -59,7 +59,7 @@ static irq_action_t *allocate_irq_action( void )
 
 static void install_irq_action( uint32_t irq, irq_action_t *desc ) 
 {
-  list_add2tail(&irqs[irq].actions, &desc->l);
+  list_add2tail( &irqs[irq].actions, &desc->l);
 }
 
 static void remove_irq_action( irq_action_t *desc ) {
@@ -122,10 +122,10 @@ int register_irq(irq_t irq, irq_handler_t handler, void *data, uint32_t flags)
   int retval = -EINVAL;
 
   if( irq < 256 && handler != NULL ) {
+    irq_action_t *desc = allocate_irq_action();
+
     GRAB_IRQ_LOCK();
   
-    irq_action_t *desc = allocate_irq_action();
- 
     desc->handler = handler;
     desc->flags = flags;
     desc->private_data = data;
@@ -140,6 +140,7 @@ int register_irq(irq_t irq, irq_handler_t handler, void *data, uint32_t flags)
     RELEASE_IRQ_LOCK();
     retval = 0;
   }
+  
   return retval;
 }
 
@@ -199,12 +200,9 @@ void enable_all_irqs(void)
 
 void do_irq(irq_t irq)
 {
-#if 0
-  test_handler(irq);
-  return;
-#endif
   if( irq < 256 ) {
     int cpu = cpu_id();
+
     int handlers = 0;
     cpu_stats_t *cpu_stat = &swks.cpu_stat[cpu];
     irq_action_t *action;

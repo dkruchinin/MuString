@@ -38,20 +38,34 @@
 #include <mlibc/index_array.h>
 #include <eza/task.h>
 #include <eza/errno.h>
+#include <ds/list.h>
+#include <mlibc/stddef.h>
+#include <mlibc/string.h>
 
 extern void initialize_idle_tasks(void);
 
 cpu_id_t online_cpus;
 
+/* Known schedulers. */
+static list_head_t schedulers;
+static spinlock_t scheduler_lock;
+
+#define LOCK_SCHEDULER_LIST spinlock_lock(&scheduler_lock)
+#define UNLOCK_SCHEDULER_LIST spinlock_unlock(&scheduler_lock)
+
+
+static void initialize_sched_internals(void)
+{
+  list_init_head(&schedulers);
+  spinlock_initialize(&schedulers_lock, "Scheduler lock");
+}
+
 void initialize_scheduler(void)
 {
+  initialize_sched_internals();
   initialize_kernel_stack_allocator();
   initialize_task_subsystem();
   initialize_idle_tasks();
-}
-
-void scheduler_tick(void)
-{
 }
 
 status_t activate_task(task_t *task)
@@ -93,7 +107,7 @@ status_t deactivate_task(task_t *task, task_state_t state)
 }
 
 
-status_t do_change_task_state(task_t *task,task_state_t state)
+status_t sched_do_change_task_state(task_t *task,task_state_t state)
 {
   /* TODO: [mt] implement security check on task state change. */
   switch(state) {
@@ -108,7 +122,58 @@ status_t do_change_task_state(task_t *task,task_state_t state)
   return -EINVAL;
 }
 
+scheduler_t *sched_get_scheduler(const char *name)
+{
+  scheduler_t *sched = NULL;
+  list_node_t *l;
+
+  LOCK_SCHEDULER_LIST;
+  list_for_each(&schedulers,l) {
+    scheduler_t *s = container_of(l,scheduler_t,l);
+    if( !strcmp(s->id,name) ) {
+      sched = s;
+      break;
+    }
+  }
+  UNLOCK_SCHEDULER_LIST;
+
+  return sched;
+}
+
+bool sched_register_scheduler(scheduler_t *sched)
+{
+  LOCK_SCHEDULER_LIST;
+  
+  list_init_node(&sched->l);
+  list_add2tail(&schedulers,&sched->l); 
+  
+  UNLOCK_SCHEDULER_LIST;
+
+  return true;
+}
+
+bool sched_unregister_scheduler(scheduler_t *sched)
+{
+  bool r = false;
+  list_node_t *l;
+
+  LOCK_SCHEDULER_LIST;
+  list_for_each(&schedulers,l) {
+    if( l == &sched->l ) {
+      r = true;
+      list_del(&sched->l);
+      break;
+    }
+  }
+  UNLOCK_SCHEDULER_LIST;
+  return r;
+}
+
 void schedule(void)
+{
+}
+
+void sched_timer_tick(void)
 {
 }
 

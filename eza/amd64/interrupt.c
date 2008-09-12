@@ -35,7 +35,7 @@ static void timer_interrupt_handler(void *data)
 {
   apic_timer_hack();
   timer_tick();
-  scheduler_tick();
+  sched_timer_tick();
 }
 
 static void install_irq_handlers(void)
@@ -50,7 +50,7 @@ static void install_irq_handlers(void)
 
 void arch_initialize_irqs(void)
 {
-  int idx, r,i;
+  int idx, r;
 
   /* Initialize the PIC */
   i8259a_init();

@@ -29,6 +29,7 @@
 #include <eza/scheduler.h>
 #include <eza/swks.h>
 #include <mlibc/string.h>
+#include <eza/arch/mm_types.h>
 
 task_t *idle_tasks[NR_CPUS];
 
@@ -41,7 +42,7 @@ void clone_fn(void *data)
     if( swks.system_ticks_64 == target_tick ) {
       kprintf( " + Tick, tick ! (Ticks: %d, PID: %d, CPU ID: %d)\n",
                swks.system_ticks_64, current_task()->pid, 1024 );
-      target_tick += 10150;
+      target_tick += 7000;
 
       rounds ++;
 
@@ -70,7 +71,7 @@ void idle_loop(void)
     if( swks.system_ticks_64 == target_tick ) {
       kprintf( " - Tick, tick ! (Ticks: %d, PID: %d, CPU ID: %d)\n",
                swks.system_ticks_64, current_task()->pid, 1024 );
-      target_tick += 10000;
+      target_tick += 7000;
 
       rounds++;
 
