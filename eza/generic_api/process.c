@@ -80,6 +80,9 @@ status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t
       UNLOCK_PID_HASH_LEVEL_W(l);
 
       kthread1 = new_task;
+
+      /* Tell the scheduler layer to take care of this task. */
+      sched_add_task(new_task);
     } else {
       /* TODO: [mt] deallocate task struct properly. */
     }

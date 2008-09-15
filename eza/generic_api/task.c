@@ -220,6 +220,10 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
   /* Setup task's initial state. */
   task->state = TASK_STATE_JUST_BORN;
 
+  /* Setup scheduler-related stuff. */
+  task->scheduler = NULL;
+  task->sched_data = NULL;
+
   *t = task;
   return 0;
   /* TODO: Unmap stack pages here. [mt] */

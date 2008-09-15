@@ -56,6 +56,8 @@ typedef uint32_t cpu_array_t;
 
 #define CPU_AFFINITY_ALL_CPUS 0
 
+struct __scheduler_t;
+
 /* Abstract object for scheduling. */
 typedef struct __task_struct {
   pid_t pid, ppid;
@@ -71,6 +73,10 @@ typedef struct __task_struct {
 
   spinlock_t lock;
 
+  /* Scheduler-related stuff. */
+  struct scheduler_t *scheduler;
+  void *sched_data;
+
   /* Arch-dependent context is located here */
   uint8_t arch_context[];
 } task_t;
@@ -79,12 +85,13 @@ typedef struct __task_struct {
 typedef struct __scheduler {
   const char *id;
   list_head_t l;
-  bool (*is_smp)(void);
+  cpu_id_t (*cpus_supported)(void);
   void (*add_cpu)(cpu_id_t cpu);
-  cpu_array_t (*scheduler_tick)(void);
-  void (*add_task)(task_t *task);
+  void (*scheduler_tick)(void);
+  status_t (*add_task)(task_t *task);
   void (*schedule)(void);
-  task_t *(*get_running_task)(cpu_id_t cpu);
+  void (*reset)(void);
+  status_t (*change_task_state)(task_t *task,task_state_t state);
 } scheduler_t;
 
 
@@ -100,10 +107,11 @@ void idle_loop(void);
 
 extern task_t *idle_tasks[];
 
-status_t sched_do_change_task_state(task_t *task,task_state_t state);
-status_t sched_activate_task(task_t *task);
-status_t sched_deactivate_task(task_t *task,task_state_t state);
+status_t sched_change_task_state(task_t *task,task_state_t state);
 void sched_reschedule_task(task_t *task);
+status_t sched_add_task(task_t *task);
+
+scheduler_t *get_default_scheduler(void);
 
 #endif
 
