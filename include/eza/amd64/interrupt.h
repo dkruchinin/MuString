@@ -10,7 +10,7 @@
 #include <eza/arch/types.h>
 
 #define HZ  1000 /* Timer frequency. */
-#define NUM_IRQS  16  /* Maximum number of hardware IRQs in the system. */
+#define NUM_IRQS  256  /* Maximum number of hardware IRQs in the system. */
 #define IRQ_BASE 0x20 /* First vector in IDT for IRQ #0. */
 
 /* AMD 64 interrupt/exception stack frame */
