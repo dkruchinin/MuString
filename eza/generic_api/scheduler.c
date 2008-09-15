@@ -66,13 +66,14 @@ void initialize_scheduler(void)
   initialize_sched_internals();
   initialize_kernel_stack_allocator();
   initialize_task_subsystem();
-  initialize_idle_tasks();
 
   /* Now initialize scheduler. */
   list_init_head(&schedulers);
   if( !sched_register_scheduler(get_default_scheduler())) {
     panic( "initialize_scheduler(): Can't register default scheduler !" );  
   }
+
+  initialize_idle_tasks();
 }
 
 void reschedule_task(task_t *task) {
@@ -104,6 +105,8 @@ bool sched_register_scheduler(scheduler_t *sched)
     return false;
   }
 
+  sched->reset();
+
   LOCK_SCHEDULER_LIST;
   
   list_init_node(&sched->l);
@@ -115,6 +118,7 @@ bool sched_register_scheduler(scheduler_t *sched)
 
   UNLOCK_SCHEDULER_LIST;
 
+  sched->reset();
   kprintf( "Registering a scheduler: %s\n", sched->id );
 
   return true;
@@ -139,6 +143,7 @@ bool sched_unregister_scheduler(scheduler_t *sched)
 
 status_t sched_change_task_state(task_t *task,task_state_t state)
 {
+  /* TODO: [mt] implement security check on task state change. */
   if(active_scheduler == NULL) {
     return -ENOTTY;
   }
@@ -149,6 +154,22 @@ status_t sched_add_task(task_t *task)
 {
   if(active_scheduler != NULL) {
     return active_scheduler->add_task(task);
+  }
+  return -ENOTTY;
+}
+
+status_t sched_setup_idle_task(task_t *task)
+{
+  if(active_scheduler != NULL) {
+    return active_scheduler->setup_idle_task(task);
+  }
+  return -ENOTTY;
+}
+
+status_t sched_add_cpu(cpu_id_t cpu)
+{
+  if( active_scheduler != NULL ) {
+    return active_scheduler->add_cpu(cpu);
   }
   return -ENOTTY;
 }

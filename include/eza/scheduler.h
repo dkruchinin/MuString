@@ -33,9 +33,6 @@
 #include <eza/arch/current.h>
 #include <ds/list.h>
 
-#define PRIORITY_MAX  128
-#define IDLE_TASK_PRIORITY (PRIORITY_MAX+1)
-
 /* Macros for locking task structure. */
 #define LOCK_TASK_STRUCT(t) spinlock_lock(&t->lock)
 #define UNLOCK_TASK_STRUCT(t) spinlock_unlock(&t->lock)
@@ -51,19 +48,18 @@ typedef enum __task_state {
   TASK_STATE_ZOMBIE = 5,
 } task_state_t;
 
-typedef uint8_t priority_t;
+typedef uint32_t priority_t;
 typedef uint32_t cpu_array_t;
 
 #define CPU_AFFINITY_ALL_CPUS 0
 
-struct __scheduler_t;
+struct __scheduler;
 
 /* Abstract object for scheduling. */
 typedef struct __task_struct {
   pid_t pid, ppid;
-  
-  priority_t static_priority, priority;
-  time_slice_t time_slice;
+  cpu_id_t cpu;
+
   task_state_t state;
   cpu_array_t cpu_affinity;
 
@@ -74,7 +70,7 @@ typedef struct __task_struct {
   spinlock_t lock;
 
   /* Scheduler-related stuff. */
-  struct scheduler_t *scheduler;
+  struct __scheduler *scheduler;
   void *sched_data;
 
   /* Arch-dependent context is located here */
@@ -84,14 +80,15 @@ typedef struct __task_struct {
 /* Abstract scheduler. */
 typedef struct __scheduler {
   const char *id;
-  list_head_t l;
+  list_node_t l;
   cpu_id_t (*cpus_supported)(void);
-  void (*add_cpu)(cpu_id_t cpu);
+  status_t (*add_cpu)(cpu_id_t cpu);
   void (*scheduler_tick)(void);
   status_t (*add_task)(task_t *task);
   void (*schedule)(void);
   void (*reset)(void);
   status_t (*change_task_state)(task_t *task,task_state_t state);
+  status_t (*setup_idle_task)(task_t *task);
 } scheduler_t;
 
 
@@ -110,6 +107,8 @@ extern task_t *idle_tasks[];
 status_t sched_change_task_state(task_t *task,task_state_t state);
 void sched_reschedule_task(task_t *task);
 status_t sched_add_task(task_t *task);
+status_t sched_setup_idle_task(task_t *task);
+status_t sched_add_cpu(cpu_id_t cpu);
 
 scheduler_t *get_default_scheduler(void);
 

@@ -154,7 +154,6 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
   status_t r = -ENOMEM;
   page_frame_t *stack_pages;
   pageaccs_list_pa_ctx_t pa_ctx;
-  pageaccs_linear_pa_ctx_t l_ctx;
   pid_t pid, ppid;
 
   /* TODO: [mt] Add memory limit check. */

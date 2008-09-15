@@ -105,9 +105,11 @@ void initialize_idle_tasks(void)
 
     /* Setup PIDs and default priorities. */
     task->pid = task->ppid = 0;
-    task->priority = task->static_priority = IDLE_TASK_PRIORITY;
-    task->time_slice = 0;
-    task->state = TASK_STATE_RUNNING;
+
+    if( sched_setup_idle_task(task) != 0 ) {
+      panic( "initialize_idle_task(): Can't setup scheduler details !" );
+    }
+
 
     /* Initialize page tables to default kernel page directory. */
     initialize_page_directory(&task->page_dir);
@@ -159,6 +161,9 @@ status_t kernel_thread(void (*fn)(void *), void *data)
 
      regs->rdi = (uint64_t)fn;
      regs->rsi = (uint64_t)data;
+
+     /* Start this task. */
+     sched_change_task_state(newtask,TASK_STATE_RUNNABLE);
   }
   return r;
 }

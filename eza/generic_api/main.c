@@ -72,7 +72,9 @@ static void main_routine_stage1(void)
    */
   interrupts_enable();
 
+  sched_add_cpu(0);
   set_cpu_online(0,1);  /* We're online. */
+
   initialize_swks();
 
 
