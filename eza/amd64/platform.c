@@ -31,6 +31,9 @@
 #include <mm/pt.h>
 #include <eza/arch/page.h>
 #include <eza/pageaccs.h>
+#ifdef CONFIG_SMP
+#include <eza/arch/smp.h>
+#endif
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 

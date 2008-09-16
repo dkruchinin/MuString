@@ -294,9 +294,9 @@ void apic_timer_hack(void);
 
 #ifdef CONFIG_SMP
 
-void arch_smp_init(void);
+uint32_t apic_send_ipi_init(uint8_t apicid);
 
-#endif /* CONFIG_SMP 
-*/
+#endif /* CONFIG_SMP */
+
 #endif
 

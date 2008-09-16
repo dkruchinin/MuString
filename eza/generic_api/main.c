@@ -43,6 +43,9 @@
 #include <eza/arch/task.h>
 #include <eza/swks.h>
 #include <eza/arch/scheduler.h>
+#ifdef CONFIG_SMP
+#include <eza/arch/smp.h>
+#endif
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0

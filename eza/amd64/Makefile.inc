@@ -23,5 +23,6 @@ LIBARCHEZA_OBJS=eza/amd64/pmm.o eza/amd64/e820map.o \
 
 
 ifeq ($(CONFIG_SMP),y)
-	LIBARCHEZA_OBJS += eza/amd64/smpap.o
+LIBARCHEZA_OBJS += eza/amd64/smpap.o \
+	eza/amd64/smp.o
 endif
