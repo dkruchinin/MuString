@@ -33,7 +33,7 @@ static inline void preempt_enable(void)
   }
 }
 
-
+/*
 static int read_atomic_counter(void)
 {
   uint64_t c;
@@ -41,5 +41,6 @@ static int read_atomic_counter(void)
   read_css_field(preempt_count,c);
   return c;
 }
+*/
 
 #endif
