@@ -27,6 +27,7 @@
 #include <eza/arch/asm.h>
 #include <eza/arch/i8254.h>
 #include <mlibc/kprintf.h>
+#include <mlibc/unistd.h>
 
 hw_timer_t i8254;
 
