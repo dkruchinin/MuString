@@ -35,6 +35,9 @@
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 #include <mlibc/string.h>
+#ifdef CONFIG_SMP
+#include <eza/arch/smp.h>
+#endif
 
 /*
  * Black mages from intel and amd wrote that
@@ -216,13 +219,13 @@ void local_bsp_apic_init(void)
   kprintf("[LW] APIC version: %d\n",v);
   /* first we're need to clear APIC to avoid magical results */
 
-    __local_apic_clear();
+  __local_apic_clear();
 
   /*manual recommends to accept all*/
   /*tpr.priority=0xffu;
     local_apic->tpr.reg=tpr.reg;*/
 
-  /**/
+  /* clear bits for interrupts - can be filled up to other os */
   for(i=7;i>=0;i--){
     v=local_apic->isr[i].bits;
     for(l=31;l>=0;l--)
@@ -370,20 +373,6 @@ void apic_timer_hack(void)
   local_apic->timer_icr.count=delay_loop;
 }
 
-#if 0
-void test_handler(uint64_t irq)
-{
-  if(irq==17) {
-    local_apic->timer_icr.count=delay_loop;
-    local_apic_send_eoi();
-    timer_tick();
-  } else
-    i8259a_ack_irq(irq);
-  scheduler_tick();
-  return;
-}
-#endif
-
 void local_apic_timer_init(void)
 {
   apic_lvt_timer_t lvt_timer=local_apic->lvt_timer;
@@ -402,17 +391,16 @@ void local_apic_timer_init(void)
   /* enable timer */
   lvt_timer.mask=0x0;
   local_apic->lvt_timer.reg=lvt_timer.reg;
-#if 0  
-  /*  for(i=48;i<50;i++) {*/
-  if(  install_interrupt_gate(0x31,irq_entrypoints_array[0x31-0x20],0,0))
-    kprintf("oops\n");
-    //}
-#endif
+}
+
+/* this shouldn't happen, but anyway we're must care on it */
+void apic_spurious_vector_handler(uint32_t irq)
+{
+  kprintf("[EE] Spurious APIC interrupt (%d)\n",irq);
+  local_apic_send_eoi();
 }
 
 #ifdef CONFIG_SMP
-
-extern void ap_boot(void);
 
 uint32_t apic_send_ipi_init(uint8_t apicid)
 {
@@ -455,27 +443,4 @@ uint32_t apic_send_ipi_init(uint8_t apicid)
   }
 }
 
-extern ptr_16_32_t protected_ap_gdtr;
-
-void arch_smp_init(void)
-{
-  ptr_16_64_t gdtr;
-  disable_all_irqs();
-
-    /*  outb(0x70, 0xf); /* set BIOS area to don't make a POST on INIT signal */
-    //  outb(0x71, 0xa);
-
-
-  /* ok setup new gdt */
-  protected_ap_gdtr.limit=GDT_ITEMS * sizeof(struct __descriptor);
-  protected_ap_gdtr.base=((uintptr_t)&gdt[1][0]-0xffffffff80000000);
-  gdtr.base=&gdt[1];
-
-  apic_send_ipi_init(1);
-  /*  while(local_apic->icr1.tx_status!=0x0)
-      apic_send_ipi_init(1);*/
-  enable_all_irqs();
-}
-
-#endif /* CONFIG_SMP */
-
+#endif

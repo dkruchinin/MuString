@@ -45,6 +45,10 @@
 #include <eza/arch/scheduler.h>
 #include <eza/arch/preempt.h>
 
+#ifdef CONFIG_SMP
+#include <eza/arch/smp.h>
+#endif
+
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
 };
@@ -147,6 +151,7 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
 void main_smpap_routine(void)
 {
   static cpu_id_t cpu = 1;
+  int f=0;
 
   kprintf("CPU#%d Hello folks! I'm here\n", cpu);
 
@@ -158,6 +163,7 @@ void main_smpap_routine(void)
    * contexts, etc.
    */
   arch_activate_idle_task(cpu);
+
 
   /* Continue CPU initialization in new context. */
   cpu++;
