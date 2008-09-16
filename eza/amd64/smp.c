@@ -57,7 +57,7 @@ void arch_smp_init(void)
   /* ok setup new gdt */
   protected_ap_gdtr.limit=GDT_ITEMS * sizeof(struct __descriptor);
   protected_ap_gdtr.base=((uintptr_t)&gdt[1][0]-0xffffffff80000000);
-  gdtr.base=&gdt[1];
+  gdtr.base=(uint64_t)&gdt[1];
 
   apic_send_ipi_init(1);
 
