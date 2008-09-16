@@ -62,9 +62,9 @@ static void main_routine_stage1(void)
 
   arch_specific_init();
   arch_initialize_irqs();
+
   /* Initialize known hardware devices. */
   initialize_common_hardware();
- 
   /* Since the PIC is initialized, all interrupts from the hardware
    * is disabled. So we can enable local interrupts since we will
    * receive interrups from the other CPUs via LAPIC upon unleashing
@@ -73,10 +73,10 @@ static void main_routine_stage1(void)
   interrupts_enable();
 
   sched_add_cpu(0);
+
   set_cpu_online(0,1);  /* We're online. */
 
   initialize_swks();
-
 
   /* The other CPUs are running, the scheduler is ready, so we can
    * enable all interrupts.
@@ -89,6 +89,7 @@ static void main_routine_stage1(void)
   start_init();
  
   /* Enter idle loop. */
+
   kprintf( "CPU #0 is entering idle loop. Current task: %p, CPU ID: %d\n",
            current_task(), cpu_id() );
   idle_loop();
@@ -116,10 +117,10 @@ void main_routine(void) /* this function called from boostrap assembler code */
    * contexts, etc.
    */
   arch_activate_idle_task(0);
-
   /* Now we can continue initialization with properly initialized kernel
    * stack frame.
    */
+
   main_routine_stage1();
 }
 

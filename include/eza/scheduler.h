@@ -48,7 +48,6 @@ typedef enum __task_state {
   TASK_STATE_ZOMBIE = 5,
 } task_state_t;
 
-typedef uint32_t priority_t;
 typedef uint32_t cpu_array_t;
 
 #define CPU_AFFINITY_ALL_CPUS 0
