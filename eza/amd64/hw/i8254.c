@@ -105,7 +105,7 @@ uint64_t i8254_calibrate_delay_loop0(void)
   oo1=inb(I8254_BASE);
   oo1|=inb(I8254_BASE) << 8;
 
-  usleep(DCLOCK);
+  arch_fake_loop(DCLOCK);
 
   outb(I8254_BASE+3,0xd2);
   oo2=inb(I8254_BASE);

@@ -48,6 +48,7 @@ void arch_smp_init(void)
 {
   ptr_16_64_t gdtr;
   disable_all_irqs();
+  int i=1,r=0;
 
   /* set BIOS area to don't make a POST on INIT signal */
     /*  outb(0x70, 0xf); 
@@ -55,11 +56,15 @@ void arch_smp_init(void)
 
 
   /* ok setup new gdt */
-  protected_ap_gdtr.limit=GDT_ITEMS * sizeof(struct __descriptor);
-  protected_ap_gdtr.base=((uintptr_t)&gdt[1][0]-0xffffffff80000000);
-  gdtr.base=(uint64_t)&gdt[1];
-
-  apic_send_ipi_init(1);
+  while(i<NR_CPUS) {
+    protected_ap_gdtr.limit=GDT_ITEMS * sizeof(struct __descriptor);
+    protected_ap_gdtr.base=((uintptr_t)&gdt[i][0]-0xffffffff80000000);
+    gdtr.base=(uint64_t)&gdt[i];
+    
+    r=apic_send_ipi_init(i);
+    usleep(1000);
+    i++;
+  }
 
   enable_all_irqs();
 }

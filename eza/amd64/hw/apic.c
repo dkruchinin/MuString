@@ -418,6 +418,8 @@ uint32_t apic_send_ipi_init(uint8_t apicid)
   local_apic->icr1.reg=icr1.reg;  
 
   usleep(20);
+  if(local_apic->esr.reg!=0)
+    return local_apic->esr.reg;
 
   icr1=local_apic->icr1;
   icr1.tx_mode=TXMODE_INIT;
@@ -428,6 +430,9 @@ uint32_t apic_send_ipi_init(uint8_t apicid)
   icr1.vector=0;
   local_apic->icr1.reg=icr1.reg;  
   usleep(10000);
+  if(local_apic->esr.reg!=0)
+    return local_apic->esr.reg;
+
 
   for(i=0;i<2;i++) { /* if we're have APIC not from 80486DX or higher, we're need to send it twice */
     icr1=local_apic->icr1;
@@ -439,9 +444,11 @@ uint32_t apic_send_ipi_init(uint8_t apicid)
     icr1.shorthand=0x0;
     local_apic->icr1.reg=icr1.reg;  
     usleep(200);
+    if(local_apic->esr.reg!=0)
+      return local_apic->esr.reg;
   }
 
-  return 0;
+  return local_apic->esr.reg;
 }
 
 #endif
