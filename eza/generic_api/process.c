@@ -12,6 +12,7 @@
 #include <eza/pageaccs.h>
 #include <eza/arch/task.h>
 #include <eza/spinlock.h>
+#include <eza/arch/preempt.h>
 
 extern task_t *kthread1;
 

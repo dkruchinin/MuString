@@ -43,6 +43,7 @@
 #include <eza/arch/task.h>
 #include <eza/swks.h>
 #include <eza/arch/scheduler.h>
+#include <eza/arch/preempt.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
@@ -59,10 +60,11 @@ extern void initialize_timer(void);
 static void main_routine_stage1(void)
 {
   /* Initialize PICs and setup common interrupt handlers. */
+  set_cpu_online(0,1);  /* We're online. */
+  sched_add_cpu(0);
 
   arch_specific_init();
   arch_initialize_irqs();
-
   /* Initialize known hardware devices. */
   initialize_common_hardware();
   /* Since the PIC is initialized, all interrupts from the hardware
@@ -71,10 +73,6 @@ static void main_routine_stage1(void)
    * the other CPUs.
    */
   interrupts_enable();
-
-  sched_add_cpu(0);
-
-  set_cpu_online(0,1);  /* We're online. */
 
   initialize_swks();
 
@@ -92,6 +90,7 @@ static void main_routine_stage1(void)
 
   kprintf( "CPU #0 is entering idle loop. Current task: %p, CPU ID: %d\n",
            current_task(), cpu_id() );
+
   idle_loop();
 }
 
@@ -105,6 +104,7 @@ void main_routine(void) /* this function called from boostrap assembler code */
   kcons->enable();
   kprintf("[LW] MuiString starts ...\n");
   /* init memory manager stuff - stage 0 */
+
   arch_mm_stage0_init(0);
   kprintf("[MM] Stage0 memory manager initied.\n");    
   install_fault_handlers();
@@ -130,14 +130,15 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
   cpu_id_t c;
 
   install_fault_handlers();
+
   interrupts_enable();
 
   /* We're online. */
   set_cpu_online(cpu,1);
 
   /* Entering idle loop. */
-  kprintf( "CPU #%d is entering idle loop. Current task: %p, CPU ID: %d\n",
-           cpu, current_task(), cpu_id() );
+  kprintf( "CPU #%d is entering idle loop. Current task: %p, CPU: %d, ATOM: %d\n",
+           cpu, current_task(), cpu_id(), in_atomic() );
 
   for( ;; ) {
   }
@@ -151,6 +152,7 @@ void main_smpap_routine(void)
 
   /* Ramap physical memory using page directory preparead be master CPU. */
   arch_mm_stage0_init(cpu); 
+
 
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.

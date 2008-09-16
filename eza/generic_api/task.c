@@ -36,7 +36,7 @@
 #include <eza/arch/task.h>
 #include <mlibc/index_array.h>
 #include <eza/spinlock.h>
-
+#include <eza/arch/preempt.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
@@ -78,6 +78,7 @@ static pid_t allocate_pid(void)
   LOCK_PID_ARRAY;
   pid_t pid = index_array_alloc_value(&pid_array);
   UNLOCK_PID_ARRAY;
+
   return pid;
 }
 

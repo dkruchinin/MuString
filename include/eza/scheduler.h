@@ -32,6 +32,7 @@
 #include <eza/spinlock.h>
 #include <eza/arch/current.h>
 #include <ds/list.h>
+#include <eza/arch/preempt.h>
 
 /* Macros for locking task structure. */
 #define LOCK_TASK_STRUCT(t) spinlock_lock(&t->lock)
@@ -109,7 +110,16 @@ status_t sched_add_task(task_t *task);
 status_t sched_setup_idle_task(task_t *task);
 status_t sched_add_cpu(cpu_id_t cpu);
 
-scheduler_t *get_default_scheduler(void);
+extern scheduler_t *get_default_scheduler(void);
+
+void schedule(void);
+
+/* Macros that deal with resceduling needs. */
+extern void arch_sched_set_current_need_resched(void);
+extern void arch_sched_reset_current_need_resched(void);
+
+#define sched_set_current_need_resched() arch_sched_set_current_need_resched()
+#define sched_reset_current_need_resched() arch_sched_reset_current_need_resched()
 
 #endif
 

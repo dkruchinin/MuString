@@ -45,6 +45,7 @@ typedef struct __eze_sched_taskdata {
   priority_t static_priority, priority;
   time_slice_t time_slice;
   list_node_t runlist;
+  task_t *task;
 } eza_sched_taskdata_t;
 
 typedef struct __eza_sched_prio_array {
@@ -56,6 +57,7 @@ typedef struct __eza_sched_cpudata {
   spinlock_t lock;
   eza_sched_prio_array_t *active_array;
   eza_sched_prio_array_t arrays[EZA_SCHED_NUM_ARRAYS];
+  list_head_t non_active_tasks;
 } eza_sched_cpudata_t;
 
 static eza_sched_taskdata_t *allocate_task_sched_data(void);
@@ -68,7 +70,7 @@ static void initialize_cpu_sched_data(eza_sched_cpudata_t *queue);
 /* 64-bit bits-related stuff. */
 /* Array must be locked prior to calling this function !
  */
-static inline priority_t add_task_to_array(eza_sched_prio_array_t *array,task_t *task)
+static inline priority_t __add_task_to_array(eza_sched_prio_array_t *array,task_t *task)
 {
   eza_sched_taskdata_t *sched_data = (eza_sched_taskdata_t *)task->sched_data;
   priority_t prio = sched_data->priority;

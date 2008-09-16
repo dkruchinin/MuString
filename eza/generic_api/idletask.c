@@ -30,6 +30,7 @@
 #include <eza/swks.h>
 #include <mlibc/string.h>
 #include <eza/arch/mm_types.h>
+#include <eza/arch/preempt.h>
 
 task_t *idle_tasks[NR_CPUS];
 
@@ -40,8 +41,8 @@ void clone_fn(void *data)
 
   for( ;; ) {
     if( swks.system_ticks_64 == target_tick ) {
-      kprintf( " + Tick, tick ! (Ticks: %d, PID: %d, CPU ID: %d)\n",
-               swks.system_ticks_64, current_task()->pid, 1024 );
+      kprintf( " + Tick, tick ! (Ticks: %d, PID: %d, CPU: %d, ATOM: %d)\n",
+               swks.system_ticks_64, current_task()->pid, 1024, in_atomic() );
       target_tick += 7000;
 
       rounds ++;
@@ -69,8 +70,8 @@ void idle_loop(void)
   /* TODO: [mt] Enable rescheduling interrupts here. */
   for( ;; ) {
     if( swks.system_ticks_64 == target_tick ) {
-      kprintf( " - Tick, tick ! (Ticks: %d, PID: %d, CPU ID: %d)\n",
-               swks.system_ticks_64, current_task()->pid, 1024 );
+      kprintf( " - Tick, tick ! (Ticks: %d, PID: %d, ID: %d, ATOM: %d)\n",
+               swks.system_ticks_64, current_task()->pid, 1024, in_atomic() );
       target_tick += 7000;
 
       rounds++;

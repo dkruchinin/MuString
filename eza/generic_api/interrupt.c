@@ -34,6 +34,7 @@
 #include <mlibc/string.h>
 #include <mlibc/kprintf.h>
 #include <eza/swks.h>
+#include <eza/arch/preempt.h>
 
 static spinlock_declare(irq_lock);
 
