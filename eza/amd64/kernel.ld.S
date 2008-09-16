@@ -22,6 +22,7 @@ SECTIONS {
 
     _low_kernel_end = p2k(BOOT_OFFSET) + SIZEOF(.unmapped);
 
+
 	.mapped(_low_kernel_end) : AT (SIZEOF(.unmapped)) {        
         _kernel_start = .;
 		ktext_start = .;
@@ -54,9 +55,9 @@ SECTIONS {
 	}
 
 #ifdef CONFIG_SMP
-/*    .percpu_data (kdata_end) : AT (k2p(kdata_end)) {
+    .percpu_data (kdata_end) : AT (k2p(kdata_end)) {
        *(.percpu_data);
-    }*/
+    }
 
     _hardcoded_unmapped_size = (unmapped_ktext_end - unmapped_ktext_start) + (unmapped_kdata_end - unmapped_kdata_start);
     ap_boot = unmapped_ap_boot - BOOT_OFFSET + AP_BOOT_OFFSET;

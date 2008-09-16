@@ -143,6 +143,7 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
 void main_smpap_routine(void)
 {
   static cpu_id_t cpu = 1;
+  int f=0;
 
   kprintf("CPU#%d Hello folks! I'm here\n", cpu);
 
@@ -153,6 +154,7 @@ void main_smpap_routine(void)
    * contexts, etc.
    */
   arch_activate_idle_task(cpu);
+
 
   /* Continue CPU initialization in new context. */
   cpu++;
