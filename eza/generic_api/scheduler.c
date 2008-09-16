@@ -49,6 +49,7 @@ cpu_id_t online_cpus;
 /* Known schedulers. */
 static list_head_t schedulers;
 static spinlock_t scheduler_lock;
+static scheduler_t *active_scheduler;
 
 #define LOCK_SCHEDULER_LIST spinlock_lock(&scheduler_lock)
 #define UNLOCK_SCHEDULER_LIST spinlock_unlock(&scheduler_lock)
@@ -65,61 +66,17 @@ void initialize_scheduler(void)
   initialize_sched_internals();
   initialize_kernel_stack_allocator();
   initialize_task_subsystem();
+
+  /* Now initialize scheduler. */
+  list_init_head(&schedulers);
+  if( !sched_register_scheduler(get_default_scheduler())) {
+    panic( "initialize_scheduler(): Can't register default scheduler !" );  
+  }
+
   initialize_idle_tasks();
 }
 
-status_t activate_task(task_t *task)
-{
-  if( task->state == TASK_STATE_JUST_BORN ||
-    task->state == TASK_STATE_STOPPED ) {
-
-    LOCK_TASK_STRUCT(task);
-    task->state = TASK_STATE_RUNNABLE;
-    UNLOCK_TASK_STRUCT(task);
-    return 0;
-  }
-  return -EINVAL;
-}
-
 void reschedule_task(task_t *task) {
-}
-
-status_t deactivate_task(task_t *task, task_state_t state)
-{
-  if( task->state == TASK_STATE_RUNNABLE ||
-    task->state == TASK_STATE_RUNNING ) {
-    task_state_t prev_state = task->state;
-
-    task->state = state;
-    if( prev_state == TASK_STATE_RUNNABLE ) {
-      /* Move targe task to the list of stopped tasks. */
-    }
-    UNLOCK_TASK_STRUCT(task);
-
-    /* In case target task is running, we must reschedule it. */
-    if( prev_state == TASK_STATE_RUNNING ) {
-      reschedule_task(task);
-    }
-
-    return 0;
-  }
-  return -EINVAL;
-}
-
-
-status_t sched_do_change_task_state(task_t *task,task_state_t state)
-{
-  /* TODO: [mt] implement security check on task state change. */
-  switch(state) {
-    case TASK_STATE_RUNNABLE:
-      return activate_task(task);
-    case TASK_STATE_STOPPED:
-      return deactivate_task(task,TASK_STATE_STOPPED);
-    default:
-      break;
-  }
-
-  return -EINVAL;
 }
 
 scheduler_t *sched_get_scheduler(const char *name)
@@ -142,12 +99,27 @@ scheduler_t *sched_get_scheduler(const char *name)
 
 bool sched_register_scheduler(scheduler_t *sched)
 {
+  if( sched == NULL || sched->cpus_supported == NULL || sched->add_cpu == NULL
+     || sched->scheduler_tick == NULL || sched->add_task == NULL
+     ||sched->schedule == NULL || sched->id == NULL ) {
+    return false;
+  }
+
+  sched->reset();
+
   LOCK_SCHEDULER_LIST;
   
   list_init_node(&sched->l);
   list_add2tail(&schedulers,&sched->l); 
   
+  if(active_scheduler == NULL) {
+    active_scheduler = sched;
+  }
+
   UNLOCK_SCHEDULER_LIST;
+
+  sched->reset();
+  kprintf( "Registering a scheduler: %s\n", sched->id );
 
   return true;
 }
@@ -169,11 +141,50 @@ bool sched_unregister_scheduler(scheduler_t *sched)
   return r;
 }
 
+status_t sched_change_task_state(task_t *task,task_state_t state)
+{
+  /* TODO: [mt] implement security check on task state change. */
+  if(active_scheduler == NULL) {
+    return -ENOTTY;
+  }
+  return active_scheduler->change_task_state(task,state);
+}
+
+status_t sched_add_task(task_t *task)
+{
+  if(active_scheduler != NULL) {
+    return active_scheduler->add_task(task);
+  }
+  return -ENOTTY;
+}
+
+status_t sched_setup_idle_task(task_t *task)
+{
+  if(active_scheduler != NULL) {
+    return active_scheduler->setup_idle_task(task);
+  }
+  return -ENOTTY;
+}
+
+status_t sched_add_cpu(cpu_id_t cpu)
+{
+  if( active_scheduler != NULL ) {
+    return active_scheduler->add_cpu(cpu);
+  }
+  return -ENOTTY;
+}
+
 void schedule(void)
 {
+  if(active_scheduler != NULL) {
+    active_scheduler->schedule();
+  }
 }
 
 void sched_timer_tick(void)
 {
+  if(active_scheduler != NULL) {
+    active_scheduler->scheduler_tick();
+  }
 }
 
