@@ -49,8 +49,9 @@ void arch_smp_init(void)
   ptr_16_64_t gdtr;
   disable_all_irqs();
 
-    /*  outb(0x70, 0xf); /* set BIOS area to don't make a POST on INIT signal */
-    //  outb(0x71, 0xa);
+  /* set BIOS area to don't make a POST on INIT signal */
+    /*  outb(0x70, 0xf); 
+      outb(0x71, 0xa); */
 
 
   /* ok setup new gdt */

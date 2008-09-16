@@ -203,7 +203,6 @@ void local_bsp_apic_init(void)
   int i=0,l;
   apic_lvt_lint_t lvt_lint;
   apic_icr1_t icr1;
-  apic_tpr_t tpr=local_apic->tpr;
 
   /*test*/
   kprintf("id=%p,version=%p\n",&local_apic->id,&local_apic->version);
@@ -376,7 +375,7 @@ void apic_timer_hack(void)
 void local_apic_timer_init(void)
 {
   apic_lvt_timer_t lvt_timer=local_apic->lvt_timer;
-  int i;
+
 
   i8254_suspend(); /* suspend general intel timer - bye bye, simple and pretty one, welcome to apic ...*/
 
@@ -441,6 +440,8 @@ uint32_t apic_send_ipi_init(uint8_t apicid)
     local_apic->icr1.reg=icr1.reg;  
     usleep(200);
   }
+
+  return 0;
 }
 
 #endif
