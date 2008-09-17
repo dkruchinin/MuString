@@ -28,6 +28,12 @@
 
 void arch_specific_init(void);
 
+#ifdef CONFIG_SMP
+
+void arch_ap_specific_init(void);
+
+#endif
+
 #endif /* __ARCH_PLATFORM_H__ */
 
 

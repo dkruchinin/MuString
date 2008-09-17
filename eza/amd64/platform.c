@@ -111,3 +111,12 @@ void arch_specific_init(void)
 #endif
   //local_apic_timer_init();
 }
+
+#ifdef CONFIG_SMP
+
+void arch_ap_specific_init(void)
+{
+  local_ap_apic_init();
+}
+
+#endif
