@@ -176,6 +176,11 @@ status_t sched_add_cpu(cpu_id_t cpu)
   return -ENOTTY;
 }
 
+void update_idle_tick_statistics(scheduler_cpu_stats_t *stats)
+{
+  stats->idle_ticks++;
+}
+
 void schedule(void)
 {
   if(active_scheduler != NULL) {

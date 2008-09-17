@@ -44,7 +44,7 @@ static void init_thread(void *data)
     if( swks.system_ticks_64 == target_tick ) {
       kprintf( " + [Init] Tick, tick ! (Ticks: %d, PID: %d, CPU: %d, ATOM: %d)\n",
                swks.system_ticks_64, current_task()->pid, 1024, in_atomic() );
-      target_tick += 7000;
+      target_tick += 200;
     }
   }
 }

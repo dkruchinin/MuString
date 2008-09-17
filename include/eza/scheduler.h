@@ -93,7 +93,7 @@ typedef struct __scheduler {
 
 
 typedef struct __scheduler_cpu_stats {
-  uint64_t task_switches, idle_switches;
+  uint64_t task_switches, idle_switches, idle_ticks;
 } scheduler_cpu_stats_t;
 
 void initialize_scheduler(void);
@@ -113,6 +113,7 @@ void sched_reschedule_task(task_t *task);
 status_t sched_add_task(task_t *task);
 status_t sched_setup_idle_task(task_t *task);
 status_t sched_add_cpu(cpu_id_t cpu);
+void update_idle_tick_statistics(scheduler_cpu_stats_t *stats);
 
 extern scheduler_t *get_default_scheduler(void);
 

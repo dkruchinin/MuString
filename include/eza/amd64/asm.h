@@ -26,10 +26,10 @@
 #ifndef __ASM_H__
 #define __ASM_H__
 
-#include <mm/page.h>
 #include <eza/arch/types.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/page.h>
+#include <mm/page.h>
+#include <eza/arch/mm_types.h>
 
 extern void set_efer_flag(int flag);
 

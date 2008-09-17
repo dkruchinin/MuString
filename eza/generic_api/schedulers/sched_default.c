@@ -1,3 +1,26 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (C) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ *
+ * eza/generic_api/schedulers/sched_default.c: Implementation of EZA default
+ *    scheduler.
+ */
+
 #include <eza/arch/types.h>
 #include <eza/resource.h>
 #include <mm/pt.h>
@@ -13,6 +36,7 @@
 #include <mlibc/string.h>
 #include <eza/arch/preempt.h>
 #include <eza/swks.h>
+#include <eza/arch/interrupt.h>
 
 /* Our own scheduler. */
 static struct __scheduler eza_default_scheduler;
@@ -29,7 +53,10 @@ static spinlock_t cpu_data_lock;
 
 #define CPU_SCHED_DATA() sched_cpu_data[cpu_id()]
 
-#define EZA_TASK_PRIORITY(t) ((eza_sched_taskdata_t *)task->sched_data)->priority
+#define EZA_TASK_PRIORITY(t) ((eza_sched_taskdata_t *)t->sched_data)->priority
+#define EZA_TASK_SCHED_DATA(t) ((eza_sched_taskdata_t *)t->sched_data)
+
+#define PRIO_TO_TIMESLICE(p) (p*5)
 
 static eza_sched_taskdata_t *allocate_task_sched_data(void)
 {
@@ -102,14 +129,22 @@ static status_t setup_new_task(task_t *task)
 
 /* NOTE: This function relies on _current_ state of the task being processed.
  */
-static inline void __recalculate_task_priority(task_t *task)
+static inline void __recalculate_timeslice_and_priority(task_t *task)
 {
+  eza_sched_taskdata_t *tdata = EZA_TASK_SCHED_DATA(task);
+  
+  /* Recalculate priority. */
+  tdata->priority = tdata->static_priority;
+
   switch(task->state) {
     case TASK_STATE_SLEEPING:
       break;
     default:
       break;
   }
+  
+  /* Recalculate timeslice. */
+  tdata->time_slice = PRIO_TO_TIMESLICE(tdata->priority);
 }
 
 /* NOTE: Task must be locked !
@@ -137,7 +172,7 @@ static inline status_t __activate_task(task_t *task, eza_sched_cpudata_t *sched_
 {
   eza_sched_taskdata_t *cdata = (eza_sched_taskdata_t *)current_task()->sched_data;
 
-  __recalculate_task_priority(task);
+  __recalculate_timeslice_and_priority(task);
   task->state = TASK_STATE_RUNNABLE;
   __add_task_to_array(sched_data->active_array,task);
 
@@ -199,8 +234,38 @@ static status_t def_add_cpu(cpu_id_t cpu)
   return r;
 }
 
+static void def_scheduler_tick1(void)
+{
+}
+
 static void def_scheduler_tick(void)
 {
+  task_t *current = current_task();
+  eza_sched_cpudata_t *cpudata = CPU_SCHED_DATA();
+  eza_sched_taskdata_t *tdata;
+  sched_discipline_t discipl;
+  
+  /* Idle task ?  */
+  if( !current->pid ) {
+    update_idle_tick_statistics(cpudata->stats);
+    return;
+  }
+
+  tdata = EZA_TASK_SCHED_DATA(current);
+  discipl = tdata->sched_discipline;
+
+  if( discipl == SCHED_RR ) {
+    if( !--tdata->time_slice ) {
+      kprintf( "** TIMESLICE IS OVER !\n" );
+      __remove_task_from_array(cpudata->active_array,current);
+      __recalculate_timeslice_and_priority(current);
+      __add_task_to_array(cpudata->active_array,current);
+      kprintf( "** NEW TIMESLICE: %d\n", tdata->time_slice );
+      sched_set_current_need_resched();
+    }
+  } else if( discipl == SCHED_FIFO ) {
+  } else {
+  }
 }
 
 static status_t def_add_task(task_t *task)
@@ -230,7 +295,7 @@ static status_t def_add_task(task_t *task)
   sdata->priority = EZA_SCHED_INITIAL_TASK_PRIORITY;
   task->cpu = cpu;
   sdata->task = task;
-  sdata->sched_discipline = SCHED_ADAPTIVE;
+  sdata->sched_discipline = SCHED_RR; /* TODO: [mt] must be SCHED_ADAPTIVE */
 
   UNLOCK_CPU_SCHED_DATA(sched_data);
   UNLOCK_TASK_STRUCT(task);
@@ -244,8 +309,6 @@ static void def_schedule(void)
   task_t *current = current_task();
   task_t *next;
   bool need_switch;
-
-  kprintf( "******* RESCHEDULING TASK: %p, PID: %d\n", current_task(), current_task()->pid );
 
   LOCK_TASK_STRUCT(current);
   LOCK_CPU_SCHED_DATA(sched_data);
@@ -270,8 +333,9 @@ static void def_schedule(void)
   UNLOCK_CPU_SCHED_DATA(sched_data);
   UNLOCK_TASK_STRUCT(current);
 
-  kprintf( "++ NEED SWITCH: %d\n", need_switch );
-  kprintf( "++ NEEXT: %d\n", next->pid );
+  kprintf( "** RESCHEDULING TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , timeslice: %d **\n",
+           current_task()->pid, need_switch,
+           next->pid, EZA_TASK_SCHED_DATA(next)->time_slice );
 
   if( need_switch ) {
     arch_activate_task(next);
@@ -357,4 +421,11 @@ static struct __scheduler eza_default_scheduler = {
 scheduler_t *get_default_scheduler(void)
 {
   return &eza_default_scheduler;
+}
+
+void debug_stop(uint64_t id)
+{
+  interrupts_disable();
+  kprintf( "[[[[[[[[[[[[[[[[[[[[[[[ DEBUG STOP %d ]]]]]]]]]]]]]]]]]]\n", id );
+  for( ;; );
 }
