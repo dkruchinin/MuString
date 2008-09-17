@@ -131,9 +131,9 @@ void main_routine(void) /* this function called from boostrap assembler code */
 #ifdef CONFIG_SMP
 static void main_smpap_routine_stage1(cpu_id_t cpu)
 {
-  cpu_id_t c;
-
   install_fault_handlers();
+
+  arch_ap_specific_init();
 
   interrupts_enable();
 
@@ -151,7 +151,6 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
 void main_smpap_routine(void)
 {
   static cpu_id_t cpu = 1;
-  int f=0;
 
   kprintf("CPU#%d Hello folks! I'm here\n", cpu);
 

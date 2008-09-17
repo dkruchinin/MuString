@@ -30,10 +30,14 @@
 
 void arch_timer_init(void)
 {
+  int i;
+
   i8254_init();
   kprintf("[LW] Calibrating delay loop ... ");
   delay_loop=i8254_calibrate_delay_loop();
-  delay_loop=i8254_calibrate_delay_loop0();
+  for(i=0;i<10;i++) {
+    delay_loop=i8254_calibrate_delay_loop0();
+  }
   kprintf("%ld\n",delay_loop);
 }
 
