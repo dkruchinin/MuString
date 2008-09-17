@@ -101,7 +101,8 @@ bool sched_register_scheduler(scheduler_t *sched)
 {
   if( sched == NULL || sched->cpus_supported == NULL || sched->add_cpu == NULL
      || sched->scheduler_tick == NULL || sched->add_task == NULL
-     ||sched->schedule == NULL || sched->id == NULL ) {
+     || sched->schedule == NULL || sched->id == NULL || sched->change_task_state == NULL
+     || sched->setup_idle_task == NULL || sched->reset == NULL ) {
     return false;
   }
 
@@ -119,7 +120,8 @@ bool sched_register_scheduler(scheduler_t *sched)
   UNLOCK_SCHEDULER_LIST;
 
   sched->reset();
-  kprintf( "Registering a scheduler: %s\n", sched->id );
+  kprintf( "Registering scheduler: '%s' (CPUs supported: %d)\n",
+           sched->id, sched->cpus_supported() );
 
   return true;
 }

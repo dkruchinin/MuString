@@ -92,6 +92,10 @@ typedef struct __scheduler {
 } scheduler_t;
 
 
+typedef struct __scheduler_cpu_stats {
+  uint64_t task_switches, idle_switches;
+} scheduler_cpu_stats_t;
+
 void initialize_scheduler(void);
 
 bool sched_register_scheduler(scheduler_t *sched);

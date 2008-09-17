@@ -140,8 +140,6 @@ void initialize_idle_tasks(void)
     sched_stat->cpu = cpu;
     sched_stat->current_task = idle_tasks[cpu];
     sched_stat->kstack_top = idle_tasks[cpu]->kernel_stack.high_address;
-//    kprintf( " ++ stat: %p, current: %p : %d, stack: %p\n", sched_stat,
-//             sched_stat->current_task, sched_stat->cpu, sched_stat->kstack_top );
     cpu++;
   }
 }

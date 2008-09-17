@@ -14,8 +14,6 @@
 #include <eza/spinlock.h>
 #include <eza/arch/preempt.h>
 
-extern task_t *kthread1;
-
 typedef uint32_t hash_level_t;
 
 /* Stuff related to PID-to-task translation. */
@@ -79,8 +77,6 @@ status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t
       LOCK_PID_HASH_LEVEL_W(l);
       list_add2tail(&pid_to_struct_hash[l],&new_task->pid_list);
       UNLOCK_PID_HASH_LEVEL_W(l);
-
-      kthread1 = new_task;
 
       /* Tell the scheduler layer to take care of this task. */
       sched_add_task(new_task);

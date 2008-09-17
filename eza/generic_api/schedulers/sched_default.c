@@ -12,6 +12,7 @@
 #include <mlibc/assert.h>
 #include <mlibc/string.h>
 #include <eza/arch/preempt.h>
+#include <eza/swks.h>
 
 /* Our own scheduler. */
 static struct __scheduler eza_default_scheduler;
@@ -28,6 +29,8 @@ static spinlock_t cpu_data_lock;
 
 #define CPU_SCHED_DATA() sched_cpu_data[cpu_id()]
 
+#define EZA_TASK_PRIORITY(t) ((eza_sched_taskdata_t *)task->sched_data)->priority
+
 static eza_sched_taskdata_t *allocate_task_sched_data(void)
 {
   /* TODO: [mt] Allocate memory via slabs !!!  */
@@ -39,12 +42,12 @@ static void free_task_sched_data(eza_sched_taskdata_t *data)
   /* TODO: [mt] Free structure via slabs ! */
 }
 
-static eza_sched_cpudata_t *allocate_cpu_sched_data(void) {
+static eza_sched_cpudata_t *allocate_cpu_sched_data(cpu_id_t cpu) {
   /* TODO: [mt] Allocate memory via slabs !!!  */
   eza_sched_cpudata_t *cpudata = (eza_sched_cpudata_t *)__alloc_page(0,1);
 
   if( cpudata != NULL ) {
-     initialize_cpu_sched_data(cpudata);
+    initialize_cpu_sched_data(cpudata, cpu);
   }
 
   return cpudata;
@@ -55,13 +58,17 @@ static void free_cpu_sched_data(eza_sched_cpudata_t *data)
   /* TODO: [mt] Free structure via slabs ! */
 }
 
-static void initialize_cpu_sched_data(eza_sched_cpudata_t *cpudata)
+static void initialize_cpu_sched_data(eza_sched_cpudata_t *cpudata, cpu_id_t cpu)
 {
   uint32_t arr,i;
 
   spinlock_initialize(&cpudata->lock, "Eza scheduler runqueue lock");
   list_init_head(&cpudata->non_active_tasks);
   cpudata->active_array = &cpudata->arrays[0];
+
+  /* Initialize scheduler statistics for this CPU. */
+  cpudata->stats = &swks.cpu_stat[cpu].sched_stats;
+  cpudata->cpu_id = cpu;
 
   for( arr=0; arr<EZA_SCHED_NUM_ARRAYS; arr++ ) {
     eza_sched_prio_array_t *array = &cpudata->arrays[arr];
@@ -93,6 +100,18 @@ static status_t setup_new_task(task_t *task)
   return 0;
 }
 
+/* NOTE: This function relies on _current_ state of the task being processed.
+ */
+static inline void __recalculate_task_priority(task_t *task)
+{
+  switch(task->state) {
+    case TASK_STATE_SLEEPING:
+      break;
+    default:
+      break;
+  }
+}
+
 /* NOTE: Task must be locked !
  */
 static inline void __reschedule_task(task_t *task)
@@ -117,12 +136,13 @@ static inline void __move_to_non_active_array(eza_sched_cpudata_t *sched_data,ta
 static inline status_t __activate_task(task_t *task, eza_sched_cpudata_t *sched_data)
 {
   eza_sched_taskdata_t *cdata = (eza_sched_taskdata_t *)current_task()->sched_data;
-  priority_t p = __add_task_to_array(sched_data->active_array,task);
 
+  __recalculate_task_priority(task);
   task->state = TASK_STATE_RUNNABLE;
+  __add_task_to_array(sched_data->active_array,task);
 
-  kprintf( "++ NEW PRIO: %d, CURRENT: %p, CRRENT PRIO: %d\n", p, current_task(), cdata->priority );
-  if( p < cdata->priority ) {
+  kprintf( "++ NEW PRIO: %d, CURRENT: %p, CRRENT PRIO: %d\n", EZA_TASK_PRIORITY(task), current_task(), cdata->priority );
+  if( EZA_TASK_PRIORITY(task) < cdata->priority ) {
     __reschedule_task(current_task());
   }
 
@@ -156,7 +176,7 @@ static status_t def_add_cpu(cpu_id_t cpu)
     return -EINVAL;
   }
 
-  cpudata = allocate_cpu_sched_data();
+  cpudata = allocate_cpu_sched_data(cpu);
   if( cpudata == NULL ) {
     return -ENOMEM;
   }
@@ -194,7 +214,8 @@ static status_t def_add_task(task_t *task)
   }
 
   if( task->sched_data != NULL ) {
-    kprintf( KO_WARNING "def_add_task(): Task being added already has a scheduler !\n" );
+    kprintf( KO_WARNING "def_add_task(): Task being added already attached to a scheduler !\n" );
+    return -EBUSY;
   }
 
   if( setup_new_task(task) != 0 ) {
@@ -205,10 +226,11 @@ static status_t def_add_task(task_t *task)
   LOCK_CPU_SCHED_DATA(sched_data);
 
   sdata = (eza_sched_taskdata_t *)task->sched_data;
-  sdata->static_priority = EZA_SCHED_DEF_NONRT_PRIO;
-  sdata->priority = EZA_SCHED_DEF_NONRT_PRIO;
+  sdata->static_priority = EZA_SCHED_INITIAL_TASK_PRIORITY;
+  sdata->priority = EZA_SCHED_INITIAL_TASK_PRIORITY;
   task->cpu = cpu;
   sdata->task = task;
+  sdata->sched_discipline = SCHED_ADAPTIVE;
 
   UNLOCK_CPU_SCHED_DATA(sched_data);
   UNLOCK_TASK_STRUCT(task);
@@ -218,7 +240,42 @@ static status_t def_add_task(task_t *task)
 
 static void def_schedule(void)
 {
+  eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
+  task_t *current = current_task();
+  task_t *next;
+  bool need_switch;
+
   kprintf( "******* RESCHEDULING TASK: %p, PID: %d\n", current_task(), current_task()->pid );
+
+  LOCK_TASK_STRUCT(current);
+  LOCK_CPU_SCHED_DATA(sched_data);
+
+  sched_reset_current_need_resched();
+
+  next = __get_most_prioritized_task(sched_data);
+  if( next == NULL ) { /* Schedule idle task. */
+    next = idle_tasks[sched_data->cpu_id];
+    sched_data->stats->idle_switches++;
+  }
+  sched_data->stats->task_switches++;
+
+  next->state = TASK_STATE_RUNNING;
+
+  if( next != current ) {
+    need_switch = true;
+  } else {
+    need_switch = false;
+  }
+
+  UNLOCK_CPU_SCHED_DATA(sched_data);
+  UNLOCK_TASK_STRUCT(current);
+
+  kprintf( "++ NEED SWITCH: %d\n", need_switch );
+  kprintf( "++ NEEXT: %d\n", next->pid );
+
+  if( need_switch ) {
+    arch_activate_task(next);
+  }
 }
 
 static void def_reset(void)
