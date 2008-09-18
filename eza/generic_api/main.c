@@ -33,6 +33,7 @@
 #include <eza/mm_init.h>
 #include <mlibc/kprintf.h>
 #include <profile.h>
+#include <server.h>
 #include <align.h>
 #include <misc.h>
 #include <eza/smp.h>
@@ -107,8 +108,9 @@ void main_routine(void) /* this function called from boostrap assembler code */
    */
   kcons->enable();
   kprintf("[LW] MuiString starts ...\n");
-  /* init memory manager stuff - stage 0 */
+  kprintf("[MB] Modules: %d\n",init.c);
 
+  /* init memory manager stuff - stage 0 */
   arch_mm_stage0_init(0);
   kprintf("[MM] Stage0 memory manager initied.\n");    
   install_fault_handlers();
