@@ -99,7 +99,7 @@ static void list_pa_reset(void *ctx)
 {
   pageaccs_list_pa_ctx_t *lctx = (pageaccs_list_pa_ctx_t*)ctx;
 
-  lctx->curr = list_node_first(&lctx->head->active_list);
+  lctx->curr = list_node_first(lctx->head);
   lctx->pages_left = lctx->num_pages;
 }
 

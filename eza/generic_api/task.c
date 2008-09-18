@@ -101,27 +101,26 @@ int setup_task_kernel_stack(task_t *task)
   return r;
 }
 
-static page_frame_t *alloc_stack_pages(void)
+static int alloc_stack_pages(list_head_t *pagelist)
 {
   int i;
-  page_frame_t *p, *first;
+  page_frame_t *p;
 
-  first = NULL;
+  list_init_head(pagelist);
+
   for( i = 0; i < KERNEL_STACK_PAGES; i++ ) {
     p = alloc_page(GENERIC_KERNEL_PAGE,0);
     if( p == NULL ) {
-      return NULL;
+      goto free_pages;
     } else {
       list_init_node( &p->page_next );
-      if(first == NULL) {
-        first = p;
-      } else {
-        list_add2tail(&first->active_list,&p->page_next);
-      }
+      list_add2tail(pagelist,&p->page_next);
     }
   }
 
-  return first;
+  return 0;
+free_pages:
+  return -1;
 }
 
 static status_t initialize_mm( task_t *orig, task_t *target,
@@ -153,7 +152,7 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
   task_t *task;
   page_frame_t *ts_page;
   status_t r = -ENOMEM;
-  page_frame_t *stack_pages;
+  list_head_t stack_pages;
   pageaccs_list_pa_ctx_t pa_ctx;
   pid_t pid, ppid;
 
@@ -187,14 +186,13 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
 
   /* Prepare kernel stack. */
   /* TODO: [mt] Implement normal stack allocation. */
-  stack_pages = alloc_stack_pages();
-  if(stack_pages == NULL) {
+  if( alloc_stack_pages(&stack_pages) != 0 ) {
     r = -ENOMEM;
     goto free_mm;
   }
 
   /* Map kernel stack. */
-  pa_ctx.head = stack_pages;
+  pa_ctx.head = &stack_pages;
   pa_ctx.num_pages = KERNEL_STACK_PAGES;
   pageaccs_list_pa.reset(&pa_ctx);
 
