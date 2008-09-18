@@ -30,6 +30,7 @@
 #include <eza/arch/context.h>
 #include <eza/arch/task.h>
 #include <mlibc/index_array.h>
+#include <eza/process.h>
 
 #define INVALID_PID  IA_INVALID_VALUE
 #define NUM_PIDS  65536
@@ -38,10 +39,6 @@
 #define PID_HASH_LEVEL_SHIFT  9 /* Levels of PID-to-task cache. */
 #define PID_HASH_LEVELS  (1 << PID_HASH_LEVEL_SHIFT)
 #define PID_HASH_LEVEL_MASK  (PID_HASH_LEVELS-1)
-
-typedef enum __task_creation_flag_t {
-  CLONE_MM = 0x1,
-} task_creation_flags_t;
 
 typedef struct __uspace_thread_creation_data {
   uintptr_t entry_point, stack_pointer;
@@ -56,6 +53,7 @@ status_t kernel_thread(void (*fn)(void *), void *data);
 status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t flags,
                                  task_privelege_t priv);
 
+status_t arch_process_context_control(task_t *task,ulong_t cmd,ulong_t arg);
 
 status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t priv,
                      task_t **new_task);

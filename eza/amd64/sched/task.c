@@ -35,6 +35,7 @@
 #include <eza/scheduler.h>
 #include <eza/arch/scheduler.h>
 #include <eza/arch/current.h>
+#include <eza/process.h>
 
 /* Located on 'amd64/asm.S' */
 extern void kthread_fork_path(void);
@@ -241,3 +242,24 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   return 0;
 }
 
+status_t arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
+{
+  regs_t *regs = (regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
+  status_t r = 0;
+  
+  switch( cmd ) {
+    case SYS_PR_CTL_SET_ENTRYPOINT:
+      regs->rip = arg;
+      break;
+    case SYS_PR_CTL_SET_STACK:
+      regs->old_rsp = arg;
+      break;
+    case SYS_PR_CTL_GET_ENTRYPOINT:
+      r = regs->rip;
+      break;
+    case SYS_PR_CTL_GET_STACK:
+      r = regs->old_rsp;
+      break;
+  }
+  return r;
+}

@@ -1,3 +1,26 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ *
+ * eza/generic_api/process.c: base system process-related functions.
+ */
+
+
 #include <eza/task.h>
 #include <mm/pt.h>
 #include <eza/smp.h>
@@ -13,6 +36,9 @@
 #include <eza/arch/task.h>
 #include <eza/spinlock.h>
 #include <eza/arch/preempt.h>
+#include <eza/process.h>
+#include <eza/security.h>
+#include <eza/arch/current.h>
 
 typedef uint32_t hash_level_t;
 
@@ -95,4 +121,56 @@ status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t
   return r;
 }
 
+status_t do_process_control(task_t *target,ulong_t cmd, ulong_t arg)
+{
+  switch( cmd ) {
+    case SYS_PR_CTL_SET_ENTRYPOINT:
+    case SYS_PR_CTL_SET_STACK:
+      if( !IS_USERSPACE_ADDRESS_VALID(arg) ) {
+        return -EFAULT;
+      }
+      if( target->state == TASK_STATE_JUST_BORN ) {
+        return arch_process_context_control(target,cmd,arg);
+      }
+      break;
+    case SYS_PR_CTL_GET_ENTRYPOINT:
+    case SYS_PR_CTL_GET_STACK:
+      /* No arguments are acceptable for these commands. */
+      if( arg == 0 && target->state == TASK_STATE_JUST_BORN ) {
+        return arch_process_context_control(target,cmd,arg);
+      }
+  }
+  return -EINVAL;
+}
+
+status_t sys_process_control( pid_t pid, ulong_t cmd, ulong_t arg)
+{
+  task_t *task = pid_to_task(pid);
+
+  if( task == NULL ) {
+    return -ESRCH;
+  }
+
+  if( !security_ops->check_process_control(task,cmd,arg) ) {
+    return -EACCES;
+  }
+
+  return do_process_control(task,cmd,arg);
+}
+
+status_t sys_create_process(task_creation_flags_t flags)
+{
+  task_t *task;
+  status_t r;
+  
+  if( !security_ops->check_create_process(flags) ) {
+    return -EPERM;
+  }
+
+  r = create_task(current_task(), flags, TPL_USER, &task);
+  if( r == 0 ) {
+    r = task->pid;
+  }
+  return r;
+}
 
