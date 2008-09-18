@@ -39,10 +39,10 @@ void idle_loop(void)
   int target_tick = swks.system_ticks_64 + 100;
 
   for( ;; ) {
-    if( swks.system_ticks_64 == target_tick ) {
+    if( swks.system_ticks_64 >= target_tick ) {
       kprintf( " - [Idle] Tick, tick ! (Ticks: %d, PID: %d, ID: %d, ATOM: %d)\n",
                swks.system_ticks_64, current_task()->pid, 1024, in_atomic() );
-      target_tick += 7000;
+      target_tick += 200;
     }
   }
 }

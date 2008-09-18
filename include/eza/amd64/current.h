@@ -26,11 +26,12 @@ typedef struct __cpu_sched_stat {
 #define CPU_SCHED_STAT_PREEMPT_OFFT 0x28
 
 /* Task flags indexes  */
-#define CPU_SCHED_NEED_RESCHED_F_IDX 3
+#define CPU_SCHED_NEED_RESCHED_F_IDX 0
 
 /* Task flags masks. */
 #define CPU_SCHED_NEED_RESCHED_F_MASK (1 << CPU_SCHED_NEED_RESCHED_F_IDX)
 
+#ifndef __ASM__
 
 #define read_css_field(field,v) \
   __asm__ __volatile__(  "movq %%gs:(%%rax), %%rax" \
@@ -57,8 +58,6 @@ typedef struct __cpu_sched_stat {
   __asm__ volatile(  "btr %%rax, %%gs:(%%rbx)" \
                      :: "a"(flag), "b"(offset_of(cpu_sched_stat_t,flags)) );
 
-
-#ifndef __ASM__
 
 struct __task_struct;
 

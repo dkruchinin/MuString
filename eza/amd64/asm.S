@@ -25,7 +25,8 @@
 
 #include <eza/arch/context.h>
 #include <eza/arch/page.h>
-
+#include <eza/arch/current.h>
+	
 .code64
 
 .text
@@ -144,11 +145,39 @@ common_interrupt:
   swapgs
 
 kernel_space_interrupt:
+ /* Tell the kernel that we're in interrupt context.
+  */
+  incq %gs:CPU_SCHED_STAT_IRQCNT_OFFT
+
+  /* Process this interrupt */
   SAVE_ALL
+
   movq %rax,%rdi
   call do_irq
+
   RESTORE_ALL
 
+  /* Tell the kernel that we've left interrupt context. */
+  decq %gs:CPU_SCHED_STAT_IRQCNT_OFFT
+
+  /* Check for preemption flag */
+  movq %gs:CPU_SCHED_STAT_FLAGS_OFFT, %rax
+	
+  bt $CPU_SCHED_NEED_RESCHED_F_IDX, %rax
+  jnc no_preemption_in_interrupt
+
+  /* Hmmmm, need to yield the CPU. Check if we're in atomic region.
+   * We're in atomic when either active IRQs counter or preemtion counter
+   * is not zero.
+   */
+  movq %gs:CPU_SCHED_STAT_IRQCNT_OFFT, %rax
+  or %gs:CPU_SCHED_STAT_PREEMPT_OFFT, %rax
+  jnz no_preemption_in_interrupt
+
+  /* OK, reschedule current task. */
+  call schedule
+
+no_preemption_in_interrupt:
   cmp $gdtselector(KTEXT_DES),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)
   je ret_from_int
   /* If we have come from user space, restore %gs.*/

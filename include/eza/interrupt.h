@@ -69,7 +69,7 @@ int enable_hw_irq(irq_t irq);
 int disable_hw_irq(irq_t irq);
 void disable_all_irqs(void);
 void enable_all_irqs(void);
-
+void do_irq(irq_t irq);
 
 void register_hw_interrupt_controller(hw_interrupt_controller_t *ctrl);
 

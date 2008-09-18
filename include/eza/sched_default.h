@@ -1,3 +1,27 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (C) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ *
+ * eza/generic_api/schedulers/sched_default.c: Data types and function prototypes
+ *  for EZA default scheduler.
+ */
+
+
 #ifndef __SCHED_DEFAULT_H__
 #define  __SCHED_DEFAULT_H__
 
@@ -112,7 +136,6 @@ static inline task_t *__get_most_prioritized_task(eza_sched_cpudata_t *sched_dat
   eza_sched_prio_array_t *array = sched_data->active_array;
   bit_idx_t idx = FIND_FIRST_BITMAP_BIT(array);
 
-  kprintf( "++ T IDX: %d\n", idx );
   if( idx != INVALID_BIT_INDEX ) {
     list_head_t *lh = &array->queues[idx];
     if( !list_is_empty(lh) ) {
