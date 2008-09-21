@@ -76,5 +76,10 @@ void register_hw_interrupt_controller(hw_interrupt_controller_t *ctrl);
 /* Arch-specific routines. */
 void arch_initialize_irqs(void);
 
+#define lock_local_interrupts()
+#define unlock_local_interrupts()
+
+#define local_interrupts_locked() false
+
 #endif
 

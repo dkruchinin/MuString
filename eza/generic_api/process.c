@@ -79,6 +79,7 @@ task_t *pid_to_task(pid_t pid)
     list_for_each(&pid_to_struct_hash[l],n) {
       task_t *t = container_of(n,task_t,pid_list);
       if(t->pid == pid) {
+        grab_task_struct(t);
         UNLOCK_PID_HASH_LEVEL_R(l);
         return t;
       }
@@ -99,13 +100,15 @@ status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t
   if(r == 0) {
     r = arch_setup_task_context(new_task,flags,priv);
     if(r == 0) {
-      hash_level_t l = pid_to_hash_level(new_task->pid);
-      LOCK_PID_HASH_LEVEL_W(l);
-      list_add2tail(&pid_to_struct_hash[l],&new_task->pid_list);
-      UNLOCK_PID_HASH_LEVEL_W(l);
-
       /* Tell the scheduler layer to take care of this task. */
-      sched_add_task(new_task);
+      r = sched_add_task(new_task);
+      if( r == 0 ) {
+        /* Now we can add this task to the hash. */
+        hash_level_t l = pid_to_hash_level(new_task->pid);
+        LOCK_PID_HASH_LEVEL_W(l);
+        list_add2tail(&pid_to_struct_hash[l],&new_task->pid_list);
+        UNLOCK_PID_HASH_LEVEL_W(l);
+      }
     } else {
       /* TODO: [mt] deallocate task struct properly. */
     }
@@ -121,7 +124,7 @@ status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t
   return r;
 }
 
-status_t do_process_control(task_t *target,ulong_t cmd, ulong_t arg)
+static status_t do_process_control(task_t *target,ulong_t cmd, ulong_t arg)
 {
   switch( cmd ) {
     case SYS_PR_CTL_SET_ENTRYPOINT:
@@ -143,8 +146,9 @@ status_t do_process_control(task_t *target,ulong_t cmd, ulong_t arg)
   return -EINVAL;
 }
 
-status_t sys_process_control( pid_t pid, ulong_t cmd, ulong_t arg)
+status_t sys_process_control(pid_t pid, ulong_t cmd, ulong_t arg)
 {
+  status_t r;
   task_t *task = pid_to_task(pid);
 
   if( task == NULL ) {
@@ -152,10 +156,14 @@ status_t sys_process_control( pid_t pid, ulong_t cmd, ulong_t arg)
   }
 
   if( !security_ops->check_process_control(task,cmd,arg) ) {
-    return -EACCES;
+    r = -EACCES;
+    goto out_release;
   }
 
-  return do_process_control(task,cmd,arg);
+  r = do_process_control(task,cmd,arg);
+out_release:
+  release_task_struct(task);
+  return r;
 }
 
 status_t sys_create_process(task_creation_flags_t flags)

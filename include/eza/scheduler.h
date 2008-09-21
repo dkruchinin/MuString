@@ -59,10 +59,8 @@ struct __scheduler;
 typedef struct __task_struct {
   pid_t pid, ppid;
   cpu_id_t cpu;
-
   task_state_t state;
   cpu_array_t cpu_affinity;
-
   kernel_stack_t kernel_stack;
   page_directory_t page_dir;
   list_node_t pid_list;
@@ -89,8 +87,11 @@ typedef struct __scheduler {
   void (*reset)(void);
   status_t (*change_task_state)(task_t *task,task_state_t state);
   status_t (*setup_idle_task)(task_t *task);
+    status_t (*scheduler_control)(task_t *task, ulong_t cmd,ulong_t arg);
 } scheduler_t;
 
+#define GRAB_SCHEDULER(s)
+#define RELEASE_SCHEDULER(s)
 
 typedef struct __scheduler_cpu_stats {
   uint64_t task_switches, idle_switches, idle_ticks;
@@ -125,6 +126,32 @@ extern void arch_sched_reset_current_need_resched(void);
 
 #define sched_set_current_need_resched() arch_sched_set_current_need_resched()
 #define sched_reset_current_need_resched() arch_sched_reset_current_need_resched()
+
+#define SYS_SCHED_CTL_SET_POLICY  0x0
+#define SYS_SCHED_CTL_GET_POLICY  0x1
+#define SYS_SCHED_CTL_SET_PRIORITY  0x2
+#define SYS_SCHED_CTL_GET_PRIORITY  0x3
+#define SYS_SCHED_CTL_MONOPOLIZE_CPU  0x4
+#define SYS_SCHED_CTL_DEMONOPOLIZE_CPU  0x5
+#define SYS_SCHED_CTL_SET_AFFINITY_MASK  0x6
+#define SYS_SCHED_CTL_GET_AFFINITY_MASK  0x7
+#define SYS_SCHED_CTL_SET_MAX_TIMISLICE  0x8
+#define SYS_SCHED_CTL_GET_MAX_TIMISLICE  0x9
+#define SYS_SCHED_CTL_GET_STATE 0xA
+#define SYS_SCHED_CTL_SET_STATE 0xB
+
+#define SCHEDULER_MAX_COMMON_IOCTL SYS_SCHED_CTL_SET_STATE
+
+status_t sys_yield(void);
+status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
+
+static inline void grab_task_struct(task_t *t)
+{
+}
+
+static inline void release_task_struct(task_t *t)
+{
+}
 
 #endif
 

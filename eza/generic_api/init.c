@@ -55,6 +55,21 @@ static void second_service_thread(void *data)
 static void init_thread(void *data)
 {
   int target_tick = swks.system_ticks_64 + 100;
+  status_t r;
+  ulong_t max_timeslice = 400;
+
+  r = sys_scheduler_control(1,SYS_SCHED_CTL_GET_POLICY,0);
+  kprintf( "POLICY: %d\n", r );
+  r = sys_scheduler_control(1,SYS_SCHED_CTL_GET_PRIORITY,0);
+  kprintf( "PRIORITY: %d\n", r );
+  r = sys_scheduler_control(1,SYS_SCHED_CTL_GET_AFFINITY_MASK,0);
+  kprintf( "CPU AFFINITY: %d\n", r );
+
+  kprintf( "INSUFFICIENT TASK: %d\n", sys_scheduler_control(4,SYS_SCHED_CTL_GET_MAX_TIMISLICE,0) );
+  kprintf( "SETTING MAX TIMESLICE TO %d : result = %d\n", max_timeslice, sys_scheduler_control(1,SYS_SCHED_CTL_SET_MAX_TIMISLICE,max_timeslice) );
+
+  r = sys_scheduler_control(1,SYS_SCHED_CTL_GET_MAX_TIMISLICE,0);
+  kprintf( "MAX TIMESLICE: %d\n", r );
 
   if( kernel_thread(second_service_thread,"Run Service, Run !") != 0 ) {
     panic( "Can't create the Init task !" );

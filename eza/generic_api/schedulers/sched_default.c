@@ -37,6 +37,8 @@
 #include <eza/arch/preempt.h>
 #include <eza/swks.h>
 #include <eza/arch/interrupt.h>
+#include <eza/security.h>
+#include <eza/interrupt.h>
 
 /* Our own scheduler. */
 static struct __scheduler eza_default_scheduler;
@@ -57,6 +59,14 @@ static spinlock_t cpu_data_lock;
 #define EZA_TASK_SCHED_DATA(t) ((eza_sched_taskdata_t *)t->sched_data)
 
 #define PRIO_TO_TIMESLICE(p) (p*5)
+
+#define LOCK_EZA_SCHED_DATA(t) \
+  lock_local_interrupts(); \
+  spinlock_lock(&t->sched_lock);
+
+#define UNLOCK_EZA_SCHED_DATA(t) \
+  spinlock_unlock(&t->sched_lock); \
+  unlock_local_interrupts();
 
 static eza_sched_taskdata_t *allocate_task_sched_data(void)
 {
@@ -119,10 +129,12 @@ static status_t setup_new_task(task_t *task)
   }
 
   list_init_node(&sdata->runlist);
+  spinlock_initialize(&sdata->lock, "EZA task data lock");
 
   LOCK_TASK_STRUCT(task);
   task->sched_data = sdata;
   task->scheduler = &eza_default_scheduler;
+  sdata->task = task;
   UNLOCK_TASK_STRUCT(task);
   return 0;
 }
@@ -145,6 +157,13 @@ static inline void __recalculate_timeslice_and_priority(task_t *task)
   
   /* Recalculate timeslice. */
   tdata->time_slice = PRIO_TO_TIMESLICE(tdata->priority);
+
+  /* Are we jailed ? */
+  if( tdata->max_timeslice != 0 ) {
+    if( tdata->time_slice > tdata->max_timeslice ) {
+      tdata->time_slice = tdata->max_timeslice;
+    }
+  }
 }
 
 /* NOTE: Task must be locked !
@@ -161,7 +180,7 @@ static inline void __reschedule_task(task_t *task)
 
 /* NOTE: Task and CPUdata must be locked prior to calling this function !
  */
-static inline void __move_to_non_active_array(eza_sched_cpudata_t *sched_data,task_t *task)
+static inline void __move_to_sleepers(eza_sched_cpudata_t *sched_data,task_t *task)
 {
   //  list_del();
 }
@@ -190,9 +209,12 @@ static inline status_t __deactivate_task(task_t *task, eza_sched_cpudata_t *sche
 {
   /* In case target task is running, we must reschedule it. */
   if( task->state == TASK_STATE_RUNNING ) {
-  //      reschedule_task(task);
+    __reschedule_task(task);
   } else { /* TASK_STATE_RUNNABLE */
-    
+    if( task->cpu == cpu_id() ) {
+      __move_to_sleepers(sched_data,task);
+    } else {
+    }
   }
 
   return 0;
@@ -234,10 +256,6 @@ static status_t def_add_cpu(cpu_id_t cpu)
   return r;
 }
 
-static void def_scheduler_tick1(void)
-{
-}
-
 static void def_scheduler_tick(void)
 {
   task_t *current = current_task();
@@ -260,7 +278,8 @@ static void def_scheduler_tick(void)
       __remove_task_from_array(cpudata->active_array,current);
       __recalculate_timeslice_and_priority(current);
       __add_task_to_array(cpudata->active_array,current);
-      kprintf( "** NEW TIMESLICE: %d\n", tdata->time_slice );
+      current->state = TASK_STATE_RUNNABLE;
+      kprintf( "** NEW (NEXT) TIMESLICE: %d\n", tdata->time_slice );
       sched_set_current_need_resched();
     }
   } else if( discipl == SCHED_FIFO ) {
@@ -272,7 +291,6 @@ static status_t def_add_task(task_t *task)
 {
   cpu_id_t cpu = cpu_id();
   eza_sched_taskdata_t *sdata;
-  eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
 
   if( sched_cpu_data[cpu] == NULL || task->state != TASK_STATE_JUST_BORN ) {
     return -EINVAL;
@@ -288,16 +306,14 @@ static status_t def_add_task(task_t *task)
   }
 
   LOCK_TASK_STRUCT(task);
-  LOCK_CPU_SCHED_DATA(sched_data);
 
   sdata = (eza_sched_taskdata_t *)task->sched_data;
   sdata->static_priority = EZA_SCHED_INITIAL_TASK_PRIORITY;
   sdata->priority = EZA_SCHED_INITIAL_TASK_PRIORITY;
   task->cpu = cpu;
-  sdata->task = task;
   sdata->sched_discipline = SCHED_RR; /* TODO: [mt] must be SCHED_ADAPTIVE */
+  sdata->max_timeslice = 0;
 
-  UNLOCK_CPU_SCHED_DATA(sched_data);
   UNLOCK_TASK_STRUCT(task);
 
   return 0;
@@ -309,6 +325,23 @@ static void def_schedule(void)
   task_t *current = current_task();
   task_t *next;
   bool need_switch;
+  uint64_t t1,t2;
+
+  if( in_interrupt() ) {
+    kprintf( KO_WARNING "schedule(): Scheduling from interrupt !\n" );
+    return;
+  }
+
+  t1 = t2 = 0;
+  asm __volatile__ ( "rdtsc" : "=r"(t1) );
+
+  /* From this moment we are in atomic context until 'arch_activate_task()'
+   * finishes its job or until interrupts will be enabled in no context
+   * switch is required.
+   */
+  if( is_interrupts_enabled() ) {
+    interrupts_disable();
+  }
 
   LOCK_TASK_STRUCT(current);
   LOCK_CPU_SCHED_DATA(sched_data);
@@ -322,7 +355,9 @@ static void def_schedule(void)
   }
   sched_data->stats->task_switches++;
 
-  next->state = TASK_STATE_RUNNING;
+  if(current->state == TASK_STATE_RUNNING) {
+    current->state = TASK_STATE_RUNNABLE;
+  }
 
   if( next != current ) {
     need_switch = true;
@@ -330,15 +365,22 @@ static void def_schedule(void)
     need_switch = false;
   }
 
+  next->state = TASK_STATE_RUNNING;
+
   UNLOCK_CPU_SCHED_DATA(sched_data);
   UNLOCK_TASK_STRUCT(current);
 
-  kprintf( "** RESCHEDULING TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , timeslice: %d **\n",
+  asm __volatile__ ( "rdtsc" : "=r"(t2) );
+  kprintf( "** RESCHEDULING TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , timeslice: %d , D: %d**\n",
            current_task()->pid, need_switch,
-           next->pid, EZA_TASK_SCHED_DATA(next)->time_slice );
+           next->pid, EZA_TASK_SCHED_DATA(next)->time_slice,
+           t2 - t1);
 
   if( need_switch ) {
     arch_activate_task(next);
+  } else {
+    /* No context switch is needed. Just enable interrupts. */
+    interrupts_enable();
   }
 }
 
@@ -406,6 +448,65 @@ static status_t def_setup_idle_task(task_t *task)
   return 0;
 }
 
+/*
+ * NOTE: Upon entering this routine target task is unlocked but marked as
+ * 'under control'.
+ */
+static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
+{
+  eza_sched_taskdata_t *sdata = EZA_TASK_SCHED_DATA(target);
+
+  if(cmd > SCHEDULER_MAX_COMMON_IOCTL) {
+    return  -EINVAL;
+  }
+
+  switch(cmd) {
+    /* Getters. */
+    case SYS_SCHED_CTL_GET_POLICY:
+      return sdata->sched_discipline;
+    case SYS_SCHED_CTL_GET_PRIORITY:
+      return sdata->static_priority;
+    case SYS_SCHED_CTL_GET_AFFINITY_MASK:
+      return target->cpu_affinity;
+    case SYS_SCHED_CTL_GET_MAX_TIMISLICE:
+      return sdata->max_timeslice;
+    case SYS_SCHED_CTL_GET_STATE:
+      return target->state;
+
+    /* Setters.  */
+    case SYS_SCHED_CTL_SET_POLICY:
+      if( arg == SCHED_RR || arg == SCHED_FIFO || arg == SCHED_ADAPTIVE ) {
+        LOCK_TASK_STRUCT(target);
+        sdata->sched_discipline = arg;
+        UNLOCK_TASK_STRUCT(target);
+        return 0;
+      }
+      return -EINVAL;
+    case SYS_SCHED_CTL_SET_PRIORITY:
+      if(arg <= EZA_SCHED_PRIORITY_MAX) {
+        if( trusted_task(target) ) {
+        } else {
+        }
+      }
+      return -EINVAL;
+    case SYS_SCHED_CTL_MONOPOLIZE_CPU:
+    case SYS_SCHED_CTL_DEMONOPOLIZE_CPU:
+    case SYS_SCHED_CTL_SET_AFFINITY_MASK:
+      return -EINVAL;
+    case SYS_SCHED_CTL_SET_MAX_TIMISLICE:
+      if(arg < HZ) {
+        LOCK_TASK_STRUCT(target);
+        sdata->max_timeslice = arg;
+        UNLOCK_TASK_STRUCT(target);
+        return 0;
+      }
+      return -EINVAL;
+    case SYS_SCHED_CTL_SET_STATE:
+      return def_change_task_state(target,arg);
+  }
+  return -EINVAL;
+}
+
 static struct __scheduler eza_default_scheduler = {
   .id = "Eza default scheduler",
   .cpus_supported = def_cpus_supported,
@@ -416,6 +517,7 @@ static struct __scheduler eza_default_scheduler = {
   .reset = def_reset,
   .change_task_state = def_change_task_state,
   .setup_idle_task = def_setup_idle_task,
+  .scheduler_control = def_scheduler_control,
 };
 
 scheduler_t *get_default_scheduler(void)

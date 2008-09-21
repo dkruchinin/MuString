@@ -60,6 +60,10 @@ static inline void discount_interrupt(void)
   }
 }
 
+static inline bool is_interrupts_enabled(void)
+{
+  return interrupts_read() & 0x200;
+}
 
 #endif
 
