@@ -95,7 +95,7 @@ uint64_t i8254_calibrate_delay_loop0(void)
     tt1|=inb(I8254_BASE) << 8;
   } while(cnt);
   
-  usleep(DCLOCK);
+  atom_usleep(DCLOCK);
 
   outb(I8254_BASE+3,0xd2);
   tt2=inb(I8254_BASE);

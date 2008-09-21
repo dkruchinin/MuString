@@ -62,7 +62,7 @@ void arch_smp_init(void)
     gdtr.base=(uint64_t)&gdt[i];
     
     r=apic_send_ipi_init(i);
-    usleep(1000);
+    atom_usleep(1000);
     i++;
   }
 

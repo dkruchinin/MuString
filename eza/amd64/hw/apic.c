@@ -367,7 +367,7 @@ void local_apic_timer_calibrate(uint32_t hz)
     ;
 
   x1=local_apic->timer_ccr.count; /*get current counter*/
-  usleep(1000000/hz); /*delay*/
+  atom_usleep(1000000/hz); /*delay*/
   x2=local_apic->timer_ccr.count; /*again get current counter to see difference*/
 
   kprintf("delay loop = %d \n",x1-x2);
@@ -428,7 +428,7 @@ uint32_t apic_send_ipi_init(uint8_t apicid)
   icr1.vector=0;
   local_apic->icr1.reg=icr1.reg;  
 
-  usleep(20);
+  atom_usleep(20);
   if(local_apic->esr.reg!=0)
     return __local_apic_chkerr();
 
@@ -440,7 +440,7 @@ uint32_t apic_send_ipi_init(uint8_t apicid)
   icr1.shorthand=0x0;
   icr1.vector=0;
   local_apic->icr1.reg=icr1.reg;  
-  usleep(10000);
+  atom_usleep(10000);
   if(local_apic->esr.reg!=0)
     return __local_apic_chkerr();
 
@@ -454,7 +454,7 @@ uint32_t apic_send_ipi_init(uint8_t apicid)
     icr1.trigger=0x1;
     icr1.shorthand=0x0;
     local_apic->icr1.reg=icr1.reg;  
-    usleep(200);
+    atom_usleep(200);
     if(local_apic->esr.reg!=0)
       return __local_apic_chkerr();
   }

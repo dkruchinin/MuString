@@ -106,7 +106,7 @@ void arch_specific_init(void)
 #ifdef CONFIG_SMP
 
   arch_smp_init();
-  //usleep(50000);
+  //atom_usleep(50000);
 
 #endif
   //local_apic_timer_init();
