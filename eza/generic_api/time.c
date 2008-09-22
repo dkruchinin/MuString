@@ -26,6 +26,10 @@
 #include <eza/arch/types.h>
 #include <eza/swks.h>
 #include <eza/arch/timer.h>
+#include <eza/scheduler.h>
+#include <eza/smp.h>
+#include <eza/arch/current.h>
+#include <eza/arch/apic.h>
 
 void initialize_timer(void)
 {
@@ -40,8 +44,12 @@ void timer_tick(void)
 {
   /* Update the ticks counter. */
   swks.system_ticks_64++;
-
   process_timers(); 
+}
+
+void timer_interrupt_handler(void *data)
+{
+  timer_tick();
 }
 
 
@@ -49,5 +57,11 @@ void timer_tick(void)
 /* SMP-specific stuff. */
 void smp_local_timer_interrupt_tick(void)
 {
+  if(cpu_id() == 0) {
+    timer_tick();
+  } else {
+    kprintf( "** Wheeee ! Local timer interrupt on CPU %d\n", cpu_id() );
+  }
+//  kprintf( "++ CPU TIMER !!! %2<<\n",swks.system_ticks_64 );
 }
 #endif

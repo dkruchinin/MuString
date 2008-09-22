@@ -6,7 +6,7 @@
 #include <eza/spinlock.h>
 #include <eza/errno.h>
 
-#define AMD64_IDT_ENTRIES NUM_IRQS
+#define AMD64_IDT_ENTRIES 256
 
 static spinlock_t amd64_idt_lock;
 
@@ -56,13 +56,11 @@ static status_t __install_handler(idt_handler_t h, irq_t vec)
 
   LOCK_AMD_IDT;
   e = &amd64_idt_table.idt_entries[vec]; 
-  if(e->available) {
-    r = install_interrupt_gate(vec,(uintptr_t)h,0,0);
-    if(r == 0) {
-      e->available = false;
-    }
+  r = install_interrupt_gate(vec,(uintptr_t)h,0,0);
+  if(r == 0) {
+    e->available = false;
   } else {
-    r = -EBUSY;
+    e->available = true;
   }
   UNLOCK_AMD_IDT;
   return r;

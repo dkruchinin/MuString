@@ -164,6 +164,10 @@ void arch_pmm_init(cpu_id_t cpu)
   tr_load(gdtselector(TSS_DES));
   idtr_load(&idtr);
 
+  if(cpu != 0) {
+    arch_smp_mm_init(cpu);
+  }
+
   return;
 }
 

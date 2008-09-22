@@ -45,6 +45,7 @@
 #include <eza/arch/preempt.h>
 #include <eza/arch/smp.h>
 #include <eza/arch/apic.h>
+#include <eza/arch/atomic.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
@@ -64,8 +65,8 @@ static void main_routine_stage1(void)
   set_cpu_online(0,1);  /* We're online. */
   sched_add_cpu(0);
 
+  arch_initialize_irqs(); 
   arch_specific_init();
-  arch_initialize_irqs();  
   /* Initialize known hardware devices. */
   initialize_common_hardware();
   /* Since the PIC is initialized, all interrupts from the hardware
@@ -150,16 +151,14 @@ void main_smpap_routine(void)
   static cpu_id_t cpu = 1;
 
   kprintf("CPU#%d Hello folks! I'm here\n", cpu);
-
+  
   /* Ramap physical memory using page directory preparead be master CPU. */
-  arch_cpu_init(cpu); 
-
+  arch_cpu_init(cpu);
 
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.
    */
   arch_activate_idle_task(cpu);
-
   /* Continue CPU initialization in new context. */
   cpu++;
   main_smpap_routine_stage1(1);

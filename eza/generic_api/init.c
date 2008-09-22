@@ -36,7 +36,7 @@
 
 static void second_service_thread(void *data)
 {
-  int target_tick = swks.system_ticks_64 + 100;
+  uint64_t target_tick = swks.system_ticks_64 + 100;
 
   kprintf( "+ [Second service] Greetings from my parent (%d): %s\n",
            current_task()->ppid,data );
@@ -54,7 +54,7 @@ static void second_service_thread(void *data)
 
 static void init_thread(void *data)
 {
-  int target_tick = swks.system_ticks_64 + 100;
+  uint64_t target_tick = swks.system_ticks_64 + 100;
   status_t r;
   ulong_t max_timeslice = 400;
 
@@ -80,10 +80,9 @@ static void init_thread(void *data)
 
   for( ;; ) {
     if( swks.system_ticks_64 >= target_tick ) {
-        target_tick = swks.system_ticks_64;
-        kprintf( " + [Init] Tick, tick ! (Ticks: %d, PID: %d, CPU: %d, ATOM: %d)\n",
-               swks.system_ticks_64, current_task()->pid, 1024, in_atomic() );
-        target_tick += 200;
+        kprintf( " + [Init] Tick, tick ! (Ticks: %d, PID: %d, CPU: %d, ATOM: %d, T: %d)\n",
+                 swks.system_ticks_64, current_task()->pid, 1024, in_atomic(), target_tick );
+        target_tick = swks.system_ticks_64 + 200;
     }
   }
 }

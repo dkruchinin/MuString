@@ -146,6 +146,7 @@ void initialize_idle_tasks(void)
     if( r != 0 ) {
       panic( "initialize_idle_tasks(): Can't map kernel stack for idle task !" );
     }
+    kprintf( "> STACK: %p : %p\n", task->kernel_stack.high_address, task->kernel_stack.low_address );
     /* Setup arch-specific task context. */
     __arch_setup_ctx(task,0);
   }

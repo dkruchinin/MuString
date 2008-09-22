@@ -35,6 +35,7 @@
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 #include <mlibc/string.h>
+#include <eza/arch/interrupt.h>
 #ifdef CONFIG_SMP
 #include <eza/arch/smp.h>
 #endif
@@ -252,7 +253,7 @@ void local_bsp_apic_init(void)
   /* enable APIC */
   __enable_apic();
 
-  local_apic_timer_init(0x31);
+  local_apic_timer_init(LOCAL_TIMER_CPU_IRQ_VEC);
 
   /*set spurois vector*/
   set_apic_spurious_vector(0xff);
@@ -367,7 +368,7 @@ void local_apic_timer_calibrate(uint32_t hz)
     ;
 
   x1=local_apic->timer_ccr.count; /*get current counter*/
-  atom_usleep(1000000/hz); /*delay*/
+  atom_usleep(1000000/hz*2); /*delay*/
   x2=local_apic->timer_ccr.count; /*again get current counter to see difference*/
 
   kprintf("delay loop = %d \n",x1-x2);
@@ -391,7 +392,7 @@ void local_apic_timer_init(uint8_t vector)
   i8254_suspend(); /* suspend general intel timer - bye bye, simple and pretty one, welcome to apic ...*/
 
   /* calibrate timer delimeter */
-  __local_apic_timer_calibrate(32);
+  __local_apic_timer_calibrate(16);
   /*calibrate to hz*/
   local_apic_timer_calibrate(HZ);
   /* setup timer vector  */
@@ -505,7 +506,7 @@ void local_ap_apic_init(void)
   /* enable APIC */
   __enable_apic();
 
-  //  local_apic_timer_init();
+  local_apic_timer_init(LOCAL_TIMER_CPU_IRQ_VEC);
 
   /* set nil vectors */
   __set_lvt_lint_vector(0,0x34+get_local_apic_id());
