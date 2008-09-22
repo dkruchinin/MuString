@@ -377,6 +377,12 @@ void local_apic_timer_calibrate(uint32_t hz)
   local_apic->timer_icr.count=x1-x2; /* <-- this will tell us how much ticks we're really need */
 }
 
+void local_apic_timer_ap_calibrate(void)
+{
+  local_apic->timer_icr.count=delay_loop;   
+}
+
+
 extern void i8254_suspend(void);
 
 void apic_timer_hack(void)
@@ -395,6 +401,26 @@ void local_apic_timer_init(uint8_t vector)
   __local_apic_timer_calibrate(16);
   /*calibrate to hz*/
   local_apic_timer_calibrate(HZ);
+  /* setup timer vector  */
+  lvt_timer.vector=vector; 
+  /* set periodic mode (set bit to 1) */
+  lvt_timer.timer_mode = 0x1;
+  /* enable timer */
+  lvt_timer.mask=0x0;
+  local_apic->lvt_timer.reg=lvt_timer.reg;
+}
+
+void local_apic_timer_ap_init(uint8_t vector)
+{
+  apic_lvt_timer_t lvt_timer=local_apic->lvt_timer;
+
+
+  i8254_suspend(); /* suspend general intel timer - bye bye, simple and pretty one, welcome to apic ...*/
+
+  /* calibrate timer delimeter */
+  __local_apic_timer_calibrate(16);
+  /*calibrate to hz*/
+  local_apic_timer_ap_calibrate();
   /* setup timer vector  */
   lvt_timer.vector=vector; 
   /* set periodic mode (set bit to 1) */
@@ -506,7 +532,7 @@ void local_ap_apic_init(void)
   /* enable APIC */
   __enable_apic();
 
-  local_apic_timer_init(LOCAL_TIMER_CPU_IRQ_VEC);
+  local_apic_timer_ap_init(LOCAL_TIMER_CPU_IRQ_VEC);
 
   /* set nil vectors */
   __set_lvt_lint_vector(0,0x34+get_local_apic_id());
