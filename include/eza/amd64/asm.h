@@ -18,6 +18,8 @@
  * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *                (added CR3-related functions)
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
+ *                (add lock prefix)
  *
  * include/eza/amd64/asm.h: generic assembler functions
  *
@@ -26,10 +28,24 @@
 #ifndef __ASM_H__
 #define __ASM_H__
 
-#include <mm/page.h>
+#include <config.h>
 #include <eza/arch/types.h>
 #include <eza/arch/mm_types.h>
-#include <eza/arch/page.h>
+
+#ifdef CONFIG_SMP
+/*
+ * x86 and x86_64(amd64) architectures provide lock prefix
+ * that guaranty atomic execution limited set of operations
+ * such as:
+ * ADC, ADD, AND, BTC, BTR, BTS, CMPXCHG, CMPXCHG8B, CMPXCHG16B, DEC,
+ * INC, NEG, NOT, OR, SBB, SUB, XADD, XCHG, and XOR
+ * (list of operations supporting lock prefix was taken from amd64 manual,
+ * volume 3)
+ */
+#define __LOCK_PREFIX "lock "
+#else
+#define __LOCK_PREFIX ""
+#endif /* CONFIG_SMP */
 
 extern void set_efer_flag(int flag);
 

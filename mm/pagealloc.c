@@ -32,7 +32,7 @@
 #include <mlibc/string.h>
 #include <eza/arch/page.h>
 
-extern percpu_page_cache_t PER_CPU_VAR(percpu_page_cache);
+//static percpu_page_cache_t PER_CPU_VAR(percpu_page_cache);
 
 #define LOCK_CACHE(c)
 #define UNLOCK_CACHE(c)
@@ -41,12 +41,12 @@ page_frame_t *alloc_page( page_flags_t flags, int clean_page )
 {
   page_frame_t *page;
 
-  if( flags & PAF_DMA_PAGE ) {
+  //if( flags & PAF_DMA_PAGE ) {
     /* DMA page requested. */
-    return NULL;
-  } else {
+    //return NULL;
+  //} else {
     /* First, try to allocate from a per-CPU page cache */      
-    percpu_page_cache_t *cpu_cache = percpu_get_var(percpu_page_cache);
+    /*percpu_page_cache_t *cpu_cache = percpu_get_var(percpu_page_cache);
 
     LOCK_CACHE(cpu_cache);    
     if(cpu_cache->num_free_pages > 0 ) {
@@ -62,8 +62,7 @@ page_frame_t *alloc_page( page_flags_t flags, int clean_page )
 
   if(clean_page) {
     arch_clean_page(page);
-  }
+    }*/
 
   return page;
 }
-

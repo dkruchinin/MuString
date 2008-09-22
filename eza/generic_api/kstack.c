@@ -20,7 +20,7 @@
  * eza/generic_api/kstack.c: functions for dealing with kernel stack management.
  */
 
-#include <mm/pagealloc.h>
+#include <mm/pfalloc.h>
 #include <eza/kernel.h>
 #include <eza/arch/bits.h>
 #include <eza/errno.h>
@@ -61,7 +61,8 @@ static void initialize_stack_chunk(kernel_stack_chunk_t *chunk, uint32_t id)
 
 static void initialize_stack_allocator_context(kernel_stack_allocator_context_t *ctx)
 {
-  kernel_stack_chunk_t *ch1 = (kernel_stack_chunk_t *)__alloc_page(0,0);
+  page_frame_t *page = alloc_page(AF_PGP);
+  kernel_stack_chunk_t *ch1 = (kernel_stack_chunk_t *)pframe_to_virt(page);
 
   if( ch1 == NULL ) {
     panic( "initialize_stack_allocator_context(): Can't initialize stack context !" );

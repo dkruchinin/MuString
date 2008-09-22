@@ -25,18 +25,11 @@
 #ifndef __EZA_SPINLOCK_H__ /* there are several spinlock.h with different targets */
 #define __EZA_SPINLOCK_H__
 
+#include <config.h>
+#include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 #include <eza/arch/mbarrier.h>
 
-typedef struct __atomic {
-  volatile long c;
-} atomic_t;
-
-/* atomic related functions prototypes
- * used in implementation
- */
-static inline void atomic_set(atomic_t *v,long c);
-static inline long atomic_get(atomic_t *v);
 
 #ifdef CONFIG_SMP
 typedef struct __spinlock_type {
@@ -72,9 +65,6 @@ static inline void spinlock_unlock(spinlock_t *s)
 //extern void spinlock_initialize(spinlock_t *s,const char *name);
 //extern int spinlock_trylock(spinlock_t *s);
 
-
-
-
 #else /* just disable preemption while spin is locked */
 /* on UP systems you can just disable preemtion and/or interrupts to make a spinlock */
 /*FIXME: include all preemtion enable/disable stuff */
@@ -91,18 +81,5 @@ typedef long spinlock_t;
 #define spinlock_unlock(x) /* enable preemtion */
 
 #endif /* CONFIG_SMP */
-
-static inline void atomic_set(atomic_t *v,long c)
-{
-  v->c=c;
-
-  return;
-}
-
-static inline long atomic_get(atomic_t *v)
-{
-  return v->c;
-}
-
 #endif /* __EZA_SPINLOCK_H__ */
 

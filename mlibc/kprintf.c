@@ -373,7 +373,7 @@ static size_t __digit(char *dest, const size_t dsize, dlong number, struct fattr
    * To prevent overflow, take care about number's sign
    * and store ABS(number) into d
    */
-  if((d < 0) && !(fa->flags & FMT_DUNSIG)) {
+  if((number < 0) && !(fa->flags & FMT_DUNSIG)) {
 	neg = true;
 	d = -number;
 	fa->flags &= ~FMT_FSPACE;
@@ -491,14 +491,13 @@ static bool __copy_byte_ip(char *dest, const size_t dsize, const char c)
 static void __ident_num_size(dlong *d, va_list ap, const struct fattrs *fa)
 {
   if(fa->flags & FMT_LLONG)
-    *d = va_arg(ap, unsigned long);
+    *d = va_arg(ap, long);
   else if(fa->flags & FMT_LDLONG)
 	*d = va_arg(ap, dlong);
   else if(fa->flags & FMT_LSIZET)
 	*d = va_arg(ap, size_t);
   else {
 	*d = va_arg(ap, int);
-
 	if(fa->flags & FMT_DUNSIG)
 	  *d = (unsigned int)*d;
   }

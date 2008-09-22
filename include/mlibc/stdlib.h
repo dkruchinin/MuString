@@ -25,6 +25,7 @@
 #ifndef __STDLIB_H__
 #define __STDLIB_H__ 
 
+#include <mlibc/bitwise.h>
 #include <eza/arch/types.h>
 
 void itoa(int num,char *buf,size_t buflen,unsigned int radix);

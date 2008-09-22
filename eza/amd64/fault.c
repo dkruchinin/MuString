@@ -21,7 +21,6 @@
  *
  */
 
-#include <mm/page.h>
 #include <eza/arch/types.h>
 #include <eza/arch/page.h>
 #include <eza/arch/fault.h>

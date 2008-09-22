@@ -20,23 +20,25 @@
  * eza/generic_api/task.c: generic functions for dealing with task creation.
  */
 
+#include <ds/iterator.h>
 #include <ds/list.h>
 #include <eza/task.h>
 #include <mm/pt.h>
 #include <eza/smp.h>
 #include <eza/kstack.h>
 #include <eza/errno.h>
-#include <mm/pagealloc.h>
+#include <mm/mm.h>
+#include <mm/pfalloc.h>
 #include <eza/amd64/context.h>
 #include <mlibc/kprintf.h>
 #include <eza/arch/scheduler.h>
 #include <eza/arch/types.h>
 #include <eza/kernel.h>
-#include <eza/pageaccs.h>
 #include <eza/arch/task.h>
 #include <mlibc/index_array.h>
 #include <eza/spinlock.h>
 
+#define GENERIC_KERNEL_PAGE 0 /* FIXME DK: remove after debugging */
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
@@ -95,32 +97,17 @@ int setup_task_kernel_stack(task_t *task)
   if( r == 0 ) {
     r = mm_map_pages( &task->page_dir, NULL,
                       task->kernel_stack.low_address, KERNEL_STACK_PAGES,
-                      KERNEL_STACK_PAGE_FLAGS, NULL );
+                      KERNEL_STACK_PAGE_FLAGS );
   }
   return r;
 }
 
 static page_frame_t *alloc_stack_pages(void)
 {
-  int i;
-  page_frame_t *p, *first;
+  page_frame_t *p;
 
-  first = NULL;
-  for( i = 0; i < KERNEL_STACK_PAGES; i++ ) {
-    p = alloc_page(GENERIC_KERNEL_PAGE,0);
-    if( p == NULL ) {
-      return NULL;
-    } else {
-      list_init_node( &p->page_next );
-      if(first == NULL) {
-        first = p;
-      } else {
-        list_add2tail(&first->active_list,&p->page_next);
-      }
-    }
-  }
-
-  return first;
+  p = alloc_pages(KERNEL_STACK_PAGES, AF_PGP);
+  return p;
 }
 
 static status_t initialize_mm( task_t *orig, task_t *target,
@@ -153,8 +140,8 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
   page_frame_t *ts_page;
   status_t r = -ENOMEM;
   page_frame_t *stack_pages;
-  pageaccs_list_pa_ctx_t pa_ctx;
-  pageaccs_linear_pa_ctx_t l_ctx;
+  page_frame_iterator_t pfi;
+  ITERATOR_CTX(page_frame, PF_ITER_LIST) pfi_list_ctx;
   pid_t pid, ppid;
 
   /* TODO: [mt] Add memory limit check. */
@@ -166,7 +153,7 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
     goto task_create_fault;
   }
 
-  ts_page = alloc_page(GENERIC_KERNEL_PAGE,1);
+  ts_page = alloc_page(AF_PGP);
   if( ts_page == NULL ) {
     goto free_pid;
   }
@@ -194,13 +181,13 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
   }
 
   /* Map kernel stack. */
-  pa_ctx.head = stack_pages;
-  pa_ctx.num_pages = KERNEL_STACK_PAGES;
-  pageaccs_list_pa.reset(&pa_ctx);
+  mm_init_pfiter_list(&pfi, &pfi_list_ctx,
+                      list_node_first(&stack_pages->head),
+                      list_node_last(&stack_pages->head));
 
-  r = mm_map_pages( &task->page_dir, &pageaccs_list_pa,
+  r = mm_map_pages( &task->page_dir, &pfi,
                     task->kernel_stack.low_address, KERNEL_STACK_PAGES,
-                    KERNEL_STACK_PAGE_FLAGS, &pa_ctx );
+                    KERNEL_STACK_PAGE_FLAGS );
   if( r != 0 ) {
     goto free_stack_pages;
   }

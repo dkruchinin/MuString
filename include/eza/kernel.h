@@ -27,7 +27,15 @@
 
 #define LOGBUFFER_LEN  32768
 
+#define _b2kb(b)    ((b) >> 10)
+#define _kb2b(kb)   ((kb) << 10)
+#define _kb2mb(kb)  ((kb) >> 10)
+#define _mb2kb(mb)  ((mb) << 10)
+#define _b2mb(b)    (_kb2mb(_b2kb(b)))
+#define _mb2b(mb)   (_kb2b(_mb2kb(mb)))
+
+
 void panic(const char *format, ...);
    
-#endif
+#endif /* __KERNEL_H__ */
 

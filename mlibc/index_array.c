@@ -25,7 +25,8 @@
 #include <mlibc/index_array.h>
 #include <eza/arch/types.h>
 #include <ds/list.h>
-#include <mm/pagealloc.h>
+#include <mm/page.h>
+#include <mm/pfalloc.h>
 #include <mlibc/kprintf.h>
 
 static index_array_entry_t *allocate_entries(range_type_t num_entries)
@@ -59,7 +60,8 @@ bool index_array_initialize(index_array_t *array, range_type_t range)
 
           if( item % IA_ENTRIES_PER_PAGE == 0 ) {
             uint64_t *p64;
-            area = __alloc_page(0,0);
+            page_frame_t *page = alloc_page(AF_PGP);
+            area = pframe_to_virt(page);;
 
             if(area == NULL) {
               return false;

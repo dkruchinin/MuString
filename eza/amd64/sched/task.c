@@ -20,17 +20,18 @@
  * eza/amd64/sched/task.c: AMD64-specific tasks-related functions.
  */
 
+#include <ds/iterator.h>
 #include <eza/task.h>
 #include <eza/arch/context.h>
 #include <mlibc/string.h>
 #include <eza/arch/page.h>
 #include <mlibc/kprintf.h>
 #include <mm/mm.h>
+#include <mm/page.h>
 #include <eza/errno.h>
 #include <mlibc/string.h>
 #include <eza/smp.h>
-#include <eza/pageaccs.h>
-#include <mm/pagealloc.h>
+#include <mm/pfalloc.h>
 #include <eza/kernel.h>
 #include <eza/scheduler.h>
 #include <eza/arch/scheduler.h>
@@ -66,26 +67,38 @@ void kernel_thread_helper(void (*fn)(void*), void *data)
 
 /* For initial stack filling. */
 static page_frame_t *next_frame;
-static page_idx_t acc_next_frame(void *ctx)
+
+static void __iter_stub(page_frame_iterator_t *pfi)
 {
+  panic("unimplemented!");
+}
+
+static void acc_next_frame(page_frame_iterator_t *pfi)
+{
+  ASSERT(pfi->type == PF_ITER_ALLOC);
+
+  pfi->state = ITER_RUN;
   if(next_frame != NULL ) {
-    return next_frame->idx;
+    pfi->pf_idx = pframe_number(next_frame);
   } else {
-    page_frame_t *frame = alloc_page(0,0);
+    page_frame_t *frame = alloc_page(AF_PGP);
     if( frame == NULL ) {
       panic( "initialize_idle_tasks(): Can't allocate a page !" );
     }
 
-    return frame->idx;
+    pfi->pf_idx = pframe_number(frame);
   }
 }
 
-static page_frame_accessor_t idle_pacc = {
-  .frames_left = pageaccs_frames_left_stub,
-  .next_frame = acc_next_frame,
-  .reset = pageaccs_reset_stub,
-  .alloc_page = pageaccs_alloc_page_stub,
-};
+static void init_pfiter_alloc(page_frame_iterator_t *pfi)
+{
+  pfi->first = __iter_stub;
+  pfi->last = __iter_stub;
+  pfi->next = acc_next_frame;
+  pfi->prev = __iter_stub;
+  iter_init(pfi, PF_ITER_ALLOC);
+  iter_set_ctx(pfi, NULL);
+}
 
 void initialize_idle_tasks(void)
 {
@@ -93,9 +106,11 @@ void initialize_idle_tasks(void)
   page_frame_t *ts_page;
   int r, cpu;
   cpu_sched_stat_t *sched_stat;
+  page_frame_iterator_t pfi;
 
+  init_pfiter_alloc(&pfi);
   for( cpu = 0; cpu < MAX_CPUS; cpu++ ) {
-    ts_page = alloc_page(0,1);
+    ts_page = alloc_page(AF_PGP);
     if( ts_page == NULL ) {
       panic( "initialize_idle_tasks(): Can't allocate main structure for idle task !" );  
     }
@@ -122,9 +137,9 @@ void initialize_idle_tasks(void)
     }
 
     next_frame = NULL;
-    r = mm_map_pages( &task->page_dir, &idle_pacc,
+    r = mm_map_pages( &task->page_dir, &pfi,
                       task->kernel_stack.low_address, KERNEL_STACK_PAGES,
-                      KERNEL_STACK_PAGE_FLAGS, NULL );
+                      KERNEL_STACK_PAGE_FLAGS);
     if( r != 0 ) {
       panic( "initialize_idle_tasks(): Can't map kernel stack for idle task !" );
     }

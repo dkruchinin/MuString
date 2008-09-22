@@ -15,39 +15,29 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * include/mm/pagealloc.h: Contains types and prototypes for kernel page
- *                         allocator.
+ * mm/pfalloc.c: page frame allocation API
  *
  */
 
-#include <mm/mm.h>
 #include <mm/page.h>
-#include <eza/arch/page.h>
+#include <mm/page.h>
+#include <mm/mmpool.h>
+#include <mm/pfalloc.h>
 #include <eza/arch/types.h>
 
-#ifndef __PAGEALLOC_H__
-#define __PAGEALLOC_H__ 
+page_frame_t *alloc_pages(int n, pfalloc_flags_t flags)
+{
+  page_frame_t *pages = NULL;
+  mm_pool_t *pool = mmpools_get_pool(__pool_type(flags & PAGE_POOLS_MASK));
 
-/* Main MM interface. */
-page_frame_t *alloc_page( page_flags_t flags, int clean_page );
-
-/**
- * This function allocates one page using kernel memory allocator.
- *
- * @flags Memory allocation flags
- * @return Valid virtual address of a newly-allocated memory page
- * or NULL if allocation failed.
- */
-static inline void *__alloc_page( page_flags_t flags, int clean_page ) {
-  page_frame_t *pf = alloc_page(flags,clean_page);
-  if( pf != NULL ) {
-    return pframe_to_virt(pf);
-  } else {
-    return NULL;
-  }
+  pages = __pool_alloc_pages(pool, n);  
+  return pages;
 }
 
-#endif
-
+void free_pages(page_frame_t *pages, int n)
+{
+  mm_pool_t *pool = mmpools_get_pool(pframe_pool_type(pages));
+  __pool_free_pages(pool, pages, n);
+}

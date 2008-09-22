@@ -44,7 +44,7 @@ void arch_mm_stage0_init(cpu_id_t cpu)
 {
   set_efer_flag(AMD_NXE_FLAG);
   /* prepare FPU to use */
-  cpu_setup_fpu();
+  //cpu_setup_fpu();
 
   if( cpu == 0 ) {
     arch_bios_init();

@@ -25,8 +25,6 @@
 #ifndef __AMD64_PAGE_H__
 #define __AMD64_PAGE_H__
 
-#include <mm/page.h>
-
 /* Paging on amd64 is a real big fucking deal
  * by default you have mapping - one for kernel space,
  * other for user space.
@@ -42,7 +40,6 @@
 /* ok, like usually we're like 4k page?! ;) */
 
 #define PAGE_BOUND  12
-
 #define PAGE_WIDTH  PAGE_BOUND
 #define PAGE_SIZE   (1 << PAGE_WIDTH)
 #define PAGE_ADDR_MASK (~(PAGE_SIZE-1))
@@ -57,6 +54,8 @@
 #define MIN_PHYS_MEMORY_REQUIRED 0x1800000
 
 #ifndef __ASM__
+
+#include <eza/arch/types.h>
 
 static inline uintptr_t _k2p(uintptr_t p)
 {

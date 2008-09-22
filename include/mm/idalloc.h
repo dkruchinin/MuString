@@ -15,39 +15,37 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * include/mm/pagealloc.h: Contains types and prototypes for kernel page
- *                         allocator.
+ * include/mm/idalloc.h: Init-data memory allocator
  *
  */
 
-#include <mm/mm.h>
+#ifndef __IDALLOC_H__
+#define __IDALLOC_H__
+
+#include <config.h>
 #include <mm/page.h>
-#include <eza/arch/page.h>
+#include <eza/spinlock.h>
 #include <eza/arch/types.h>
 
-#ifndef __PAGEALLOC_H__
-#define __PAGEALLOC_H__ 
+typedef struct __idalloc_meminfo {
+  char *mem;
+  list_head_t avail_pages;
+  spinlock_t lock;
+  int pages;    
+  bool is_enabled;
+} idalloc_meminfo_t;
 
-/* Main MM interface. */
-page_frame_t *alloc_page( page_flags_t flags, int clean_page );
+extern idalloc_meminfo_t idalloc_meminfo;
 
-/**
- * This function allocates one page using kernel memory allocator.
- *
- * @flags Memory allocation flags
- * @return Valid virtual address of a newly-allocated memory page
- * or NULL if allocation failed.
- */
-static inline void *__alloc_page( page_flags_t flags, int clean_page ) {
-  page_frame_t *pf = alloc_page(flags,clean_page);
-  if( pf != NULL ) {
-    return pframe_to_virt(pf);
-  } else {
-    return NULL;
-  }
+void idalloc_enable(page_frame_t *pages);
+void idalloc_disable(void);
+void *idalloc(size_t size);
+
+static inline bool idalloc_is_enabled(void)
+{
+  return idalloc_meminfo.is_enabled;
 }
 
-#endif
-
+#endif /* __IDALLOC_H__ */

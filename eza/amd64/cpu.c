@@ -27,10 +27,37 @@
 
 extern void syscall_point(void);
 
+/* local functions implementations */
+static void cpu_clean_am_flag(void)
+{
+  asm (                                                                   
+       "mov %%cr0, %%rax\n"
+       "and $~(0x40000), %%rax\n"
+       "mov %%rax, %%cr0\n"
+       :
+       :
+       : "%rax");
+
+}
+
+static void cpu_clean_iopl_nt_flags(void)
+{
+  asm (
+       "pushfq\n"
+       "pop %%rax\n"
+       "and $~(0x7000), %%rax\n"
+       "pushq %%rax\n"
+       "popfq\n"
+       :
+       :
+       : "%rax");
+
+}
+
 /* cpu_setup_fpu(): checkin CPU flags 
  * to make FPU usable for use
  */
-void cpu_setup_fpu(void)
+static void cpu_setup_fpu(void)
 {
   asm volatile(
 	       "movq %%cr0, %%rax;"
@@ -44,6 +71,21 @@ void cpu_setup_fpu(void)
 	       :
 	       :"%rax");
 
+}
+
+void arch_cpu_init(cpu_id_t cpu)
+{
+  set_efer_flag(AMD_NXE_FLAG);
+  /* prepare FPU to use */
+  cpu_setup_fpu();
+  if( cpu == 0 ) {
+    arch_bios_init();
+  }
+
+  /* disable i/o on upper levels */
+  cpu_clean_iopl_nt_flags();
+  /* disable align checking */
+  cpu_clean_am_flag();
 }
 
 /* init syscall/sysret entry function */

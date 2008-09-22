@@ -78,7 +78,7 @@ typedef struct __task_struct {
 /* Abstract scheduler. */
 typedef struct __scheduler {
   const char *id;
-  list_head_t l;
+  list_node_t l;
   bool (*is_smp)(void);
   void (*add_cpu)(cpu_id_t cpu);
   cpu_array_t (*scheduler_tick)(void);

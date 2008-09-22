@@ -22,8 +22,6 @@
  *
  */
 
-#include <mm/page.h>
-#include <eza/arch/types.h>
 #include <eza/arch/mm_types.h>
 #include <eza/arch/page.h>
 #include <eza/arch/cpu.h>
@@ -43,6 +41,7 @@
 #include <eza/arch/task.h>
 #include <eza/swks.h>
 #include <eza/arch/scheduler.h>
+#include <eza/arch/mm.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
@@ -61,7 +60,7 @@ static void main_routine_stage1(void)
   /* Initialize PICs and setup common interrupt handlers. */
 
   arch_specific_init();
-  arch_initialize_irqs();
+  arch_initialize_irqs();  
   /* Initialize known hardware devices. */
   initialize_common_hardware();
  
@@ -100,10 +99,11 @@ void main_routine(void) /* this function called from boostrap assembler code */
    * the final initializations.
    */
   kcons->enable();
-  kprintf("[LW] MuiString starts ...\n");
+  kprintf("[LW] MuiString starts ... \n");
   /* init memory manager stuff - stage 0 */
-  arch_mm_stage0_init(0);
-  kprintf("[MM] Stage0 memory manager initied.\n");    
+  arch_cpu_init(0);
+  kprintf("[LW] Initialized CPU vectors.\n");
+  mm_init();
   install_fault_handlers();
   initialize_irqs();
   initialize_scheduler();

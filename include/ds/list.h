@@ -256,6 +256,13 @@ static inline void list_add_range(list_node_t *first, list_node_t *last,
   first->prev = prev;
 }
 
+/* for internal usage */
+static inline void __list_del_range(list_node_t *first, list_node_t *last)
+{
+  first->prev->next = last->next;
+  last->next->prev = first->prev;
+}
+
 /**
  * @fn static inline list_del_range(list_node_t *first, list_node_t *last)
  * @brief Delete nodes from @a first to @a last from list.
@@ -264,10 +271,27 @@ static inline void list_add_range(list_node_t *first, list_node_t *last,
  */
 static inline void list_del_range(list_node_t *first, list_node_t *last)
 {
-  first->prev->next = last->next;
-  last->next->prev = first->prev;  
+  __list_del_range(first, last);
   first->prev = MLST_LIST_PREV;
   last->next = MLST_LIST_NEXT;
+}
+
+static inline void list_cut_sublist(list_node_t *first, list_node_t *last)
+{
+  __list_del_range(first, last);
+  first->prev = last;
+  last->next = first;
+}
+
+static inline void list_cut_head(list_head_t *head)
+{
+  list_cut_sublist(list_node_first(head), list_node_last(head));
+}
+
+static inline void list_set_head(list_head_t *new_head, list_node_t *cyclist)
+{
+  list_add_range(cyclist, cyclist->prev,
+                 list_node_first(new_head), list_node_last(new_head));
 }
 
 /**
