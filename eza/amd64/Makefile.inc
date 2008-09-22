@@ -19,10 +19,13 @@ LIBARCHEZA_OBJS=eza/amd64/pmm.o eza/amd64/e820map.o \
 	eza/amd64/hw/i8259.o \
 	eza/amd64/hw/apic.o \
 	eza/amd64/hw/ioapic.o \
-	eza/amd64/hw/fake_apic.o
+	eza/amd64/hw/fake_apic.o \
+	eza/amd64/idt.o
+
 
 
 ifeq ($(CONFIG_SMP),y)
 LIBARCHEZA_OBJS += eza/amd64/smpap.o \
-	eza/amd64/smp.o
+	eza/amd64/smp.o \
+	eza/amd64/smp_int.o
 endif

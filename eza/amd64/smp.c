@@ -69,4 +69,9 @@ void arch_smp_init(void)
   enable_all_irqs();
 }
 
+void initialize_common_cpu_interrupts(void)
+{
+  
+}
+
 #endif /* CONFIG_SMP */

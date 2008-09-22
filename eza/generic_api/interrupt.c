@@ -74,7 +74,7 @@ void register_hw_interrupt_controller(hw_interrupt_controller_t *ctrl)
   GRAB_IRQ_LOCK();
   list_add2tail(&known_hw_int_controllers, &ctrl->l);
 
-  for( idx = 0; idx < 256; idx++ ) {
+  for( idx = 0; idx < NUM_IRQS; idx++ ) {
     if( irqs[idx].controller == NULL ) {
       if( ctrl->handles_irq(idx) ) {
         irqs[idx].controller = ctrl;
@@ -122,7 +122,7 @@ int register_irq(irq_t irq, irq_handler_t handler, void *data, uint32_t flags)
 {
   int retval = -EINVAL;
 
-  if( irq < 256 && handler != NULL ) {
+  if( irq < NUM_IRQS && handler != NULL ) {
     irq_action_t *desc = allocate_irq_action();
 
     GRAB_IRQ_LOCK();
@@ -150,7 +150,7 @@ int unregister_irq(irq_t irq, void *data)
   int retval = -EINVAL;
   irq_action_t *desc;
 
-  if( irq < 256 ) {
+  if( irq < NUM_IRQS ) {
     GRAB_IRQ_LOCK();
     list_for_each_entry(&irqs[irq].actions, desc, l) {
       if( desc->private_data == data ) {
@@ -166,7 +166,7 @@ void initialize_irqs( void )
 {
   int i;
 
-  for( i = 0; i < 256; i++ ) {
+  for( i = 0; i < NUM_IRQS; i++ ) {
     list_init_head(&irqs[i].actions);
 
     irqs[i].controller = NULL;
@@ -201,7 +201,7 @@ void enable_all_irqs(void)
 
 void do_irq(irq_t irq)
 {
-  if( irq < 256 ) {
+  if( irq < NUM_IRQS ) {
     int cpu = cpu_id();
 
     int handlers = 0;

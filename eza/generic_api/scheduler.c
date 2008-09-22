@@ -233,3 +233,11 @@ out_release:
   release_task_struct(target);
   return r;
 }
+
+#ifdef CONFIG_SMP
+/* SMP-specific stuff. */
+void do_smp_scheduler_interrupt_handler(void)
+{
+}
+
+#endif

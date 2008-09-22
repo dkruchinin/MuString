@@ -29,8 +29,18 @@
 #include <eza/arch/current.h>
 
 #define HZ  1000 /* Timer frequency. */
-#define NUM_IRQS  256  /* Maximum number of hardware IRQs in the system. */
-#define IRQ_BASE 0x20 /* First vector in IDT for IRQ #0. */
+#define IRQ_BASE 32 /* First vector in IDT for IRQ #0. */
+#define RESERVED_IRQS 16 /* Reserved IRQ for SMP use. */
+/* Maximum number of hardware IRQs in the system. */
+#define NUM_IRQS  256 - IRQ_BASE - RESERVED_IRQS
+
+#ifdef CONFIG_SMP
+
+#define CPU_SMP_BASE_IRQ (256 - RESERVED_IRQS)
+#define LOCAL_TIMER_CPU_IRQ_VEC CPU_SMP_BASE_IRQ
+#define SCHEDULER_IPI_IRQ_VEC (CPU_SMP_BASE_IRQ+1)
+
+#endif
 
 /* AMD 64 interrupt/exception stack frame */
 typedef struct __interrupt_stack_frame {

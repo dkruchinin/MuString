@@ -30,6 +30,8 @@
 #include <eza/arch/apic.h>
 #include <eza/arch/mm_types.h>
 #include <eza/kernel.h>
+#include <eza/arch/interrupt.h>
+#include <eza/smp.h>
 
 static void timer_interrupt_handler(void *data)
 {
@@ -38,7 +40,7 @@ static void timer_interrupt_handler(void *data)
   sched_timer_tick();
 }
 
-static void install_irq_handlers(void)
+static void install_generic_irq_handlers(void)
 {
   //  register_irq( TIMER_IRQ_LINE, timer_interrupt_handler, NULL, 0 );
 
@@ -47,6 +49,10 @@ static void install_irq_handlers(void)
   //  io_apic_enable_irq(0);
 }
 
+static void install_smp_irq_handlers(void)
+{
+    
+}
 
 void arch_initialize_irqs(void)
 {
@@ -66,7 +72,9 @@ void arch_initialize_irqs(void)
   }
 
   /* Setup all known interrupt handlers. */
-  install_irq_handlers();  
+  install_generic_irq_handlers();  
 
+#ifdef CONFIG_SMP
+  install_smp_irq_handlers();
+#endif
 }
-

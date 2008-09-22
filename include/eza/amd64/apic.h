@@ -287,7 +287,7 @@ struct __local_apic_t {
 void local_bsp_apic_init(void);
 void local_apic_bsp_switch(void);
 uint32_t get_local_apic_id(void);
-void local_apic_timer_init(void);
+void local_apic_timer_init(uint8_t vector);
 extern void fake_apic_init(void);
 void local_apic_send_eoi(void);
 void apic_timer_hack(void);
