@@ -59,7 +59,7 @@
 #include <eza/arch/types.h>
 
 #ifdef CONFIG_SMP
-#define __percpu__ __attribute__((__section__(".percpu_data")))
+#define __percpu__ /*__attribute__((__section__(".percpu_data")))*/
 #else
 #define __percpu__
 #endif /* CONFIG_SMP */
