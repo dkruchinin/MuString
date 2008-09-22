@@ -31,11 +31,13 @@
 #include <ds/list.h>
 #include <eza/bits.h>
 #include <eza/arch/bits.h>
+#include <eza/spinlock.h>
 
 #define eza_sched_type_t uint64_t
 #define EZA_SCHED_PRIO_GRANULARITY 64
 
 #define EZA_SCHED_RT_TASKS_WIDTH 2
+
 #define EZA_SCHED_NONRT_TASKS_WIDTH 2
 #define EZA_SCHED_TOTAL_WIDTH (EZA_SCHED_RT_TASKS_WIDTH+EZA_SCHED_NONRT_TASKS_WIDTH)
 
@@ -79,11 +81,14 @@ typedef enum __sched_discipline {
 } sched_discipline_t;
 
 typedef struct __eze_sched_taskdata {
+  spinlock_t sched_lock;
   priority_t static_priority, priority;
   time_slice_t time_slice;
   list_node_t runlist;
   sched_discipline_t sched_discipline;
   task_t *task;
+
+  time_slice_t max_timeslice;
 } eza_sched_taskdata_t;
 
 typedef struct __eza_sched_prio_array {

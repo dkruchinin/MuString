@@ -44,6 +44,7 @@
 #include <eza/arch/scheduler.h>
 #include <eza/arch/preempt.h>
 #include <eza/arch/smp.h>
+#include <eza/arch/apic.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
@@ -131,11 +132,11 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
 
   arch_ap_specific_init();
 
-  interrupts_enable();
-
   /* We're online. */
   set_cpu_online(cpu,1);
 
+  interrupts_enable();
+  
   /* Entering idle loop. */
   kprintf( "CPU #%d is entering idle loop. Current task: %p, CPU: %d, ATOM: %d\n",
            cpu, current_task(), cpu_id(), in_atomic() );
@@ -158,7 +159,6 @@ void main_smpap_routine(void)
    * contexts, etc.
    */
   arch_activate_idle_task(cpu);
-
 
   /* Continue CPU initialization in new context. */
   cpu++;

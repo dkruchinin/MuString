@@ -85,7 +85,7 @@ static always_inline long arch_bit_find_lsf(unsigned long word)
 {
   __asm__ ("bsf %1, %2\n\t"
            : "=r" (word)
-           : "r" (word), "ir" ((long)-1));
+           : "r" (word), "r" ((long)-1));
 
   return word;
 }
@@ -95,7 +95,7 @@ static always_inline long arch_bit_find_msf(unsigned long word)
 {
   __asm__ ("bsr %1, %2\n\t"
            : "=r" (word)
-           : "r" (word), "ir" ((long)-1));
+           : "r" (word), "r" ((long)-1));
   return word;
 }
 
@@ -104,7 +104,7 @@ static always_inline void arch_bits_or(volatile void *word, unsigned long flags)
 {
   __asm__ volatile (__LOCK_PREFIX "or %1, %0\n\t"
                     : "+m" (*(volatile char *)word)
-                    : "ir" (flags)
+                    : "r" (flags)
                     : "memory");
 }
 
@@ -113,7 +113,7 @@ static always_inline void arch_bits_and(volatile void *word, unsigned long mask)
 {
   __asm__ volatile (__LOCK_PREFIX "and %1, %0\n\t"
                     : "+m" (*(volatile char *)word)
-                    : "ir" (mask)
+                    : "r" (mask)
                     : "memory");
 }
 

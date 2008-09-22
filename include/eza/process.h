@@ -36,6 +36,8 @@ typedef enum __task_creation_flag_t {
 #define SYS_PR_CTL_GET_ENTRYPOINT 0x2
 #define SYS_PR_CTL_GET_STACK 0x3
 
+task_t *pid_to_task(pid_t pid);
+
 status_t sys_process_control( pid_t pid, ulong_t cmd, ulong_t arg);
 status_t sys_create_process(task_creation_flags_t flags);
 

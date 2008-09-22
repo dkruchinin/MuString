@@ -44,3 +44,10 @@ void timer_tick(void)
   process_timers(); 
 }
 
+
+#ifdef CONFIG_SMP
+/* SMP-specific stuff. */
+void smp_local_timer_interrupt_tick(void)
+{
+}
+#endif

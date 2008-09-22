@@ -34,10 +34,23 @@
 #define IS_USERSPACE_ADDRESS_VALID(addr) (addr < USERSPACE_TOP_ADDRESS)
 
 typedef struct __security_operations_t {
-    bool (*check_process_control)(task_t *target,ulong_t cmd, ulong_t arg);
-    bool (*check_create_process)(task_creation_flags_t flags);
+  bool (*check_process_control)(task_t *target,ulong_t cmd, ulong_t arg);
+  bool (*check_create_process)(task_creation_flags_t flags);
+  bool (*check_scheduler_control)(task_t *target,ulong_t cmd, ulong_t arg);
 } security_operations_t;
 
 extern security_operations_t *security_ops;
+
+#define CAP_SCHED_POLICY 0
+
+static inline bool capable(task_t *task, ulong_t capability )
+{
+  return true;
+}
+
+static inline bool trusted_task(task_t *task)
+{
+  return true;
+}
 
 #endif

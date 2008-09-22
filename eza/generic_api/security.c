@@ -35,10 +35,15 @@ static bool def_check_create_process(task_creation_flags_t flags)
   return true;
 }
 
+static bool def_check_scheduler_control(task_t *target,ulong_t cmd, ulong_t arg)
+{
+  return true;
+}
 
 static security_operations_t def_sops = {
   .check_process_control = def_check_process_control,
-  .check_create_process = def_check_create_process,  
+  .check_create_process = def_check_create_process,
+  .check_scheduler_control = def_check_scheduler_control,
 };
 
 security_operations_t *security_ops = &def_sops;

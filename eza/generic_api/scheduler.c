@@ -41,6 +41,8 @@
 #include <ds/list.h>
 #include <mlibc/stddef.h>
 #include <mlibc/string.h>
+#include <eza/process.h>
+#include <eza/security.h>
 
 extern void initialize_idle_tasks(void);
 
@@ -195,3 +197,47 @@ void sched_timer_tick(void)
   }
 }
 
+status_t sys_yield(void)
+{
+  schedule();
+  return 0;
+}
+
+
+static status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
+{
+  return task->scheduler->scheduler_control(task,cmd,arg);
+}
+
+status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg)
+{
+  task_t *target = pid_to_task(pid);
+  status_t r;
+
+  if( target == NULL ) {
+    return -ESRCH;
+  }
+
+  if( target->scheduler == NULL ) {
+    r = -ENOTTY;
+    goto out_release;
+  }
+
+  if( !security_ops->check_scheduler_control(target,cmd,arg) ) {
+    r = -EACCES;
+    goto out_release;
+  }
+
+  r = do_scheduler_control(target,cmd,arg);
+out_release:
+  release_task_struct(target);
+  return r;
+}
+
+#ifdef CONFIG_SMP
+/* SMP-specific stuff. */
+void do_smp_scheduler_interrupt_handler(void)
+{
+}
+
+#endif

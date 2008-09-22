@@ -33,6 +33,9 @@ extern void ap_boot(void);
 extern ptr_16_32_t protected_ap_gdtr;
 void arch_smp_init(void);
 
+void smp_local_timer_interrupt_handler(void);
+void smp_scheduler_interrupt_handler(void);
+
 #endif /* CONFIG_SMP */
 
 #endif /* __EZA_SMP_H__ */

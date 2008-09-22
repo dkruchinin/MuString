@@ -252,7 +252,7 @@ void local_bsp_apic_init(void)
   /* enable APIC */
   __enable_apic();
 
-  local_apic_timer_init();
+  local_apic_timer_init(0x31);
 
   /*set spurois vector*/
   set_apic_spurious_vector(0xff);
@@ -383,7 +383,7 @@ void apic_timer_hack(void)
   local_apic->timer_icr.count=delay_loop;
 }
 
-void local_apic_timer_init(void)
+void local_apic_timer_init(uint8_t vector)
 {
   apic_lvt_timer_t lvt_timer=local_apic->lvt_timer;
 
@@ -395,7 +395,7 @@ void local_apic_timer_init(void)
   /*calibrate to hz*/
   local_apic_timer_calibrate(HZ);
   /* setup timer vector  */
-  lvt_timer.vector=0x31; 
+  lvt_timer.vector=vector; 
   /* set periodic mode (set bit to 1) */
   lvt_timer.timer_mode = 0x1;
   /* enable timer */
