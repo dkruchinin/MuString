@@ -21,6 +21,13 @@
  *
  */
 
+/**
+ * @file include/eza/arch/atomic.h
+ * A set of AMD64-dependent dependent atomic operations.
+ *
+ * @author Dan Kruchinin
+ */
+
 #ifndef __AMD64_ATOMIC_H__
 #define __AMD64_ATOMIC_H__
 
@@ -30,22 +37,57 @@
 
 typedef volatile long atomic_t;
 
+/**
+ * @def atomic_set(a, val)
+ * Set a value of an atomic variable @a a
+ *
+ * @param a   - A pointer to atomic variable
+ * @param val - The value to set.
+ */
 #define atomic_set(a, val) (*(a) = (val))
+
+/**
+ * @def atomic_get(a)
+ * Get a value of an atomic variable @a a
+ *
+ * @param a - A pointer to atomic variable
+ * @return The value of atomic variable @a a
+ */
 #define atomic_get(a) (*(a))
 
-static inline void atomic_add(atomic_t *a, long add)
+/**
+ * @fn static always_inline void atomic_add(atomic_t *a, long add)
+ * Atomically add signed number @a add to an atomic variable @a a
+ *
+ * @param[out] a   - A pointer to atomic variable @a add will be added to
+ * @param[in]  add - A signed number to add.
+ */
+static always_inline void atomic_add(atomic_t *a, long add)
 {
   __asm__ volatile ( __LOCK_PREFIX "addq %1, %0\n\t"
                     : "+m" (*a)
                     : "ir" (add));
 }
 
+/**
+ * @fn static always_inline void atomic_inc(atomic_t *a)
+ * Atomically increment the value of atomic variable @a a
+ *
+ * @param[out] a - A pointer to atomic variable.
+ */
 static always_inline void atomic_inc(atomic_t *a)
 {
   __asm__ volatile (__LOCK_PREFIX "incq %0\n\t"
                     : "+m" (*a));
 }
 
+/**
+ * @fn static always_inline void atomic_sub(atomic_t *a, long sub)
+ * Atomically substract signed number @a sub from an atomic variable @a a
+ *
+ * @param[out] a   - A pointer to atomic vatiable @a sub will be substracted from.
+ * @param[in]  sub - A signed number to substract.
+ */
 static always_inline void atomic_sub(atomic_t *a, long sub)
 {
   __asm__ volatile (__LOCK_PREFIX "subq %1, %0\n\t"
@@ -53,6 +95,12 @@ static always_inline void atomic_sub(atomic_t *a, long sub)
                     : "ir" (sub));
 }
 
+/**
+ * @fn static always_inline void atomic_dec(atomic_t *a)
+ * Atomically decrement the value of atomic variable @a a
+ *
+ * @param[out] a - A pointer to atomic variable.
+ */
 static always_inline void atomic_dec(atomic_t *a)
 {
   __asm__ volatile (__LOCK_PREFIX "decq %0\n\t"

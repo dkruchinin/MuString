@@ -21,6 +21,13 @@
  *
  */
 
+/**
+ * @file include/mlibc/bitwise.h
+ * Architecure independent bitwise operations API.
+ *
+ * @author Dan Kruchinin
+ */
+
 #ifndef __BITWISE_H__
 #define __BITWISE_H__
 
@@ -32,6 +39,9 @@ static inline void bit_set(void *bitmap, int bit)
   *(char *)bitmap |= (1 << bit);
 }
 #else
+/**
+ * @see arch_bit_set
+ */
 #define bit_set(bitmap, bit) arch_bit_set(bitmap, bit)
 #endif /* ARCH_BIT_SET */
 
@@ -41,6 +51,9 @@ static inline void bit_clear(void *bitmap, int bit)
   *(char *)bitmap &= ~(1 << bit);
 }
 #else
+/**
+ * @see arch_bit_set
+ */
 #define bit_clear(bitmap, bit) arch_bit_clear(bitmap, bit)
 #endif /* ARCH_BIT_CLEAR */
 
@@ -50,6 +63,9 @@ static inline void bit_toggle(void *bitmap, int bit)
   *(char *)bitmap ^= (1 << bit);
 }
 #else
+/**
+ * @see arch_bit_toggle
+ */
 #define bit_toggle(bitmap, bit) arch_bit_toggle(bitmap, bit)
 #endif /* ARCH_BIT_TOGGLE */
 
@@ -59,6 +75,9 @@ static inline int bit_test(void *bitmap, int bitno)
   return (*(char *)bitmap & (1 << bitno));
 }
 #else
+/**
+ * @see arch_bit_test
+ */
 #define bit_test(bitmap, bitno) arch_bit_test(bitmap, bitno)
 #endif /* ARCH_BIT_TEST */
 
@@ -77,6 +96,9 @@ static inline long bit_find_lsf(unsigned long word)
   return c;
 }
 #else
+/**
+ * @see arch_bit_find_lsf
+ */
 #define bit_find_lsf(word) arch_bit_find_lsf(word)
 #endif /* ARCH_BIT_FIND_LSF */
 
@@ -94,6 +116,9 @@ static inline long bit_find_msf(unsigned long word)
   return c;
 }
 #else
+/**
+ * @see arch_bit_find_msf
+ */
 #define bit_find_msf(word) arch_bit_find_msf(word)
 #endif /* ARCH_BIT_FIND_MSF */
 

@@ -21,6 +21,8 @@
 /**
  * @file include/ds/list.h
  * Doubly-linked list based on list.h taken from linux-kernel
+ *
+ * @author Dan Kruchinin
  */
 
 #ifndef __LIST_H__
@@ -276,6 +278,16 @@ static inline void list_del_range(list_node_t *first, list_node_t *last)
   last->next = MLST_LIST_NEXT;
 }
 
+/**
+ * @fn static inline void list_cut_sublist(list_node_t *first, list_node_t *last)
+ * @brief Cut a "sublist" started from @a first and ended with @a last
+ *
+ * A @e "sublist" is similar to ordinary list except it hasn't a head.
+ * In other words it's a cyclic list in which all nodes are equitable.
+ *
+ * @param first - From this node sublist will be cutted
+ * @param last  - The last node in the cutted sequence
+ */
 static inline void list_cut_sublist(list_node_t *first, list_node_t *last)
 {
   __list_del_range(first, last);
@@ -283,11 +295,26 @@ static inline void list_cut_sublist(list_node_t *first, list_node_t *last)
   last->next = first;
 }
 
+/**
+ * @fn static inline void list_cut_head(list_head_t *head)
+ * @brief Cut a head from the list and make a "sublist"
+ * @param head - List's head that will be cutted.
+ * @see list_cut_sublist
+ * @see list_set_head
+ */
 static inline void list_cut_head(list_head_t *head)
 {
   list_cut_sublist(list_node_first(head), list_node_last(head));
 }
 
+/**
+ * @fn static inline void list_cut_head(list_head_t *head)
+ * @brief Attach a head to the sublist @a cyclist
+ * @param new_head - A head that will be attached
+ * @param cyclist  - "sublist"
+ * @see list_cut_sublist
+ * @see list_set_head
+ */
 static inline void list_set_head(list_head_t *new_head, list_node_t *cyclist)
 {
   list_add_range(cyclist, cyclist->prev,
