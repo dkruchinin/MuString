@@ -35,7 +35,8 @@
 
 .global arch_delay_loop
 .global arch_fake_loop
-	
+.global return_from_common_interrupt
+
 .global divide_by_zero_fault_handler
 .global debug_fault_handler
 .global nmi_fault_handler
@@ -155,6 +156,7 @@ kernel_space_interrupt:
   movq %rax,%rdi
   call do_irq
 
+return_from_common_interrupt:
   RESTORE_ALL
 
   /* Tell the kernel that we've left interrupt context. */

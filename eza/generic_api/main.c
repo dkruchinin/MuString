@@ -74,6 +74,7 @@ static void main_routine_stage1(void)
    * receive interrups from the other CPUs via LAPIC upon unleashing
    * the other CPUs.
    */
+
   interrupts_enable();
   initialize_swks();
 
@@ -135,15 +136,16 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
 
   /* We're online. */
   set_cpu_online(cpu,1);
+  sched_add_cpu(cpu);
 
+  for(;;);
   interrupts_enable();
-  
+
   /* Entering idle loop. */
   kprintf( "CPU #%d is entering idle loop. Current task: %p, CPU: %d, ATOM: %d\n",
            cpu, current_task(), cpu_id(), in_atomic() );
 
-  for( ;; ) {
-  }
+  idle_loop();
 }
 
 void main_smpap_routine(void)

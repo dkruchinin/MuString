@@ -176,7 +176,7 @@ static inline void __reschedule_task(task_t *task)
     kprintf( "** LOCAL NEED RESCHED: %d\n", cpu_id() );
     sched_set_current_need_resched();
   } else {
-    kprintf( "** REMOTE NEED RESCHED: CPU %d, TASK's CPU: \n", cpu_id(), task->cpu );
+    kprintf( "** REMOTE NEED RESCHED: CPU %d, TASK's CPU: %d\n", cpu_id(), task->cpu );
   }
 }
 
@@ -264,7 +264,11 @@ static void def_scheduler_tick(void)
   eza_sched_cpudata_t *cpudata = CPU_SCHED_DATA();
   eza_sched_taskdata_t *tdata;
   sched_discipline_t discipl;
-  
+
+  if(cpudata == NULL) {
+    return;
+  }
+
   /* Idle task ?  */
   if( !current->pid ) {
     update_idle_tick_statistics(cpudata->stats);
@@ -276,12 +280,12 @@ static void def_scheduler_tick(void)
 
   if( discipl == SCHED_RR ) {
     if( !--tdata->time_slice ) {
-      kprintf( "** TIMESLICE IS OVER !\n" );
       __remove_task_from_array(cpudata->active_array,current);
       __recalculate_timeslice_and_priority(current);
       __add_task_to_array(cpudata->active_array,current);
       current->state = TASK_STATE_RUNNABLE;
-      kprintf( "** NEW (NEXT) TIMESLICE: %d\n", tdata->time_slice );
+      kprintf( "** CPU %d: TIMESLICE IS OVER ! NEXT TIMESLICE: %d\n",
+               cpu_id(), tdata->time_slice );
       sched_set_current_need_resched();
     }
   } else if( discipl == SCHED_FIFO ) {
@@ -318,6 +322,8 @@ static status_t def_add_task(task_t *task)
 
   UNLOCK_TASK_STRUCT(task);
 
+  kprintf( ">> ADDED TASK: %d\n", task->pid );
+  
   return 0;
 }
 
@@ -373,8 +379,8 @@ static void def_schedule(void)
   UNLOCK_TASK_STRUCT(current);
 
   asm __volatile__ ( "rdtsc" : "=r"(t2) );
-  kprintf( "** RESCHEDULING TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , timeslice: %d , D: %d**\n",
-           current_task()->pid, need_switch,
+  kprintf( "** [%d] RESCHEDULING TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , timeslice: %d , D: %d**\n",
+           cpu_id(), current_task()->pid, need_switch,
            next->pid, EZA_TASK_SCHED_DATA(next)->time_slice,
            t2 - t1);
 

@@ -59,9 +59,7 @@ void smp_local_timer_interrupt_tick(void)
 {
   if(cpu_id() == 0) {
     timer_tick();
-  } else {
-    kprintf( "** Wheeee ! Local timer interrupt on CPU %d\n", cpu_id() );
   }
-//  kprintf( "++ CPU TIMER !!! %2<<\n",swks.system_ticks_64 );
+  sched_timer_tick();
 }
 #endif

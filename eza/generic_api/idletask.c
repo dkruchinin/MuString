@@ -34,14 +34,33 @@
 
 task_t *idle_tasks[NR_CPUS];
 
-void idle_loop(void)
+static void percpu_worker(void *data)
 {
-  int target_tick = swks.system_ticks_64 + 100;
+  uint64_t target_tick = swks.system_ticks_64 + 100;
 
   for( ;; ) {
     if( swks.system_ticks_64 >= target_tick ) {
-      kprintf( " - [Idle] Tick, tick ! (Ticks: %d, PID: %d, ID: %d, ATOM: %d)\n",
-               swks.system_ticks_64, current_task()->pid, 1024, in_atomic() );
+      kprintf( " + [%d] [Worker] Tuck, tuck ! CPU: %d (Ticks: %d, PID: %d, ID: %d, ATOM: %d)\n",
+               cpu_id(), cpu_id(), swks.system_ticks_64, current_task()->pid, 1024, in_atomic() );
+      target_tick += 200;
+    }
+  }
+}
+
+void idle_loop(void)
+{
+  uint64_t target_tick = swks.system_ticks_64 + 100;
+
+  if( cpu_id() != 0 ) {
+    if( kernel_thread(percpu_worker, NULL) != 0 ) {
+      panic( "Can't create per-cpu worker for CPU %d\n", cpu_id() );
+    }
+  }
+
+  for( ;; ) {
+    if( swks.system_ticks_64 >= target_tick ) {
+      kprintf( " + [Idle] Tick, tick ! CPU: %d (Ticks: %d, PID: %d, ID: %d, ATOM: %d)\n",
+               cpu_id(), swks.system_ticks_64, current_task()->pid, 1024, in_atomic() );
       target_tick += 200;
     }
   }
