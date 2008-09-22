@@ -379,7 +379,7 @@ static void def_schedule(void)
   UNLOCK_TASK_STRUCT(current);
 
   asm __volatile__ ( "rdtsc" : "=r"(t2) );
-  kprintf( "** [%d] RESCHEDULING TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , timeslice: %d , D: %d**\n",
+  kprintf( "** [%d] RESCHED TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , timeslice: %d , D: %d**\n",
            cpu_id(), current_task()->pid, need_switch,
            next->pid, EZA_TASK_SCHED_DATA(next)->time_slice,
            t2 - t1);
