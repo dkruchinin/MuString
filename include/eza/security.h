@@ -15,33 +15,29 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 MadTirra <tirra.newly@gmail.com>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *
- * eza/amd64/timer.c: arch specific timers init
- *                          
- *
+ * include/eza/security.h: security check procedures - related types and
+ *                          prototypes.
  */
 
+#ifndef __SECURITY_H__
+#define  __SECURITY_H__
+
 #include <eza/arch/types.h>
-#include <eza/arch/i8254.h>
-#include <eza/timer.h>
-#include <eza/time.h>
-#include <mlibc/kprintf.h>
+#include <eza/scheduler.h>
+#include <eza/arch/page.h>
+#include <eza/process.h>
 
-void arch_timer_init(void)
-{
-  int i;
+#define USERSPACE_TOP_ADDRESS 0xffffffffffff
 
-  i8254_init();
-  kprintf("[LW] Calibrating delay loop ... ");
-  delay_loop=i8254_calibrate_delay_loop();
-  for(i=0;i<10;i++) {
-    delay_loop=i8254_calibrate_delay_loop0();
-  }
-  kprintf("%ld\n",delay_loop);
-}
+#define IS_USERSPACE_ADDRESS_VALID(addr) (addr < USERSPACE_TOP_ADDRESS)
 
-uint64_t arch_calibrate_delay_loop(void)
-{
-  return i8254_calibrate_delay_loop();
-}
+typedef struct __security_operations_t {
+    bool (*check_process_control)(task_t *target,ulong_t cmd, ulong_t arg);
+    bool (*check_create_process)(task_creation_flags_t flags);
+} security_operations_t;
+
+extern security_operations_t *security_ops;
+
+#endif

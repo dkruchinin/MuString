@@ -21,7 +21,6 @@
  *                                scheduler-related information.
  */
 
-
 #ifndef __ARCH_SCHEDULER_H__
 #define __ARCH_SCHEDULER_H__ 
 
@@ -32,14 +31,6 @@
 #include <eza/amd64/context.h>
 #include <eza/arch/current.h>
 #include <eza/smp.h>
-
-static inline task_t *current_task(void)
-{
-  uintptr_t ct;
-
-  read_css_field(current_task,ct);
-  return (task_t*)ct;
-}
 
 static inline void set_cpu_online(cpu_id_t cpu, uint32_t online)
 {
@@ -72,6 +63,7 @@ static inline cpu_id_t cpu_id(void)
 
 void arch_hw_activate_task(arch_context_t *new_ctx, task_t *new_task,
                            arch_context_t *old_ctx, uintptr_t kstack);
+
 
 static inline void arch_activate_task(task_t *to)
 {

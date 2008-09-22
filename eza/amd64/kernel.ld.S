@@ -22,6 +22,7 @@ SECTIONS {
 
     _low_kernel_end = p2k(BOOT_OFFSET) + SIZEOF(.unmapped);
 
+
 	.mapped(_low_kernel_end) : AT (SIZEOF(.unmapped)) {        
         _kernel_start = .;
 		ktext_start = .;

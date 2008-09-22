@@ -31,6 +31,7 @@
 #include <eza/mm_init.h>
 #include <mlibc/kprintf.h>
 #include <profile.h>
+#include <server.h>
 #include <align.h>
 #include <misc.h>
 #include <eza/smp.h>
@@ -41,7 +42,8 @@
 #include <eza/arch/task.h>
 #include <eza/swks.h>
 #include <eza/arch/scheduler.h>
-#include <eza/arch/mm.h>
+#include <eza/arch/preempt.h>
+#include <eza/arch/smp.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
@@ -58,36 +60,35 @@ extern void initialize_timer(void);
 static void main_routine_stage1(void)
 {
   /* Initialize PICs and setup common interrupt handlers. */
+  set_cpu_online(0,1);  /* We're online. */
+  sched_add_cpu(0);
 
   arch_specific_init();
   arch_initialize_irqs();  
   /* Initialize known hardware devices. */
   initialize_common_hardware();
- 
   /* Since the PIC is initialized, all interrupts from the hardware
    * is disabled. So we can enable local interrupts since we will
    * receive interrups from the other CPUs via LAPIC upon unleashing
    * the other CPUs.
    */
   interrupts_enable();
-
-  set_cpu_online(0,1);  /* We're online. */
   initialize_swks();
-
 
   /* The other CPUs are running, the scheduler is ready, so we can
    * enable all interrupts.
    */
-  enable_all_irqs();
-
+  enable_all_irqs();  
   /* TODO: Here we should wake up all other CPUs, if any. */
 
   /* OK, we can proceed. */
   start_init();
  
   /* Enter idle loop. */
+
   kprintf( "CPU #0 is entering idle loop. Current task: %p, CPU ID: %d\n",
            current_task(), cpu_id() );
+
   idle_loop();
 }
 
@@ -99,7 +100,9 @@ void main_routine(void) /* this function called from boostrap assembler code */
    * the final initializations.
    */
   kcons->enable();
-  kprintf("[LW] MuiString starts ... \n");
+  kprintf("[LW] MuiString starts ...\n");
+  kprintf("[MB] Modules: %d\n",init.c);
+
   /* init memory manager stuff - stage 0 */
   arch_cpu_init(0);
   kprintf("[LW] Initialized CPU vectors.\n");
@@ -114,27 +117,28 @@ void main_routine(void) /* this function called from boostrap assembler code */
    * contexts, etc.
    */
   arch_activate_idle_task(0);
-
   /* Now we can continue initialization with properly initialized kernel
    * stack frame.
    */
+
   main_routine_stage1();
 }
 
 #ifdef CONFIG_SMP
 static void main_smpap_routine_stage1(cpu_id_t cpu)
 {
-  cpu_id_t c;
-
   install_fault_handlers();
+
+  arch_ap_specific_init();
+
   interrupts_enable();
 
   /* We're online. */
   set_cpu_online(cpu,1);
 
   /* Entering idle loop. */
-  kprintf( "CPU #%d is entering idle loop. Current task: %p, CPU ID: %d\n",
-           cpu, current_task(), cpu_id() );
+  kprintf( "CPU #%d is entering idle loop. Current task: %p, CPU: %d, ATOM: %d\n",
+           cpu, current_task(), cpu_id(), in_atomic() );
 
   for( ;; ) {
   }
@@ -147,12 +151,14 @@ void main_smpap_routine(void)
   kprintf("CPU#%d Hello folks! I'm here\n", cpu);
 
   /* Ramap physical memory using page directory preparead be master CPU. */
-  arch_mm_stage0_init(cpu); 
+  arch_cpu_init(cpu); 
+
 
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.
    */
   arch_activate_idle_task(cpu);
+
 
   /* Continue CPU initialization in new context. */
   cpu++;

@@ -76,7 +76,7 @@ jump_to_kernel:
 .code64
 start64:
 	/* here we're go - call C code */
-	movq $ap_stack+2048, %rsp
+	movq $ap_stack+4096, %rsp
 	call main_smpap_routine-AP_BOOT_OFFSET+BOOT_OFFSET
 	/* will never returns */
 	

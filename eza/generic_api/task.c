@@ -37,8 +37,7 @@
 #include <eza/arch/task.h>
 #include <mlibc/index_array.h>
 #include <eza/spinlock.h>
-
-#define GENERIC_KERNEL_PAGE 0 /* FIXME DK: remove after debugging */
+#include <eza/arch/preempt.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
@@ -80,6 +79,7 @@ static pid_t allocate_pid(void)
   LOCK_PID_ARRAY;
   pid_t pid = index_array_alloc_value(&pid_array);
   UNLOCK_PID_ARRAY;
+
   return pid;
 }
 
@@ -107,7 +107,7 @@ static page_frame_t *alloc_stack_pages(void)
   page_frame_t *p;
 
   p = alloc_pages(KERNEL_STACK_PAGES, AF_PGP);
-  return p;
+  return p;  
 }
 
 static status_t initialize_mm( task_t *orig, task_t *target,
@@ -174,8 +174,7 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
 
   /* Prepare kernel stack. */
   /* TODO: [mt] Implement normal stack allocation. */
-  stack_pages = alloc_stack_pages();
-  if(stack_pages == NULL) {
+  if(!(stack_pages = alloc_stack_pages())) {
     r = -ENOMEM;
     goto free_mm;
   }
@@ -184,7 +183,6 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
   mm_init_pfiter_list(&pfi, &pfi_list_ctx,
                       list_node_first(&stack_pages->head),
                       list_node_last(&stack_pages->head));
-
   r = mm_map_pages( &task->page_dir, &pfi,
                     task->kernel_stack.low_address, KERNEL_STACK_PAGES,
                     KERNEL_STACK_PAGE_FLAGS );
@@ -206,6 +204,10 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
 
   /* Setup task's initial state. */
   task->state = TASK_STATE_JUST_BORN;
+
+  /* Setup scheduler-related stuff. */
+  task->scheduler = NULL;
+  task->sched_data = NULL;
 
   *t = task;
   return 0;

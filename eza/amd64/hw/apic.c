@@ -35,6 +35,9 @@
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 #include <mlibc/string.h>
+#ifdef CONFIG_SMP
+#include <eza/arch/smp.h>
+#endif
 
 /*
  * Black mages from intel and amd wrote that
@@ -101,7 +104,7 @@ static void __disable_apic(void)
   local_apic->svr.reg=svr.reg;
 }
 
-void __local_apic_clear(void)
+static void __local_apic_clear(void)
 {
   uint32_t max_lvt;
   uint32_t v;
@@ -133,6 +136,23 @@ void __local_apic_clear(void)
     local_apic->lvt_pc.reg=lvt_pc.reg;
   }
   
+}
+
+static int __local_apic_chkerr(void)
+{
+  apic_esr_t esr;
+  int i=0;
+
+  esr=local_apic->esr;
+
+  if(esr.rx_cs_err){i++;kprintf("[LA] Receive checksum failed.\n");}
+  if(esr.tx_accept_err){i++;kprintf("[LA] Transfer failed.\n");}
+  if(esr.rx_accept_err){i++;kprintf("[LA] Receive failed.\n");}
+  if(esr.tx_illegal_vector){i++;kprintf("[LA] Illegal transfer vector.\n");}
+  if(esr.rx_illegal_vector){i++;kprintf("[LA] Illegal receive vector.\n");}
+  if(esr.reg_illegal_addr){i++;kprintf("[LA] Illegal register address.\n");}
+
+  return i;
 }
 
 uint32_t get_apic_version(void)
@@ -200,7 +220,6 @@ void local_bsp_apic_init(void)
   int i=0,l;
   apic_lvt_lint_t lvt_lint;
   apic_icr1_t icr1;
-  apic_tpr_t tpr=local_apic->tpr;
 
   /*test*/
   kprintf("id=%p,version=%p\n",&local_apic->id,&local_apic->version);
@@ -216,13 +235,13 @@ void local_bsp_apic_init(void)
   kprintf("[LW] APIC version: %d\n",v);
   /* first we're need to clear APIC to avoid magical results */
 
-    __local_apic_clear();
+  __local_apic_clear();
 
   /*manual recommends to accept all*/
   /*tpr.priority=0xffu;
     local_apic->tpr.reg=tpr.reg;*/
 
-  /**/
+  /* clear bits for interrupts - can be filled up to other os */
   for(i=7;i>=0;i--){
     v=local_apic->isr[i].bits;
     for(l=31;l>=0;l--)
@@ -242,8 +261,8 @@ void local_bsp_apic_init(void)
   //local_apic->lvt_lint0.mask |= (1 << 0);
 
   /* set nil vectors */
-  __set_lvt_lint_vector(0,0x32);
-  __set_lvt_lint_vector(1,0x33);
+  __set_lvt_lint_vector(0,0x34);
+  __set_lvt_lint_vector(1,0x35);
   /*set mode#7 extINT for lint0*/
   lvt_lint=local_apic->lvt_lint0;
   lvt_lint.tx_mode=0x7;
@@ -290,13 +309,7 @@ void local_bsp_apic_init(void)
   /*  for(i=0;i<16;i++)
       io_apic_set_ioredir(i,0xff,i,0x0);*/
 
-  /*FIXME: just for debug */
-  /*output info from esr*/
-  /*  kprintf("[APIC] errors:\n");
-  kprintf("tx_cs_err: %d, tx_accept_err: %d, rx_accept_err: %d\ntx_ill_vec: %d,rx_ill_vec: %d,reg_ill_addr: %d\n",
-	  local_apic->esr.tx_cs_err,local_apic->esr.tx_accept_err,local_apic->esr.rx_accept_err,local_apic->esr.tx_illegal_vector,
-	  local_apic->esr.rx_illegal_vector,local_apic->esr.reg_illegal_addr)*/;
-
+  __local_apic_chkerr();
 }
 
 void local_apic_bsp_switch(void)
@@ -354,7 +367,7 @@ void local_apic_timer_calibrate(uint32_t hz)
     ;
 
   x1=local_apic->timer_ccr.count; /*get current counter*/
-  usleep(1000000/hz); /*delay*/
+  atom_usleep(1000000/hz); /*delay*/
   x2=local_apic->timer_ccr.count; /*again get current counter to see difference*/
 
   kprintf("delay loop = %d \n",x1-x2);
@@ -370,24 +383,10 @@ void apic_timer_hack(void)
   local_apic->timer_icr.count=delay_loop;
 }
 
-#if 0
-void test_handler(uint64_t irq)
-{
-  if(irq==17) {
-    local_apic->timer_icr.count=delay_loop;
-    local_apic_send_eoi();
-    timer_tick();
-  } else
-    i8259a_ack_irq(irq);
-  scheduler_tick();
-  return;
-}
-#endif
-
 void local_apic_timer_init(void)
 {
   apic_lvt_timer_t lvt_timer=local_apic->lvt_timer;
-  int i;
+
 
   i8254_suspend(); /* suspend general intel timer - bye bye, simple and pretty one, welcome to apic ...*/
 
@@ -402,17 +401,16 @@ void local_apic_timer_init(void)
   /* enable timer */
   lvt_timer.mask=0x0;
   local_apic->lvt_timer.reg=lvt_timer.reg;
-#if 0  
-  /*  for(i=48;i<50;i++) {*/
-  if(  install_interrupt_gate(0x31,irq_entrypoints_array[0x31-0x20],0,0))
-    kprintf("oops\n");
-    //}
-#endif
+}
+
+/* this shouldn't happen, but anyway we're must care on it */
+void apic_spurious_vector_handler(uint32_t irq)
+{
+  kprintf("[EE] Spurious APIC interrupt (%d)\n",irq);
+  local_apic_send_eoi();
 }
 
 #ifdef CONFIG_SMP
-
-extern void ap_boot(void);
 
 uint32_t apic_send_ipi_init(uint8_t apicid)
 {
@@ -430,7 +428,9 @@ uint32_t apic_send_ipi_init(uint8_t apicid)
   icr1.vector=0;
   local_apic->icr1.reg=icr1.reg;  
 
-  usleep(20);
+  atom_usleep(20);
+  if(local_apic->esr.reg!=0)
+    return __local_apic_chkerr();
 
   icr1=local_apic->icr1;
   icr1.tx_mode=TXMODE_INIT;
@@ -440,7 +440,10 @@ uint32_t apic_send_ipi_init(uint8_t apicid)
   icr1.shorthand=0x0;
   icr1.vector=0;
   local_apic->icr1.reg=icr1.reg;  
-  usleep(10000);
+  atom_usleep(10000);
+  if(local_apic->esr.reg!=0)
+    return __local_apic_chkerr();
+
 
   for(i=0;i<2;i++) { /* if we're have APIC not from 80486DX or higher, we're need to send it twice */
     icr1=local_apic->icr1;
@@ -451,31 +454,99 @@ uint32_t apic_send_ipi_init(uint8_t apicid)
     icr1.trigger=0x1;
     icr1.shorthand=0x0;
     local_apic->icr1.reg=icr1.reg;  
-    usleep(200);
+    atom_usleep(200);
+    if(local_apic->esr.reg!=0)
+      return __local_apic_chkerr();
   }
+
+  return __local_apic_chkerr();
 }
 
-extern ptr_16_32_t protected_ap_gdtr;
-
-void arch_smp_init(void)
+int apic_broadcast_ipi_vector(uint8_t vector)
 {
-  ptr_16_64_t gdtr;
-  disable_all_irqs();
+  apic_icr1_t icr1=local_apic->icr1;
 
-    /*  outb(0x70, 0xf); /* set BIOS area to don't make a POST on INIT signal */
-    //  outb(0x71, 0xa);
+  icr1.tx_mode=TXMODE_FIXED;
+  icr1.rx_mode=DMODE_LOGIC;
+  icr1.level=LEVEL_ASSERT;
+  icr1.trigger=TRIG_LEVEL; /* trigger mode -> level */
+  icr1.shorthand=SHORTHAND_ALLEXS; /* all exclude ipi */
+  icr1.vector=vector;
+  local_apic->icr1.reg=icr1.reg;  
 
+  return __local_apic_chkerr();
+}
 
-  /* ok setup new gdt */
-  protected_ap_gdtr.limit=GDT_ITEMS * sizeof(struct __descriptor);
-  protected_ap_gdtr.base=((uintptr_t)&gdt[1][0]-0xffffffff80000000);
-  gdtr.base=&gdt[1];
+void local_ap_apic_init(void)
+{
+  uint32_t v;
+  int i=0,l;
+  apic_lvt_lint_t lvt_lint;
+  apic_icr1_t icr1;
 
-  apic_send_ipi_init(1);
-  /*  while(local_apic->icr1.tx_status!=0x0)
-      apic_send_ipi_init(1);*/
-  enable_all_irqs();
+  kprintf("[AP] Checking APIC is present ... ");
+  if(__local_apic_check()<0) {
+    kprintf("FAIL\n");
+    return;
+  } else
+    kprintf("(%d)OK\n",get_local_apic_id());
+
+  /* first we're need to clear APIC to avoid magical results */
+  __local_apic_clear();
+
+  /* clear bits for interrupts - can be filled up to other os */
+  for(i=7;i>=0;i--){
+    v=local_apic->isr[i].bits;
+    for(l=31;l>=0;l--)
+      if(v & (1 << l))
+	local_apic_send_eoi();
+  }
+
+  /* enable APIC */
+  __enable_apic();
+
+  //  local_apic_timer_init();
+
+  /* set nil vectors */
+  __set_lvt_lint_vector(0,0x34+get_local_apic_id());
+  __set_lvt_lint_vector(1,0x35+get_local_apic_id());
+  /*set mode#7 extINT for lint0*/
+  lvt_lint=local_apic->lvt_lint0;
+  lvt_lint.tx_mode=0x7;
+  lvt_lint.mask=0x1;
+  local_apic->lvt_lint0.reg=lvt_lint.reg;
+  /*set mode#4 NMI for lint1*/
+  lvt_lint=local_apic->lvt_lint1;
+  lvt_lint.tx_mode=0x4;
+  lvt_lint.mask=0x1;
+  local_apic->lvt_lint1.reg=lvt_lint.reg;
+
+  /*tx_mode & polarity set to 0 on both lintx*/
+  lvt_lint=local_apic->lvt_lint0;
+  lvt_lint.tx_status = 0x0;
+  lvt_lint.polarity = 0x0;
+  local_apic->lvt_lint0.reg=lvt_lint.reg;
+  lvt_lint=local_apic->lvt_lint1;
+  lvt_lint.tx_status = 0x0;
+  lvt_lint.polarity = 0x0;
+  local_apic->lvt_lint1.reg=lvt_lint.reg;
+  /* ok, now we're need to set esr vector to 0xfe */
+  local_apic->lvt_error.vector = 0xfe;
+
+  /*enable to receive errors*/
+  if(__get_maxlvt()>3)
+    local_apic->esr.tx_cs_err = 0x0;
+
+  /* set icr1 registers*/
+  icr1=local_apic->icr1;
+  icr1.tx_mode=TXMODE_INIT;
+  icr1.rx_mode=DMODE_PHY;
+  icr1.level=TRIG_EDGE;
+  icr1.shorthand=SHORTHAND_SELF;
+  icr1.trigger=TRIG_LEVEL;
+  local_apic->icr1.reg=icr1.reg;
+
+  __local_apic_chkerr();
 }
 
 #endif /* CONFIG_SMP */
-

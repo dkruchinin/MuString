@@ -53,6 +53,16 @@
 #define IOAPIC_IDREG   0x0
 #define IOAPIC_VERREG  0x1
 
+/* level modes*/
+#define LEVEL_DEASSERT  0x0
+#define LEVEL_ASSERT    0x1
+
+/* short hand modes */
+#define SHORTHAND_NIL       0x0 /* none nobody */
+#define SHORTHAND_SELF      0x1 /* self only */
+#define SHORTHAND_ALLABS    0x2 /* absolutely all */
+#define SHORTHAND_ALLEXS    0x3 /* all exclude ipi */
+
 typedef union {
   uint32_t value;
   struct {

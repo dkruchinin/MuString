@@ -34,6 +34,10 @@
 #include <mm/pt.h>
 #include <mm/pfalloc.h>
 #include <eza/arch/page.h>
+#include <eza/pageaccs.h>
+#ifdef CONFIG_SMP
+#include <eza/arch/smp.h>
+#endif
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 
@@ -106,8 +110,17 @@ void arch_specific_init(void)
 #ifdef CONFIG_SMP
 
   arch_smp_init();
-  //usleep(50000);
+  //atom_usleep(50000);
 
 #endif
   //local_apic_timer_init();
 }
+
+#ifdef CONFIG_SMP
+
+void arch_ap_specific_init(void)
+{
+  local_ap_apic_init();
+}
+
+#endif

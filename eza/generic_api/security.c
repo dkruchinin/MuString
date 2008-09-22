@@ -15,33 +15,30 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 MadTirra <tirra.newly@gmail.com>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *
- * eza/amd64/timer.c: arch specific timers init
- *                          
- *
+ * eza/generic_api/security.c: security check procedures live here.
  */
 
 #include <eza/arch/types.h>
-#include <eza/arch/i8254.h>
-#include <eza/timer.h>
-#include <eza/time.h>
-#include <mlibc/kprintf.h>
+#include <eza/security.h>
+#include <eza/arch/current.h>
+#include <eza/process.h>
 
-void arch_timer_init(void)
+static bool def_check_process_control(task_t *target,ulong_t cmd, ulong_t arg)
 {
-  int i;
-
-  i8254_init();
-  kprintf("[LW] Calibrating delay loop ... ");
-  delay_loop=i8254_calibrate_delay_loop();
-  for(i=0;i<10;i++) {
-    delay_loop=i8254_calibrate_delay_loop0();
-  }
-  kprintf("%ld\n",delay_loop);
+  return true;
 }
 
-uint64_t arch_calibrate_delay_loop(void)
+static bool def_check_create_process(task_creation_flags_t flags)
 {
-  return i8254_calibrate_delay_loop();
+  return true;
 }
+
+
+static security_operations_t def_sops = {
+  .check_process_control = def_check_process_control,
+  .check_create_process = def_check_create_process,  
+};
+
+security_operations_t *security_ops = &def_sops;

@@ -27,8 +27,9 @@
 #include <ds/iterator.h>
 #include <ds/list.h>
 #include <mlibc/stddef.h>
-#include <eza/spinlock.h> /* TODO DK: atomic operations should be placed to the separate file atomic.h */
+#include <eza/spinlock.h>
 #include <eza/arch/page.h>
+#include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 
 #define NOF_MM_POOLS 4

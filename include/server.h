@@ -15,33 +15,34 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 MadTirra <tirra.newly@gmail.com>
+ * (c) Copyright 2005,2008 Tirra <madtirra@jarios.org>
  *
- * eza/amd64/timer.c: arch specific timers init
- *                          
+ * include/server.h: servers going multiboot related structs and defines
  *
  */
 
+#ifndef __SERVER_H__
+#define __SERVER_H__
+
 #include <eza/arch/types.h>
-#include <eza/arch/i8254.h>
-#include <eza/timer.h>
-#include <eza/time.h>
-#include <mlibc/kprintf.h>
 
-void arch_timer_init(void)
-{
-  int i;
+#define MAX_PRIVBOOT_SERVERS  16
 
-  i8254_init();
-  kprintf("[LW] Calibrating delay loop ... ");
-  delay_loop=i8254_calibrate_delay_loop();
-  for(i=0;i<10;i++) {
-    delay_loop=i8254_calibrate_delay_loop0();
-  }
-  kprintf("%ld\n",delay_loop);
-}
+typedef struct __init_server {
+  uintptr_t addr; /* start address of the server loaded via boot loader */
+  size_t size; /* it's size */
+} init_server_t;
 
-uint64_t arch_calibrate_delay_loop(void)
-{
-  return i8254_calibrate_delay_loop();
-}
+typedef struct __init_type {
+  count_t c; /* # of servers */
+  init_server_t server[MAX_PRIVBOOT_SERVERS];
+} init_t; /* general init servers structure */
+
+extern init_t init;
+
+/* functions */
+uint32_t server_get_num(void); /* get real number of servers */
+uintptr_t server_get_start_phy_addr(void); /* get start physical address */
+uintptr_t server_get_end_phy_addr(void); /* get end physical address */
+
+#endif /* __SERVER_H__ */

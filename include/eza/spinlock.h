@@ -29,6 +29,7 @@
 #include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 #include <eza/arch/mbarrier.h>
+#include <eza/arch/preempt.h>
 
 
 #ifdef CONFIG_SMP
@@ -40,9 +41,7 @@ typedef struct __spinlock_type {
 #define spinlock_initialize(x,y)
 #define spinlock_trylock(x)
 #define mbarrier_leave()
-#define arch_atomic_spinlock(x)
-
-
+//#define arch_atomic_spinlock(x)
 
 #define spinlock_declare(s)  spinlock_t s
 #define spinlock_extern(s)   extern spinlock_t s
@@ -52,14 +51,17 @@ typedef struct __spinlock_type {
     .v={0};	 \
   };
 
-#define spinlock_lock(u)  arch_atomic_spinlock(&(u)->v)
+#define spinlock_lock(u) \
+  preempt_disable(); \
+  //  arch_atomic_spinlock(&(u->v))
 
 static inline void spinlock_unlock(spinlock_t *s)
 {
-  if(atomic_get((&s->v))==0) return; /* FIXME: made assertion */
   mbarrier_leave();
-  atomic_set((&s->v),0);
-  /*FIXME: enable preemtion*/
+  //  atomic_set((&s->v),0);
+
+  /* Enable preemption. */
+  preempt_enable();
 }
 
 //extern void spinlock_initialize(spinlock_t *s,const char *name);

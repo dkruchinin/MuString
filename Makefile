@@ -12,6 +12,7 @@
 -include eza/generic_api/Makefile.inc
 -include mm/Makefile.inc
 -include mlibc/Makefile.inc
+-include server/Makefile.inc
 
 # arch specific
 -include eza/$(ARCH)/Makefile.inc
@@ -23,7 +24,7 @@ ifeq ($(PARANOIC),y)
 endif
 
 MUIOBJS=$(LIBEZA_OBJS) $(LIBARCHEZA_OBJS) $(LIBMM_OBJS) \
-        $(LIBEZA_CORE_OBJS) $(MLIBC_OBJS)
+        $(LIBEZA_CORE_OBJS) $(MLIBC_OBJS) $(LIBSERVER_OBJS)
 
 all: build bootimage
 

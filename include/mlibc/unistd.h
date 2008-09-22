@@ -31,6 +31,8 @@
 
 extern uint32_t delay_loop;
 
+void atom_usleep(usec_t usecs);
+
 void usleep(usec_t usecs);
 
 #endif /*__UNISTD_H__*/

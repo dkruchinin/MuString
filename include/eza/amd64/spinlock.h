@@ -71,7 +71,7 @@ static inline uint64_t atomic_test_set(atomic_t *v)
 }
 
 /* amd64 specific fast spinlock */
-static inline void arch_atomic_spinlock(atomic_t *v)
+static inline void arch_atomic_spinlock1(atomic_t *v)
 {
   uint64_t t;
 
@@ -94,6 +94,13 @@ static inline void arch_atomic_spinlock(atomic_t *v)
 
   barrier_enter();
 }
+
+/*
+static inline void arch_atomic_spinlock(atomic_t *v)
+{
+  //  v->count = 1;
+}
+*/
 
 #endif /* __AMD64_SPINLOCK_H__ */
 

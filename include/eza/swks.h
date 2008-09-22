@@ -39,6 +39,7 @@ enum __swks_constants {
 /* Per-CPU global statistics */
 typedef struct __cpu_stats {
   uint64_t irq_stat[NUM_IRQS];
+  scheduler_cpu_stats_t sched_stats;
 } cpu_stats_t;
 
 /* System-Wide Kernel Statistics. */

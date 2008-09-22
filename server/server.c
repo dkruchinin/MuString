@@ -15,39 +15,36 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2005,2008 Tirra <madtirra@jarios.org>
  *
- * include/mm/pagealloc.h: Contains types and prototypes for kernel page
- *                         allocator.
+ * server/server.c: servers going multiboot functions
  *
  */
 
-#include <mm/mm.h>
-#include <mm/page.h>
-#include <eza/arch/page.h>
 #include <eza/arch/types.h>
+#include <server.h>
 
-#ifndef __PAGEALLOC_H__
-#define __PAGEALLOC_H__ 
-
-/* Main MM interface. */
-page_frame_t *alloc_page( page_flags_t flags, int clean_page );
-
-/**
- * This function allocates one page using kernel memory allocator.
- *
- * @flags Memory allocation flags
- * @return Valid virtual address of a newly-allocated memory page
- * or NULL if allocation failed.
- */
-static inline void *__alloc_page( page_flags_t flags, int clean_page ) {
-  page_frame_t *pf = alloc_page(flags,clean_page);
-  if( pf != NULL ) {
-    return pframe_to_virt(pf);
-  } else {
-    return NULL;
-  }
+uint32_t server_get_num(void)
+{
+  return init.c;
 }
 
-#endif
+uintptr_t server_get_start_phy_addr(void)
+{
+  if(server_get_num()>0) 
+    return init.server[0].addr;
+  else
+    return nil;
+}
+
+uintptr_t server_get_end_phy_addr(void)
+{
+  int i=server_get_num();
+
+  if(i>0) {
+    if(i>MAX_PRIVBOOT_SERVERS)      i=MAX_PRIVBOOT_SERVERS;
+    return init.server[i-1].addr+init.server[i-1].size;
+  } else
+    return nil;
+}
 

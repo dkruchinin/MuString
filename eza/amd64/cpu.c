@@ -82,6 +82,9 @@ void arch_cpu_init(cpu_id_t cpu)
     arch_bios_init();
   }
 
+  /* prepare segmentation */
+  arch_pmm_init(cpu);
+  
   /* disable i/o on upper levels */
   cpu_clean_iopl_nt_flags();
   /* disable align checking */

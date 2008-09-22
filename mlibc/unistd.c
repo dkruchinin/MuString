@@ -26,10 +26,15 @@
 #include <eza/interrupt.h>
 #include <eza/arch/asm.h>
 
-void usleep(usec_t usecs)
+void atom_usleep(usec_t usecs)
 {
   disable_all_irqs();
   arch_delay_loop(delay_loop*usecs);
   enable_all_irqs();
+}
+
+void usleep(usec_t usecs)
+{
+  arch_delay_loop(delay_loop*usecs);
 }
 

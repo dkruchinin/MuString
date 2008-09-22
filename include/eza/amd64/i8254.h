@@ -34,6 +34,7 @@
 
 void i8254_init(void);
 uint64_t i8254_calibrate_delay_loop(void);
+uint64_t i8254_calibrate_delay_loop0(void);
 
 #endif
 

@@ -238,7 +238,7 @@ void vga_scroll(void)
     __vga.x=diff;
   }
   if(__vga.y>=__vga.rows) {
-    int lim = __vga.cols * 2 + 1;
+    int lim = (__vga.cols * 2) + 1;
     char *p = (char *)(__vga.base + __vga.cols * (__vga.rows - 1) * 2);
     
     __vga.y=__vga.rows - 2;
@@ -246,8 +246,8 @@ void vga_scroll(void)
     vga_make_attr(&out);
     memcpy(__vga.base, __vga.base + 2 * __vga.cols, __vga.cols * (__vga.rows-1) * 2);
     while (lim-- > 0)
-      *p++ = out;
-    //memset((void*)__vga.base+__vga.cols*(__vga.rows - 1),out,__vga.cols*2+1);
+     *p++ = out;
+    //    memset((void*)(__vga.base+__vga.cols*(__vga.rows - 1)),out,__vga.cols*2-1);
   }
 
   return;

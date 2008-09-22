@@ -19,7 +19,7 @@ extern page_frame_accessor_t pageaccs_linear_pa;
  * pageframes to map.
  */
 typedef struct __pageaccs_list_pa_ctx {
-  page_frame_t *head;
+  list_head_t *head;
   list_node_t *curr;
   page_idx_t num_pages, pages_left;
 } pageaccs_list_pa_ctx_t;

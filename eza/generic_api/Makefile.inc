@@ -14,4 +14,5 @@ LIBEZA_OBJS=eza/generic_api/main.o \
 	eza/generic_api/idletask.o \
 	eza/generic_api/panic.o \
 	eza/generic_api/process.o \
-	eza/generic_api/schedulers/sched_default.o
+	eza/generic_api/schedulers/sched_default.o \
+	eza/generic_api/security.o

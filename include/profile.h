@@ -32,16 +32,6 @@
 #define PROFILE_MEMORY_SIZE  ((2*4096)*1024)  /* 8M initially and overall */
 #define PROFILE_INIT_TASK    32
 
-typedef struct __init_task {
-  uintptr_t addr;
-  size_t size;
-} init_task_t;
-
-typedef struct __init_type {
-  count_t c;
-  init_task_t task_[PROFILE_INIT_TASK];
-} init_t;
-
 /* Followed structure used for lining
  * allocations during the boot process
  */
@@ -66,7 +56,6 @@ typedef struct __profile_type {
 
 /* external (main.c) */
 extern profile_t profile;
-extern init_t init;
 extern boot_alloc_t boot_allocs;
 
 #endif /* __PROFILE_H__ */

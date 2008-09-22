@@ -35,6 +35,7 @@
 #include <mlibc/string.h>
 #include <mlibc/kprintf.h>
 #include <eza/swks.h>
+#include <eza/arch/preempt.h>
 
 static spinlock_declare(irq_lock);
 
@@ -74,7 +75,7 @@ void register_hw_interrupt_controller(hw_interrupt_controller_t *ctrl)
   GRAB_IRQ_LOCK();
   list_add2tail(&known_hw_int_controllers, &ctrl->l);
 
-  for( idx = 0; idx < 256; idx++ ) {
+  for( idx = 0; idx < NUM_IRQS; idx++ ) {
     if( irqs[idx].controller == NULL ) {
       if( ctrl->handles_irq(idx) ) {
         irqs[idx].controller = ctrl;

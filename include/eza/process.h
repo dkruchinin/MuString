@@ -15,33 +15,28 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 MadTirra <tirra.newly@gmail.com>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *
- * eza/amd64/timer.c: arch specific timers init
- *                          
- *
+ * include/eza/process.h: base system process-related functions.
  */
 
+
+#ifndef __PROCESS_H__
+#define __PROCESS_H__
+
 #include <eza/arch/types.h>
-#include <eza/arch/i8254.h>
-#include <eza/timer.h>
-#include <eza/time.h>
-#include <mlibc/kprintf.h>
+#include <eza/scheduler.h>
 
-void arch_timer_init(void)
-{
-  int i;
+typedef enum __task_creation_flag_t {
+  CLONE_MM = 0x1,
+} task_creation_flags_t;
 
-  i8254_init();
-  kprintf("[LW] Calibrating delay loop ... ");
-  delay_loop=i8254_calibrate_delay_loop();
-  for(i=0;i<10;i++) {
-    delay_loop=i8254_calibrate_delay_loop0();
-  }
-  kprintf("%ld\n",delay_loop);
-}
+#define SYS_PR_CTL_SET_ENTRYPOINT 0x0
+#define SYS_PR_CTL_SET_STACK 0x1
+#define SYS_PR_CTL_GET_ENTRYPOINT 0x2
+#define SYS_PR_CTL_GET_STACK 0x3
 
-uint64_t arch_calibrate_delay_loop(void)
-{
-  return i8254_calibrate_delay_loop();
-}
+status_t sys_process_control( pid_t pid, ulong_t cmd, ulong_t arg);
+status_t sys_create_process(task_creation_flags_t flags);
+
+#endif

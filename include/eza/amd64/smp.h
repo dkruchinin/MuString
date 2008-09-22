@@ -15,33 +15,25 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 MadTirra <tirra.newly@gmail.com>
+ * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
  *
- * eza/amd64/timer.c: arch specific timers init
- *                          
+ * include/eza/amd64/smp.h: SMP support on amd64 architecture.
  *
  */
 
+#ifndef __EZA_SMP_H__
+#define __EZA_SMP_H__
+
 #include <eza/arch/types.h>
-#include <eza/arch/i8254.h>
-#include <eza/timer.h>
-#include <eza/time.h>
-#include <mlibc/kprintf.h>
+#include <eza/arch/gdt.h>
+#include <eza/arch/mm_types.h>
 
-void arch_timer_init(void)
-{
-  int i;
+#ifdef CONFIG_SMP
+extern void ap_boot(void);
+extern ptr_16_32_t protected_ap_gdtr;
+void arch_smp_init(void);
 
-  i8254_init();
-  kprintf("[LW] Calibrating delay loop ... ");
-  delay_loop=i8254_calibrate_delay_loop();
-  for(i=0;i<10;i++) {
-    delay_loop=i8254_calibrate_delay_loop0();
-  }
-  kprintf("%ld\n",delay_loop);
-}
+#endif /* CONFIG_SMP */
 
-uint64_t arch_calibrate_delay_loop(void)
-{
-  return i8254_calibrate_delay_loop();
-}
+#endif /* __EZA_SMP_H__ */
+
