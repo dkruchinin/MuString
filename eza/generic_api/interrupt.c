@@ -35,6 +35,7 @@
 #include <mlibc/kprintf.h>
 #include <eza/swks.h>
 #include <eza/arch/preempt.h>
+#include <eza/idt.h>
 
 static spinlock_declare(irq_lock);
 
@@ -165,6 +166,13 @@ int unregister_irq(irq_t irq, void *data)
 void initialize_irqs( void )
 {
   int i;
+
+  /* First, initialize the IDT. */
+  if( get_idt() == NULL ) {
+    panic( "initialize_irqs(): Can't locate the IDT !" );
+  }
+
+  get_idt()->initialize();
 
   for( i = 0; i < NUM_IRQS; i++ ) {
     list_init_head(&irqs[i].actions);

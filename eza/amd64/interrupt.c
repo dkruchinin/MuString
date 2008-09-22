@@ -51,7 +51,11 @@ static void install_generic_irq_handlers(void)
 
 static void install_smp_irq_handlers(void)
 {
-    
+   #define LOCAL_TIMER_CPU_IRQ_VEC CPU_SMP_BASE_IRQ
+   #define SCHEDULER_IPI_IRQ_VEC (CPU_SMP_BASE_IRQ+1)
+   /*   */
+    void smp_local_timer_interrupt_handler(void);
+    void smp_scheduler_interrupt_handler(void);    
 }
 
 void arch_initialize_irqs(void)
