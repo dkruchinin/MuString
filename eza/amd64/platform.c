@@ -22,13 +22,17 @@
  */
 
 #include <config.h>
+#include <ds/iterator.h>
 #include <eza/arch/types.h>
 #include <eza/arch/apic.h>
 #include <eza/arch/ioapic.h>
 #include <eza/interrupt.h>
 #include <eza/timer.h>
 #include <mm/mm.h>
+#include <mm/page.h>
+#include <mm/pfalloc.h>
 #include <mm/pt.h>
+#include <mm/pfalloc.h>
 #include <eza/arch/page.h>
 #include <eza/pageaccs.h>
 #ifdef CONFIG_SMP
@@ -39,15 +43,15 @@
 
 static int __map_apic_page(void)
 {
-  pageaccs_linear_pa_ctx_t pa_ctx;
-  uint32_t res;
+  page_frame_iterator_t pfi;
+  ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
+  int32_t res;
 
-  pa_ctx.start_page=APIC_BASE >> PAGE_WIDTH;
-  pa_ctx.end_page=APIC_BASE >> PAGE_WIDTH;
+  mm_init_pfiter_index(&pfi, &pfi_index_ctx,
+                       APIC_BASE >> PAGE_WIDTH,
+                       APIC_BASE >> PAGE_WIDTH);
 
-  pageaccs_linear_pa.reset(&pa_ctx);
-
-  res=__mm_map_pages(&pageaccs_linear_pa,APIC_BASE,1,PF_IO_PAGE,&pa_ctx);
+  res=__mm_map_pages(&pfi,APIC_BASE,1,PF_DONTCACHE);
 
   if(res<0) {
     kprintf("[MM] Cannot map IO page for APIC.\n");
@@ -59,15 +63,15 @@ static int __map_apic_page(void)
 
 static int __map_ioapic_page(void)
 {
-  pageaccs_linear_pa_ctx_t pa_ctx;
+  page_frame_iterator_t pfi;
+  ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
   uint32_t res;
 
-  pa_ctx.start_page=IOAPIC_BASE >> PAGE_WIDTH;
-  pa_ctx.end_page=IOAPIC_BASE >> PAGE_WIDTH;
+  mm_init_pfiter_index(&pfi, &pfi_index_ctx,
+                       IOAPIC_BASE >> PAGE_WIDTH,
+                       IOAPIC_BASE >> PAGE_WIDTH);
 
-  pageaccs_linear_pa.reset(&pa_ctx);
-
-  res=__mm_map_pages(&pageaccs_linear_pa,IOAPIC_BASE,1,PF_IO_PAGE,&pa_ctx);
+  res=__mm_map_pages(&pfi,IOAPIC_BASE,1,PF_DONTCACHE);
 
   if(res<0) {
     kprintf("[MM] Cannot map IO page for IO APIC.\n");

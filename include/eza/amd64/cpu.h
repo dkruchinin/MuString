@@ -26,8 +26,6 @@
 #ifndef __AMD64_CPU_H__
 #define __AMD64_CPU_H__
 
-#include <config.h>
-
 /* specific amd flags and registers */
 #define AMD_MSR_STAR    0xc0000081 /* msr */
 #define AMD_MSR_LSTAR   0xc0000082
@@ -57,6 +55,9 @@
 
 #ifndef __ASM__
 
+#include <config.h>
+#include <eza/arch/types.h>
+
 #ifdef CONFIG_SMP
 #define __percpu__ __attribute__((__section__(".percpu_data")))
 #else
@@ -64,7 +65,7 @@
 #endif /* CONFIG_SMP */
 
 /* varios CPU functions from cpu.c */
-void cpu_setup_fpu(void);
+void arch_cpu_init(cpu_id_t cpu);
 
 #endif /* __ASM__ */
 

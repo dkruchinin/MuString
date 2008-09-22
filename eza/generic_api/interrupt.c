@@ -30,6 +30,7 @@
 #include <eza/interrupt.h>
 #include <eza/errno.h>
 #include <eza/spinlock.h>
+#include <eza/smp.h>
 #include <eza/arch/interrupt.h> /* Arch-specific constants. */
 #include <mlibc/string.h>
 #include <mlibc/kprintf.h>

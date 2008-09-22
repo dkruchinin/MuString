@@ -15,40 +15,101 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * include/mm/page.h: constants used for page manipulation
+ * include/mm/page.h: Architecture independent page-frame primitives
  *
  */
 
-#ifndef __MM_PAGE_H__
-#define __MM_PAGE_H__
+#ifndef __PAGE_H__
+#define __PAGE_H__
 
-#define PAGE_CACHEABLE_SHIFT      0
-#define PAGE_NOT_CACHEABLE_SHIFT  PAGE_CACHEABLE_SHIFT
-#define PAGE_PRESENT_SHIFT        1
-#define PAGE_NOT_PRESENT_SHIFT    PAGE_PRESENT_SHIFT
-#define PAGE_USER_SHIFT           2
-#define PAGE_KERNEL_SHIFT         PAGE_USER_SHIFT
-#define PAGE_READ_SHIFT           3
-#define PAGE_WRITE_SHIFT          4
-#define PAGE_EXEC_SHIFT           5
-#define PAGE_GLOBAL_SHIFT         6
+#include <ds/iterator.h>
+#include <ds/list.h>
+#include <mlibc/stddef.h>
+#include <eza/spinlock.h>
+#include <eza/arch/page.h>
+#include <eza/arch/atomic.h>
+#include <eza/arch/types.h>
 
-#define PAGE_NOT_CACHEABLE  (0 << PAGE_CACHEABLE_SHIFT)
-#define PAGE_CACHEABLE      (1 << PAGE_CACHEABLE_SHIFT)
+#define NOF_MM_POOLS 4
 
-#define PAGE_PRESENT      (0 << PAGE_PRESENT_SHIFT)
-#define PAGE_NOT_PRESENT  (1 << PAGE_PRESENT_SHIFT)
+/* memory-related types. */
+typedef int page_idx_t;
+typedef uint16_t page_flags_t;
 
-#define PAGE_USER    (1 << PAGE_USER_SHIFT)
-#define PAGE_KERNEL  (0 << PAGE_USER_SHIFT)
+#define PF_PDMA       0x01
+#define PF_PGP        0x02
+#define PF_PCONT      0x04
+#define PF_PPERCPU    0x08
+#define PF_FREE       0x10
+#define PF_RESERVED   0x20
+#define PF_KERNEL     0x40
+#define PF_DONTCACHE  0x80
 
-#define PAGE_READ   (1 << PAGE_READ_SHIFT)
-#define PAGE_WRITE  (1 << PAGE_WRITE_SHIFT)
-#define PAGE_EXEC   (1 << PAGE_EXEC_SHIFT)
+#define __pool_type(flags) ((flags) >> 1)
+#define PAGE_POOLS_MASK (PF_PGP | PF_PDMA | PF_PPERCPU | PF_PCONT)
+#define PAGE_PRESENT_MASK (PAGE_POOL_MASK | PF_RESERVED)
 
-#define PAGE_GLOBAL  (1 << PAGE_GLOBAL_SHIFT)
+typedef struct __page_frame {
+  list_head_t head;
+  list_node_t node;
+  page_idx_t idx;
+  atomic_t refcount;
+  uint32_t _private;
+  page_flags_t flags;
+} page_frame_t;
 
-#endif /* __MM_PAGE_H__ */
+#define PF_ITER_UNDEF_VAL (-0xf)
 
+DEFINE_ITERATOR(page_frame,
+                page_idx_t pf_idx);
+
+DEFINE_ITERATOR_TYPES(page_frame,
+                      PF_ITER_ARCH,
+                      PF_ITER_INDEX,
+                      PF_ITER_LIST,
+                      PF_ITER_ALLOC);
+
+extern page_frame_t *page_frames_array;
+
+#define PAGE_ALIGN(addr) align_up((uintptr_t)(addr), PAGE_SIZE)
+#define pframe_pool_type(page) (__pool_type((page)->flags & PAGE_POOLS_MASK))
+
+static inline void *pframe_to_virt(page_frame_t *frame)
+{
+  return (void *)(KERNEL_BASE + frame->idx * PAGE_SIZE);
+}
+
+static inline page_idx_t pframe_number(page_frame_t *frame)
+{
+  return frame->idx;
+}
+
+static inline page_frame_t *pframe_by_number(page_idx_t idx)
+{
+  return (page_frames_array + idx);
+}
+
+static inline void *pframe_phys_addr(page_frame_t *frame)
+{
+  return (void *)((uintptr_t)frame->idx * PAGE_SIZE);
+}
+
+static inline void *virt_to_phys(void *virt)
+{
+  return virt - KERNEL_BASE;
+}
+
+static inline void *pframe_id_to_virt( page_idx_t idx )
+{
+  return (void *)(KERNEL_BASE + idx * PAGE_SIZE);
+}
+
+static inline page_idx_t virt_to_pframe_id(void *virt)
+{
+  page_idx_t idx = ((uintptr_t)virt - KERNEL_BASE) >> PAGE_WIDTH;
+  return idx;
+}
+
+#endif /* __PAGE_H__ */

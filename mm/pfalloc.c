@@ -15,27 +15,29 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * include/kernel.h: contains main kernel types and prototypes for common
- *                   kernel routines.
+ * mm/pfalloc.c: page frame allocation API
  *
  */
 
-#ifndef __KERNEL_H__
-#define __KERNEL_H__ 
+#include <mm/page.h>
+#include <mm/page.h>
+#include <mm/mmpool.h>
+#include <mm/pfalloc.h>
+#include <eza/arch/types.h>
 
-#define LOGBUFFER_LEN  32768
+page_frame_t *alloc_pages(int n, pfalloc_flags_t flags)
+{
+  page_frame_t *pages = NULL;
+  mm_pool_t *pool = mmpools_get_pool(__pool_type(flags & PAGE_POOLS_MASK));
 
-#define _b2kb(b)    ((b) >> 10)
-#define _kb2b(kb)   ((kb) << 10)
-#define _kb2mb(kb)  ((kb) >> 10)
-#define _mb2kb(mb)  ((mb) << 10)
-#define _b2mb(b)    (_kb2mb(_b2kb(b)))
-#define _mb2b(mb)   (_kb2b(_mb2kb(mb)))
+  pages = __pool_alloc_pages(pool, n);  
+  return pages;
+}
 
-
-void panic(const char *format, ...);
-   
-#endif /* __KERNEL_H__ */
-
+void free_pages(page_frame_t *pages, int n)
+{
+  mm_pool_t *pool = mmpools_get_pool(pframe_pool_type(pages));
+  __pool_free_pages(pool, pages, n);
+}

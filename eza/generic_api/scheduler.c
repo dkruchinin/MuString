@@ -51,7 +51,7 @@ cpu_id_t online_cpus;
 /* Known schedulers. */
 static list_head_t schedulers;
 static spinlock_t scheduler_lock;
-static scheduler_t *active_scheduler;
+static scheduler_t *active_scheduler = NULL;
 
 #define LOCK_SCHEDULER_LIST spinlock_lock(&scheduler_lock)
 #define UNLOCK_SCHEDULER_LIST spinlock_unlock(&scheduler_lock)

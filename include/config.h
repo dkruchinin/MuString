@@ -11,6 +11,11 @@
 
 /* GENERAL config */
 #define CONFIG_SMP
+#define CONFIG_ALWAYS_INLINE
+
+/* MM-related */
+#define CONFIG_IOMMU
+#define IDALLOC_PAGES 2
 
 /* SMP-related */
 #define NR_CPUS  2

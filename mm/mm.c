@@ -22,242 +22,221 @@
  */
 
 
+#include <ds/iterator.h>
 #include <ds/list.h>
 #include <mlibc/kprintf.h>
-#include <eza/kernel.h>
-#include <eza/arch/page.h>
 #include <mm/mm.h>
-#include <eza/swks.h>
-#include <eza/smp.h>
-
-extern uint8_t e820count;
-static uint64_t min_phys_addr, max_phys_addr;
-static page_idx_t dma_pages;
+#include <mm/page.h>
+#include <mm/mmpool.h>
+#include <mm/idalloc.h>
+#include <eza/kernel.h>
+#include <eza/arch/mm.h>
 
 /* Here they are ! */
 page_frame_t *page_frames_array;
-memory_zone_t memory_zones[NUM_MEMORY_ZONES];
-percpu_page_cache_t PER_CPU_VAR(percpu_page_cache);
 
-static void detect_physical_memory(void) {
-  int idx, found;
-  kprintf( "E820 memory map:\n" ); 
-  char *types[] = { "(unknown)", "(usable)", "(reserved)", "(ACPI reclaimable)",
-                    "(ACPI non-volatile)", "(BAD)" };
+static void __init_page(page_frame_t *page)
+{
+  list_init_head(&page->head);
+  list_init_node(&page->node);
+  /* FIXME DK:
+   * On x86 and x86_64, processor supports some atomic operations
+   * without difficult locking policy.
+   */  
+  atomic_set(&page->refcount, 0);
+  page->_private = 0;  
+}
 
-  for( idx = 0, found = 0; idx < e820count; idx++ ) {
-    e820memmap_t *mmap = &e820table[idx];
-    uint64_t length = ((uintptr_t)mmap->length_high << 32) | mmap->length_low;
-    char *type;
+void mm_init(void)
+{
+  mm_pool_t *pool;
+  page_frame_iterator_t pfi;
+  ITERATOR_CTX(page_frame, PF_ITER_ARCH) pfi_arch_ctx;
+  
+  arch_mm_init();  
+  mmpools_init();
+  arch_mm_page_iter_init(&pfi, &pfi_arch_ctx);
+  iterate_forward(&pfi) {
+    page_frame_t *page = pframe_by_number(pfi.pf_idx);
+    __init_page(page);
+    mmpools_add_page(page);
+  }
 
-    if( mmap->type <= 5 ) {
-      type = types[mmap->type];
-    } else {
-      type = types[0];
-    }
-
-    kprintf( " BIOS-e820: 0x%.16x - 0x%.16x %s\n",
-             mmap->base_address, mmap->base_address + length, type );
+  kprintf("[MM] Memory pools were initialized\n");
+  /*
+   * Now we may initialize "init data allocator"
+   * Note: idalloc allocator will cut from general pool's
+   * pages not more than IDALLOC_PAGES. After initialization
+   * is done, idalloc must be explicitely disabled.
+   */
+  pool = mmpools_get_pool(POOL_GENERAL);
+  ASSERT(pool->free_pages);
+  idalloc_enable(list_entry(list_node_first(&pool->pages->head), page_frame_t, node));
+  kprintf("[MM] Init-data memory allocator was initialized. (idalloc pages: %ld)\n",
+          idalloc_meminfo.pages);
+  for_each_active_mm_pool(pool) {
+    char *name = mmpools_get_pool_name(pool->type);
     
-    if( !found && mmap->base_address == KERNEL_PHYS_START && mmap->type == 1 ) {
-      min_phys_addr = 0;
-      max_phys_addr = mmap->base_address + length;
-      found = 1;
-    }
+    kprintf("[MM] Memory pool %s:\n", name);
+    kprintf("   total pages:    %ld\n", pool->total_pages);
+    kprintf("   free pages:     %ld\n", pool->free_pages);
+    kprintf("   reserved pages: %ld\n", pool->reserved_pages);
+    mmpools_init_pool_allocator(pool);
   }
 
-  if( !found ) {
-    panic( "detect_physical_memory(): No valid E820 memory maps found for main physical memory area !\n" );
-  }
-
-  if( max_phys_addr <= min_phys_addr ||
-      ((min_phys_addr - max_phys_addr) <= MIN_PHYS_MEMORY_REQUIRED )) {
-    panic( "detect_physical_memory(): Insufficient E820 memory map found for main physical memory area !\n" );
-  }
-
-  /* Setup DMA zone. */
-  dma_pages = MB(16) / PAGE_SIZE;
+  arch_mm_remap_pages();
+  kprintf("[MM] All pages were successfully remapped\n");
 }
 
-static void reset_page_frame(page_frame_t *page)
+static void __pfiter_idx_first(page_frame_iterator_t *pfi)
 {
-  list_init_head(&page->active_list);
-  list_init_node(&page->page_next);
-  page->flags &= PERMANENT_PAGE_FLAG_MASK;  /* Reset all flags but special ones. */
-  atomic_set(&page->refcount,0);
+  ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
+
+  ASSERT(pfi->type == PF_ITER_INDEX);
+  ctx = iter_fetch_ctx(pfi);
+  pfi->pf_idx = ctx->first;
+  pfi->state = ITER_RUN;
 }
 
-static void initialize_page_array(void)
+static void __pfiter_idx_last(page_frame_iterator_t *pfi)
 {
-  int just_left, e820id = 0;
-  uint64_t curr_addr = 0;
-  uint64_t mmap_begin, mmap_end;
-  e820memmap_t *mmap = &e820table[0];   /* Start from the first memory area. */
-  page_idx_t page_idx = 0;
-  memory_zone_t *zone;
-  uint32_t type;
-  page_frame_t *page;
-  list_head_t *page_list;
-  uint32_t flags;
-  page_idx_t kernel_start_page, kernel_end_page;
+  ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
 
-  /* Setup the pointer to the array. */
-  page_frames_array = (page_frame_t*)KERNEL_FIRST_FREE_ADDRESS;
+  ASSERT(pfi->type == PF_ITER_INDEX);
+  ctx = iter_fetch_ctx(pfi);
+  pfi->pf_idx = ctx->last;
+  pfi->state = ITER_RUN;
+}
 
-  /* Calculate kernel image size + page frame array itself. */
-  kernel_end_page = ((uintptr_t)KERNEL_FIRST_FREE_ADDRESS - KERNEL_BASE - KERNEL_PHYS_START) / PAGE_SIZE;
-  kernel_end_page += ((max_phys_addr / PAGE_SIZE) * sizeof(page_frame_t)) / PAGE_SIZE;
+static void __pfiter_idx_next(page_frame_iterator_t *pfi)
+{  
+  ASSERT(pfi->type == PF_ITER_INDEX);    
+  if (pfi->pf_idx == PF_ITER_UNDEF_VAL)
+    iter_first(pfi);
+  else {
+    ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
 
-  kernel_start_page = KERNEL_PHYS_START / PAGE_SIZE;
-  kernel_end_page += kernel_start_page; /* Till this 'kernel_end_page' has kept only offset. */
-
-  mmap_begin = mmap->base_address;
-  mmap_end = mmap->base_address + (((uintptr_t)(mmap->length_high) << 32) | mmap->length_low);
-  mmap_end &= PAGE_ADDR_MASK;
-  type = mmap->type;
-
-  just_left = 0;
-  while( curr_addr < max_phys_addr ) {
-    /* Locate zone current page belongs to. */
-    if( page_idx < dma_pages ) {
-      zone = &memory_zones[ZONE_DMA];
-    } else {
-      zone = &memory_zones[ZONE_NORMAL]; 
+    ctx = iter_fetch_ctx(pfi);
+    if (pfi->pf_idx > ctx->last) {
+      pfi->state = ITER_STOP;
+      pfi->pf_idx = PF_ITER_UNDEF_VAL;
+      return;
     }
 
-    flags = zone->type; /* Initial page flags. */
+    pfi->pf_idx++;
+  }
+}
 
-    if( curr_addr >= mmap_begin && curr_addr < mmap_end ) {
-      if(just_left != 0) {
-        just_left = 0;
-      }
+static void __pfiter_idx_prev(page_frame_iterator_t *pfi)
+{  
+  ASSERT(pfi->type == PF_ITER_INDEX);  
+  if (pfi->pf_idx == PF_ITER_UNDEF_VAL)
+    iter_last(pfi);
+  else {
+    ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
 
-      if(type != E820_USABLE) {
-        page_list = &zone->reserved_pages;
-        flags |= PAGE_RESERVED;
-      } else {
-        page_list = &zone->pages;
-      }
-    } else {
-      /* Has just left the map ? */
-      if( just_left == 0 ) {
-        just_left = 1;
-
-        if(e820id < e820count) {
-          /* Switch to the next E820 map. */
-          mmap = &e820table[++e820id];
-          mmap_begin = mmap->base_address;
-          mmap_end = mmap->base_address + (((uintptr_t)mmap->length_high << 32) | mmap->length_low);
-          mmap_begin &= PAGE_ADDR_MASK;
-          mmap_end &= PAGE_ADDR_MASK;
-
-          type = mmap->type;
-        } else {
-          /* Hmmmmm, no more E820 maps ? */
-          mmap_begin = mmap_end = 0;
-        }
-       /* Since we have just switched to the next map, we should rescan current page. */
-        continue;
-      } else {
-        /* No valid E820 map for this page even if we've moved to the next record in
-         * the E820 array, so we assume that current page is reserved.
-         */
-        flags |= PAGE_RESERVED;
-        page_list = &zone->reserved_pages;
-      }
+    ctx = iter_fetch_ctx(pfi);
+    if (pfi->pf_idx < ctx->first) {
+      pfi->state = ITER_STOP;
+      pfi->pf_idx = PF_ITER_UNDEF_VAL;
+      return;
     }
 
-    /* Make sure we've taken into account kernel pages. */
-    if( page_idx >= kernel_start_page && page_idx <= kernel_end_page ) {
-        flags |= PAGE_RESERVED;
-        page_list = &zone->reserved_pages;
+    pfi->pf_idx--;
+  }
+}
+
+void mm_init_pfiter_index(page_frame_iterator_t *pfi,
+                          ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx,
+                          page_idx_t start_pfi, page_idx_t end_pfi)
+{
+  pfi->first = __pfiter_idx_first;
+  pfi->last = __pfiter_idx_last;
+  pfi->next = __pfiter_idx_next;
+  pfi->prev = __pfiter_idx_prev;
+  iter_init(pfi, PF_ITER_INDEX);
+  memset(ctx, 0, sizeof(*ctx));
+  ctx->first = start_pfi;
+  ctx->last = end_pfi;
+  pfi->pf_idx = PF_ITER_UNDEF_VAL;
+  iter_set_ctx(pfi, ctx);
+}
+
+static void __pfiter_list_first(page_frame_iterator_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
+
+  ASSERT(pfi->type == PF_ITER_LIST);
+  ctx = iter_fetch_ctx(pfi);
+  ctx->cur = ctx->first_node;
+  pfi->pf_idx =
+    pframe_number(list_entry(ctx->cur, page_frame_t, node));
+  pfi->state = ITER_RUN;
+}
+
+static void __pfiter_list_last(page_frame_iterator_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
+
+  ASSERT(pfi->type == PF_ITER_LIST);
+  ctx = iter_fetch_ctx(pfi);
+  ctx->cur = ctx->last_node;
+  pfi->pf_idx =
+    pframe_number(list_entry(ctx->cur, page_frame_t, node));
+  pfi->state = ITER_RUN;
+}
+
+static void __pfiter_list_next(page_frame_iterator_t *pfi)
+{
+  ASSERT(pfi->type == PF_ITER_LIST);
+  if (pfi->pf_idx == PF_ITER_UNDEF_VAL)
+    iter_first(pfi);
+  else {
+    ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
+
+    ctx = iter_fetch_ctx(pfi);
+    if (ctx->cur == ctx->last_node) {
+      pfi->state = ITER_STOP;
+      pfi->pf_idx = PF_ITER_UNDEF_VAL;
+      return;
     }
 
-    /* Initialize current page. */
-    page = &page_frames_array[page_idx];
-    reset_page_frame(page);
-    page->idx = page_idx;
-    page->flags = flags;
+    ctx->cur = ctx->cur->next;
+    pfi->pf_idx = pframe_number(list_entry(ctx->cur, page_frame_t, node));
+  }
+}
 
-    /* Insert page into the list. */
-    list_add2tail(page_list, &page->page_next);
-    zone->num_total_pages++;
-    if(flags & PAGE_RESERVED) {
-      zone->num_reserved_pages++;
-     } else {
-      zone->num_free_pages++;
+static void __pfiter_list_prev(page_frame_iterator_t *pfi)
+{
+  ASSERT(pfi->type == PF_ITER_LIST);
+  if (pfi->pf_idx == PF_ITER_UNDEF_VAL)
+    iter_last(pfi);
+  else {
+    ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
+
+    ctx = iter_fetch_ctx(pfi);
+    if (ctx->cur == ctx->first_node) {
+      pfi->state = ITER_STOP;
+      pfi->pf_idx = PF_ITER_UNDEF_VAL;
     }
 
-    page_idx++;
-    curr_addr += PAGE_SIZE;
+    ctx->cur = ctx->cur->prev;
+    pfi->pf_idx = pframe_number(list_entry(ctx->cur, page_frame_t, node));
   }
 }
 
-static void initialize_zones(void)
+void mm_init_pfiter_list(page_frame_iterator_t *pfi,
+                         ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx,
+                         list_node_t *first_node, list_node_t *last_node)
 {
-  memory_zone_type_t types[NUM_MEMORY_ZONES] = {ZONE_DMA,ZONE_NORMAL};
-  int idx;
-
-  for(idx = 0; idx < NUM_MEMORY_ZONES; idx++ ) {
-    memory_zone_t *zone = &memory_zones[idx];
-
-    zone->type = types[idx];
-    zone->num_total_pages = zone->num_free_pages = zone->num_reserved_pages = 0;
-    list_init_head(&zone->pages);
-    list_init_head(&zone->reserved_pages);
-    spinlock_initialize(&zone->lock, "" );
-  }
+  pfi->first = __pfiter_list_first;
+  pfi->last = __pfiter_list_last;
+  pfi->next = __pfiter_list_next;
+  pfi->prev = __pfiter_list_prev;
+  iter_init(pfi, PF_ITER_LIST);
+  memset(ctx, 0, sizeof(*ctx));
+  ctx->first_node = first_node;
+  ctx->last_node = last_node;
+  pfi->pf_idx = PF_ITER_UNDEF_VAL;
+  iter_set_ctx(pfi, ctx);
 }
-
-static void setup_memory_swks(void)
-{
-  swks.mem_total_pages = max_phys_addr / PAGE_SIZE;
-}
-
-static void initialize_percpu_caches(void)
-{
-  percpu_page_cache_t *cache;
-  memory_zone_t *zone = &memory_zones[ZONE_NORMAL];
-  page_idx_t cpupages = zone->num_total_pages / NR_CPUS;
-  page_idx_t p = 0;
-
-  cache = percpu_get_var(percpu_page_cache);
-  spinlock_initialize(&cache->lock, "<percpu cache spinlock>");
-  list_init_head(&cache->pages);
-
-  /* Take into account the last cache. */
-  if( cpupages + NR_CPUS >= zone->num_total_pages ) {
-      cpupages = zone->num_total_pages;
-  }
-
-  /* Now move all pages to the cache. */
-  for(p = 0; p < cpupages && !list_is_empty(&zone->pages); p++ ) {      
-      list_node_t *l = list_node_first(&zone->pages);
-      list_del(l);
-      list_add2tail(&cache->pages, l);
-      zone->num_free_pages--;
-      zone->num_total_pages--;
-      p++;
-  }
-
-  cache->num_free_pages = cache->total_pages = p;
-}
-
-void build_page_array(void)
-{
-  if( e820count < 0xff ) {
-    detect_physical_memory();
-
-    kprintf( "Initializing memory ... " );
-    initialize_zones();    
-    initialize_page_array();
-
-    initialize_percpu_caches();
-
-    kprintf( "Done (%d pages initialized).\n", max_phys_addr / PAGE_SIZE );
-    setup_memory_swks();
-  } else {
-    panic( "build_page_array(): No valid E820 memory maps found !\n" );
-  }
-}
-

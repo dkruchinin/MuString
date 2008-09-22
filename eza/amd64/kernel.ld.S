@@ -52,20 +52,18 @@ SECTIONS {
 		*(.bss);		/* uninitialized static variables */
 
 		kdata_end = .;
+        _kernel_end = .;
 	}
 
 #ifdef CONFIG_SMP
     .percpu_data (kdata_end) : AT (k2p(kdata_end)) {
        *(.percpu_data);
+       _kernel_end = .;
     }
 
     _hardcoded_unmapped_size = (unmapped_ktext_end - unmapped_ktext_start) + (unmapped_kdata_end - unmapped_kdata_start);
     ap_boot = unmapped_ap_boot - BOOT_OFFSET + AP_BOOT_OFFSET;
     ap_gdtr = unmapped_ap_gdtr - BOOT_OFFSET + AP_BOOT_OFFSET;
     protected_ap_gdtr = p2k(ap_gdtr);
-
-#endif
-   
-   . = ALIGN(0x1000);
-   _kernel_end = .;	
+#endif  
 }

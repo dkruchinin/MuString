@@ -22,8 +22,6 @@
  *
  */
 
-#include <mm/page.h>
-#include <eza/arch/types.h>
 #include <eza/arch/mm_types.h>
 #include <eza/arch/page.h>
 #include <eza/arch/cpu.h>
@@ -45,11 +43,8 @@
 #include <eza/swks.h>
 #include <eza/arch/scheduler.h>
 #include <eza/arch/preempt.h>
-
-#ifdef CONFIG_SMP
 #include <eza/arch/smp.h>
 #include <eza/arch/apic.h>
-#endif
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
@@ -70,7 +65,7 @@ static void main_routine_stage1(void)
   sched_add_cpu(0);
 
   arch_specific_init();
-  arch_initialize_irqs();
+  arch_initialize_irqs();  
   /* Initialize known hardware devices. */
   initialize_common_hardware();
   /* Since the PIC is initialized, all interrupts from the hardware
@@ -79,14 +74,12 @@ static void main_routine_stage1(void)
    * the other CPUs.
    */
   interrupts_enable();
-
   initialize_swks();
 
   /* The other CPUs are running, the scheduler is ready, so we can
    * enable all interrupts.
    */
-  enable_all_irqs();
-
+  enable_all_irqs();  
   /* TODO: Here we should wake up all other CPUs, if any. */
 
   /* OK, we can proceed. */
@@ -112,8 +105,9 @@ void main_routine(void) /* this function called from boostrap assembler code */
   kprintf("[MB] Modules: %d\n",init.c);
 
   /* init memory manager stuff - stage 0 */
-  arch_mm_stage0_init(0);
-  kprintf("[MM] Stage0 memory manager initied.\n");    
+  arch_cpu_init(0);
+  kprintf("[LW] Initialized CPU vectors.\n");
+  mm_init();
   install_fault_handlers();
   initialize_irqs();
   initialize_scheduler();
@@ -158,7 +152,7 @@ void main_smpap_routine(void)
   kprintf("CPU#%d Hello folks! I'm here\n", cpu);
 
   /* Ramap physical memory using page directory preparead be master CPU. */
-  arch_mm_stage0_init(cpu); 
+  arch_cpu_init(cpu); 
 
 
   /* Now we can switch stack to our new kernel stack, setup any arch-specific

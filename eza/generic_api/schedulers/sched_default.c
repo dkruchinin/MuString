@@ -24,6 +24,7 @@
 #include <eza/arch/types.h>
 #include <eza/resource.h>
 #include <mm/pt.h>
+#include <mm/pfalloc.h>
 #include <eza/kstack.h>
 #include <eza/spinlock.h>
 #include <eza/arch/current.h>
@@ -31,7 +32,6 @@
 #include <eza/scheduler.h>
 #include <eza/errno.h>
 #include <eza/sched_default.h>
-#include <mm/pagealloc.h>
 #include <mlibc/assert.h>
 #include <mlibc/string.h>
 #include <eza/arch/preempt.h>
@@ -71,7 +71,8 @@ static spinlock_t cpu_data_lock;
 static eza_sched_taskdata_t *allocate_task_sched_data(void)
 {
   /* TODO: [mt] Allocate memory via slabs !!!  */
-  return (eza_sched_taskdata_t *)__alloc_page(0,1);
+  page_frame_t *page = alloc_page(AF_PGP);  
+  return (eza_sched_taskdata_t *)pframe_to_virt(page);
 }
 
 static void free_task_sched_data(eza_sched_taskdata_t *data)
@@ -81,7 +82,8 @@ static void free_task_sched_data(eza_sched_taskdata_t *data)
 
 static eza_sched_cpudata_t *allocate_cpu_sched_data(cpu_id_t cpu) {
   /* TODO: [mt] Allocate memory via slabs !!!  */
-  eza_sched_cpudata_t *cpudata = (eza_sched_cpudata_t *)__alloc_page(0,1);
+  page_frame_t *page = alloc_page(AF_PGP);
+  eza_sched_cpudata_t *cpudata = (eza_sched_cpudata_t *)pframe_to_virt(page);
 
   if( cpudata != NULL ) {
     initialize_cpu_sched_data(cpudata, cpu);

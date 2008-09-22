@@ -22,7 +22,6 @@
  *
  */
 
-#include <mm/page.h>
 #include <eza/arch/types.h>
 #include <eza/arch/page.h>
 #include <eza/arch/mm_types.h>
@@ -164,15 +163,6 @@ void arch_pmm_init(cpu_id_t cpu)
   gdtr_load(&gdtr);
   tr_load(gdtselector(TSS_DES));
   idtr_load(&idtr);
-
-  /* Build page array. */
-  if( cpu == 0 ) {
-    build_page_array(); 
-  }
-
-  /* Remap memory using 4K page frames. All CPUs has to do this. */
-  arch_remap_memory(cpu);
-
 
   return;
 }

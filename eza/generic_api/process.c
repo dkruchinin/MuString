@@ -26,7 +26,6 @@
 #include <eza/smp.h>
 #include <eza/kstack.h>
 #include <eza/errno.h>
-#include <mm/pagealloc.h>
 #include <eza/amd64/context.h>
 #include <mlibc/kprintf.h>
 #include <eza/arch/scheduler.h>

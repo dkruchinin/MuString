@@ -24,11 +24,8 @@
 #ifndef __MM_TYPES_H__
 #define __MM_TYPES_H__
 
-#include <mm/page.h>
 #include <eza/arch/types.h>
 #include <eza/arch/page.h>
-#include <eza/arch/types.h>
-#include <eza/smp.h>
 
 typedef enum __prot_ring {
   PROT_RING_0 = 0,

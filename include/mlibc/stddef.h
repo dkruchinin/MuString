@@ -50,4 +50,7 @@
 #define container_of(ptr, type, member) \
   (type *)((char *)(ptr) - offsetof(type, member))
 
+#define align_up(s,a)    (((s)+((a)-1)) & ~((a)-1))
+#define align_down(s,a)  ((s) & ~((a)-1))
+
 #endif /* __STDDEF_H__ */

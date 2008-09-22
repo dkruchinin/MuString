@@ -66,10 +66,6 @@ typedef uint64_t unative_t;
 typedef uint64_t native_t;
 typedef uint64_t ipl_t;
 
-/* memory-related types. */
-typedef uint32_t page_idx_t;
-typedef uint32_t page_flags_t;
-
 /* bit-related types. */
 typedef uint32_t bit_idx_t;
 
@@ -94,6 +90,12 @@ typedef struct {
   unsigned nx: 1;
 } __attribute__ ((packed)) pte_t;
 
+
+#ifdef CONFIG_ALWAYS_INLINE
+#define always_inline inline __attribute__((always_inline))
+#else
+#define always_inline
+#endif /* CONFIG_ALWAYS_INLINE */
 
 #endif
 
