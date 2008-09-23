@@ -24,6 +24,7 @@
 #include <ds/list.h>
 #include <mlibc/string.h>
 #include <mlibc/assert.h>
+#include <mlibc/stddef.h>
 #include <mlibc/bitwise.h>
 #include <mm/page.h>
 #include <mm/mmpool.h>
@@ -52,19 +53,20 @@ struct tlsf_idxs {
 #define TLSF_PB_FREE 0x04
 #define TLSF_PB_MASK 0x07
 
-static const int FLD_FPOW2      = TLSF_FLD_FPOW2;
-static const int FLD_LPOW2      = TLSF_FLD_FPOW2 + TLSF_FLD_SIZE - 1;
-static const int MAX_BLOCK_SIZE = 1 << (TLSF_FLD_FPOW2 + TLSF_FLD_SIZE);
+static const int FLD_FPOW2 = 0;
+static const int FLD_LPOW2 = TLSF_FLD_SIZE + TLSF_FIRST_OFFSET - 2;
+static const int MAX_BLOCK_SIZE = (1 << (TLSF_FLD_SIZE + TLSF_FIRST_OFFSET - 1));
 
 static inline void get_tlsf_ids(uint16_t size, struct tlsf_idxs *ids);
 static inline uint16_t size_from_tlsf_ids(struct tlsf_idxs *ids);
 
 #define __bitno(pow2)      ((pow2) >> 1)
+#define __fld_offset(fldi) ((fldi) ? (TLSF_SLD_SIZE << ((fldi) - 1)) : TLSF_SLD_SIZE)
 #define __fldi(size)       (__power2fldi(bit_find_msf(size)))
-#define __sldi(size, fldi) (((size) & ~(1 << __fldi2power(fldi))) >> __fld_offset(fldi))
-#define __fldi2power(fldi) ((fldi) + TLSF_FLD_SIZE)
-#define __power2fldi(pow) (((pow) >= TLSF_FLD_SIZE) ? ((pow) - TLSF_FLD_SIZE) : 0)
-#define __fld_offset(fldi) ((fldi) + TLSF_FIRST_OFFSET)
+#define __sldi(size, fldi) (((size) & ~(1 << __fldi2power(fldi)) /  __fld_offset(fldi))
+#define __fldi2power(fldi) ((fldi) ? ((fldi) + TLSF_FIRST_OFFSET - 1) : 0)
+#define __power2fldi(pow)                                               \
+  (((pow) >= TLSF_FIRST_OFFSET) ? ((pow) - TLSF_FIRST_OFFSET + 1) : 0)
 #define __sld_bitmap(tlsf, fldi) (*(tlsf_bitmap_t *)((tlsf)->slds_bitmap + (fldi) * TLSF_SLD_SIZE))
 
 #define __fld_mark_avail(tlsf, fldi)            \
@@ -132,13 +134,13 @@ static void get_tlsf_ids(uint16_t size, struct tlsf_idxs *ids)
   int pow2 = bit_find_msf(size);
 
   ids->fldi = __power2fldi(pow2);
-  ids->sldi = (size & ~(1 << pow2)) >> __fld_offset(ids->fldi);
+  ids->sldi = (size & ~(1 << pow2)) / __fld_offset(ids->fldi);
 }
 
 static inline uint16_t size_from_tlsf_ids(struct tlsf_idxs *ids)
 {
   uint16_t size = 1 << __fldi2power(ids->fldi);
-  size += ids->sldi * (1 << __fld_offset(ids->fldi));
+  size += ids->sldi * __fld_offset(ids->fldi);
 
   return size;
 }
@@ -286,7 +288,7 @@ static page_frame_t *try_merge(tlsf_t *tlsf, page_frame_t *block_root, int side)
 
     neighbour = __right_neighbour(block_root);
   }
-
+  
   n_size = __block_size(neighbour);
   n_flags = __block_flags(neighbour);
   get_tlsf_ids(n_size, &n_ids);
@@ -414,6 +416,7 @@ static void build_tlsf_map(tlsf_t *tlsf, list_head_t *pages, page_idx_t npages)
   int i, j;
   struct tlsf_idxs ids;
 
+  kprintf("TLSF: %ld blocks of %ld size\n", blocks, block_size);
   /* initialize TLSF map */
   for (i = 0; i < TLSF_FLD_SIZE; i++) {
     tlsf_node_t *nodes = tlsf->map[i].nodes;    
@@ -433,7 +436,7 @@ static void build_tlsf_map(tlsf_t *tlsf, list_head_t *pages, page_idx_t npages)
   
   /* initialize bitmaps */
   memset(&tlsf->fld_bitmap, 0, sizeof(tlsf->fld_bitmap));
-  memset(tlsf->slds_bitmap, 0, sizeof(*(tlsf->slds_bitmap)) * TLSF_FLD_BMAP_SIZE);
+  memset(tlsf->slds_bitmap, 0, sizeof(*(tlsf->slds_bitmap)) * TLSF_SLD_BITMAP_SIZE);
 
   /* insert available blocks to the corresponding TLSF map entries */
   get_tlsf_ids(block_size, &ids);
@@ -456,10 +459,23 @@ static void build_tlsf_map(tlsf_t *tlsf, list_head_t *pages, page_idx_t npages)
   }
 }
 
+static void check_tlsf_defs(void)
+{
+  ASSERT(TLSF_FLD_SIZE < TLSF_FLDS_MAX);
+  ASSERT(TLSF_FIRST_OFFSET > 0);
+  ASSERT(TLSF_SLD_BITMAP_SIZE < (sizeof(long) << 3));
+  ASSERT((FLD_FPOW2 + TLSF_FIRST_OFFSET) < (sizeof(long) << 3));
+  ASSERT(is_powerof2(TLSF_SLD_SIZE) &&
+         (TLSF_SLD_SIZE <= ((1 << (FLD_FPOW2 + TLSF_FIRST_OFFSET)) >> 1)) &&
+         (TLSF_SLD_SIZE >= TLSF_SLDS_MIN));
+}
+
 void tlsf_alloc_init(mm_pool_t *pool)
 {
   tlsf_t *tlsf = idalloc(sizeof(*tlsf));
-
+  
+  memset(tlsf, 0, sizeof(*tlsf));
+  check_tlsf_defs();
   tlsf->owner = pool->type;
   spinlock_initialize(&tlsf->lock, "TLSF spinlock");
   build_tlsf_map(tlsf, &pool->pages->head, pool->free_pages);

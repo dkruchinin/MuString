@@ -33,13 +33,16 @@
 
 #define TLSF_DEBUG /* FIXME DK: remove this macro after debugging */
 
-#define TLSF_FLD_SIZE       4
-#define TLSF_SLD_SIZE       4
-#define TLSF_FLD_BMAP_SIZE  TLSF_FLD_SIZE
-#define TLSF_SLDS_BMAP_SIZE (TLSF_FLD_SIZE * TLSF_SLD_SIZE)
-#define TLSF_CPUCACHE_PAGES 8
-#define TLSF_FIRST_OFFSET   2
-#define TLSF_FLD_FPOW2      4
+#define TLSF_FLD_SIZE       5 /**< TLSF first level directory size */
+#define TLSF_SLD_SIZE       4 /**< TLSF second level directory size */
+#define TLSF_CPUCACHE_PAGES 8 /* TODO DK: implement TSLF percpu caches */
+#define TLSF_FIRST_OFFSET   4 /**< TLSF first offset */
+
+
+#define TLSF_SLDS_MIN 2
+#define TLSF_FLDS_MAX 8
+#define TLSF_FLD_BITMAP_SIZE TLSF_FLD_SIZE
+#define TLSF_SLD_BITMAP_SIZE (TLSF_FLD_SIZE * TLSF_SLD_SIZE)
 
 typedef struct __tlsf_node {
   int blocks_no;
@@ -57,10 +60,10 @@ typedef struct __tlsf {
   list_head_t *percpu_cache;  
   spinlock_t lock;  
   mm_pool_type_t owner;
-  uint8_t slds_bitmap[TLSF_SLDS_BMAP_SIZE];
-  uint8_t fld_bitmap;
   page_idx_t first_page_idx;
   page_idx_t last_page_idx;
+  uint8_t slds_bitmap[TLSF_SLD_BITMAP_SIZE];
+  uint8_t fld_bitmap;  
 } tlsf_t;
 
 void tlsf_alloc_init(mm_pool_t *pool);
