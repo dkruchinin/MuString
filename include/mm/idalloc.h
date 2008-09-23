@@ -25,6 +25,7 @@
 #define __IDALLOC_H__
 
 #include <config.h>
+#include <mm/mmpool.h>
 #include <mm/page.h>
 #include <eza/spinlock.h>
 #include <eza/arch/types.h>
@@ -32,14 +33,15 @@
 typedef struct __idalloc_meminfo {
   char *mem;
   list_head_t avail_pages;
+  list_head_t used_pages;
   spinlock_t lock;
-  int pages;    
+  int npages;    
   bool is_enabled;
 } idalloc_meminfo_t;
 
 extern idalloc_meminfo_t idalloc_meminfo;
 
-void idalloc_enable(page_frame_t *pages);
+void idalloc_enable(mm_pool_t *pool);
 void idalloc_disable(void);
 void *idalloc(size_t size);
 

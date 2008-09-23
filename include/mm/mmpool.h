@@ -45,7 +45,7 @@ typedef struct __mm_pool {
   page_idx_t total_pages;
   page_idx_t reserved_pages;
   atomic_t free_pages;
-  page_frame_t *reserved;
+  list_head_t reserved;
   page_frame_t *pages;
   pf_allocator_t allocator;
   mm_pool_type_t type;
@@ -63,8 +63,8 @@ extern mm_pool_t mm_pools[NOF_MM_POOLS];
 
 #define __pool_alloc_pages(pool, n)               \
   ((pool)->allocator.alloc_pages(n, (pool)->allocator.alloc_ctx))
-#define __pool_free_pages(pool, pages, n)       \
-  ((pool)->allocator.free_pages(pages, n, (pool)->allocator.alloc_ctx))
+#define __pool_free_pages(pool, pages)                                  \
+  ((pool)->allocator.free_pages(pages, (pool)->allocator.alloc_ctx))
 
 static inline mm_pool_t *mmpools_get_pool(mm_pool_type_t type)
 {
@@ -93,5 +93,6 @@ static inline char *mmpools_get_pool_name(mm_pool_type_t type)
 void mmpools_init(void);
 void mmpools_add_page(page_frame_t *page);
 void mmpools_init_pool_allocator(mm_pool_t *pool);
+void mmpools_check_pool_pages(mm_pool_t *pool);
 
 #endif /* __MMPOOL_H__ */

@@ -23,5 +23,6 @@
 
 /* debugging stuff */
 #define DEBUG_GENERAL
+#define DEBUG_MM
 
 #endif /* __CONFIG_H__ */

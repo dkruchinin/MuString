@@ -48,10 +48,10 @@ struct tlsf_idxs {
   int sldi;
 };
 
-#define TLSF_PB_HEAD 0x01
-#define TLSF_PB_TAIL 0x02
-#define TLSF_PB_FREE 0x04
-#define TLSF_PB_MASK 0x07
+#define TLSF_PB_MARK  0x01
+#define TLSF_PB_HEAD  0x02
+#define TLSF_PB_TAIL  0x04
+#define TLSF_PB_MASK  0x07
 
 static const int FLD_FPOW2 = 0;
 static const int FLD_LPOW2 = TLSF_FLD_SIZE + TLSF_FIRST_OFFSET - 2;
@@ -81,6 +81,16 @@ static inline uint16_t size_from_tlsf_ids(struct tlsf_idxs *ids);
   (bit_clear(&(tlsf)->slds_bitmap[(fldi) * TLSF_SLD_SIZE], sldi))
 #define __sld_is_avail(tlsf, fldi, sldi)                            \
   (bit_test(&(tlsf)->slds_bitmap[(fldi) * TLSF_SLD_SIZE], sldi))
+
+static inline void __make_block(page_frame_t *head, page_frame_t *tail)
+{
+  list_init_node(&head->node);
+  if (head != tail)
+    list_init_node(&tail->node);
+
+  head->node.next = &tail->node;
+  tail->node.prev = &head->node;
+}
 
 static inline uint16_t __block_size(page_frame_t *block)
 {
@@ -147,21 +157,23 @@ static inline uint16_t size_from_tlsf_ids(struct tlsf_idxs *ids)
 
 static inline void __block_init(page_frame_t *block_root, uint16_t size)
 {
-  page_frame_t *tail = list_entry(block_root->node.prev, page_frame_t, node);
-  
-  __block_flags_set_mask(block_root, ~TLSF_PB_MASK);
-  __block_flags_set(block_root, TLSF_PB_FREE | TLSF_PB_HEAD);
-  bit_clear(&tail->_private, __bitno(TLSF_PB_TAIL));
+  page_frame_t *tail = list_entry(block_root->node.next, page_frame_t, node);
+
+  bit_set(&block_root->_private, __bitno(TLSF_PB_HEAD));
+  bit_set(&tail->_private, __bitno(TLSF_PB_TAIL));
   __block_size_set(block_root, size);
 }
 
 static inline void __block_deinit(page_frame_t *block_root)
 {
-  page_frame_t *tail = list_entry(block_root->node.prev, page_frame_t, node);
-
-  bit_clear(&block_root->_private, __bitno(TLSF_PB_FREE));
-  bit_set(&tail->_private, __bitno(TLSF_PB_TAIL));
-  list_init_head(&block_root->head);
+  page_frame_t *tail = list_entry(block_root->node.next, page_frame_t, node);
+  
+  bit_clear(&block_root->_private, __bitno(TLSF_PB_HEAD));
+  bit_clear(&tail->_private, __bitno(TLSF_PB_TAIL));
+  list_init_head(&block_root->head);  
+  list_init_node(&block_root->node);
+  if (block_root != tail)
+    list_init_node(&tail->node);
 }
 
 static void __block_insert(tlsf_t *tlsf, page_frame_t *block_root,
@@ -240,28 +252,35 @@ static inline page_frame_t *__left_neighbour(page_frame_t *block_root)
   page_frame_t *page;
 
   page = pframe_by_number(pframe_number(block_root) - 1);
-  if (bit_test(&page->_private, __bitno(TLSF_PB_TAIL)))
-    return list_entry(page->node.next->next, page_frame_t, node);
+  if (!bit_test(&page->_private, __bitno(TLSF_PB_TAIL)))
+    return NULL;
 
-  return list_entry(page->node.next, page_frame_t, node);
+  return list_entry(page->node.prev, page_frame_t, node);
 }
 
 static inline page_frame_t *__right_neighbour(page_frame_t *block_root)
 {
   page_frame_t *page;
 
-  page = list_entry(block_root->node.prev, page_frame_t, node);  
-  return pframe_by_number(pframe_number(page) + 1);
+  page = pframe_by_number(pframe_number(list_entry(block_root->node.next,
+                                                   page_frame_t, node) + 1));
+  if (!bit_test(&page->_private, __bitno(TLSF_PB_HEAD))) {
+    return NULL;
+  }
+  
+  return page;
 }
 
 static page_frame_t *split(tlsf_t *tlsf, page_frame_t *block_root, uint16_t split_size)
 {
+  int offset = __block_size(block_root) - split_size;
   page_frame_t *new_block;
 
-  new_block = pframe_by_number(pframe_number(block_root) + split_size);
-  list_cut_sublist(&new_block->node, block_root->node.prev);
-  __block_size_set(block_root, split_size);
-  __block_deinit(block_root);
+  new_block = pframe_by_number(pframe_number(block_root) + offset);
+  __make_block(new_block, pframe_by_number(pframe_number(new_block) + split_size - 1));
+  __make_block(block_root, pframe_by_number(pframe_number(block_root) + offset - 1));  
+  __block_size_set(block_root, offset);
+  bit_set(&new_block->_private, __bitno(TLSF_PB_MARK));
 
   return new_block;
 }
@@ -283,39 +302,35 @@ static page_frame_t *try_merge(tlsf_t *tlsf, page_frame_t *block_root, int side)
     neighbour = __left_neighbour(block_root);
   }
   else { /* get page block right neighbour */
-    if ((pframe_number(block_root) + size) >= tlsf->last_page_idx)
+    if ((pframe_number(block_root) + size) > tlsf->last_page_idx)
       goto out;
 
     neighbour = __right_neighbour(block_root);
   }
-  
+  if (!neighbour)
+    goto out;
+
   n_size = __block_size(neighbour);
   n_flags = __block_flags(neighbour);
   get_tlsf_ids(n_size, &n_ids);
-  /*
-   * Unfortunately our block can not be coalesced with its neighbour
-   * if either block_root's neighbour is not a head of another block
-   * or result block seems to be too large to seat in the set of free blocks.
-   */
-  if (!bit_test(&n_flags, __bitno(TLSF_PB_HEAD)) ||
-      !bit_test(&n_flags, __bitno(TLSF_PB_FREE)) ||
-      ((size + n_size) >= MAX_BLOCK_SIZE)) {
+
+  /* if result block is too big, merging can't be completed */
+  if ((size + n_size) >= MAX_BLOCK_SIZE)
     goto out;
-  }
 
   /* Wow, it seems that blocks can be successfully coalesced */
-  block_remove(tlsf, neighbour);  
-  if (pframe_number(block_root) < pframe_number(neighbour)) {
-    list_add_range(&neighbour->node, neighbour->node.prev,
-                   block_root->node.prev, &block_root->node);    
-  }
-  else {
-    list_add_range(&block_root->node, block_root->node.prev,
-                   neighbour->node.prev, &neighbour->node);
+  block_remove(tlsf, neighbour);
+  if (pframe_number(block_root) > pframe_number(neighbour)) {
+    page_frame_t *tmp = block_root;
+
     block_root = neighbour;
+    neighbour = tmp;
   }
 
-  __block_size_set(block_root, size + n_size);  
+  __block_size_set(neighbour, 0);
+  bit_clear(&neighbour->_private, __bitno(TLSF_PB_MARK));
+  __make_block(block_root, neighbour);
+  __block_size_set(block_root, size + n_size);
   
   out:
   return block_root;
@@ -357,23 +372,43 @@ static page_frame_t *find_suitable_block(tlsf_t *tlsf, uint16_t size)
   return block;
 }
 
-static void __free_pages(page_frame_t *pages, int n, void *data)
+static void __free_pages(page_frame_t *pages, void *data)
 {
   tlsf_t *tlsf = data;
   page_frame_t *merged_block;
   mm_pool_t *pool = mmpools_get_pool(tlsf->owner);
+  int n;
+  page_idx_t page_idx = pframe_number(pages);
 
-  if (bit_test(&pages->_private, __bitno(TLSF_PB_FREE))) {
-    return;
-  }
-  
   spinlock_lock(&tlsf->lock);
-  list_cut_head(&pages->head);
+  n = __block_size(pages);
+  if (!bit_test(&pages->_private, __bitno(TLSF_PB_MARK))) {
+    kprintf(KO_WARNING "TLSF: Freeing page frame #%d is NOT a TLSF frame!\n", page_idx);
+    goto cant_free;
+  }
+  if (bit_test(&pages->_private, __bitno(TLSF_PB_HEAD))) {
+    kprintf(KO_WARNING "TLSF: Attemption to free already freed page %d!\n", page_idx);
+    goto cant_free;
+  }
+  if (((n + page_idx - 1) < tlsf->first_page_idx) ||
+      ((n + page_idx - 1) > tlsf->last_page_idx)) {
+    kprintf(KO_WARNING "TLSF: Invalid size(%d) of freeing block starting from %d\n",
+            n, page_idx);
+    goto cant_free;
+  }
+
+  __make_block(pages, pframe_by_number(page_idx + n - 1));
   merged_block = try_merge_left(tlsf, pages);
   merged_block = try_merge_right(tlsf, merged_block);
   block_insert(tlsf, merged_block, __block_size(merged_block));
-  spinlock_unlock(&tlsf->lock);
   atomic_add(&pool->free_pages, n);
+  goto out;
+
+  cant_free:
+  kprintf(KO_WARNING "TLSF: Can't free pages starting from %d frame\n", page_idx);
+  
+  out:
+  spinlock_unlock(&tlsf->lock);
 }
 
 static page_frame_t *__alloc_pages(int n, void *data)
@@ -385,9 +420,9 @@ static page_frame_t *__alloc_pages(int n, void *data)
 
   if (n >= MAX_BLOCK_SIZE)
     goto out;
-
-  spinlock_lock(&tlsf->lock);
-  block_root = find_suitable_block(tlsf, n);
+  
+  spinlock_lock(&tlsf->lock);  
+  block_root = find_suitable_block(tlsf, n);  
   if (!block_root) {
     spinlock_unlock(&tlsf->lock);
     goto out;
@@ -396,11 +431,10 @@ static page_frame_t *__alloc_pages(int n, void *data)
   block_remove(tlsf, block_root);
   size = __block_size(block_root);
   if (size > n) { /* split block if necessary */
-    page_frame_t *tmp = split(tlsf, block_root, n);
+    page_frame_t *tmp = split(tlsf, block_root, size - n);
     block_insert(tlsf, tmp, size - n);
   }
 
-  list_set_head(&block_root->head, &block_root->node);
   spinlock_unlock(&tlsf->lock);
   atomic_sub(&pool->free_pages, n);
   
@@ -408,15 +442,10 @@ static page_frame_t *__alloc_pages(int n, void *data)
   return block_root;
 }
 
-static void build_tlsf_map(tlsf_t *tlsf, list_head_t *pages, page_idx_t npages)
+static void build_tlsf_map(tlsf_t *tlsf, page_frame_t *pages, page_idx_t npages)
 {
-  int block_size = 1 << FLD_LPOW2;
-  page_idx_t blocks = npages / block_size;
-  page_idx_t pages_rest = npages - (blocks * block_size);
   int i, j;
-  struct tlsf_idxs ids;
 
-  kprintf("TLSF: %ld blocks of %ld size\n", blocks, block_size);
   /* initialize TLSF map */
   for (i = 0; i < TLSF_FLD_SIZE; i++) {
     tlsf_node_t *nodes = tlsf->map[i].nodes;    
@@ -428,34 +457,23 @@ static void build_tlsf_map(tlsf_t *tlsf, list_head_t *pages, page_idx_t npages)
       nodes[j].max_avail_size = 0;
     }
   }
-
-  tlsf->first_page_idx =
-    pframe_number((page_frame_t *)list_entry(list_node_first(pages), page_frame_t, node));
-  tlsf->last_page_idx =
-    pframe_number((page_frame_t *)list_entry(list_node_last(pages), page_frame_t, node));
   
   /* initialize bitmaps */
+  tlsf->first_page_idx = tlsf->last_page_idx = - 1;
   memset(&tlsf->fld_bitmap, 0, sizeof(tlsf->fld_bitmap));
   memset(tlsf->slds_bitmap, 0, sizeof(*(tlsf->slds_bitmap)) * TLSF_SLD_BITMAP_SIZE);
 
   /* insert available blocks to the corresponding TLSF map entries */
-  get_tlsf_ids(block_size, &ids);
-  while (blocks-- > 0) {
-    page_frame_t *first_page = list_entry(list_node_first(pages), page_frame_t, node);
-    page_frame_t *last_page = pframe_by_number(pframe_number(first_page) + block_size - 1);
-
-    list_cut_sublist(&first_page->node, &last_page->node);
-    block_insert(tlsf, first_page, block_size);
-  }
-  if (pages_rest > 0) {
-    page_frame_t *last_block = list_entry(list_node_first(pages), page_frame_t, node);
-    mm_pool_t *pool = mmpools_get_pool(tlsf->owner);
-
-    list_cut_head(pages);
-    __block_init(last_block, pages_rest);
-    bit_clear(&last_block->_private, __bitno(TLSF_PB_FREE));
-    atomic_sub(&pool->free_pages, pages_rest);
-    __free_pages(last_block, pages_rest, tlsf);
+  for (i = npages - 1; i >= 0; i--) {
+    if (pages[i].flags & PF_RESERVED)
+      continue;
+    if (tlsf->last_page_idx < 0)
+      tlsf->last_page_idx = pframe_number(pages + i);
+    
+    tlsf->first_page_idx = pframe_number(pages + i);
+    bit_set(&pages[i]._private, __bitno(TLSF_PB_MARK));
+    __block_size_set(pages + i, 1);
+    __free_pages(pages + i, tlsf);
   }
 }
 
@@ -473,13 +491,15 @@ static void check_tlsf_defs(void)
 void tlsf_alloc_init(mm_pool_t *pool)
 {
   tlsf_t *tlsf = idalloc(sizeof(*tlsf));
+  long free_pages;
   
   memset(tlsf, 0, sizeof(*tlsf));
   check_tlsf_defs();
   tlsf->owner = pool->type;
   spinlock_initialize(&tlsf->lock, "TLSF spinlock");
-  build_tlsf_map(tlsf, &pool->pages->head, pool->free_pages);
-  pool->pages = NULL;
+  free_pages = atomic_get(&pool->free_pages);  
+  build_tlsf_map(tlsf, pool->pages, pool->total_pages);
+  atomic_set(&pool->free_pages, free_pages);
   pool->allocator.type = PFA_TLSF;
   pool->allocator.alloc_ctx = tlsf;
   pool->allocator.alloc_pages = __alloc_pages;
@@ -503,8 +523,12 @@ void tlsf_memdump(void *_tlsf)
         struct tlsf_idxs ids = { i, j };
         uint16_t size2 = size_from_tlsf_ids(&ids);
         if (__sld_is_avail(tlsf, i, j)) {
+          list_node_t *n;
           tlsf_node_t *node = tlsf->map[i].nodes + j;
           kprintf("...TLSF SLD %ld is available: %d\n", size2, node->blocks_no);
+          list_for_each(&node->blocks, n) {
+            kprintf("==> size %d\n", __block_size(list_entry(n, page_frame_t, head)));
+          }
         }
         else {
           kprintf("...TLSF SLD %ld is NOT available\n", size2);

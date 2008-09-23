@@ -39,18 +39,16 @@ typedef enum __pfalloc_type {
 
 typedef struct __pf_allocator {
   page_frame_t *(*alloc_pages)(int n, void *data);
-  void (*free_pages)(page_frame_t *pframe, int n, void *data);  
+  void (*free_pages)(page_frame_t *pframe, void *data);  
   void *alloc_ctx;
   pfalloc_type_t type;
 } pf_allocator_t;
 
 #define alloc_page(flags)                       \
   alloc_pages(1, flags)
-#define free_page(page)                         \
-  free_pages(page, 1)
 
 page_frame_t *alloc_pages(int n, pfalloc_flags_t flags);
-void free_pages(page_frame_t *pages, int n);
+void free_pages(page_frame_t *pages);
 
 #endif /* __PFALLOC_H__ */
 
