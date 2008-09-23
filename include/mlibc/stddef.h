@@ -53,4 +53,6 @@
 #define align_up(s,a)    (((s)+((a)-1)) & ~((a)-1))
 #define align_down(s,a)  ((s) & ~((a)-1))
 
+#define is_powerof2(num) ((num) & ~((num) - 1))
+
 #endif /* __STDDEF_H__ */
