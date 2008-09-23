@@ -31,56 +31,44 @@
 #include <eza/arch/mbarrier.h>
 #include <eza/arch/preempt.h>
 
+#define __SPINLOCK_LOCKED_V 1
+#define __SPINLOCK_UNLOCKED_V 0
 
-#ifdef CONFIG_SMP
 typedef struct __spinlock_type {
-  atomic_t v;
+    long_t __spin_val;
 } spinlock_t;
 
+#ifdef CONFIG_SMP
 
-#define spinlock_initialize(x,y)
+#include <eza/arch/spinlock.h>
+
 #define spinlock_trylock(x)
 #define mbarrier_leave()
-//#define arch_atomic_spinlock(x)
 
 #define spinlock_declare(s)  spinlock_t s
 #define spinlock_extern(s)   extern spinlock_t s
 
-#define spinlock_initialize_macro(s)  \
-  spinlock_t s={ \
-    .v={0};	 \
-  };
+#define spinlock_initialize(x,y)                \
+    ((spinlock_t *)x)->__spin_val = __SPINLOCK_UNLOCKED_V
 
 #define spinlock_lock(u) \
   preempt_disable(); \
-  //  arch_atomic_spinlock(&(u->v))
+  arch_spinlock_lock(u);
 
-static inline void spinlock_unlock(spinlock_t *s)
-{
-  mbarrier_leave();
-  //  atomic_set((&s->v),0);
-
-  /* Enable preemption. */
+#define spinlock_unlock(u) \
+  arch_spinlock_unlock(u); \
   preempt_enable();
-}
 
-//extern void spinlock_initialize(spinlock_t *s,const char *name);
-//extern int spinlock_trylock(spinlock_t *s);
-
-#else /* just disable preemption while spin is locked */
-/* on UP systems you can just disable preemtion and/or interrupts to make a spinlock */
-/*FIXME: include all preemtion enable/disable stuff */
-
-typedef long spinlock_t;
+#else
 
 #define spinlock_declare(s)  
 #define spinlock_extern(s)   
 #define spinlock_initialize_macro(s)  
 
 #define spinlock_initialize(x, name)
-#define spinlock_lock(x) /* disable preemtion */
+#define spinlock_lock(x) preempt_disable()
 #define spinlock_trylock(x) /* the same like above */
-#define spinlock_unlock(x) /* enable preemtion */
+#define spinlock_unlock(x) preempt_enable()
 
 #endif /* CONFIG_SMP */
 #endif /* __EZA_SPINLOCK_H__ */

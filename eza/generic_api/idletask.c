@@ -31,6 +31,7 @@
 #include <mlibc/string.h>
 #include <eza/arch/mm_types.h>
 #include <eza/arch/preempt.h>
+#include <eza/spinlock.h>
 
 task_t *idle_tasks[NR_CPUS];
 

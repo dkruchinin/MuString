@@ -58,6 +58,7 @@ extern void initialize_common_hardware(void);
 extern void start_init(void);
 extern void initialize_timer(void);
 
+extern spinlock_t can_proceed;
 
 static void main_routine_stage1(void)
 {
@@ -127,8 +128,6 @@ void main_routine(void) /* this function called from boostrap assembler code */
   main_routine_stage1();
 }
 
-extern bool can_proceed;
-
 #ifdef CONFIG_SMP
 static void main_smpap_routine_stage1(cpu_id_t cpu)
 {
@@ -138,9 +137,6 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
 
   /* We're online. */
   set_cpu_online(cpu,1);
-
-  while( !can_proceed );
-
   sched_add_cpu(cpu);
 
   interrupts_enable();

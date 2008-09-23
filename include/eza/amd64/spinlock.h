@@ -26,81 +26,22 @@
 #define __AMD64_SPINLOCK_H__
 
 #include <eza/arch/types.h>
-#include <eza/spinlock.h>
 #include <eza/arch/mbarrier.h>
+#include <eza/arch/asm.h>
 
-#define atomic_pre_inc(v)  (atomic_post_inc(v)+1)
-#define atomic_pre_dec(v)  (atomic_post_dec(v)-1)
 
-static inline void atomic_inc(atomic_t *v)
-{
-  asm volatile("incq %0" : "=m" (v->c));
-}
+#define arch_spinlock_lock(s)                   \
+    __asm__ __volatile__(  "movl %2,%%eax\n" \
+                           "1:" __LOCK_PREFIX "cmpxchgl %0, %1\n"       \
+                           "cmp %2, %%eax\n"                            \
+                           "jnz 1b\n"                                   \
+                           :: "r"(__SPINLOCK_LOCKED_V),"m"( *(&(((spinlock_t*)s)->__spin_val)) ), "rI"(__SPINLOCK_UNLOCKED_V) \
+                           : "%rax", "memory" )
 
-static inline void atomic_dec(atomic_t *v)
-{
-  asm volatile ("decq %o\n" : "=m" (v->c));
-}
-
-static inline long atomic_post_inc(atomic_t *v)
-{
-  long r=1;
-
-  asm volatile ("lock xaddr %1, %0\n" : "=m" (v->c),"+r" (r));
-
-  return r;
-}
-
-static inline long atomic_post_dec(atomic_t *v)
-{
-  long r=-1;
-
-  asm volatile ("lock xaddr %1, %0" : "=m" (v->c), "+r" (r));
-
-  return r;
-}
-
-static inline uint64_t atomic_test_set(atomic_t *v)
-{
-  uint64_t o;
-
-  asm volatile ("movq $1, %0\n"
-		"xchgq %0, %1\n" : "=r" (o), "=m" (v->c));
-
-  return o;
-}
-
-/* amd64 specific fast spinlock */
-static inline void arch_atomic_spinlock1(atomic_t *v)
-{
-  uint64_t t;
-
-  /* FIXME: disable preemtion on current task */
-
-  asm volatile (
-                "0:;"
-#ifdef CONFIG_HT
-                "pause;"
-#endif
-                "mov %0, %1;"
-                "testq %1, %1;"
-                "jnz 0b;"
-                "incq %1;"
-                "xchgq %0, %1;"
-                "testq %1, %1;"
-		"jnz 0b;"
-                : "=m"(v->count),"=r"(t)
-                );
-
-  barrier_enter();
-}
-
-/*
-static inline void arch_atomic_spinlock(atomic_t *v)
-{
-  //  v->count = 1;
-}
-*/
+#define arch_spinlock_unlock(s) \
+    __asm__ __volatile__( __LOCK_PREFIX "xchgl %0, %1\n"        \
+                          :: "r"(__SPINLOCK_UNLOCKED_V), "m"( *(&(((spinlock_t*)s)->__spin_val)) ) \
+                          : "memory" ) \
 
 #endif /* __AMD64_SPINLOCK_H__ */
 

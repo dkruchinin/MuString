@@ -13,6 +13,7 @@ typedef struct __cpu_sched_stat {
   struct __task_struct *current_task;
   uintptr_t kstack_top;
   uint64_t flags, irq_count, preempt_count;
+  uint64_t irq_lock_count;  
 } cpu_sched_stat_t;
 
 #endif
@@ -24,6 +25,7 @@ typedef struct __cpu_sched_stat {
 #define CPU_SCHED_STAT_FLAGS_OFFT 0x18
 #define CPU_SCHED_STAT_IRQCNT_OFFT 0x20
 #define CPU_SCHED_STAT_PREEMPT_OFFT 0x28
+#define CPU_SCHED_STAT_IRQLOCK_OFFT 0x30
 
 /* Task flags indexes  */
 #define CPU_SCHED_NEED_RESCHED_F_IDX 0

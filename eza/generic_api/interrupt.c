@@ -38,7 +38,7 @@
 #include <eza/arch/preempt.h>
 #include <eza/idt.h>
 
-static spinlock_declare(irq_lock);
+static spinlock_t irq_lock;
 
 static LIST_DEFINE(known_hw_int_controllers);
 static irq_line_t irqs[NUM_IRQS];

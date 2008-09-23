@@ -131,7 +131,7 @@ static status_t setup_new_task(task_t *task)
   }
 
   list_init_node(&sdata->runlist);
-  spinlock_initialize(&sdata->lock, "EZA task data lock");
+  spinlock_initialize(&sdata->sched_lock, "EZA task data lock");
 
   LOCK_TASK_STRUCT(task);
   task->sched_data = sdata;
