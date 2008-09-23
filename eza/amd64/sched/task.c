@@ -121,6 +121,7 @@ void initialize_idle_tasks(void)
 
     /* Setup PIDs and default priorities. */
     task->pid = task->ppid = 0;
+    task->cpu = cpu;
 
     if( sched_setup_idle_task(task) != 0 ) {
       panic( "initialize_idle_task(): Can't setup scheduler details !" );

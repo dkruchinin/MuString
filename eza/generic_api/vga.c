@@ -94,6 +94,7 @@ void vga_init(void)
   __vga.x = __vga.y = 0;
   memset(&__vregs, 0, sizeof(__vregs));
   __vga.es_char = -1;
+  vga_cls();
 }
 
 void vga_update_cursor(void)
@@ -101,7 +102,7 @@ void vga_update_cursor(void)
   uint16_t where, crt_dp, crt_ap;
   uint16_t crt_ar;
 
-  where=__vga.y * __vga.cols + __vga.x - 1;
+  where=__vga.y * __vga.cols + __vga.x ;
   crt_dp=vga_set_mode(VDP_CRT, VGA_COLOR); /* CRT data port */
   crt_ap=vga_set_mode(VAP_CRT, VGA_COLOR); /* CRT address port */
 
@@ -205,11 +206,13 @@ void vga_putch(uint16_t c)
     if(c < ' ')
       break;
     vga_make_attr(&c);
-    where=__vga.base+__vga.cols*__vga.y+__vga.x;
+    where=(uint16_t *)(__vga.base+__vga.cols*__vga.y+__vga.x);
     *where = c;
     __vga.x++;
-    vga_scroll();
+    break;
   }
+
+  vga_scroll();
 
   return;
 }
@@ -217,7 +220,7 @@ void vga_putch(uint16_t c)
 void vga_cls(void)
 {
   uint16_t out;
-  int i, lim = __vga.cols * __vga.rows * 2;
+  int i, lim = __vga.cols * __vga.rows;
 
   out=SPACE;
   vga_make_attr(&out);
@@ -230,24 +233,22 @@ void vga_cls(void)
 
 void vga_scroll(void)
 {
-  uint16_t diff,out;
-  
+  uint16_t out,*vgam;
+  int i=0;
+
   if(__vga.x>=__vga.cols) {
-    diff=(__vga.x-__vga.cols) % __vga.cols;
     __vga.y++;
-    __vga.x=diff;
+    __vga.x=0;
   }
+
   if(__vga.y>=__vga.rows) {
-    int lim = (__vga.cols * 2) + 1;
-    char *p = (char *)(__vga.base + __vga.cols * (__vga.rows - 1) * 2);
-    
-    __vga.y=__vga.rows - 2;
-    out=SPACE;    
+    out=SPACE;
     vga_make_attr(&out);
-    memcpy(__vga.base, __vga.base + 2 * __vga.cols, __vga.cols * (__vga.rows-1) * 2);
-    while (lim-- > 0)
-     *p++ = out;
-    //    memset((void*)(__vga.base+__vga.cols*(__vga.rows - 1)),out,__vga.cols*2-1);
+    memcpy((void *)__vga.base, (void *) (__vga.base + (__vga.cols)),2*((__vga.cols * __vga.rows)-__vga.cols));
+    vgam=(uint16_t *)(__vga.base+__vga.cols*(__vga.rows-1));
+    for(i=0;i<__vga.cols;i++)
+      vgam[i]=out;
+    __vga.y=__vga.rows-1;
   }
 
   return;

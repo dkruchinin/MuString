@@ -33,20 +33,24 @@
 #include <eza/arch/mm_types.h>
 #include <eza/arch/preempt.h>
 
+#define STEP 1000
+
+bool can_proceed = false;
 
 static void second_service_thread(void *data)
 {
-  int target_tick = swks.system_ticks_64 + 100;
+  uint64_t target_tick = swks.system_ticks_64 + 100;
 
   kprintf( "+ [Second service] Greetings from my parent (%d): %s\n",
            current_task()->ppid,data );
 
+  can_proceed = true;
   for( ;; ) {
       if( swks.system_ticks_64 >= target_tick ) {
           target_tick = swks.system_ticks_64;
           kprintf( " + [Second service] Tick, tick ! (Ticks: %d, PID: %d, CPU: %d, ATOM: %d)\n",
-               swks.system_ticks_64, current_task()->pid, 1024, in_atomic() );
-          target_tick += 200;
+                   swks.system_ticks_64, current_task()->pid, cpu_id(), in_atomic() );
+          target_tick += STEP;
     }
   }
 }
@@ -54,7 +58,7 @@ static void second_service_thread(void *data)
 
 static void init_thread(void *data)
 {
-  int target_tick = swks.system_ticks_64 + 100;
+  uint64_t target_tick = swks.system_ticks_64 + 100;
   status_t r;
   ulong_t max_timeslice = 400;
 
@@ -80,10 +84,9 @@ static void init_thread(void *data)
 
   for( ;; ) {
     if( swks.system_ticks_64 >= target_tick ) {
-        target_tick = swks.system_ticks_64;
-        kprintf( " + [Init] Tick, tick ! (Ticks: %d, PID: %d, CPU: %d, ATOM: %d)\n",
-               swks.system_ticks_64, current_task()->pid, 1024, in_atomic() );
-        target_tick += 200;
+        kprintf( " + [Init] Tick, tick ! (Ticks: %d, PID: %d, CPU: %d, ATOM: %d, T: %d)\n",
+                 swks.system_ticks_64, current_task()->pid, cpu_id(), in_atomic(), target_tick );
+        target_tick = swks.system_ticks_64 + STEP;
     }
   }
 }

@@ -32,40 +32,48 @@
 #include <eza/kernel.h>
 #include <eza/arch/interrupt.h>
 #include <eza/smp.h>
+#include <eza/arch/smp.h>
+#include <eza/idt.h>
 
-static void timer_interrupt_handler(void *data)
-{
-  apic_timer_hack();
-  timer_tick();
-  sched_timer_tick();
-}
+extern void timer_interrupt_handler(void *data);
 
 static void install_generic_irq_handlers(void)
 {
-  //  register_irq( TIMER_IRQ_LINE, timer_interrupt_handler, NULL, 0 );
-
-  register_irq(17, timer_interrupt_handler, NULL, 0 );
-
-  //  io_apic_enable_irq(0);
+  //register_irq(0, timer_interrupt_handler, NULL, 0 );
 }
 
 static void install_smp_irq_handlers(void)
 {
-    
+  const idt_t *idt;
+  status_t r;
+
+  idt = get_idt();
+  r = idt->install_handler(smp_local_timer_interrupt_handler,
+                           LOCAL_TIMER_CPU_IRQ_VEC);
+  r |= idt->install_handler(smp_scheduler_interrupt_handler,
+                            SCHEDULER_IPI_IRQ_VEC);
+  if(r != 0) {
+    panic( "arch_initialize_irqs(): Can't install SMP irqs !" );
+  }
 }
 
 void arch_initialize_irqs(void)
 {
   int idx, r;
+  const idt_t *idt;
+  irq_t base;
 
+  idt = get_idt();
+  
   /* Initialize the PIC */
   i8259a_init();
   fake_apic_init();
 
   /* Initialize all possible IRQ handlers to stubs. */
-  for(idx=0;idx<256-IRQ_BASE;idx++) {
-    r = install_interrupt_gate(idx+IRQ_BASE, irq_entrypoints_array[idx],
-                               PROT_RING_0, 0 );
+  base=idt->first_available_vector();
+
+  for(idx=0;idx<idt->vectors_available();idx++) {
+    r=idt->install_handler((idt_handler_t)irq_entrypoints_array[idx],idx+base);
     if( r != 0 ) {
       panic( "Can't install IDT slot for IRQ #%d\n", idx );
     }

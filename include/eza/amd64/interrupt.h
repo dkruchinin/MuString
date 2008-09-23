@@ -30,7 +30,7 @@
 
 #define HZ  1000 /* Timer frequency. */
 #define IRQ_BASE 32 /* First vector in IDT for IRQ #0. */
-#define RESERVED_IRQS 16 /* Reserved IRQ for SMP use. */
+#define RESERVED_IRQS 8 /* Reserved IRQ for SMP use. */
 /* Maximum number of hardware IRQs in the system. */
 #define NUM_IRQS  256 - IRQ_BASE - RESERVED_IRQS
 

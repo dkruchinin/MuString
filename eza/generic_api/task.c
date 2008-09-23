@@ -204,6 +204,7 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
 
   /* Setup task's initial state. */
   task->state = TASK_STATE_JUST_BORN;
+  task->cpu = cpu_id();
 
   /* Setup scheduler-related stuff. */
   task->scheduler = NULL;

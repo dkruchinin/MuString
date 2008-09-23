@@ -56,10 +56,12 @@ SECTIONS {
 	}
 
 #ifdef CONFIG_SMP
-    .percpu_data (kdata_end) : AT (k2p(kdata_end)) {
-       *(.percpu_data);
-       _kernel_end = .;
-    }
+/*
+  *  .percpu_data (kdata_end) : AT (k2p(kdata_end)) {
+  *     *(.percpu_data);
+  *     _kernel_end = .;
+  *  }
+    */
 
     _hardcoded_unmapped_size = (unmapped_ktext_end - unmapped_ktext_start) + (unmapped_kdata_end - unmapped_kdata_start);
     ap_boot = unmapped_ap_boot - BOOT_OFFSET + AP_BOOT_OFFSET;
