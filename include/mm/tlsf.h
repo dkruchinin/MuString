@@ -31,7 +31,9 @@
 #include <eza/spinlock.h>
 #include <eza/arch/types.h>
 
-#define TLSF_DEBUG /* FIXME DK: remove this macro after debugging */
+#ifdef DEBUG_MM
+#define TLSF_DEBUG
+#endif /* DEBUG_MM */
 
 #define TLSF_FLD_SIZE       5 /**< TLSF first level directory size */
 #define TLSF_SLD_SIZE       4 /**< TLSF second level directory size */
@@ -70,6 +72,8 @@ void tlsf_alloc_init(mm_pool_t *pool);
 
 #ifdef TLSF_DEBUG
 void tlsf_memdump(void *_tlsf);
+#else
+#define tlsf_memdump(_tlsf)
 #endif /* TLSF_DEBUG */
 
 #endif /* __TLSF_H__ */

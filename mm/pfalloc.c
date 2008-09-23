@@ -36,8 +36,8 @@ page_frame_t *alloc_pages(int n, pfalloc_flags_t flags)
   return pages;
 }
 
-void free_pages(page_frame_t *pages, int n)
+void free_pages(page_frame_t *pages)
 {
   mm_pool_t *pool = mmpools_get_pool(pframe_pool_type(pages));
-  __pool_free_pages(pool, pages, n);
+  __pool_free_pages(pool, pages);
 }

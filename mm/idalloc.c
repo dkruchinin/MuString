@@ -27,38 +27,54 @@
 #include <mlibc/string.h>
 #include <mm/page.h>
 #include <mm/idalloc.h>
+#include <eza/kernel.h>
 #include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 
-#define IDALLOC_PAGE_INUSE 0x1
+#define IDALLOC_PAGE       0x01
+#define IDALLOC_PAGE_INUSE 0x02
+#define IDALLOC_PAGE_FULL  0x04
 
 idalloc_meminfo_t idalloc_meminfo;
 
 static void __prepare_page(page_frame_t *page)
 {
-  atomic_inc(&page->refcount);
-  page->_private = IDALLOC_PAGE_INUSE;
+  page->flags |= PF_RESERVED;
+  page->_private = IDALLOC_PAGE;
 }
 
-void idalloc_enable(page_frame_t *pages)
+void idalloc_enable(mm_pool_t *pool)
 {
-  page_frame_t *last_frame;
+  int i, npages = 0;
+  page_frame_t *first_page;
   
   memset(&idalloc_meminfo, 0, sizeof(idalloc_meminfo));
   spinlock_initialize(&idalloc_meminfo.lock, "");
   list_init_head(&idalloc_meminfo.avail_pages);
+  list_init_head(&idalloc_meminfo.used_pages);
   if (IDALLOC_PAGES <= 0)
     return;
 
-  last_frame = pframe_by_number(pframe_number(pages) + IDALLOC_PAGES - 1);
-  list_del_range(&pages->node, &last_frame->node);
-  list_add_range(&pages->node, &last_frame->node,
-                 list_node_first(&idalloc_meminfo.avail_pages),
-                 list_node_last(&idalloc_meminfo.avail_pages));
-  __prepare_page(pages);
-  idalloc_meminfo.pages = IDALLOC_PAGES;
-  idalloc_meminfo.mem = pframe_to_virt(pages);
+  for (i = 0; i < pool->total_pages; i++) {
+    if (pool->pages[i].flags & PF_RESERVED)
+      continue;
+    __prepare_page(pool->pages + i);
+    list_add2tail(&idalloc_meminfo.avail_pages, &pool->pages[i].node);
+    pool->reserved_pages++;
+    if (++npages == IDALLOC_PAGES)
+      break;
+  }
+  if (npages != IDALLOC_PAGES) {
+    panic("idalloc_enable: Can't get %d pages for init-data allocator from pool %s",
+          IDALLOC_PAGES, mmpools_get_pool_name(pool->type));
+  }
+
+  atomic_sub(&pool->free_pages, IDALLOC_PAGES);
+  first_page = list_entry(list_node_first(&idalloc_meminfo.avail_pages), page_frame_t, node);
+  first_page->_private |= IDALLOC_PAGE_INUSE;
+  idalloc_meminfo.npages = IDALLOC_PAGES;
+  idalloc_meminfo.mem = pframe_to_virt(first_page);
   idalloc_meminfo.is_enabled = true;
 }
 
@@ -81,11 +97,14 @@ void *idalloc(size_t size)
     }
 
     list_delfromhead(&idalloc_meminfo.avail_pages);
+    cur_page->_private &= ~IDALLOC_PAGE_INUSE;
+    cur_page->_private |= IDALLOC_PAGE_FULL;
+    list_add2tail(&idalloc_meminfo.used_pages, &cur_page->node);
     if (list_is_empty(&idalloc_meminfo.avail_pages))
       goto out;
 
     cur_page = list_entry(list_node_first(&idalloc_meminfo.avail_pages), page_frame_t, node);
-    __prepare_page(cur_page);
+    cur_page->_private |= IDALLOC_PAGE_INUSE;
     mem = (void *)idalloc_meminfo.mem;
     idalloc_meminfo.mem += size;
   }

@@ -39,10 +39,6 @@ static void __init_page(page_frame_t *page)
 {
   list_init_head(&page->head);
   list_init_node(&page->node);
-  /* FIXME DK:
-   * On x86 and x86_64, processor supports some atomic operations
-   * without difficult locking policy.
-   */  
   atomic_set(&page->refcount, 0);
   page->_private = 0;  
 }
@@ -71,16 +67,17 @@ void mm_init(void)
    */
   pool = mmpools_get_pool(POOL_GENERAL);
   ASSERT(pool->free_pages);
-  idalloc_enable(list_entry(list_node_first(&pool->pages->head), page_frame_t, node));
+  idalloc_enable(pool);
   kprintf("[MM] Init-data memory allocator was initialized. (idalloc pages: %ld)\n",
-          idalloc_meminfo.pages);
+          idalloc_meminfo.npages);
   for_each_active_mm_pool(pool) {
     char *name = mmpools_get_pool_name(pool->type);
     
     kprintf("[MM] Memory pool %s:\n", name);
     kprintf("   total pages:    %ld\n", pool->total_pages);
-    kprintf("   free pages:     %ld\n", pool->free_pages);
+    kprintf("   free pages:     %ld\n", atomic_get(&pool->free_pages));
     kprintf("   reserved pages: %ld\n", pool->reserved_pages);
+    //mmpools_check_pool_pages(pool);    
     mmpools_init_pool_allocator(pool);
   }
 

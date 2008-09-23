@@ -48,24 +48,22 @@ void mmpools_add_page(page_frame_t *page)
 {
   mm_pool_t *pool = mmpools_get_pool(pframe_pool_type(page));
 
+  if (!pool->pages) {
+    pool->pages = page;
+    if (pool->type == POOL_GENERAL) {
+      kprintf("PGP: ==> %d\n", pframe_number(pool->pages));
+    }    
+    pool->is_active = true;
+  }
+  
   if (page->flags & PF_RESERVED) {
-    if (!pool->reserved)
-      pool->reserved = page;
-
-    list_add2tail(&pool->reserved->head, &page->node);
     pool->reserved_pages++;
+    list_add2tail(&pool->reserved, &page->node);
   }
-  else {
-    if (!pool->pages)
-      pool->pages = page;
-
-    list_add2tail(&pool->pages->head, &page->node);
+  else
     atomic_inc(&pool->free_pages);
-  }
 
   pool->total_pages++;
-  if (!pool->is_active)
-    pool->is_active = true;
 }
 
 void mmpools_init_pool_allocator(mm_pool_t *pool)
@@ -79,4 +77,34 @@ void mmpools_init_pool_allocator(mm_pool_t *pool)
       default:
         panic("Unlnown memory pool type: %d", pool->type);
   }
+}
+
+void mmpools_check_pool_pages(mm_pool_t *pool)
+{
+  char *pool_name = mmpools_get_pool_name(pool->type);
+  page_idx_t prev;
+  page_frame_t *page;
+  bool ok = true;
+
+  if (!pool->pages)
+    return;
+
+  prev = pframe_number(list_entry(list_node_first(&pool->pages->head),
+                                  page_frame_t, node));
+  kprintf("Checking pages in memory pool %s...", pool_name);
+  list_for_each_entry(&pool->pages->head, page, node) {
+    if ((page->idx - prev) > 1) {
+      ok = false;
+      break;
+    }
+
+    prev = pframe_number(page);
+  }
+  if (ok) {
+    kprintf("   [OK]\n");
+    return;
+  }
+
+  kprintf("  [FAILED]\n");
+  kprintf("  ATTENTION! Pool %s contains non-continous pages!\n", pool_name);
 }

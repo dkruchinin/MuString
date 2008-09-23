@@ -141,7 +141,7 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
   status_t r = -ENOMEM;
   page_frame_t *stack_pages;
   page_frame_iterator_t pfi;
-  ITERATOR_CTX(page_frame, PF_ITER_LIST) pfi_list_ctx;
+  ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_idx_ctx;
   pid_t pid, ppid;
 
   /* TODO: [mt] Add memory limit check. */
@@ -180,9 +180,9 @@ status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags
   }
 
   /* Map kernel stack. */
-  mm_init_pfiter_list(&pfi, &pfi_list_ctx,
-                      list_node_first(&stack_pages->head),
-                      list_node_last(&stack_pages->head));
+  mm_init_pfiter_index(&pfi, &pfi_idx_ctx,
+                       pframe_number(stack_pages),
+                       pframe_number(stack_pages) + KERNEL_STACK_PAGES - 1);
   r = mm_map_pages( &task->page_dir, &pfi,
                     task->kernel_stack.low_address, KERNEL_STACK_PAGES,
                     KERNEL_STACK_PAGE_FLAGS );
