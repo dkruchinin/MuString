@@ -21,6 +21,12 @@
  *
  */
 
+/**
+ * @file include/mm/tlsf.h
+ * @brief TLSF O(1) page allocator
+ * @author Dan Kruchinin
+ */
+
 #ifndef __TLSF_H__
 #define __TLSF_H__
 

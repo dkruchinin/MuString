@@ -21,6 +21,12 @@
  *
  */
 
+/**
+ * @file include/mm/tlsf.c
+ * @brief TLSF O(1) page allocator
+ * @author Dan Kruchinin
+ */
+
 #include <ds/list.h>
 #include <mlibc/string.h>
 #include <mlibc/assert.h>
