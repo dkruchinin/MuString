@@ -14,27 +14,27 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2008 MadTirra <madtirra@jarios.org>
  *
- * include/eza/process.h: base system process-related functions.
+ * kernel/version.c: Version related simple functions and definions
+ *
  */
 
+#ifndef __VERSION_H__
+#define __VERSION_H__
 
-#ifndef __PROCESS_H__
-#define __PROCESS_H__
-
-#include <eza/task.h>
 #include <eza/arch/types.h>
 
-#define SYS_PR_CTL_SET_ENTRYPOINT 0x0
-#define SYS_PR_CTL_SET_STACK 0x1
-#define SYS_PR_CTL_GET_ENTRYPOINT 0x2
-#define SYS_PR_CTL_GET_STACK 0x3
+#define KERNEL_VERSION     0
+#define KERNEL_SUBVERSION  0
+#define KERNEL_RELEASE     1
 
-task_t *pid_to_task(pid_t pid);
+#define KERNEL_RELEASE_NAME  "Quoppa"
 
-status_t sys_process_control( pid_t pid, ulong_t cmd, ulong_t arg);
-status_t sys_create_process(task_creation_flags_t flags);
 
-#endif
+void print_kernel_version_info(void);
+void swks_add_version_info(void);
+
+#endif /* __VERSION_H__ */
+

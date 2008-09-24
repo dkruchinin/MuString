@@ -14,27 +14,29 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2008 MadTirra <madtirra@jarios.org>
  *
- * include/eza/process.h: base system process-related functions.
+ * kernel/version.c: Version related simple functions
+ *
  */
 
-
-#ifndef __PROCESS_H__
-#define __PROCESS_H__
-
-#include <eza/task.h>
 #include <eza/arch/types.h>
+#include <eza/swks.h>
+#include <mlibc/kprintf.h>
+#include <version.h>
 
-#define SYS_PR_CTL_SET_ENTRYPOINT 0x0
-#define SYS_PR_CTL_SET_STACK 0x1
-#define SYS_PR_CTL_GET_ENTRYPOINT 0x2
-#define SYS_PR_CTL_GET_STACK 0x3
+void print_kernel_version_info(void)
+{
+  kprintf("MuiString kernel version: %d.%d.%d (%s)\n",
+	  KERNEL_VERSION,KERNEL_SUBVERSION,KERNEL_RELEASE,
+	  KERNEL_RELEASE_NAME);
+}
 
-task_t *pid_to_task(pid_t pid);
+void swks_add_version_info(void)
+{
+  swks.version=KERNEL_VERSION;
+  swks.sub_version=KERNEL_SUBVERSION;
+  swks.release=KERNEL_RELEASE;
+}
 
-status_t sys_process_control( pid_t pid, ulong_t cmd, ulong_t arg);
-status_t sys_create_process(task_creation_flags_t flags);
-
-#endif

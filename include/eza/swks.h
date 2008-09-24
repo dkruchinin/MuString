@@ -14,8 +14,9 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2008 MadTirra <madtirra@jarios.org>
  *
  * include/eza/swks.h: Contains types and prototypes for dealing with "SWKS" -
  *                    the "System-Wide Kernel Statistics", a global structure
@@ -60,8 +61,13 @@ typedef struct __swks {
   pid_t total_processes, runnable_processes;
   pid_t sleeping_processes, zombies;
 
-  /*clock settings*/
+  /* clock settings */
   uint64_t delay_loop;
+
+  /* version info */
+  uint16_t version;
+  uint16_t sub_version;
+  uint16_t release;
 
 } swks_t;
 

@@ -72,6 +72,11 @@ typedef uint32_t bit_idx_t;
 /* SMP-related stuff. */
 typedef uint32_t cpu_id_t;
 
+typedef enum __task_privilege {
+  TPL_KERNEL = 0,  /* Kernel task - the most serious level. */
+  TPL_USER = 1,    /* User task - the least serious level */
+} task_privelege_t;
+
 /* PTE entry structure specific for amd64 */
 typedef struct {
   unsigned present : 1;

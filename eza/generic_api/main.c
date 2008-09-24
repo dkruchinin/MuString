@@ -35,11 +35,11 @@
 #include <align.h>
 #include <misc.h>
 #include <eza/smp.h>
+#include <eza/arch/task.h>
 #include <eza/interrupt.h>
 #include <eza/scheduler.h>
 #include <eza/arch/fault.h>
 #include <eza/arch/platform.h>
-#include <eza/arch/task.h>
 #include <eza/swks.h>
 #include <eza/arch/scheduler.h>
 #include <eza/arch/preempt.h>
