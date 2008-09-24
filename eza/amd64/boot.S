@@ -200,7 +200,6 @@ start64:
 			loop mods_loop
 			
 		mods_end:
-		
 		bt $6, %eax				/* mbi->flags[6] (mmap_length, mmap_addr valid)	*/
 		jc mmap_valid
 			
@@ -255,7 +254,7 @@ start64:
 	rep movsb
 
 #endif
-		
+
 	call main_routine   /* call normal C code,uff */
 	
 	cli

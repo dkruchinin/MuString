@@ -37,9 +37,10 @@
 #include <eza/arch/page.h>
 #include <eza/pageaccs.h>
 
-#undef CONFIG_IOMMU /* FIXME DK:  */
+//#undef CONFIG_IOMMU /* FIXME DK:  */
 
 /* Initial kernel top-level page directory record. */
+uintptr_t _kernel_extended_end;
 uint8_t e820count;
 page_directory_t kernel_pt_directory;
 uint8_t k_entries[PAGE_SIZE] __attribute__((aligned(PAGE_SIZE)));
@@ -53,17 +54,19 @@ static void initialize_kernel_page_directory(void)
   kernel_pt_directory.entries = k_entries;
 }
 
-static void verify_mapping( char *pool_name, uintptr_t start_addr, page_idx_t num_pages,
-                            page_idx_t start_idx ) {
+#ifdef DEBUG_MM
+static void verify_mapping(const char *descr, uintptr_t start_addr,
+                          page_idx_t num_pages, page_idx_t start_idx)
+{
   page_idx_t i, t;
   char *ptr = (char *)start_addr;
-  int good = 1;
+  bool ok = true;
 
-  kprintf( "Verifying pool (%s) ... ", pool_name );
+  kprintf(" Verifying %s mapping...", descr);
   for( i = 0; i < num_pages; i++ ) {
     t = mm_pin_virtual_address(&kernel_pt_directory,(uintptr_t)ptr);
-    if( t != start_idx ) {
-      good = 0;
+    if(t != start_idx) {
+      ok = false;
       break;
     }
 
@@ -71,16 +74,18 @@ static void verify_mapping( char *pool_name, uintptr_t start_addr, page_idx_t nu
     ptr += PAGE_SIZE;
   }
 
-  if( good ) {
-    kprintf( " OK\n" );
-  } else {
-    kprintf( " FAIL" );
-    kprintf( "\n[!!!] 0x%X: page mismatch ! found idx: 0x%X, expected: 0x%X\n",
-             ptr, t, start_idx );
-    panic( "arch_remap_memory(): Can't remap zone !" );
+  if (ok) {
+    kprintf(" %*s\n", 14 - strlen(descr), "[OK]");
+    return;
   }
-  return;
+  
+  kprintf(" %*s\n", 18 - strlen(descr), "[FAILED]");
+  panic("[!!!] 0x%X: page mismatch ! found idx: 0x%X, expected: 0x%X\n",
+        ptr, t, start_idx);
 }
+#else
+#define verify_mapping(descr, start_addr, num_pages, start_idx)
+#endif /* DEBUG_MM */
 
 static void scan_phys_mem(void)
 {
@@ -100,8 +105,8 @@ static void scan_phys_mem(void)
       type = types[0];
     }
 
-    kprintf( " BIOS-e820: 0x%.16x - 0x%.16x %s\n",
-             mmap->base_address, mmap->base_address + length, type );
+    kprintf(" BIOS-e820: %#.8x - %#.8x %s\n",
+            mmap->base_address, mmap->base_address + length, type);
 
     if( !found && mmap->base_address == KERNEL_PHYS_START && mmap->type == 1 ) {
       min_phys_addr = 0;
@@ -130,9 +135,11 @@ void arch_mm_init(void)
   kprintf("[MM] Scanning physical memory...\n");
   scan_phys_mem();
   swks.mem_total_pages = max_phys_addr >> PAGE_WIDTH;
-  kprintf("Scanned: %ldM, %ld pages\n", (long)_b2mb(max_phys_addr - min_phys_addr),
-          (long)swks.mem_total_pages);
-  page_frames_array = KERNEL_FIRST_FREE_ADDRESS;
+  page_frames_array = KERNEL_FIRST_FREE_ADDRESS;  
+  _kernel_extended_end =
+    PAGE_ALIGN((uintptr_t)page_frames_array + sizeof(page_frame_t) * swks.mem_total_pages);
+  kprintf(" Scanned: %ldM, %ld pages\n", (long)_b2mb(max_phys_addr - min_phys_addr),
+          (long)swks.mem_total_pages);  
 }
 
 static int prepare_page(page_idx_t idx, ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx)
@@ -155,7 +162,7 @@ static int prepare_page(page_idx_t idx, ITERATOR_CTX(page_frame, PF_ITER_ARCH) *
       mmap_end = mmap->base_address + (((uintptr_t)mmap->length_high << 32) | mmap->length_low);
       mmap_type = mmap->type;
     }
-    else { /* it seems that we received a page with invalid idx... */
+    else { /* it seems that we've received a page with invalid idx... */
       return -1;
     }
   }
@@ -232,20 +239,16 @@ void arch_mm_remap_pages(void)
 
   /* First, initialize kernel default page-table directory. */
   initialize_kernel_page_directory();
-  kprintf( "PGD: Virt = 0x%x, Phys = 0x%x\n",
-           kernel_pt_directory.entries, virt_to_phys(kernel_pt_directory.entries) );
+  kprintf(" PGD: Virt = 0x%x, Phys = 0x%x\n",
+          kernel_pt_directory.entries, virt_to_phys(kernel_pt_directory.entries));
 
-  /* Next, we'll create direct mapping 'one-to-one' for the first 16MBs of memory.
-   * This is needed for example, for VGA console.
-   * We intentionally skip page number zero since it will allow us to detect
-   * kernel-mode NULL pointers bugs in runtime.
-   */
+  /* Create identity mapping */
   ret = mm_map_pages(&kernel_pt_directory, &pfi, 0x1000, IDENT_MAP_PAGES - 1, 0);
-  if( ret != 0 ) {
+  if(ret != 0)
     panic( "arch_mm_remap_pages(): Can't remap physical pages (DMA identical mapping) !" );
-  }
 
-  verify_mapping( "identity mapping", 0x1000, IDENT_MAP_PAGES - 1, 1);
+    verify_mapping("identity", 0x1000, IDENT_MAP_PAGES - 1, 1);
+  
   /* Now we should remap all available physical memory starting at 'KERNEL_BASE'. */
   mm_init_pfiter_index(&pfi, &pfi_index_ctx, 0, swks.mem_total_pages - 1);
   ret = mm_map_pages(&kernel_pt_directory, &pfi, KERNEL_BASE,
@@ -260,7 +263,6 @@ void arch_mm_remap_pages(void)
   /* All CPUs must initially reload their CR3 registers with already
    * initialized Level-4 page directory.
    */
-
   arch_smp_mm_init(0);
 }
 

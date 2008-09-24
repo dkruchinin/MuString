@@ -149,9 +149,9 @@ static int map_pde2_range( pde2_entry_t *pde2, uintptr_t virt_addr, uintptr_t en
   register uintptr_t v = (pde2->base_0_19 | (pde2->base_20_39 << 20)) << 12; /* Get base address of PTE */
 
   do {
-    pte_t *pte = (pte_t *)p2k_code(v) + ((virt_addr >> 12) & 0x1ff);    
+    pte_t *pte = (pte_t *)p2k_code(v) + ((virt_addr >> 12) & 0x1ff);
     register uintptr_t page_base;
-
+    
     iter_next(pfi);
     ASSERT(iter_isrunning(pfi));
     page_base = (uintptr_t)pfi->pf_idx;
@@ -204,7 +204,7 @@ static int map_pdp3_range(pdp3_entry_t *pdp3, uintptr_t virt_addr, uintptr_t end
   pde2 = (pde2_entry_t *)v + ((virt_addr >> 21) & 0x1ff);
 
   do {
-     if( !tlb_entry_valid(pde2) ) {
+    if( !tlb_entry_valid(pde2) ) {
       if( populate_pde2_entry(pde2, flags) != 0 ) {
         return -ENOMEM;
       }
@@ -263,7 +263,7 @@ static int map_pml4_range(pml4_entry_t *pml4, uintptr_t virt_addr, uintptr_t end
 
 static int populate_pml4_entry(pml4_entry_t *entry, page_flags_t flags)
 {  
-  page_frame_t *pf = alloc_page(AF_PGP);
+  page_frame_t *pf = alloc_page(AF_PGP);  
   if( pf != NULL ) {
     register uintptr_t pfn = pframe_number(pf);
 
@@ -345,9 +345,9 @@ page_idx_t mm_pin_virtual_address( page_directory_t *pd, uintptr_t virt_addr )
   pml4_entry_t *pml4 = vaddr_to_pml4(virt_addr,pd);
   pdp3_entry_t *pdp3;
   register uintptr_t v;
-
+  
   if( tlb_entry_valid(pml4) ) {
-    v = p2k_code((pml4->base_0_19 | (pml4->base_20_39 << 20)) << 12); /* Get base address of PDP */ 
+    v = p2k_code((pml4->base_0_19 | (pml4->base_20_39 << 20)) << 12); /* Get base address of PDP */
 
     pdp3 = (pdp3_entry_t *)v + ((virt_addr >> 30) & 0x1ff);
     if( tlb_entry_valid(pdp3) ) {
@@ -363,9 +363,9 @@ page_idx_t mm_pin_virtual_address( page_directory_t *pd, uintptr_t virt_addr )
 
         if( tlb_entry_valid(pte) ) {
           idx = pte->base_0_19 | (pte->base_20_39 << 20);
-        } 
-      } 
-    } 
+        }
+      }
+    }
   }
 
   return idx;

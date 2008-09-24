@@ -25,4 +25,6 @@
 #define DEBUG_GENERAL
 #define DEBUG_MM
 
+#define KERNEL_CORE_STACK_PAGES 2
+
 #endif /* __CONFIG_H__ */

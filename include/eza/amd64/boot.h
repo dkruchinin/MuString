@@ -24,8 +24,12 @@
 #ifndef __BOOT_H__
 #define __BOOT_H__
 
-#define BOOT_OFFSET      0x108000
-#define AP_BOOT_OFFSET   0x8000
+#include <config.h>
+#include <eza/arch/page.h>
+
+#define BIOS_END_ADDR 0x100000
+#define AP_BOOT_OFFSET   (KERNEL_CORE_STACK_PAGES << PAGE_WIDTH)
+#define BOOT_OFFSET (BIOS_END_ADDR + AP_BOOT_OFFSET)
 #define BOOT_STACK_SIZE  0x400
 
 #define MULTIBOOT_HEADER_MAGIC  0x1BADB002

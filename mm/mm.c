@@ -16,11 +16,16 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
  * mm/mm.c: Contains implementation of kernel memory manager.
  *
  */
 
+/**
+ * @file mm/mm.c
+ * Basic memory management functionality.
+ */
 
 #include <ds/iterator.h>
 #include <ds/list.h>
@@ -68,16 +73,15 @@ void mm_init(void)
   pool = mmpools_get_pool(POOL_GENERAL);
   ASSERT(pool->free_pages);
   idalloc_enable(pool);
-  kprintf("[MM] Init-data memory allocator was initialized. (idalloc pages: %ld)\n",
-          idalloc_meminfo.npages);
+  kprintf("[MM] Init-data memory allocator was initialized.\n");
+  kprintf(" idalloc available pages: %ld\n", idalloc_meminfo.npages);
   for_each_active_mm_pool(pool) {
     char *name = mmpools_get_pool_name(pool->type);
-    
-    kprintf("[MM] Memory pool %s:\n", name);
-    kprintf("   total pages:    %ld\n", pool->total_pages);
-    kprintf("   free pages:     %ld\n", atomic_get(&pool->free_pages));
-    kprintf("   reserved pages: %ld\n", pool->reserved_pages);
-    //mmpools_check_pool_pages(pool);    
+      
+    kprintf("[MM] Pages statistics of pool \"%s\":\n", name);
+    kprintf(" | %-8s %-8s %-8s |\n", "Total", "Free", "Reserved");
+    kprintf(" | %-8d %-8d %-8d |\n", pool->total_pages,
+            atomic_get(&pool->free_pages), pool->reserved_pages);
     mmpools_init_pool_allocator(pool);
   }
 

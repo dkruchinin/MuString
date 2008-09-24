@@ -50,12 +50,8 @@ void mmpools_add_page(page_frame_t *page)
 
   if (!pool->pages) {
     pool->pages = page;
-    if (pool->type == POOL_GENERAL) {
-      kprintf("PGP: ==> %d\n", pframe_number(pool->pages));
-    }    
     pool->is_active = true;
   }
-  
   if (page->flags & PF_RESERVED) {
     pool->reserved_pages++;
     list_add2tail(&pool->reserved, &page->node);
@@ -69,11 +65,9 @@ void mmpools_add_page(page_frame_t *page)
 void mmpools_init_pool_allocator(mm_pool_t *pool)
 {
   switch (pool->type) {
-      case POOL_GENERAL:
+      case POOL_GENERAL: case POOL_DMA:
         tlsf_alloc_init(pool);
         break;
-      case POOL_DMA:
-        break; /* FIXME DK: */
       default:
         panic("Unlnown memory pool type: %d", pool->type);
   }

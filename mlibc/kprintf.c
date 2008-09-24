@@ -92,7 +92,7 @@ void vkprintf(const char *fmt, va_list ap)
   size_t sl;
   kconsole_t *kcons = default_console();
 
-  memset(tmp_buf, '\0', TMPBUF_SIZE);
+  memset(tmp_buf, '\0', TMPBUF_SIZE);  
   sl = vsprintf(tmp_buf, fmt, ap);
   /* FIXME: fix this shit... */
   /*if (sl > TMPBUF_SIZE) {
@@ -146,7 +146,7 @@ size_t vsnprintf(char *dest, const size_t dsize, const char *fmt, va_list ap)
 		  continue;
 		}
 		else {
-		  if(*fmt > '0') {
+		  if(*fmt >= '0') {
 			__fields_inc(&fa.width, char2int(*fmt));
 			continue;
 		  }
@@ -312,11 +312,7 @@ size_t vsnprintf(char *dest, const size_t dsize, const char *fmt, va_list ap)
 	  cs += ret;
 	}
 	else if((fa.flags & FMT_TSTR) == FMT_TSTR) {
-	  len = strlen(s);
-
-	  if((fa.presiction > 0) && (len < fa.presiction))
-		len = fa.presiction;
-	  
+	  len = strlen(s);	  
 	  fa.width = ((fa.width <= len) ? 0 : fa.width - len);  
 
 	  if(!(fa.flags & FMT_FLJ)) {

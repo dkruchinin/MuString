@@ -510,6 +510,8 @@ void tlsf_alloc_init(mm_pool_t *pool)
   pool->allocator.alloc_ctx = tlsf;
   pool->allocator.alloc_pages = __alloc_pages;
   pool->allocator.free_pages = __free_pages;
+  kprintf("[MM] Pool \"%s\" initialized TLSF O(1) allocator\n",
+          mmpools_get_pool_name(pool->type));
 }
 
 #ifdef TLSF_DEBUG
@@ -533,7 +535,10 @@ void tlsf_memdump(void *_tlsf)
           tlsf_node_t *node = tlsf->map[i].nodes + j;
           kprintf("...TLSF SLD %ld is available: %d\n", size2, node->blocks_no);
           list_for_each(&node->blocks, n) {
-            kprintf("==> size %d\n", __block_size(list_entry(n, page_frame_t, head)));
+            page_frame_t *pf = list_entry(n, page_frame_t, head);
+            if (__block_size(pf) == 255)
+              continue;
+            kprintf("==> size %d(%d)\n", pframe_number(pf), __block_size(pf));
           }
         }
         else {
