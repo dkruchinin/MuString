@@ -24,12 +24,8 @@
 #ifndef __PROCESS_H__
 #define __PROCESS_H__
 
+#include <eza/task.h>
 #include <eza/arch/types.h>
-#include <eza/scheduler.h>
-
-typedef enum __task_creation_flag_t {
-  CLONE_MM = 0x1,
-} task_creation_flags_t;
 
 #define SYS_PR_CTL_SET_ENTRYPOINT 0x0
 #define SYS_PR_CTL_SET_STACK 0x1

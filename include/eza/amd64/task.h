@@ -26,13 +26,8 @@
 #include <eza/smp.h>
 #include <eza/arch/current.h>
 #include <eza/arch/asm.h>
-#include <eza/scheduler.h>
+#include <eza/task.h>
 #include <eza/arch/cpu.h>
-
-typedef enum __task_privilege {
-  TPL_KERNEL = 0,  /* Kernel task - the most serious level. */
-  TPL_USER = 1,    /* User task - the least serious level */
-} task_privelege_t;
 
 extern cpu_sched_stat_t PER_CPU_VAR(cpu_sched_stat);
 

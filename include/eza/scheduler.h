@@ -33,47 +33,7 @@
 #include <eza/arch/current.h>
 #include <ds/list.h>
 #include <eza/arch/preempt.h>
-
-/* Macros for locking task structure. */
-#define LOCK_TASK_STRUCT(t) spinlock_lock(&t->lock)
-#define UNLOCK_TASK_STRUCT(t) spinlock_unlock(&t->lock)
-
-typedef uint32_t time_slice_t;
-
-typedef enum __task_state {
-  TASK_STATE_JUST_BORN = 0,
-  TASK_STATE_RUNNABLE = 1,
-  TASK_STATE_RUNNING = 2,
-  TASK_STATE_SLEEPING = 3,
-  TASK_STATE_STOPPED = 4,
-  TASK_STATE_ZOMBIE = 5,
-} task_state_t;
-
-typedef uint32_t cpu_array_t;
-
-#define CPU_AFFINITY_ALL_CPUS 0
-
-struct __scheduler;
-
-/* Abstract object for scheduling. */
-typedef struct __task_struct {
-  pid_t pid, ppid;
-  cpu_id_t cpu;
-  task_state_t state;
-  cpu_array_t cpu_affinity;
-  kernel_stack_t kernel_stack;
-  page_directory_t page_dir;
-  list_node_t pid_list;
-
-  spinlock_t lock;
-
-  /* Scheduler-related stuff. */
-  struct __scheduler *scheduler;
-  void *sched_data;
-
-  /* Arch-dependent context is located here */
-  uint8_t arch_context[];
-} task_t;
+#include <eza/task.h>
 
 /* Abstract scheduler. */
 typedef struct __scheduler {
