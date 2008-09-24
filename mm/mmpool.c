@@ -40,6 +40,7 @@ void mmpools_init(void)
   memset(mm_pools, 0, sizeof(*mm_pools) * NOF_MM_POOLS);
   for (t = __POOL_FIRST; t < NOF_MM_POOLS; t++) {
     mm_pools[t].type = t;
+    list_init_head(&mm_pools[t].reserved);
     atomic_set(&mm_pools[t].free_pages, 0);
   }
 }
@@ -64,8 +65,10 @@ void mmpools_add_page(page_frame_t *page)
 
 void mmpools_init_pool_allocator(mm_pool_t *pool)
 {
+  ASSERT(pool->is_active);
   switch (pool->type) {
       case POOL_GENERAL: case POOL_DMA:
+        ASSERT(atomic_get(&pool->free_pages) > 0);
         tlsf_alloc_init(pool);
         break;
       default:
@@ -73,32 +76,3 @@ void mmpools_init_pool_allocator(mm_pool_t *pool)
   }
 }
 
-void mmpools_check_pool_pages(mm_pool_t *pool)
-{
-  char *pool_name = mmpools_get_pool_name(pool->type);
-  page_idx_t prev;
-  page_frame_t *page;
-  bool ok = true;
-
-  if (!pool->pages)
-    return;
-
-  prev = pframe_number(list_entry(list_node_first(&pool->pages->head),
-                                  page_frame_t, node));
-  kprintf("Checking pages in memory pool %s...", pool_name);
-  list_for_each_entry(&pool->pages->head, page, node) {
-    if ((page->idx - prev) > 1) {
-      ok = false;
-      break;
-    }
-
-    prev = pframe_number(page);
-  }
-  if (ok) {
-    kprintf("   [OK]\n");
-    return;
-  }
-
-  kprintf("  [FAILED]\n");
-  kprintf("  ATTENTION! Pool %s contains non-continous pages!\n", pool_name);
-}
