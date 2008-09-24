@@ -45,9 +45,7 @@
 #define L3_ADDR_MASK  ~(L3_ENTRY_RANGE-1)
 #define L4_ADDR_MASK  ~(L4_ENTRY_RANGE-1)
 
-/* FIXME DK: remove after debugging */
-#define PF_KERNEL_PAGE 0
-#define PF_IO_PAGE 1
+/* TODO DK: REDESIGN!!! */
 
 typedef struct __pml4_entry {
   unsigned present: 1;
@@ -92,17 +90,21 @@ static inline pml4_entry_t *vaddr_to_pml4(uintptr_t vaddr,page_directory_t *pd)
   return ((pml4_entry_t *)pd->entries) + idx;
 }
 
-static int populate_pdp3_entry(pdp3_entry_t *entry, page_flags_t flags)
+static int populate_pdp3_entry(pdp3_entry_t *entry, mmap_flags_t flags)
 {  
-  page_frame_t *pf = alloc_page(AF_PGP);
+  page_frame_t *pf = alloc_page(AF_PGEN);
   if( pf != NULL ) {
     register uintptr_t pfn = pframe_number(pf);
 
     entry->present = 1;
-    entry->rw = 1;
-    entry->us = 0;
+    if (!(flags & MAP_ACC_MASK) || MAP_RDONLY)
+      entry->rw = 0; /* if access type is not set, page pages as read-only */
+    else if (flags & MAP_RW)
+      entry->rw = 1;    
+
+    entry->us = (flags & MAP_KERNEL) ? 0 : 1;
     entry->pwt = 0;
-    entry->pcd = 0;
+    entry->pcd = (flags & MAP_DONTCACHE) ? 1 : 0;
     entry->a = 0;
     entry->reserved_6_8 = 0;
     entry->available_9_11 = 0;
@@ -117,17 +119,21 @@ static int populate_pdp3_entry(pdp3_entry_t *entry, page_flags_t flags)
   return -ENOMEM;
 }
 
-static int populate_pde2_entry(pde2_entry_t *entry, page_flags_t flags)
+static int populate_pde2_entry(pde2_entry_t *entry, mmap_flags_t flags)
 {
-  page_frame_t *pf = alloc_page(AF_PGP);
+  page_frame_t *pf = alloc_page(AF_PGEN);
   if( pf != NULL ) {
     register uintptr_t pfn = pframe_number(pf);
 
     entry->present = 1;
-    entry->rw = 1;
-    entry->us = 0;
+    if (!(flags & MAP_ACC_MASK) || MAP_RDONLY)
+      entry->rw = 0; /* if access type is not set, page pages as read-only */
+    else if (flags & MAP_RW)
+      entry->rw = 1;
+
+    entry->us = (flags & MAP_KERNEL) ? 0 : 1;
     entry->pwt = 0;
-    entry->pcd = 0;
+    entry->pcd = (flags & MAP_DONTCACHE) ? 1 : 0;
     entry->a = 0;
     entry->x6 = 0;
     entry->page_size = 0; /* 4K pages */
@@ -144,7 +150,7 @@ static int populate_pde2_entry(pde2_entry_t *entry, page_flags_t flags)
 }
 
 static int map_pde2_range( pde2_entry_t *pde2, uintptr_t virt_addr, uintptr_t end_addr,
-                           page_frame_iterator_t *pfi, page_flags_t flags)
+                           page_frame_iterator_t *pfi, mmap_flags_t flags)
 {
   register uintptr_t v = (pde2->base_0_19 | (pde2->base_20_39 << 20)) << 12; /* Get base address of PTE */
 
@@ -156,24 +162,16 @@ static int map_pde2_range( pde2_entry_t *pde2, uintptr_t virt_addr, uintptr_t en
     ASSERT(iter_isrunning(pfi));
     page_base = (uintptr_t)pfi->pf_idx;
     pte->present = 1;
-    pte->rw = 1;
+    if (!(flags & MAP_ACC_MASK) || MAP_RDONLY)
+      pte->rw = 0; /* if access type is not set, page pages as read-only */
+    else if (flags & MAP_RW)
+      pte->rw = 1;
 
     /* User/supervisor ? */
-    if( flags & PF_KERNEL_PAGE ) {
-      pte->us = 0;
-    } else {
-      pte->us = 1;
-    }
-
+    pte->us = (flags & MAP_KERNEL) ? 0 : 1;
     pte->pwt = 0;
 
-    /* Disable caching for I/O regions. */
-    if( flags & PF_IO_PAGE ) {
-      pte->pcd = 1;
-    } else {
-      pte->pcd = 0;
-    }
-
+    pte->pcd = (flags & MAP_DONTCACHE) ? 1 : 0;
     pte->a = 0;
     pte->d = 0;
     pte->pat = 0;
@@ -192,7 +190,7 @@ static int map_pde2_range( pde2_entry_t *pde2, uintptr_t virt_addr, uintptr_t en
 }
 
 static int map_pdp3_range(pdp3_entry_t *pdp3, uintptr_t virt_addr, uintptr_t end_addr,
-                           page_frame_iterator_t *pfi, page_flags_t flags)
+                           page_frame_iterator_t *pfi, mmap_flags_t flags)
 {
   register uintptr_t v = (pdp3->base_0_19 | (pdp3->base_20_39 << 20)) << 12; /* Get base address of PDT */
   pde2_entry_t *pde2;
@@ -230,7 +228,7 @@ static int map_pdp3_range(pdp3_entry_t *pdp3, uintptr_t virt_addr, uintptr_t end
 
 
 static int map_pml4_range(pml4_entry_t *pml4, uintptr_t virt_addr, uintptr_t end_addr,
-                           page_frame_iterator_t *pfi, page_flags_t flags)
+                           page_frame_iterator_t *pfi, mmap_flags_t flags)
 {
   register uintptr_t v = (pml4->base_0_19 | (pml4->base_20_39 << 20)) << 12; /* Get base address of PDP */
   pdp3_entry_t *pdp3;
@@ -261,17 +259,21 @@ static int map_pml4_range(pml4_entry_t *pml4, uintptr_t virt_addr, uintptr_t end
   return 0;
 }
 
-static int populate_pml4_entry(pml4_entry_t *entry, page_flags_t flags)
+static int populate_pml4_entry(pml4_entry_t *entry, mmap_flags_t flags)
 {  
-  page_frame_t *pf = alloc_page(AF_PGP);  
+  page_frame_t *pf = alloc_page(AF_PGEN);  
   if( pf != NULL ) {
     register uintptr_t pfn = pframe_number(pf);
 
     entry->present = 1;
-    entry->rw = 1;
-    entry->us = 0;
+    if (!(flags & MAP_ACC_MASK) || MAP_RDONLY)
+      entry->rw = 0; /* if access type is not set, page pages as read-only */
+    else if (flags & MAP_RW)
+      entry->rw = 1;
+    
+    entry->us = (flags & MAP_KERNEL) ? 0 : 1;
     entry->pwt = 0;
-    entry->pcd = 0;
+    entry->pcd = (flags & MAP_DONTCACHE) ? 1 : 0;
     entry->a = 0;
     entry->reserved_6_8 = 0;
     entry->available_9_11 = 0;
@@ -287,7 +289,7 @@ static int populate_pml4_entry(pml4_entry_t *entry, page_flags_t flags)
 }
 
 int mm_map_pages(page_directory_t *pd, page_frame_iterator_t *pfi, uintptr_t virt_addr,
-                 size_t num_pages, page_flags_t flags) {
+                 size_t num_pages, mmap_flags_t flags) {
   register uintptr_t end_addr, length, to_addr;
 
   if( pd == NULL || pd->entries == NULL || num_pages == 0 ||

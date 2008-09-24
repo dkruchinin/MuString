@@ -22,6 +22,8 @@
  */
 
 
+/* TODO DK: REDISIGN!!! */
+
 #ifndef __PT_H__
 #define __PT_H__
 
@@ -33,6 +35,19 @@
 /* Page that never exists */
 #define INVALID_PAGE_IDX  0xffffffff
 
+/**
+ * @typedef uint8_t mmap_flags_t
+ * Memory mapping flags.
+ */
+typedef uint8_t mmap_flags_t;
+
+/* flags for memory mapping */
+#define MAP_KERNEL    0x01 /**< Mapping will be wisible in kernel space only */
+#define MAP_DONTCACHE 0x02 /**< Forbid caching of mapped address */
+#define MAP_RDONLY    0x04 /**< Map pages for read-only access */
+#define MAP_RW        0x08 /**< Map pages for read-write access */
+#define MAP_ACC_MASK (MAP_RDONLY | MAP_RW)
+
 typedef struct __page_directory {
   spinlock_t lock;
   uint8_t *entries;  /* Must refer to a page that contains TLB entries
@@ -42,13 +57,6 @@ typedef struct __page_directory {
 
 /* Top-level page-table record. */
 extern page_directory_t kernel_pt_directory;
-
-typedef struct __page_frame_accessor {
-  page_idx_t (*frames_left)(void *ctx);
-  page_idx_t (*next_frame)(void *ctx);
-  void (*reset)(void *ctx);
-  page_frame_t *(*alloc_page)(void *ctx, page_flags_t flags,int clean_page);
-} page_frame_accessor_t;
 
 /**
  * @fninitialize_page_directory(page_directory_t *pd)
@@ -82,7 +90,7 @@ void initialize_page_directory(page_directory_t *pd);
  *         -EINVAL if insufficient number of pages or addresses were passed.
  */
 int mm_map_pages( page_directory_t *top_level_pgd, page_frame_iterator_t *pfi,
-                  uintptr_t virt_addr, size_t num_pages, page_flags_t flags);
+                  uintptr_t virt_addr, size_t num_pages, mmap_flags_t flags);
 
 /**
  * @fn mm_pin_virtual_address( page_directory_t *pd, uintptr_t virt_addr )

@@ -31,7 +31,6 @@
 #include <eza/arch/scheduler.h>
 #include <eza/arch/types.h>
 #include <eza/kernel.h>
-#include <eza/pageaccs.h>
 #include <eza/arch/task.h>
 #include <eza/spinlock.h>
 #include <eza/arch/preempt.h>
