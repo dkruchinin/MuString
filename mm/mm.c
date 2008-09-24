@@ -37,15 +37,16 @@
 #include <eza/kernel.h>
 #include <eza/arch/mm.h>
 
-/* Here they are ! */
+/* An array of all physical pages */
 page_frame_t *page_frames_array;
 
+/* initialize opne page */
 static void __init_page(page_frame_t *page)
 {
   list_init_head(&page->head);
   list_init_node(&page->node);
   atomic_set(&page->refcount, 0);
-  page->_private = 0;  
+  page->_private = 0;
 }
 
 void mm_init(void)
@@ -53,10 +54,20 @@ void mm_init(void)
   mm_pool_t *pool;
   page_frame_iterator_t pfi;
   ITERATOR_CTX(page_frame, PF_ITER_ARCH) pfi_arch_ctx;
-  
-  arch_mm_init();  
+
+  arch_mm_init();
   mmpools_init();
+
+  /*
+   * PF_ITER_ARCH page frame iterator iterates through page_frame_t 
+   * structures located in the page_frames_array. It starts from the
+   * very first page and iterates forward until the last page available
+   * in the system is handled. On each iteration it returns an
+   * index of initialized by arhitecture-dependent level page frame.
+   */  
   arch_mm_page_iter_init(&pfi, &pfi_arch_ctx);
+  
+  /* initialize page and add it to the related pool */
   iterate_forward(&pfi) {
     page_frame_t *page = pframe_by_number(pfi.pf_idx);
     __init_page(page);
@@ -64,10 +75,11 @@ void mm_init(void)
   }
 
   kprintf("[MM] Memory pools were initialized\n");
-  /*
+
+/*
    * Now we may initialize "init data allocator"
    * Note: idalloc allocator will cut from general pool's
-   * pages not more than IDALLOC_PAGES. After initialization
+   * pages no more than IDALLOC_PAGES. After initialization
    * is done, idalloc must be explicitely disabled.
    */
   pool = mmpools_get_pool(POOL_GENERAL);
@@ -85,6 +97,7 @@ void mm_init(void)
     mmpools_init_pool_allocator(pool);
   }
 
+  /* Now we can remap memory */
   arch_mm_remap_pages();
   kprintf("[MM] All pages were successfully remapped\n");
 }

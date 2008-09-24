@@ -21,6 +21,22 @@
  *
  */
 
+/**
+ * @file include/mm/idalloc.h
+ * @brief Init-data memory allocator
+ *
+ * Init-data memory allocator is used for dynamic
+ * allocation of continous chunks of memory leaster than PAGE_SIZE
+ * that are used for init-data. Init-data allocator can't free allocated blocks,
+ * so it may be beneficial if you need to allocate some amount of memory leaster than
+ * PAGE_SIZE *before* slabs are initialized or if you're sure allocated data'll never be fried.
+ *
+ * When idalloc is disabled it looks if it has any unused pages. If so, it returns them to
+ * the pool's page frames allocator.
+ *
+ * @author Dan Kruchinin
+ */
+
 #ifndef __IDALLOC_H__
 #define __IDALLOC_H__
 
@@ -30,21 +46,43 @@
 #include <eza/spinlock.h>
 #include <eza/arch/types.h>
 
+/**
+ * @struct idalloc_memingo_t
+ * Contains idalloc internal information.
+ */
 typedef struct __idalloc_meminfo {
-  char *mem;
-  list_head_t avail_pages;
-  list_head_t used_pages;
-  spinlock_t lock;
-  int npages;    
-  bool is_enabled;
+  char *mem;                /**< Address starting from which data may be allocated */
+  list_head_t avail_pages;  /**< A list of available pages */
+  list_head_t used_pages;   /**< A list of already used(full) pages */
+  spinlock_t lock;          /**< Obvious */
+  int npages;               /**< Total number of pages idalloc owns */
+  bool is_enabled;          /**< True if idalloc is enabled and false otherwise */
 } idalloc_meminfo_t;
 
-extern idalloc_meminfo_t idalloc_meminfo;
+extern idalloc_meminfo_t idalloc_meminfo; /**< Global structure containing all idalloc informaion */
 
+/**
+ * @brief Enable init-data allocator
+ * IDALLOC_PAGES will be cutted from @a pool. (if available)
+ *
+ * @param pool - Memory pool idalloc may cut pages from.
+ * @see mm_pool_t
+ */
 void idalloc_enable(mm_pool_t *pool);
-void idalloc_disable(void);
+void idalloc_disable(void); /* TODO DK: redisign */
+
+/**
+ * @brief Allocate @a size memory chunk if possible
+ *
+ * @param size - A size of memory chunk to allocate.
+ * @return A pointer to memory chunk of size @a size on success or NULL on failure.
+ */
 void *idalloc(size_t size);
 
+/**
+ * @brief Check if idalloc is enabled
+ * @return boolean
+ */
 static inline bool idalloc_is_enabled(void)
 {
   return idalloc_meminfo.is_enabled;

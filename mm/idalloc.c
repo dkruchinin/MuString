@@ -32,14 +32,16 @@
 #include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 
-#define IDALLOC_PAGE       0x01
-#define IDALLOC_PAGE_INUSE 0x02
-#define IDALLOC_PAGE_FULL  0x04
+/* Idalloc-specific page frame flags (_private) */
+#define IDALLOC_PAGE       0x01 /* Page owner is idalloc */
+#define IDALLOC_PAGE_INUSE 0x02 /* Page is in use */
+#define IDALLOC_PAGE_FULL  0x04 /* Page is full and can not be used */
 
 idalloc_meminfo_t idalloc_meminfo;
 
 static void __prepare_page(page_frame_t *page)
 {
+  /* mark page as reserved. No one should access it. */
   page->flags |= PF_RESERVED;
   page->_private = IDALLOC_PAGE;
 }
@@ -56,9 +58,14 @@ void idalloc_enable(mm_pool_t *pool)
   if (IDALLOC_PAGES <= 0)
     return;
 
+  /*
+   * Ok, idalloc needs several pages. It only needs non-reserved pages,
+   * but it doesn't care if its pages will be continous or not.
+   */
   for (i = 0; i < pool->total_pages; i++) {
     if (pool->pages[i].flags & PF_RESERVED)
       continue;
+    
     __prepare_page(pool->pages + i);
     list_add2tail(&idalloc_meminfo.avail_pages, &pool->pages[i].node);
     pool->reserved_pages++;
@@ -72,7 +79,7 @@ void idalloc_enable(mm_pool_t *pool)
 
   atomic_sub(&pool->free_pages, IDALLOC_PAGES);
   first_page = list_entry(list_node_first(&idalloc_meminfo.avail_pages), page_frame_t, node);
-  first_page->_private |= IDALLOC_PAGE_INUSE;
+  first_page->_private |= IDALLOC_PAGE_INUSE; /* mark first page as active one */
   idalloc_meminfo.npages = IDALLOC_PAGES;
   idalloc_meminfo.mem = pframe_to_virt(first_page);
   idalloc_meminfo.is_enabled = true;
@@ -91,16 +98,22 @@ void *idalloc(size_t size)
     uintptr_t page_bound = (uintptr_t)pframe_to_virt(cur_page) + PAGE_SIZE;
 
     if ((uintptr_t)(idalloc_meminfo.mem + size) < page_bound) {
+      /* all is ok, we can just cut size from available address */
       mem = (void *)idalloc_meminfo.mem;
       idalloc_meminfo.mem += size;
       goto out;
     }
 
+    /*
+     * it seems we don't have enough memory in current page,
+     * so we'll try to allocate required chunk from next page(if exists).
+     * But before it we should properly deinit "full" page.
+     */
     list_delfromhead(&idalloc_meminfo.avail_pages);
     cur_page->_private &= ~IDALLOC_PAGE_INUSE;
     cur_page->_private |= IDALLOC_PAGE_FULL;
     list_add2tail(&idalloc_meminfo.used_pages, &cur_page->node);
-    if (list_is_empty(&idalloc_meminfo.avail_pages))
+    if (list_is_empty(&idalloc_meminfo.avail_pages)) /* ouh, so sad :( */
       goto out;
 
     cur_page = list_entry(list_node_first(&idalloc_meminfo.avail_pages), page_frame_t, node);
