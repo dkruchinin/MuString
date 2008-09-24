@@ -32,12 +32,29 @@ page_frame_t *alloc_pages(int n, pfalloc_flags_t flags)
   page_frame_t *pages = NULL;
   mm_pool_t *pool = mmpools_get_pool(__pool_type(flags & PAGE_POOLS_MASK));
 
-  pages = __pool_alloc_pages(pool, n);  
+  if (atomic_get(&pool->free_pages) < n)
+    goto out;
+  
+  pages = __pool_alloc_pages(pool, n);
+  if (!pages)
+    goto out;
+  if (flags & AF_ZERO) /* fill page block with zeros */
+    pframe_memnull(pages, n);
+
+  /* done */
+  out:
   return pages;
 }
 
 void free_pages(page_frame_t *pages)
 {
   mm_pool_t *pool = mmpools_get_pool(pframe_pool_type(pages));
+
+  if (!pool->is_active) {
+    kprintf(KO_ERROR "free_pages: trying to free pages from dead pool %s\n",
+            mmpools_get_pool_name(pool->type));
+    return;
+  }
+  
   __pool_free_pages(pool, pages);
 }

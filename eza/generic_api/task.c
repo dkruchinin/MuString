@@ -94,7 +94,7 @@ static page_frame_t *alloc_stack_pages(void)
 {
   page_frame_t *p;
 
-  p = alloc_pages(KERNEL_STACK_PAGES, AF_PGP);
+  p = alloc_pages(KERNEL_STACK_PAGES, AF_PGEN);
   return p;  
 }
 
@@ -117,7 +117,7 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
     goto task_create_fault;
   }
 
-  ts_page = alloc_page(AF_PGP);
+  ts_page = alloc_page(AF_PGEN);
   if( ts_page == NULL ) {
     goto free_pid;
   }
@@ -149,7 +149,7 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
                        pframe_number(stack_pages) + KERNEL_STACK_PAGES - 1);
   r = mm_map_pages( &task->page_dir, &pfi,
                     task->kernel_stack.low_address, KERNEL_STACK_PAGES,
-                    KERNEL_STACK_PAGE_FLAGS );
+                    MAP_KERNEL | MAP_RW);
   if( r != 0 ) {
     goto free_stack_pages;
   }

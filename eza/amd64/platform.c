@@ -34,10 +34,7 @@
 #include <mm/pt.h>
 #include <mm/pfalloc.h>
 #include <eza/arch/page.h>
-#include <eza/pageaccs.h>
-#ifdef CONFIG_SMP
 #include <eza/arch/smp.h>
-#endif
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 
@@ -51,7 +48,8 @@ static int __map_apic_page(void)
                        APIC_BASE >> PAGE_WIDTH,
                        APIC_BASE >> PAGE_WIDTH);
 
-  res=__mm_map_pages(&pfi,APIC_BASE,1,PF_DONTCACHE);
+  res=__mm_map_pages(&pfi,APIC_BASE,1,
+                     MAP_KERNEL | MAP_RW | MAP_DONTCACHE);
 
   if(res<0) {
     kprintf("[MM] Cannot map IO page for APIC.\n");
@@ -71,7 +69,8 @@ static int __map_ioapic_page(void)
                        IOAPIC_BASE >> PAGE_WIDTH,
                        IOAPIC_BASE >> PAGE_WIDTH);
 
-  res=__mm_map_pages(&pfi,IOAPIC_BASE,1,PF_DONTCACHE);
+  res=__mm_map_pages(&pfi,IOAPIC_BASE,1,
+                     MAP_KERNEL | MAP_RW | MAP_DONTCACHE);
 
   if(res<0) {
     kprintf("[MM] Cannot map IO page for IO APIC.\n");

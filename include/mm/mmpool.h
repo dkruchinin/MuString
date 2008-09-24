@@ -45,13 +45,13 @@ typedef uint8_t mm_pool_type_t;
  * DMA pool (may exists on x86 and x86_64) architectures
  * if IOMMU is not supported
  */
-#define POOL_DMA     __pool_type(PF_PDMA)
+#define POOL_DMA __pool_type(PF_PDMA)
 
 /**
  * General purpose memory pool.
  * Typically contains most of pages.
  */
-#define POOL_GENERAL __pool_type(PF_PGP)
+#define POOL_GENERAL __pool_type(PF_PGEN)
 #define __POOL_FIRST POOL_DMA
 
 /**

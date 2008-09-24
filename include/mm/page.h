@@ -21,6 +21,12 @@
  *
  */
 
+/**
+ * @file include/mm/page.h
+ * Architecture independent page-frame primitives
+ * @author Dan Kruchinin
+ */
+
 #ifndef __PAGE_H__
 #define __PAGE_H__
 
@@ -32,44 +38,66 @@
 #include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 
-#define NOF_MM_POOLS 4
+#define NOF_MM_POOLS 2 /**< Number of MM pools in system */
 
-/* memory-related types. */
+/**
+ * @typedef int page_idx_t
+ * Page index.
+ */
 typedef int page_idx_t;
+
+/**
+ * @typedef uint16_t page_flags_t;
+ * Page flags.
+ */
 typedef uint16_t page_flags_t;
 
-#define PF_PDMA       0x01
-#define PF_PGP        0x02
-#define PF_PCONT      0x04
-#define PF_PPERCPU    0x08
-#define PF_FREE       0x10
-#define PF_RESERVED   0x20
-#define PF_KERNEL     0x40
-#define PF_DONTCACHE  0x80
+#define PF_PDMA       0x01 /**< DMA pool is page owner */
+#define PF_PGEN       0x02 /**< GENERAL pool is page owner */
+#define PF_RESERVED   0x04 /**< Page is reserved */
 
 #define __pool_type(flags) ((flags) >> 1)
-#define PAGE_POOLS_MASK (PF_PGP | PF_PDMA | PF_PPERCPU | PF_PCONT)
+#define PAGE_POOLS_MASK (PF_PGEN | PF_PDMA)
 #define PAGE_PRESENT_MASK (PAGE_POOL_MASK | PF_RESERVED)
 
+/**
+ * @struct page_frame_t
+ * @brief Describes one physical page.
+ *
+ * Each physical page has corresponding unique page_frame_t
+ * item, which describes internal page attributes.
+ *
+ * @see pframe_pages_array
+ */
 typedef struct __page_frame {
-  list_head_t head;
-  list_node_t node;
-  page_idx_t idx;
-  atomic_t refcount;
-  uint32_t _private;
-  page_flags_t flags;
+  list_head_t head;   /**< Obvious */
+  list_node_t node;   /**< Obvious */
+  page_idx_t idx;     /**< Page frame index in the pframe_pages_array */
+  atomic_t refcount;  /**< Number of references to the physical page */
+  uint32_t _private;  /**< Private data that may be used by page allocator */
+  page_flags_t flags; /**< Page flags */
 } page_frame_t;
 
 #define PF_ITER_UNDEF_VAL (-0xf)
 
+/**
+ * @struct page_frame_iterator_t
+ * Page frame iterator
+ * @see DEFINE_ITERATOR
+ */
 DEFINE_ITERATOR(page_frame,
                 page_idx_t pf_idx);
 
+/**
+ * Page frame iterator supported types
+ * @see DEFINE_ITERATOR_TYPES
+ */
 DEFINE_ITERATOR_TYPES(page_frame,
-                      PF_ITER_ARCH,
-                      PF_ITER_INDEX,
-                      PF_ITER_LIST,
-                      PF_ITER_ALLOC);
+                      PF_ITER_ARCH,  /**< Architecture-dependent iterator used for page frames initialization */
+                      PF_ITER_INDEX, /**< Index-based iterator */
+                      PF_ITER_LIST,  /**< List-based iterator */
+                      PF_ITER_ALLOC  /**< Each next item of ALLOC iterator is dynamically allocated */
+                      );
 
 extern page_frame_t *page_frames_array;
 
@@ -111,5 +139,23 @@ static inline page_idx_t virt_to_pframe_id(void *virt)
   page_idx_t idx = ((uintptr_t)virt - KERNEL_BASE) >> PAGE_WIDTH;
   return idx;
 }
+
+/**
+ * @fn static inline void pframe_memnull(page_frame_t *start, int block_size)
+ * @brief Fill block of @a block_size continuos pages with zero's
+ * @param[out] start - A pointer to very first page frame in the block
+ * @param block_size - Number of pages in block
+ */
+#ifndef ARCH_PAGE_MEMNULL
+static inline void pframe_memnull(page_frame_t *start, int block_size)
+{
+  register int sz = block_size;
+
+  while (--sz >= 0)
+    memset(pframe_to_virt(start + block_size), 0, PAGE_SIZE);
+}
+#else
+#define pframe_memnull(start, block_size) arch_page_memnull(start, block_size)
+#endif /* ARCH_PAGE_MEMNULL */
 
 #endif /* __PAGE_H__ */

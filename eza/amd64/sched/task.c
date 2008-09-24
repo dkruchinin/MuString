@@ -83,7 +83,7 @@ static void acc_next_frame(page_frame_iterator_t *pfi)
   if(next_frame != NULL ) {
     pfi->pf_idx = pframe_number(next_frame);
   } else {
-    page_frame_t *frame = alloc_page(AF_PGP);
+    page_frame_t *frame = alloc_page(AF_PGEN);
     if( frame == NULL ) {
       panic( "initialize_idle_tasks(): Can't allocate a page !" );
     }
@@ -112,7 +112,7 @@ void initialize_idle_tasks(void)
 
   init_pfiter_alloc(&pfi);
   for( cpu = 0; cpu < MAX_CPUS; cpu++ ) {
-    ts_page = alloc_page(AF_PGP);
+    ts_page = alloc_page(AF_PGEN);
     if( ts_page == NULL ) {
       panic( "initialize_idle_tasks(): Can't allocate main structure for idle task !" );  
     }
@@ -144,7 +144,7 @@ void initialize_idle_tasks(void)
     next_frame = NULL;
     r = mm_map_pages( &task->page_dir, &pfi,
                       task->kernel_stack.low_address, KERNEL_STACK_PAGES,
-                      KERNEL_STACK_PAGE_FLAGS);
+                      MAP_KERNEL | MAP_RW);
     if( r != 0 ) {
       panic( "initialize_idle_tasks(): Can't map kernel stack for idle task !" );
     }

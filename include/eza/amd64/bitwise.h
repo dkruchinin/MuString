@@ -37,21 +37,21 @@
 #include <eza/arch/types.h>
 
 #define ARCH_BIT_SET
-/* atomic */
+/* Atomic operation */
 static always_inline void arch_bit_set(volatile void *bitmap, int bit)
 {
   __asm__ volatile ( __LOCK_PREFIX "bts %1, %0\n\t"
-                    : "=m" (*(volatile char *)bitmap)
+                    : "=m" (*(volatile long *)bitmap)
                     : "ir" (bit)
                     : "memory");
 }
 
 #define ARCH_BIT_CLEAR
-/* atomic */
+/* Atomic operation */
 static always_inline void arch_bit_clear(volatile void *bitmap, int bit)
 {
   __asm__ volatile (__LOCK_PREFIX "btr %1, %0\n\t"
-                    : "=m" (*(volatile char *)bitmap)
+                    : "=m" (*(volatile long *)bitmap)
                     : "ir" (bit)
                     : "memory");
 }
@@ -61,7 +61,7 @@ static always_inline void arch_bit_clear(volatile void *bitmap, int bit)
 static always_inline void arch_bit_toggle(volatile void *bitmap, int bit)
 {
   __asm__ volatile (__LOCK_PREFIX "btc %1, %0\n\t"
-                    : "=m" (*(volatile char *)bitmap)
+                    : "=m" (*(volatile long *)bitmap)
                     : "ir" (bit)
                     : "memory");
 }
@@ -75,7 +75,7 @@ static always_inline int arch_bit_test(volatile void *bitmap, int bitno)
   __asm__ volatile ("bt %1, %2\n\t"
                     "sbb %0, %0"
                     : "=r" (ret)
-                    : "ir" (bitno), "m" (*(volatile char *)bitmap));
+                    : "ir" (bitno), "m" (*(volatile unsigned long *)bitmap));
 
   return ret;
 }
@@ -100,19 +100,21 @@ static always_inline long arch_bit_find_msf(unsigned long word)
 }
 
 #define ARCH_BITS_OR
+/* atomic operation */
 static always_inline void arch_bits_or(volatile void *word, unsigned long flags)
 {
   __asm__ volatile (__LOCK_PREFIX "or %1, %0\n\t"
-                    : "+m" (*(volatile char *)word)
+                    : "+m" (*(volatile unsigned long *)word)
                     : "r" (flags)
                     : "memory");
 }
 
 #define ARCH_BITS_AND
+/* atomic operation */
 static always_inline void arch_bits_and(volatile void *word, unsigned long mask)
 {
   __asm__ volatile (__LOCK_PREFIX "and %1, %0\n\t"
-                    : "+m" (*(volatile char *)word)
+                    : "+m" (*(volatile unsigned long *)word)
                     : "r" (mask)
                     : "memory");
 }

@@ -35,9 +35,6 @@
 #include <eza/swks.h>
 #include <eza/arch/mm.h>
 #include <eza/arch/page.h>
-#include <eza/pageaccs.h>
-
-//#undef CONFIG_IOMMU /* FIXME DK:  */
 
 /* Initial kernel top-level page directory record. */
 uintptr_t _kernel_extended_end;
@@ -155,7 +152,7 @@ static int prepare_page(page_idx_t idx, ITERATOR_CTX(page_frame, PF_ITER_ARCH) *
   if (page->idx < dma_pages)
     page->flags = PF_PDMA;
   else
-    page->flags = PF_PGP;
+    page->flags = PF_PGEN;
   if ((uintptr_t)pframe_phys_addr(page) > mmap_end) { /* switching to the next e820 map */
     if (ctx->e820id < e820count) {
       ctx->mmap = mmap = &e820table[++ctx->e820id];
@@ -243,7 +240,7 @@ void arch_mm_remap_pages(void)
           kernel_pt_directory.entries, virt_to_phys(kernel_pt_directory.entries));
 
   /* Create identity mapping */
-  ret = mm_map_pages(&kernel_pt_directory, &pfi, 0x1000, IDENT_MAP_PAGES - 1, 0);
+  ret = mm_map_pages(&kernel_pt_directory, &pfi, 0x1000, IDENT_MAP_PAGES - 1, MAP_KERNEL | MAP_RW);
   if(ret != 0)
     panic( "arch_mm_remap_pages(): Can't remap physical pages (DMA identical mapping) !" );
 
@@ -252,7 +249,7 @@ void arch_mm_remap_pages(void)
   /* Now we should remap all available physical memory starting at 'KERNEL_BASE'. */
   mm_init_pfiter_index(&pfi, &pfi_index_ctx, 0, swks.mem_total_pages - 1);
   ret = mm_map_pages(&kernel_pt_directory, &pfi, KERNEL_BASE,
-                     swks.mem_total_pages, 0);
+                     swks.mem_total_pages, MAP_KERNEL | MAP_RW);
   if( ret != 0 ) {
     panic( "arch_mm_remap_pages(): Can't remap physical pages !" );
   }

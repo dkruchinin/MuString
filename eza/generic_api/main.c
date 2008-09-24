@@ -34,6 +34,7 @@
 #include <server.h>
 #include <align.h>
 #include <misc.h>
+#include <version.h>
 #include <eza/smp.h>
 #include <eza/arch/task.h>
 #include <eza/interrupt.h>
@@ -77,6 +78,7 @@ static void main_routine_stage1(void)
    */
   interrupts_enable();
   initialize_swks();
+  swks_add_version_info();
 
   /* The other CPUs are running, the scheduler is ready, so we can
    * enable all interrupts.
@@ -103,7 +105,7 @@ void main_routine(void) /* this function called from boostrap assembler code */
    * the final initializations.
    */
   kcons->enable();
-  kprintf("[LW] MuiString starts ...\n");
+  print_kernel_version_info();
   kprintf("[MB] Modules: %d\n",init.c);
 
   /* init memory manager stuff - stage 0 */

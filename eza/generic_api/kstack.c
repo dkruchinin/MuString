@@ -61,7 +61,7 @@ static void initialize_stack_chunk(kernel_stack_chunk_t *chunk, uint32_t id)
 
 static void initialize_stack_allocator_context(kernel_stack_allocator_context_t *ctx)
 {
-  page_frame_t *page = alloc_page(AF_PGP);
+  page_frame_t *page = alloc_page(AF_PGEN);
   kernel_stack_chunk_t *ch1 = (kernel_stack_chunk_t *)pframe_to_virt(page);
 
   if( ch1 == NULL ) {

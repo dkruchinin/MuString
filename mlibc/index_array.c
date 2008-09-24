@@ -60,7 +60,7 @@ bool index_array_initialize(index_array_t *array, range_type_t range)
 
           if( item % IA_ENTRIES_PER_PAGE == 0 ) {
             uint64_t *p64;
-            page_frame_t *page = alloc_page(AF_PGP);
+            page_frame_t *page = alloc_page(AF_PGEN);
             area = pframe_to_virt(page);;
 
             if(area == NULL) {
