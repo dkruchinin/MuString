@@ -33,54 +33,82 @@
 
 #include <eza/arch/bitwise.h>
 
+/**
+ * @fn static inline void bit_set(void *bitmap, int bit)
+ * Set bit number @a bit in the bitmap @a bitmap
+ * @note The limit of @a bitmap = sizeof(unsigned long)
+ *
+ * @param[out] bitmap - A pointer to the bitmap
+ * @param bit - Number of bit to set
+ */
 #ifndef ARCH_BIT_SET
 static inline void bit_set(void *bitmap, int bit)
 {
-  *(char *)bitmap |= (1 << bit);
+  *(unsigned long *)bitmap |= (1 << bit);
 }
 #else
-/**
- * @see arch_bit_set
- */
 #define bit_set(bitmap, bit) arch_bit_set(bitmap, bit)
 #endif /* ARCH_BIT_SET */
 
+/**
+ * @fn static inline void bit_clear(void *bitmap, int bit)
+ * Clear bit number @a bit in the bitmap @a bitmap
+ * @note The limit of @a bitmap = sizeof(unsigned long)
+ *
+ * @param[out] bitmap - A pointer to the bitmap
+ * @param bit - Number of bit to clear
+ */
 #ifndef ARCH_BIT_CLEAR
 static inline void bit_clear(void *bitmap, int bit)
 {
-  *(char *)bitmap &= ~(1 << bit);
+  *(unsigned long *)bitmap &= ~(1 << bit);
 }
 #else
-/**
- * @see arch_bit_set
- */
 #define bit_clear(bitmap, bit) arch_bit_clear(bitmap, bit)
 #endif /* ARCH_BIT_CLEAR */
 
+/**
+ * @fn static inline void bit_toggle(void *bitmap, int bit)
+ * Toggle bit @a bit in the bitmap @a bitmap.
+ * @note The limit of @a bitmap = sizeof(unsigned long)
+ *
+ * @param[out] bitmap - A pointer to the bitmap.
+ * @param bit - Number of bit to toggle
+ */
 #ifndef ARCH_BIT_TOGGLE
 static inline void bit_toggle(void *bitmap, int bit)
 {
-  *(char *)bitmap ^= (1 << bit);
+  *(unsigned long *)bitmap ^= (1 << bit);
 }
 #else
-/**
- * @see arch_bit_toggle
- */
 #define bit_toggle(bitmap, bit) arch_bit_toggle(bitmap, bit)
 #endif /* ARCH_BIT_TOGGLE */
 
+/**
+ * @fn static inline int bit_test(void *bitmap, int bitno)
+ * Test if bit with number @a bitno is set in the bitmap @a bitmap.
+ * @note The limit of @a bitmap = sizeof(unsigned long)
+ *
+ * @param bitmap - A pointer to the bitmap.
+ * @param bitno - Number of bit to test
+ * @return 1 if bit is set and 0 otherwise
+ */
 #ifndef ARCH_BIT_TEST
 static inline int bit_test(void *bitmap, int bitno)
 {
-  return (*(char *)bitmap & (1 << bitno));
+  return ((*(unsigned long *)bitmap & (1 << bitno)) >> bitno);
 }
 #else
-/**
- * @see arch_bit_test
- */
 #define bit_test(bitmap, bitno) arch_bit_test(bitmap, bitno)
 #endif /* ARCH_BIT_TEST */
 
+/**
+ * @fn static inline long bit_find_lsf(unsigned long word)
+ * Find first set least significant bit.
+ *
+ * @param word - Where to search
+ * @return Found bit number on success, negative value on failure.
+ */
 #ifndef ARCH_BIT_FIND_LSF
 static inline long bit_find_lsf(unsigned long word)
 {
@@ -96,13 +124,16 @@ static inline long bit_find_lsf(unsigned long word)
   return c;
 }
 #else
-/**
- * @see arch_bit_find_lsf
- */
 #define bit_find_lsf(word) arch_bit_find_lsf(word)
 #endif /* ARCH_BIT_FIND_LSF */
 
-
+/**
+ * @fn static inline long bit_find_msf(unsigned long word)
+ * Find most significant set bit in the @a word.
+ *
+ * @param word - Where to search.
+ * @return Found bit number on success, negative value on failure.
+ */
 #ifndef ARCH_BIT_FIND_MSF
 static inline long bit_find_msf(unsigned long word)
 {
@@ -116,20 +147,40 @@ static inline long bit_find_msf(unsigned long word)
   return c;
 }
 #else
-/**
- * @see arch_bit_find_msf
- */
 #define bit_find_msf(word) arch_bit_find_msf(word)
 #endif /* ARCH_BIT_FIND_MSF */
 
+/**
+ * @fn static inline void bits_or(void *word, unsigned long flags)
+ * Executes logical OR with @a word and @a flags and writes result to @a word
+ * @note The limit of @a word = sizeof(unsigned long)
+ *
+ * @param[out] word - A pointer to memory results will be written to
+ * @param flsgs - Flags that will be OR'ed with @a word
+ */
 #ifndef ARCH_BITS_OR
+static inline void bits_or(void *word, unsigned long flags)
+{
+  *(unsigned long *)word |= flags;
+}
 #define bits_or(word, flags) panic("bits_or uniplemented")
 #else
 #define bits_or(word, flags) arch_bits_or(word, flags)
 #endif /* ARCH_BITS_OR */
 
+/**
+ * @fn static inline void bits_and(void *word, unsigned long mask)
+ * Executes logical AND with @a word and @a mask and writes result to @a word.
+ * @note The limit of @a word = sizeof(unsigned long)
+ *
+ * @param[out] word - A pointer to memory results will be written to
+ * @param mask - A mask that will be AND'ed with @a word
+ */
 #ifndef ARCH_BITS_AND
-#define bits_and(word, mask) panic("bits_and unimplemented")
+static inline void bits_and(void *word, unsigned long mask)
+{
+  *(unsigned long *)word &= mask;
+}
 #else
 #define bits_and(word, mask) arch_bits_and(word, mask)
 #endif /* ARCH_BITS_AND */

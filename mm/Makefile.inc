@@ -1,7 +1,6 @@
 
 
-LIBMM_OBJS=mm/bbuddy.o \
-           mm/mm.o \
+LIBMM_OBJS=mm/mm.o \
 	   mm/pt.o \
        mm/mmpool.o \
        mm/idalloc.o \
