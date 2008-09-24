@@ -29,7 +29,7 @@
 #include <eza/arch/cpu.h>
 #include <eza/arch/types.h>
 
-extern cpu_id_t online_cpus;
+extern volatile cpu_id_t online_cpus;
 
 #ifdef CONFIG_SMP
 /* Real cpu_id() is defined in include/<arch>/scheduler.h  */

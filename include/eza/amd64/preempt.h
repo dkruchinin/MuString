@@ -6,7 +6,12 @@
 #include <eza/arch/current.h>
 
 extern void schedule(void);
-extern cpu_id_t online_cpus;
+extern volatile cpu_id_t online_cpus;
+
+#define COND_RESCHED_CURRENT \
+    if( !in_atomic() && current_task_needs_resched() ) { \
+      schedule(); \
+    }
 
 static inline void preempt_disable(void)
 {
@@ -43,9 +48,7 @@ static inline void preempt_enable(void)
 {
   if( online_cpus != 0 ) {
     dec_css_field(preempt_count);
-    if( !in_atomic() && current_task_needs_resched() ) {
-      schedule();
-    }
+    COND_RESCHED_CURRENT;
   }
 }
 

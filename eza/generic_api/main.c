@@ -75,7 +75,6 @@ static void main_routine_stage1(void)
    * receive interrups from the other CPUs via LAPIC upon unleashing
    * the other CPUs.
    */
-
   interrupts_enable();
   initialize_swks();
 

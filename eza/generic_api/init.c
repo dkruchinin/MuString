@@ -33,7 +33,7 @@
 #include <eza/arch/mm_types.h>
 #include <eza/arch/preempt.h>
 
-#define STEP 1000
+#define STEP 300
 
 bool can_proceed = false;
 

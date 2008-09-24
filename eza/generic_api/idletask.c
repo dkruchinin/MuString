@@ -35,60 +35,16 @@
 
 task_t *idle_tasks[NR_CPUS];
 
-#define STEP 1000
-
-static void percpu_worker1(void *data)
-{
-  uint64_t target_tick = swks.system_ticks_64 + 100;
-
-  kprintf( "+ [Worker N2] Greetings from my parent (%d): %s. My PID: %d\n",
-           current_task()->ppid,data, current_task()->pid );
-
-  for( ;; ) {
-    if( swks.system_ticks_64 >= target_tick ) {
-      kprintf( " + [%d] [Worker N2] Tuck, tuck ! CPU: %d (Ticks: %d, PID: %d, ID: %d, ATOM: %d)\n",
-               cpu_id(), cpu_id(), swks.system_ticks_64, current_task()->pid,
-               cpu_id(), in_atomic() );
-      target_tick = swks.system_ticks_64 + STEP;
-    }
-  }
-}
-
-static void percpu_worker(void *data)
-{
-  uint64_t target_tick = swks.system_ticks_64 + 100;
-
-  kprintf( "+ [Worker N1] Greetings from my parent (%d): %s. My PID: %d\n",
-           current_task()->ppid,data, current_task()->pid );
-
-  if( kernel_thread(percpu_worker1, "Run Second Worker, Run !!!") != 0 ) {
-      panic( "Can't create per-cpu 2nd worker for CPU %d\n", cpu_id() );
-  }
-
-  for( ;; ) {
-    if( swks.system_ticks_64 >= target_tick ) {
-      kprintf( " + [%d] [Worker N1] Tuck, tuck ! CPU: %d (Ticks: %d, PID: %d, ID: %d, ATOM: %d)\n",
-               cpu_id(), cpu_id(), swks.system_ticks_64, current_task()->pid,
-               cpu_id(), in_atomic() );
-      target_tick = swks.system_ticks_64 + STEP;
-    }
-  }
-}
+#define STEP 300
 
 void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
 
-  if( cpu_id() != 0 ) {
-    if( kernel_thread(percpu_worker, "Run Worker, Run !!!") != 0 ) {
-      panic( "Can't create per-cpu worker for CPU %d\n", cpu_id() );
-    }
-  }
-
   for( ;; ) {
     if( swks.system_ticks_64 >= target_tick ) {
-      kprintf( " + [Idle N1] Tick, tick ! CPU: %d (Ticks: %d, PID: %d, ID: %d, ATOM: %d)\n",
-               cpu_id(), swks.system_ticks_64, current_task()->pid, 1024, in_atomic() );
+      kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
+               cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
       target_tick += STEP;
     }
   }

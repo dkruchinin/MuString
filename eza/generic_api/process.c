@@ -95,7 +95,7 @@ status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t
   task_t *new_task;
   status_t r;
 
-  r = create_new_task(parent,&new_task,flags,priv);
+  r = create_new_task(parent,flags,priv,&new_task);
   if(r == 0) {
     r = arch_setup_task_context(new_task,flags,priv);
     if(r == 0) {

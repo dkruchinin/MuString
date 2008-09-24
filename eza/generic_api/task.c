@@ -90,18 +90,6 @@ static void free_pid(pid_t pid)
   UNLOCK_PID_ARRAY;
 }
 
-int setup_task_kernel_stack(task_t *task)
-{
-  int r = allocate_kernel_stack(&task->kernel_stack);
-
-  if( r == 0 ) {
-    r = mm_map_pages( &task->page_dir, NULL,
-                      task->kernel_stack.low_address, KERNEL_STACK_PAGES,
-                      KERNEL_STACK_PAGE_FLAGS );
-  }
-  return r;
-}
-
 static page_frame_t *alloc_stack_pages(void)
 {
   page_frame_t *p;
@@ -134,7 +122,7 @@ static status_t initialize_mm( task_t *orig, task_t *target,
   return r;
 }
 
-status_t create_new_task(task_t *parent, task_t **t, task_creation_flags_t flags,task_privelege_t priv)
+status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privelege_t priv, task_t **t)
 {
   task_t *task;
   page_frame_t *ts_page;

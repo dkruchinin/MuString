@@ -8,12 +8,14 @@
 
 struct __task_struct;
 
+typedef uint64_t curtype_t;
+
 typedef struct __cpu_sched_stat {
-  uint64_t cpu;
+  curtype_t cpu;
   struct __task_struct *current_task;
   uintptr_t kstack_top;
-  uint64_t flags, irq_count, preempt_count;
-  uint64_t irq_lock_count;  
+  curtype_t flags, irq_count, preempt_count;
+  curtype_t irq_lock_count;
 } cpu_sched_stat_t;
 
 #endif
