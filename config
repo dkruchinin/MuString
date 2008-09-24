@@ -1,5 +1,6 @@
 # MuiString 
 # config: file with MuiString configuration
+# test
 
 ARCH = amd64
 
