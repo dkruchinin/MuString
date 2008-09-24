@@ -123,7 +123,7 @@ status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t
   return r;
 }
 
-static status_t do_process_control(task_t *target,ulong_t cmd, ulong_t arg)
+status_t do_process_control(task_t *target,ulong_t cmd, ulong_t arg)
 {
   switch( cmd ) {
     case SYS_PR_CTL_SET_ENTRYPOINT:

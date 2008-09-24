@@ -71,6 +71,7 @@ static inline void arch_activate_task(task_t *to)
   arch_context_t *from_ctx = (arch_context_t*)&(current_task()->arch_context[0]);
 
   /* Let's jump ! */
+  kprintf( "******* ACTIVATING TASK: %d\n", to->pid );
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
 }
 

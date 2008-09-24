@@ -82,5 +82,16 @@
   /* tss desciptor - for 64bit on amd64 we're need two descriptors */ \
   { 0,0,0,0,0,0,0,0,0,0 }, \
   { 0,0,0,0,0,0,0,0,0,0 }, \
+  /* TEST DESCRIPTOR: DON'T USE IT !!!*/ \
+  { .limit_0_15=0xffff, \
+    .base_0_15=0, \
+    .base_16_23=0, \
+    .access=AR_PRESENT | AR_CODE | DPL_KERNEL | AR_READABLE, \
+    .limit_16_19=0xf, \
+    .available=0, \
+    .longmode=1, \
+    .special=0, \
+    .granularity=1, \
+    .base_24_31=0}, \
   }
 

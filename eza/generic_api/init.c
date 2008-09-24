@@ -32,69 +32,87 @@
 #include <mlibc/string.h>
 #include <eza/arch/mm_types.h>
 #include <eza/arch/preempt.h>
+#include <eza/process.h>
+#include <eza/scheduler.h>
+#include <ds/iterator.h>
+#include <mm/mm.h>
+#include <mm/pfalloc.h>
+#include <mlibc/string.h>
 
-#define STEP 300
+#define INIT_CODE_START 0x8000000
+#define INIT_CODE_PAGES 1
 
-bool can_proceed = false;
+#define INIT_STACK_START 0x9000000
+#define INIT_STACK_PAGES 1
 
-static void second_service_thread(void *data)
+static char init_code[] = { 0xeb, 0xfe };
+#define INIT_CODE_SIZE 2
+
+static int create_init_mm(task_t *task)
 {
-  uint64_t target_tick = swks.system_ticks_64 + 100;
-
-  kprintf( "+ [Second service] Greetings from my parent (%d): %s\n",
-           current_task()->ppid,data );
-
-  can_proceed = true;
-  for( ;; ) {
-      if( swks.system_ticks_64 >= target_tick ) {
-          target_tick = swks.system_ticks_64;
-          kprintf( " + [Second service] Tick, tick ! (Ticks: %d, PID: %d, CPU: %d, ATOM: %d)\n",
-                   swks.system_ticks_64, current_task()->pid, cpu_id(), in_atomic() );
-          target_tick += STEP;
-    }
-  }
-}
-
-
-static void init_thread(void *data)
-{
-  uint64_t target_tick = swks.system_ticks_64 + 100;
+  ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_idx_ctx;
+  page_frame_iterator_t pfi;
+  page_frame_t *code = alloc_pages(INIT_CODE_PAGES, AF_PGP);
+  page_frame_t *stack = alloc_pages(INIT_STACK_PAGES, AF_PGP);
   status_t r;
-  ulong_t max_timeslice = 400;
 
-  r = sys_scheduler_control(1,SYS_SCHED_CTL_GET_POLICY,0);
-  kprintf( "POLICY: %d\n", r );
-  r = sys_scheduler_control(1,SYS_SCHED_CTL_GET_PRIORITY,0);
-  kprintf( "PRIORITY: %d\n", r );
-  r = sys_scheduler_control(1,SYS_SCHED_CTL_GET_AFFINITY_MASK,0);
-  kprintf( "CPU AFFINITY: %d\n", r );
-
-  kprintf( "INSUFFICIENT TASK: %d\n", sys_scheduler_control(4,SYS_SCHED_CTL_GET_MAX_TIMISLICE,0) );
-  kprintf( "SETTING MAX TIMESLICE TO %d : result = %d\n", max_timeslice, sys_scheduler_control(1,SYS_SCHED_CTL_SET_MAX_TIMISLICE,max_timeslice) );
-
-  r = sys_scheduler_control(1,SYS_SCHED_CTL_GET_MAX_TIMISLICE,0);
-  kprintf( "MAX TIMESLICE: %d\n", r );
-
-  if( kernel_thread(second_service_thread,"Run Service, Run !") != 0 ) {
-    panic( "Can't create the Init task !" );
+  if( code == NULL ) {
+    panic( "Can't allocate pages for init's code !" );
   }
 
-  kprintf( "+ [Init] Greetings from my parent (%d): %s\n",
-           current_task()->ppid,data );
-
-  for( ;; ) {
-    if( swks.system_ticks_64 >= target_tick ) {
-        kprintf( " + [Init] Tick, tick ! (Ticks: %d, PID: %d, CPU: %d, ATOM: %d, T: %d)\n",
-                 swks.system_ticks_64, current_task()->pid, cpu_id(), in_atomic(), target_tick );
-        target_tick = swks.system_ticks_64 + STEP;
-    }
+  if( stack == NULL ) {
+    panic( "Can't allocate pages for init's stack !" );
   }
+
+  mm_init_pfiter_index(&pfi, &pfi_idx_ctx,
+                       pframe_number(code),
+                       pframe_number(code) );
+  r = mm_map_pages( &task->page_dir, &pfi,
+                    INIT_CODE_START, INIT_CODE_PAGES,
+                    0 );
+  if( r != 0 ) {
+    goto out;
+  }
+
+  mm_init_pfiter_index(&pfi, &pfi_idx_ctx,
+                       pframe_number(stack),
+                       pframe_number(stack) );
+  r = mm_map_pages( &task->page_dir, &pfi,
+                    INIT_STACK_START, INIT_STACK_PAGES,
+                    0 );
+
+  memcpy((char *)INIT_CODE_START,init_code,INIT_CODE_SIZE);
+
+  r = do_process_control(task,SYS_PR_CTL_SET_ENTRYPOINT,INIT_CODE_START);
+  kprintf( "** Setting entrypoint: %d\n", r );
+
+  r |= do_process_control(task,SYS_PR_CTL_SET_STACK,INIT_STACK_START + PAGE_SIZE - 32);
+  kprintf( "** Setting stack: %d\n", r );
+
+  if( r != 0 ) {
+    goto out;
+  }
+out:
+  return r;
 }
 
 void start_init(void)
 {
-  if( kernel_thread(init_thread,"Run Init, Run !") != 0 ) {
-    panic( "Can't create the Init task !" );
+  status_t r;
+  task_t *init;
+
+  r = create_task( current_task(), CLONE_MM, TPL_USER, &init );
+  if( !r ) {
+    r = create_init_mm(init);
+  }
+
+  if( !r ) {
+    kprintf( "** Init is ready !\n" );
+    r = sched_change_task_state( init, TASK_STATE_RUNNABLE );
+  }
+
+  if( r ) {
+    panic("start_init(): Can't start 'init' process !");
   }
 }
 

@@ -189,7 +189,7 @@ static inline void _set_pt_flags(pte_t *p,index_t i,int f)
  */
 
 #define IDT_ITEMS  256  /* interrupt descriptors */
-#define GDT_ITEMS  8   /* GDT */
+#define GDT_ITEMS  9   /* GDT */
 
 #define NIL_DES  0  /* nil(null) descriptor */
 #define KTEXT_DES    1 /* kernel space */

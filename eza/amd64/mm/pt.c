@@ -100,7 +100,7 @@ static int populate_pdp3_entry(pdp3_entry_t *entry, page_flags_t flags)
 
     entry->present = 1;
     entry->rw = 1;
-    entry->us = 0;
+    entry->us = 1;
     entry->pwt = 0;
     entry->pcd = 0;
     entry->a = 0;
@@ -125,7 +125,7 @@ static int populate_pde2_entry(pde2_entry_t *entry, page_flags_t flags)
 
     entry->present = 1;
     entry->rw = 1;
-    entry->us = 0;
+    entry->us = 1;
     entry->pwt = 0;
     entry->pcd = 0;
     entry->a = 0;
@@ -160,7 +160,7 @@ static int map_pde2_range( pde2_entry_t *pde2, uintptr_t virt_addr, uintptr_t en
 
     /* User/supervisor ? */
     if( flags & PF_KERNEL_PAGE ) {
-      pte->us = 0;
+      pte->us = 1;
     } else {
       pte->us = 1;
     }
@@ -269,7 +269,7 @@ static int populate_pml4_entry(pml4_entry_t *entry, page_flags_t flags)
 
     entry->present = 1;
     entry->rw = 1;
-    entry->us = 0;
+    entry->us = 1;
     entry->pwt = 0;
     entry->pcd = 0;
     entry->a = 0;

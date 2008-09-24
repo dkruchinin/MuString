@@ -26,7 +26,10 @@
 #include <eza/arch/context.h>
 #include <eza/arch/page.h>
 #include <eza/arch/current.h>
-	
+
+/* extra bytes on the stack after CPU exception stack frame: %rax */
+#define INT_STACK_EXTRA_PUSHES  8
+
 .code64
 
 .text
@@ -59,6 +62,7 @@
 .global hi_level_fault_handlers 
 
 .global kthread_fork_path
+.global user_fork_path
 
 arch_delay_loop:
 0:	dec %rdi
@@ -109,6 +113,13 @@ kthread_fork_path:
     RESTORE_ALL
     iretq
 
+user_fork_path:
+    RESTORE_ALL
+//    swapgs
+    xor %eax, %eax
+    movl %eax, %ds
+    iretq
+
 /* Initialize low-level IRQ stubs. Thank Linux team for a very good approach !
  */
 .global irq_entrypoints_array 
@@ -132,9 +143,6 @@ low_irq_stubs:
 .text
 v=v+1
 .endr
-
-/* extra bytes on the stack after CPU exception stack frame: %rax */
-#define INT_STACK_EXTRA_PUSHES  8
 
 common_interrupt:
   /* Upon entering this point on the stack we have got exception stack frame 

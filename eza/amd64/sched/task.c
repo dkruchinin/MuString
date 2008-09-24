@@ -40,6 +40,7 @@
 
 /* Located on 'amd64/asm.S' */
 extern void kthread_fork_path(void);
+extern void user_fork_path(void);
 
 /* Bytes enough to store our arch-specific context. */
 #define ARCH_CONTEXT_BUF_SIZE  1256
@@ -211,6 +212,32 @@ static uint64_t __setup_kernel_task_context(task_t *task)
   return sizeof(regs_t);
 }
 
+static uint64_t __setup_user_task_context(task_t *task)
+{
+  regs_t *regs = (regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
+  uint64_t flags;
+
+  /* Prepare a fake CPU-saved context */
+  memset( regs, 0, sizeof(regs_t) );
+
+  /* Now setup selectors so them reflect kernel space. */
+  regs->cs = gdtselector(8);
+  regs->old_ss = 0;
+  regs->rip = 0;
+  regs->old_rsp = 0;
+
+  /* Save flags. */
+  __asm__ volatile (
+    "pushfq\n"
+    "popq %0\n"
+    : "=r" (flags) );
+  flags &= ~0x200;  /* Disable interrupts. */
+  regs->rflags = flags;
+  //| 0x200; /* Enable interrupts. */  
+
+  return sizeof(regs_t);
+}
+
 status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
                                  task_privelege_t priv)
 {
@@ -220,7 +247,7 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   if( priv == TPL_KERNEL ) {
     reg_size = __setup_kernel_task_context(newtask);
   } else {
-    panic( "arch_setup_task_context(): Creation of userspace threads is not yet supported !\n" );
+    reg_size = __setup_user_task_context(newtask);
   }
 
   /* Now reserve space for storing XMM context since it requires
@@ -249,7 +276,7 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   if( priv == TPL_KERNEL ) {
     *((uint64_t *)fsave) = (uint64_t)kthread_fork_path;
   } else {
-    panic( "arch_setup_task_context(): Creation of userspace threads is not yet supported !\n" );
+    *((uint64_t *)fsave) = (uint64_t)user_fork_path;
   }
 
   /* Now setup CR3 and _current_ value of new thread's stack. */
