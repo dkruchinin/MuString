@@ -158,6 +158,8 @@ void initialize_idle_tasks(void)
     sched_stat->cpu = cpu;
     sched_stat->current_task = idle_tasks[cpu];
     sched_stat->kstack_top = idle_tasks[cpu]->kernel_stack.high_address;
+    sched_stat->kernel_ds = KERNEL_SELECTOR(KDATA_DES);
+    sched_stat->user_ds = USER_SELECTOR(UDATA_DES);
     cpu++;
   }
 }

@@ -149,6 +149,29 @@
 #define ARCH_CTX_FS_OFFSET   0x10
 #define ARCH_CTX_GS_OFFSET   0x18
 
+#ifdef __ASM__
+
+/* extra bytes on the stack after CPU exception stack frame: %rax */
+#define INT_STACK_EXTRA_PUSHES  8
+
+#include <eza/arch/current.h>
+#include <eza/arch/page.h>
+
+#define ENTER_INTERRUPT_CTX(label,extra_pushes) \
+	cmp $gdtselector(KTEXT_DES),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ;\
+	je label; \
+        swapgs ;\
+label:	;\
+	incq %gs:CPU_SCHED_STAT_IRQCNT_OFFT ;\
+	push %rax ;\
+	SAVE_ALL ;\
+	sti
+
+#define COMMON_INTERRUPT_EXIT_PATH \
+         jmp return_from_common_interrupt;
+     
+#endif
+
 #ifndef __ASM__
 
 #include <eza/arch/types.h>

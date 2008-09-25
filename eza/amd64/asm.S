@@ -27,9 +27,6 @@
 #include <eza/arch/page.h>
 #include <eza/arch/current.h>
 
-/* extra bytes on the stack after CPU exception stack frame: %rax */
-#define INT_STACK_EXTRA_PUSHES  8
-
 .code64
 
 .text

@@ -15,7 +15,7 @@ typedef struct __cpu_sched_stat {
   struct __task_struct *current_task;
   uintptr_t kstack_top;
   curtype_t flags, irq_count, preempt_count;
-  curtype_t irq_lock_count;
+  curtype_t irq_lock_count, kernel_ds, user_ds;
 } cpu_sched_stat_t;
 
 #endif
