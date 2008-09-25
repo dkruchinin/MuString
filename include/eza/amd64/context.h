@@ -164,7 +164,6 @@
         mov %gs: CPU_SCHED_STAT_KERN_DS_OFFT,%ds; \
 label:	;\
 	incq %gs:CPU_SCHED_STAT_IRQCNT_OFFT ;\
-	push %rax ;\
 	SAVE_ALL ;\
 	sti
 
