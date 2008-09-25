@@ -114,13 +114,7 @@ kthread_fork_path:
 user_fork_path:
 resume_userspace:
     RESTORE_ALL
-    pop %rax
-
-    cli
-    /* Now we should restore user %ds before returning. */
-    mov %gs:CPU_SCHED_STAT_USER_DS_OFFT, %ds
-    swapgs
-    iretq
+    jmp userspace_ret_from_int
 
 /* Initialize low-level IRQ stubs. Thank Linux team for a very good approach !
  */
@@ -169,6 +163,14 @@ kernel_space_interrupt:
 return_from_common_interrupt:
   RESTORE_ALL
 
+  /* To avoid nested schedulings (when current process is scheduled
+   * during its schedule path, we disable interrupts when checking
+   * for rescheduling to occur. Interrupts will be re-enabled either
+   * in 'schedule()', or in 'arch_activate_task()' after context
+   * switch completes.
+   */
+  cli
+
   /* Tell the kernel that we've left interrupt context. */
   decq %gs:CPU_SCHED_STAT_IRQCNT_OFFT
 
@@ -190,13 +192,18 @@ return_from_common_interrupt:
   call schedule
 
 no_preemption_in_interrupt:
+  /* Now we can enable interrupts. */
+  sti
   cmp $KERNEL_SELECTOR(KTEXT_DES),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)
   je ret_from_int
 
   /* If we have come from user space, restore %gs and %ds.
    * Interrupts will be enabled after reloading %rflags during
    * execution of the IRETQ instruction.
+   * We disable interrupts to avoid the use of user data segment
+   * in case if another interrupt has occured.
    */
+userspace_ret_from_int:
   cli
   mov %gs: CPU_SCHED_STAT_USER_DS_OFFT,%ds
   swapgs
@@ -356,5 +363,3 @@ hi_level_fault_handlers:
 .quad reserved_fault_handler_impl              /* 29 */
 .quad security_exception_fault_handler_impl    /* 30 */
 .quad reserved_fault_handler_impl              /* 31 */
-
-
