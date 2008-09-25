@@ -141,21 +141,7 @@ v=v+1
 .endr
 
 common_interrupt:
-  /* Upon entering this point on the stack we have got exception stack frame 
-   * and saved %rax since at this moment %rax contains IRQ line number.
-   */
-  cmp $KERNEL_SELECTOR(KTEXT_DES),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)
-  je kernel_space_interrupt
-  /* If we have come from user space, perform 'swapgs'.*/
-  swapgs
-
-kernel_space_interrupt:
- /* Tell the kernel that we're in interrupt context.
-  */
-  incq %gs:CPU_SCHED_STAT_IRQCNT_OFFT
-
-  /* Process this interrupt */
-  SAVE_ALL
+  ENTER_INTERRUPT_CTX(kernel_space_interrupt,INT_STACK_EXTRA_PUSHES)
 
   movq %rax,%rdi
   call do_irq
