@@ -28,6 +28,8 @@ typedef struct __cpu_sched_stat {
 #define CPU_SCHED_STAT_IRQCNT_OFFT 0x20
 #define CPU_SCHED_STAT_PREEMPT_OFFT 0x28
 #define CPU_SCHED_STAT_IRQLOCK_OFFT 0x30
+#define CPU_SCHED_STAT_KERN_DS_OFFT 0x38
+#define CPU_SCHED_STAT_USER_DS_OFFT 0x40
 
 /* Task flags indexes  */
 #define CPU_SCHED_NEED_RESCHED_F_IDX 0

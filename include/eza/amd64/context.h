@@ -160,7 +160,8 @@
 #define ENTER_INTERRUPT_CTX(label,extra_pushes) \
 	cmp $gdtselector(KTEXT_DES),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ;\
 	je label; \
-        swapgs ;\
+        swapgs ;  \
+        mov %gs: CPU_SCHED_STAT_KERN_DS_OFFT,%ds; \
 label:	;\
 	incq %gs:CPU_SCHED_STAT_IRQCNT_OFFT ;\
 	push %rax ;\
@@ -201,7 +202,8 @@ typedef struct __regs {
   /* Kernel-saved registers. */
   uint64_t rbp, rsi, rdi, rdx, rcx, rbx;
   uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
-
+  uint64_t rax;
+    
   /* CPU-saved registers. */
   uint64_t rip, cs, rflags, old_rsp, old_ss;
 } regs_t;

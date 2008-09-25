@@ -108,13 +108,18 @@ syscall_point:
 kthread_fork_path:
     sti
     RESTORE_ALL
+    pop %rax
     iretq
 
 user_fork_path:
+resume_userspace:
     RESTORE_ALL
-//    swapgs
-    movl $(USER_SELECTOR(UDATA_DES)), %eax
-    movl %eax, %ds
+    pop %rax
+
+    cli
+    /* Now we should restore user %ds before returning. */
+    mov %gs:CPU_SCHED_STAT_USER_DS_OFFT, %ds
+    swapgs
     iretq
 
 /* Initialize low-level IRQ stubs. Thank Linux team for a very good approach !
