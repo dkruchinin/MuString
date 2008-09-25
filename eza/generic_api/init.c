@@ -104,7 +104,7 @@ static int create_init_mm(task_t *task)
            idx );
 
   memcpy(pframe_to_virt(code),init_code,INIT_CODE_SIZE);
-
+  
   if( r != 0 ) {
     goto out;
   }

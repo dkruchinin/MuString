@@ -158,7 +158,7 @@
 #include <eza/arch/page.h>
 
 #define ENTER_INTERRUPT_CTX(label,extra_pushes) \
-	cmp $gdtselector(KTEXT_DES),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ;\
+	cmp $KERNEL_SELECTOR(KTEXT_DES),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ;\
 	je label; \
         swapgs ;  \
         mov %gs: CPU_SCHED_STAT_KERN_DS_OFFT,%ds; \

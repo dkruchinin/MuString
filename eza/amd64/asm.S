@@ -150,7 +150,7 @@ common_interrupt:
   /* Upon entering this point on the stack we have got exception stack frame 
    * and saved %rax since at this moment %rax contains IRQ line number.
    */
-  cmp $gdtselector(KTEXT_DES),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)
+  cmp $KERNEL_SELECTOR(KTEXT_DES),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)
   je kernel_space_interrupt
   /* If we have come from user space, perform 'swapgs'.*/
   swapgs
@@ -174,7 +174,7 @@ return_from_common_interrupt:
 
   /* Check for preemption flag */
   movq %gs:CPU_SCHED_STAT_FLAGS_OFFT, %rax
-	
+
   bt $CPU_SCHED_NEED_RESCHED_F_IDX, %rax
   jnc no_preemption_in_interrupt
 
@@ -190,11 +190,16 @@ return_from_common_interrupt:
   call schedule
 
 no_preemption_in_interrupt:
-  cmp $gdtselector(KTEXT_DES),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)
+  cmp $KERNEL_SELECTOR(KTEXT_DES),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)
   je ret_from_int
-  /* If we have come from user space, restore %gs.*/
-  swapgs
 
+  /* If we have come from user space, restore %gs and %ds.
+   * Interrupts will be enabled after reloading %rflags during
+   * execution of the IRETQ instruction.
+   */
+  cli
+  mov %gs: CPU_SCHED_STAT_USER_DS_OFFT,%ds
+  swapgs
 ret_from_int:
   popq %rax
   iretq

@@ -9,8 +9,8 @@
 .global smp_scheduler_interrupt_handler
 
 smp_local_timer_interrupt_handler:
-	pushq $10
-	ENTER_INTERRUPT_CTX(l1,0)
+	push %rax 
+	ENTER_INTERRUPT_CTX(l1,INT_STACK_EXTRA_PUSHES)
 	callq apic_timer_hack
 	callq smp_local_timer_interrupt_tick
 lapic_int_finish:
@@ -18,8 +18,8 @@ lapic_int_finish:
 	COMMON_INTERRUPT_EXIT_PATH
 
 smp_scheduler_interrupt_handler:
-	pushq $11
-	ENTER_INTERRUPT_CTX(l2,0)
+	push %rax
+	ENTER_INTERRUPT_CTX(l2,INT_STACK_EXTRA_PUSHES)
 	SAVE_ALL
 	call do_smp_scheduler_interrupt_handler
 	jmp lapic_int_finish

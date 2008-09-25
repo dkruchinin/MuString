@@ -286,6 +286,10 @@ status_t arch_vm_map_kernel_area(task_t *task)
   /* Just copy PML4 entry from kernel page directoy to user one. */
   *dst_pml4 = *src_pml4;
 
+  src_pml4 = (uintptr_t *)kernel_pt_directory.entries;
+  dst_pml4 = (uintptr_t *)task->page_dir.entries;
+  *dst_pml4 = *src_pml4;
+
   return 0;
 }
 
