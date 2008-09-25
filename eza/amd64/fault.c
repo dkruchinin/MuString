@@ -72,50 +72,62 @@ void divide_by_zero_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 
 void debug_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
+  kprintf( "  [!!] #Debug exception raised !\n" );
 }
 
 void nmi_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
+  kprintf( "  [!!] #NMI exception raised !\n" );
 }
 
 void breakpoint_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
+  kprintf( "  [!!] #Breakpoint exception raised !\n" );
 }
 
 void overflow_fault_handler_impl(void)
 {
+  kprintf( "  [!!] #Overflow exception raised !\n" );
 }
 
 void bound_range_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
+    kprintf( "  [!!] #Bound range exception raised !\n" );
 }
 
 void invalid_opcode_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
+    kprintf( "  [!!] #Invalid opcode exception raised !\n" );
 }
 
 void device_not_available_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
+    kprintf( "  [!!] #Dev not available exception raised !\n" );
 }
 
 void doublefault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
+    kprintf( "  [!!] #Double fault exception raised !\n" );
 }
 
 void coprocessor_segment_overrun_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
+    kprintf( "  [!!] #FPU segment overrun exception raised !\n" );
 }
 
 void invalid_tss_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
+    kprintf( "  [!!] #Invalid TSS exception raised !\n" );
 }
 
 void segment_not_present_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
+    kprintf( "  [!!] #Segment not present exception raised !\n" );
 }
 
 void stack_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
+    kprintf( "  [!!] #Stack exception raised !\n" );
 }
 
 void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
@@ -144,30 +156,37 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 
 void reserved_exception_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
+    kprintf( "  [!!] #Reserved exception raised !\n" );
 }
 
 void fpu_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
+    kprintf( "  [!!] #FPU exception raised !\n" );
 }
 
 void alignment_check_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
+    kprintf( "  [!!] #Alignment check exception raised !\n" );
 }
 
 void machine_check_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
+    kprintf( "  [!!] #Machine check exception raised !\n" );
 }
 
 void simd_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
+    kprintf( "  [!!] #SIMD exception raised !\n" );
 }
 
 void security_exception_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
+    kprintf( "  [!!] #Security exception raised !\n" );
 }
 
 void reserved_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
+  kprintf( "  [!!] #Reserved fault exception raised !\n" );  
 }
 
 

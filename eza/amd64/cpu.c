@@ -28,6 +28,8 @@
 
 extern void syscall_point(void);
 
+static void arch_syscall_setup_cpu(void);
+
 /* local functions implementations */
 static void cpu_clean_am_flag(void)
 {
@@ -90,10 +92,13 @@ void arch_cpu_init(cpu_id_t cpu)
   cpu_clean_iopl_nt_flags();
   /* disable align checking */
   cpu_clean_am_flag();
+
+  /* setup syscall entrypoint */
+  arch_syscall_setup_cpu();
 }
 
 /* init syscall/sysret entry function */
-void arch_syscall_setup_cpu(void)
+static void arch_syscall_setup_cpu(void)
 {
   /* enable */
   set_efer_flag(AMD_SCE_FLAG);
@@ -101,7 +106,8 @@ void arch_syscall_setup_cpu(void)
   write_msr(AMD_MSR_STAR,((uint64_t)(gdtselector(KDATA_DES) | PL_USER) << 48) | 
 	    ((uint64_t)(gdtselector(KTEXT_DES) | PL_KERNEL) << 32));
   write_msr(AMD_MSR_LSTAR,(uint64_t)syscall_point);
-  write_msr(AMD_MSR_SFMASK,0x200);
+  /* Disable interrupts upon entering syscalls. */
+  write_msr(AMD_MSR_SFMASK,~0x200);
 
   return;
 }

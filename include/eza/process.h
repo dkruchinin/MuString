@@ -38,5 +38,6 @@ status_t do_process_control(task_t *target,ulong_t cmd, ulong_t arg);
 
 status_t sys_process_control( pid_t pid, ulong_t cmd, ulong_t arg);
 status_t sys_create_process(task_creation_flags_t flags);
+status_t sys_get_pid(void);
 
 #endif

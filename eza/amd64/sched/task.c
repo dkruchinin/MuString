@@ -221,18 +221,7 @@ static uint64_t __setup_user_task_context(task_t *task)
   regs->old_ss = USER_SELECTOR(UDATA_DES);
   regs->rip = 0;
   regs->old_rsp = 0;
-
   regs->rflags = USER_RFLAGS;
-  /* Save flags. */
-/*
-  __asm__ volatile (
-    "pushfq\n"
-    "popq %0\n"
-    : "=r" (flags) );
-*/
-  //flags &= ~0x200;  /* Disable interrupts. */
-  //regs->rflags = flags;
-  //| 0x200; /* Enable interrupts. */  
 
   return sizeof(regs_t);
 }

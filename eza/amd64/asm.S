@@ -26,12 +26,12 @@
 #include <eza/arch/context.h>
 #include <eza/arch/page.h>
 #include <eza/arch/current.h>
+#include <eza/errno.h>
 
 .code64
 
 .text
 .global set_efer_flag
-.global syscall_point
 
 .global arch_delay_loop
 .global arch_fake_loop
@@ -77,33 +77,6 @@ set_efer_flag:
 	btsl %edi, %eax
 	wrmsr
 	ret
-
-	/* low-level syscall binding, registers used:	
-	 * rcx - uspace address to out, rax - syscall number,
-	 * rdi, rsi, rdx, r10, r8, r9 - arguments (from 1 - 6), rax returning value
-	 */
-syscall_point:
-	swapgs
-	movq %rsp, %gs:0
-        movq %gs:8, %rsp
-        swapgs
-        sti
-        
-        pushq %rcx
-        pushq %r11
-        movq %r10, %rcx
-        pushq %rax
-	/* call real handler */
-        call syscall_handler
-        addq $8, %rsp
-        popq %r11
-        popq %rcx
-        cli
-        swapgs
-        movq %gs:0, %rsp
-        swapgs
-	
-        sysretq
 
 kthread_fork_path:
     sti

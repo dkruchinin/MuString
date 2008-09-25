@@ -46,8 +46,11 @@
 #define INIT_STACK_START INIT_CODE_START+0x100000
 #define INIT_STACK_PAGES 1
 
-static char init_code[] = { 0xb8, 0, 0, 0, 0, 0xeb, 0xfe }; // jmp -1
-#define INIT_CODE_SIZE 7
+/* ovl 0x0,%rax; syscall; jmp <spin> */
+static char init_code[] = { 0xb8, 0, 0, 0, 0,   \
+                            0x0f, 0x05,         \
+                            0xeb, 0xfe };
+#define INIT_CODE_SIZE 9
 
 static int create_init_mm(task_t *task)
 {
