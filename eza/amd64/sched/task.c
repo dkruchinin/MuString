@@ -193,21 +193,15 @@ static uint64_t __setup_kernel_task_context(task_t *task)
   memset( regs, 0, sizeof(regs_t) );
 
   /* Now setup selectors so them reflect kernel space. */
-  regs->cs = gdtselector(KTEXT_DES);
-  regs->old_ss = gdtselector(KDATA_DES);
+  regs->cs = KERNEL_SELECTOR(KTEXT_DES);
+  regs->old_ss = KERNEL_SELECTOR(KDATA_DES);
   regs->rip = (uint64_t)kernel_thread_helper;
 
   /* When kernel threads start execution, their 'userspace' stacks are equal
    * to their kernel stacks.
    */
   regs->old_rsp = task->kernel_stack.high_address - 128;
-
-  /* Save flags. */
-  __asm__ volatile (
-    "pushfq\n"
-    "popq %0\n"
-    : "=r" (flags) );
-  regs->rflags = flags | 0x200; /* Enable interrupts. */  
+  regs->rflags = KERNEL_RFLAGS;
 
   return sizeof(regs_t);
 }
@@ -220,9 +214,9 @@ static uint64_t __setup_user_task_context(task_t *task)
   /* Prepare a fake CPU-saved context */
   memset( regs, 0, sizeof(regs_t) );
 
-  /* Now setup selectors so them reflect kernel space. */
-  regs->cs = gdtselector(8);
-  regs->old_ss = 0;
+  /* Now setup selectors so them reflect user space. */
+  regs->cs = USER_SELECTOR(UTEXT_DES);
+  regs->old_ss = USER_SELECTOR(UDATA_DES);
   regs->rip = 0;
   regs->old_rsp = 0;
 

@@ -38,23 +38,25 @@
 #include <mm/mm.h>
 #include <mm/pfalloc.h>
 #include <mlibc/string.h>
+#include <mm/pt.h>
 
-#define INIT_CODE_START 0x8000000
+#define INIT_CODE_START 0x1FFFFF000000
 #define INIT_CODE_PAGES 1
 
-#define INIT_STACK_START 0x9000000
+#define INIT_STACK_START INIT_CODE_START+0x100000
 #define INIT_STACK_PAGES 1
 
-static char init_code[] = { 0xeb, 0xfe };
-#define INIT_CODE_SIZE 2
+static char init_code[] = { 0xb8, 0, 0, 0, 0, 0xeb, 0xfe }; // jmp -1
+#define INIT_CODE_SIZE 7
 
 static int create_init_mm(task_t *task)
 {
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_idx_ctx;
   page_frame_iterator_t pfi;
-  page_frame_t *code = alloc_pages(INIT_CODE_PAGES, AF_PGP);
-  page_frame_t *stack = alloc_pages(INIT_STACK_PAGES, AF_PGP);
+  page_frame_t *code = alloc_pages(INIT_CODE_PAGES, AF_PGEN);
+  page_frame_t *stack = alloc_pages(INIT_STACK_PAGES, AF_PGEN);
   status_t r;
+  page_idx_t idx;
 
   if( code == NULL ) {
     panic( "Can't allocate pages for init's code !" );
@@ -64,12 +66,19 @@ static int create_init_mm(task_t *task)
     panic( "Can't allocate pages for init's stack !" );
   }
 
+  kprintf( "** INIT CODE START: %p, page idx: %x\n",
+           INIT_CODE_START, code->idx );
+
+  kprintf( "** INIT STACK START: %p, page idx: %x\n",
+           INIT_STACK_START, stack->idx );
+
   mm_init_pfiter_index(&pfi, &pfi_idx_ctx,
                        pframe_number(code),
                        pframe_number(code) );
+
   r = mm_map_pages( &task->page_dir, &pfi,
                     INIT_CODE_START, INIT_CODE_PAGES,
-                    0 );
+                    MAP_ACC_MASK );
   if( r != 0 ) {
     goto out;
   }
@@ -79,15 +88,22 @@ static int create_init_mm(task_t *task)
                        pframe_number(stack) );
   r = mm_map_pages( &task->page_dir, &pfi,
                     INIT_STACK_START, INIT_STACK_PAGES,
-                    0 );
-
-  memcpy((char *)INIT_CODE_START,init_code,INIT_CODE_SIZE);
+                    MAP_ACC_MASK );
 
   r = do_process_control(task,SYS_PR_CTL_SET_ENTRYPOINT,INIT_CODE_START);
   kprintf( "** Setting entrypoint: %d\n", r );
 
   r |= do_process_control(task,SYS_PR_CTL_SET_STACK,INIT_STACK_START + PAGE_SIZE - 32);
   kprintf( "** Setting stack: %d\n", r );
+
+  idx = mm_pin_virtual_address(&task->page_dir,INIT_CODE_START);
+  kprintf( "** Init code page: %x\n", idx );
+
+  idx = mm_pin_virtual_address(&task->page_dir,KERNEL_BASE + 0x8000);
+  kprintf( "** Kernel base: %p, first page: %d\n", KERNEL_BASE + 0x8000,
+           idx );
+
+  memcpy(pframe_to_virt(code),init_code,INIT_CODE_SIZE);
 
   if( r != 0 ) {
     goto out;
@@ -101,7 +117,8 @@ void start_init(void)
   status_t r;
   task_t *init;
 
-  r = create_task( current_task(), CLONE_MM, TPL_USER, &init );
+  r = create_task( current_task(), 0, TPL_USER, &init );
+  kprintf( "**** Create inittask: %d\n", r );
   if( !r ) {
     r = create_init_mm(init);
   }

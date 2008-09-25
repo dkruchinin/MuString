@@ -35,6 +35,7 @@
 #include <eza/swks.h>
 #include <eza/arch/mm.h>
 #include <eza/arch/page.h>
+#include <eza/vm.h>
 
 /* Initial kernel top-level page directory record. */
 uintptr_t _kernel_extended_end;
@@ -44,6 +45,8 @@ uint8_t k_entries[PAGE_SIZE] __attribute__((aligned(PAGE_SIZE)));
 
 static page_idx_t dma_pages = 0;
 static uint64_t min_phys_addr = 0, max_phys_addr = 0;
+
+static vm_range_t direct_mapping_area;
 
 static void initialize_kernel_page_directory(void)
 {
@@ -257,10 +260,33 @@ void arch_mm_remap_pages(void)
   /* Verify that mappings are valid. */  
   verify_mapping("general", KERNEL_BASE, swks.mem_total_pages, 0);
 
+  /* Now we should register our direct mapping area and kernel area
+   * to allow them be mapped as mandatory areas in user memory space.
+   */
+  direct_mapping_area.phys_addr=0x1000;
+  direct_mapping_area.virt_addr=0x1000;
+  direct_mapping_area.num_pages=IDENT_MAP_PAGES-1;
+  direct_mapping_area.map_flags=MAP_KERNEL | MAP_RW;
+  vm_register_user_mandatory_area(&direct_mapping_area);
+
   /* All CPUs must initially reload their CR3 registers with already
    * initialized Level-4 page directory.
    */
   arch_smp_mm_init(0);
+}
+
+status_t arch_vm_map_kernel_area(task_t *task)
+{
+  uintptr_t *src_pml4,*dst_pml4;
+  int idx = (KERNEL_BASE >> 39) & 0x1FF;
+
+  src_pml4 = ((uintptr_t *)kernel_pt_directory.entries)+idx;
+  dst_pml4 = ((uintptr_t *)task->page_dir.entries)+idx;  
+
+  /* Just copy PML4 entry from kernel page directoy to user one. */
+  *dst_pml4 = *src_pml4;
+
+  return 0;
 }
 
 void arch_smp_mm_init(int cpu)

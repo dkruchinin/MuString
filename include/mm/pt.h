@@ -31,6 +31,7 @@
 #include <eza/spinlock.h>
 #include <eza/arch/page.h>
 #include <mm/mm.h>
+#include <eza/arch/atomic.h>
 
 /* Page that never exists */
 #define INVALID_PAGE_IDX  0xffffffff
@@ -50,6 +51,7 @@ typedef uint8_t mmap_flags_t;
 
 typedef struct __page_directory {
   spinlock_t lock;
+  atomic_t use_count;  
   uint8_t *entries;  /* Must refer to a page that contains TLB entries
                       * for this page directory.
                       */

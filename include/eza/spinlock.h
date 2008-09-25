@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *
  * include/eza/spinlock.h: spinlock and atomic types and functions
  *                         architecture independed
@@ -50,6 +51,10 @@ typedef struct __spinlock_type {
 
 #define spinlock_initialize(x,y)                \
     ((spinlock_t *)x)->__spin_val = __SPINLOCK_UNLOCKED_V
+
+#define SPINLOCK_DEFINE(s) spinlock_t s = {     \
+        .__spin_val = __SPINLOCK_UNLOCKED_V,         \
+    };
 
 #define spinlock_lock(u) \
   preempt_disable(); \

@@ -21,6 +21,7 @@
  *
  */
 
+#include <eza/arch/page.h>
 
 #define GDT_CPU_ENTRIES  { \
    { 0,0,0,0,0,0,0,0,0,0 }, /* nil descriptor */ \
@@ -50,7 +51,7 @@
   { .limit_0_15=0xffff, \
     .base_0_15=0, \
     .base_16_23=0, \
-    .access=AR_PRESENT | AR_DATA | AR_WRITEABLE | DPL_USPACE, \
+    .access=AR_PRESENT | AR_DATA | AR_WRITEABLE | (1 << 2) | DPL_USPACE, \
     .limit_16_19=0xf, \
     .available=0, \
     .longmode=1, \
@@ -82,16 +83,4 @@
   /* tss desciptor - for 64bit on amd64 we're need two descriptors */ \
   { 0,0,0,0,0,0,0,0,0,0 }, \
   { 0,0,0,0,0,0,0,0,0,0 }, \
-  /* TEST DESCRIPTOR: DON'T USE IT !!!*/ \
-  { .limit_0_15=0xffff, \
-    .base_0_15=0, \
-    .base_16_23=0, \
-    .access=AR_PRESENT | AR_CODE | DPL_KERNEL | AR_READABLE, \
-    .limit_16_19=0xf, \
-    .available=0, \
-    .longmode=1, \
-    .special=0, \
-    .granularity=1, \
-    .base_24_31=0}, \
-  }
-
+}

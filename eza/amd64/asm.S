@@ -116,7 +116,7 @@ kthread_fork_path:
 user_fork_path:
     RESTORE_ALL
 //    swapgs
-    xor %eax, %eax
+    movl $(USER_SELECTOR(UDATA_DES)), %eax
     movl %eax, %ds
     iretq
 

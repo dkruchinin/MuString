@@ -27,6 +27,7 @@
 void initialize_page_directory(page_directory_t *pd)
 {
   spinlock_initialize(&pd->lock,"Kernel PGD lock");
+  atomic_set(&pd->use_count,1);
   pd->entries = NULL;
 }
 

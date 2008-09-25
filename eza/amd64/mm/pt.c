@@ -97,7 +97,7 @@ static int populate_pdp3_entry(pdp3_entry_t *entry, mmap_flags_t flags)
     register uintptr_t pfn = pframe_number(pf);
 
     entry->present = 1;
-    if (!(flags & MAP_ACC_MASK) || MAP_RDONLY)
+    if (!(flags & MAP_ACC_MASK) || (flags & MAP_RDONLY))
       entry->rw = 0; /* if access type is not set, page pages as read-only */
     else if (flags & MAP_RW)
       entry->rw = 1;    
@@ -126,7 +126,7 @@ static int populate_pde2_entry(pde2_entry_t *entry, mmap_flags_t flags)
     register uintptr_t pfn = pframe_number(pf);
 
     entry->present = 1;
-    if (!(flags & MAP_ACC_MASK) || MAP_RDONLY)
+    if (!(flags & MAP_ACC_MASK) || (flags & MAP_RDONLY))
       entry->rw = 0; /* if access type is not set, page pages as read-only */
     else if (flags & MAP_RW)
       entry->rw = 1;
@@ -162,7 +162,7 @@ static int map_pde2_range( pde2_entry_t *pde2, uintptr_t virt_addr, uintptr_t en
     ASSERT(iter_isrunning(pfi));
     page_base = (uintptr_t)pfi->pf_idx;
     pte->present = 1;
-    if (!(flags & MAP_ACC_MASK) || MAP_RDONLY)
+    if (!(flags & MAP_ACC_MASK) || (flags & MAP_RDONLY))
       pte->rw = 0; /* if access type is not set, page pages as read-only */
     else if (flags & MAP_RW)
       pte->rw = 1;
@@ -266,7 +266,7 @@ static int populate_pml4_entry(pml4_entry_t *entry, mmap_flags_t flags)
     register uintptr_t pfn = pframe_number(pf);
 
     entry->present = 1;
-    if (!(flags & MAP_ACC_MASK) || MAP_RDONLY)
+    if (!(flags & MAP_ACC_MASK) || (flags & MAP_RDONLY))
       entry->rw = 0; /* if access type is not set, page pages as read-only */
     else if (flags & MAP_RW)
       entry->rw = 1;

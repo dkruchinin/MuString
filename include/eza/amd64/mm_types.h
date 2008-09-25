@@ -141,6 +141,8 @@ extern void gdt_tss_setlim(descriptor_t *p,uint32_t lim);
 /* idt realted misc functions */
 extern void idt_set_offset(idescriptor_t *p,uintptr_t off);
 
+extern tss_t *get_cpu_tss(cpu_id_t cpu);
+
 /* Functions for dealing with traps and gates. */
 int install_trap_gate( uint32_t slot, uintptr_t handler,
                        prot_ring_t dpl, ist_stack_frame_t ist );

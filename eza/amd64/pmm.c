@@ -54,6 +54,11 @@ void tss_init(tss_t *tp)
   return;
 }
 
+tss_t *get_cpu_tss(cpu_id_t cpu)
+{
+  return &tss[cpu];
+}
+
 void idt_init(void)
 {
   return;

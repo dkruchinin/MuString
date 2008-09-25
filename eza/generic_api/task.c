@@ -38,6 +38,7 @@
 #include <mlibc/index_array.h>
 #include <eza/spinlock.h>
 #include <eza/arch/preempt.h>
+#include <eza/vm.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
@@ -131,7 +132,7 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
   }
 
   /* Initialize task's MM. */
-  r = initialize_task_mm(parent,task,flags);
+  r = vm_initialize_task_mm(parent,task,flags,priv);
   if( r != 0 ) {
     goto free_stack;
   }

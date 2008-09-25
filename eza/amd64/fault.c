@@ -32,6 +32,9 @@
 #define kernel_fault(f) \
     (f->cs == gdtselector(KTEXT_DES))
 
+#define get_fault_address(x) \
+    __asm__ __volatile__( "movq %%cr2, %0" : "=r"(x) )
+
 typedef struct __fault_descr {
   uint32_t slot;
   void (*handler)();
@@ -120,16 +123,21 @@ void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_fr
   if( kernel_fault(stack_frame) ) {
     kprintf( "#GPF in kernel mode: RIP = 0x%X\n", stack_frame->rip );    
   }
-  kprintf( "[!!!] Unhandled GPF exception ! Stopping ...\n" );
+
+  kprintf( "[!!!] Unhandled GPF exception ! Stopping (CODE: %d) ...\n",
+           stack_frame->error_code );
   l1: goto l1;
 }
 
 void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
+    uint64_t a;
   if( kernel_fault(stack_frame) ) {
     kprintf( "#PF in kernel mode: RIP = 0x%X\n", stack_frame->rip );    
   }
-  kprintf( "[!!!] Unhandled PF exception ! Stopping ...\n" );
+  get_fault_address(a);
+  kprintf( "[!!!] Unhandled PF exception ! Stopping (CODE: %d, See page 225). Address: %p\n",
+           stack_frame->error_code, a);
   l1: goto l1;
 
 }

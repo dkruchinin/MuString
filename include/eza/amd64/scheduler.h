@@ -31,6 +31,7 @@
 #include <eza/amd64/context.h>
 #include <eza/arch/current.h>
 #include <eza/smp.h>
+#include <eza/arch/mm_types.h>
 
 static inline void set_cpu_online(cpu_id_t cpu, uint32_t online)
 {
@@ -64,14 +65,17 @@ static inline cpu_id_t cpu_id(void)
 void arch_hw_activate_task(arch_context_t *new_ctx, task_t *new_task,
                            arch_context_t *old_ctx, uintptr_t kstack);
 
-
 static inline void arch_activate_task(task_t *to)
 {
   arch_context_t *to_ctx = (arch_context_t*)&to->arch_context[0];
   arch_context_t *from_ctx = (arch_context_t*)&(current_task()->arch_context[0]);
+  tss_t *tss = get_cpu_tss(to->cpu);
+  
+  /* We should setup TSS to reflect new task's kernel stack. */
+  tss->rsp0 = to->kernel_stack.high_address;
 
   /* Let's jump ! */
-  kprintf( "******* ACTIVATING TASK: %d\n", to->pid );
+  kprintf( "******* ACTIVATING TASK: %d (CPU: %d)\n", to->pid, to->cpu );
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
 }
 

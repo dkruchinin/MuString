@@ -144,42 +144,18 @@ static inline uintptr_t _k2p(uintptr_t p)
 #define PGFLT_RS_PAGE  (1 << 3) /* reserved page access occured */ 
 #define PGFLT_EX_PAGE  (1 << 4) /* execute page take a page fault */
 
-/* inlined functions for playing with flags and address */
-/*
-static inline void _set_pt_addr(pte_t *p,index_t i,uintptr_t a)
-{
-  pte_t *__p=&p[i];
+/* The most sensetive bits in RFLAGS.  */
+#define RFLAGS_IOPL_BIT 12
+#define RFLAGS_INT_BIT 9
 
-  __p->base_12_31=(a >> 12) & 0xfffff;
-  __p->base_32_39=(a >> 32) & 0xff;
+/* Default RFLAGS: IOPL=0, all interrupts are enabled. */
+#define DEFAULT_RFLAGS_VALUE (0 | (1 << RFLAGS_INT_BIT))
 
-  return;
-}
+/* Initial RFLAGS value for new user tasks. */
+#define USER_RFLAGS DEFAULT_RFLAGS_VALUE
 
-static inline int _get_pt_flags(pte_t *p,index_t i)
-{
-  pte_t *__p=&p[i];
-
-  return ((!__p->page_cache_disable) << PAGE_CACHEABLE_SHIFT | (!__p->present) << PAGE_PRESENT_SHIFT |
-	  __p->uaccessible << PAGE_USER_SHIFT | 1 << PAGE_READ_SHIFT | __p->writeable << PAGE_WRITE_SHIFT |
-	  (!__p->no_execute) << PAGE_EXEC_SHIFT | __p->global << PAGE_GLOBAL_SHIFT);
-}
-
-static inline void _set_pt_flags(pte_t *p,index_t i,int f) 
-{
-  pte_t *__p=&p[i];
-
-  __p->page_cache_disable=!(f & PAGE_CACHEABLE);
-  __p->present=!(f & PAGE_NOT_PRESENT);
-  __p->uaccessible=(f & PAGE_USER) != 0;
-  __p->writeable=(f & PAGE_WRITE) != 0;
-  __p->no_execute=(f & PAGE_EXEC) == 0;
-  __p->global=(f & PAGE_GLOBAL) != 0;
-
-  return;
-}
-
-*/
+/* Initial RFLAGS value for new kernel tasks: IOPL=3. */
+#define KERNEL_RFLAGS (DEFAULT_RFLAGS_VALUE | (3 << RFLAGS_IOPL_BIT))
 
 #endif /* __ASM__ */
 
@@ -189,7 +165,7 @@ static inline void _set_pt_flags(pte_t *p,index_t i,int f)
  */
 
 #define IDT_ITEMS  256  /* interrupt descriptors */
-#define GDT_ITEMS  9   /* GDT */
+#define GDT_ITEMS  8   /* GDT */
 
 #define NIL_DES  0  /* nil(null) descriptor */
 #define KTEXT_DES    1 /* kernel space */
@@ -222,6 +198,10 @@ static inline void _set_pt_flags(pte_t *p,index_t i,int f)
 /* bootstrap macros */
 #define idtselector(des)  ((des) << 4)
 #define gdtselector(des)  ((des) << 3)
+
+/* Macros for defining task selectors. */
+#define USER_SELECTOR(s) (gdtselector(s) | PL_USER)
+#define KERNEL_SELECTOR(s) gdtselector(s)
 
 #endif /* __AMD64_PAGE_H__ */
 
