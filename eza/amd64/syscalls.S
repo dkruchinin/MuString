@@ -31,7 +31,9 @@
  * of available system calls.
  */
 syscall_table:
-	.quad	sys_get_pid
+	.quad	sys_get_pid       	/* 0 */
+	.quad 	sys_create_task
+	.quad 	sys_task_control
 
 /* Dn't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

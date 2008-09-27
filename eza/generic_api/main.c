@@ -84,7 +84,8 @@ static void main_routine_stage1(void)
    * enable all interrupts.
    */
   enable_all_irqs();  
-  /* TODO: Here we should wake up all other CPUs, if any. */
+
+  initialize_ipc();
 
   /* OK, we can proceed. */
   start_init();
