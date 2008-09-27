@@ -6,10 +6,6 @@
 #include <mm/pfalloc.h>
 #include <mm/page.h>
 
-void initialize_ipc(void)
-{
-}
-
 status_t ipc_create_port(task_t *owner,ulong_t mode,ulong_t size)
 {
   status_t r;

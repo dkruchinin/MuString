@@ -2,6 +2,12 @@
 #include <ipc/ipc.h>
 #include <mm/pfalloc.h>
 #include <mm/page.h>
+#include <ds/linked_array.h>
+
+void initialize_ipc(void)
+{
+}
+
 
 task_ipc_t *allocate_task_ipc(void)
 {
