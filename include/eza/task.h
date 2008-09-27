@@ -29,7 +29,6 @@
 #include <eza/arch/context.h>
 #include <mlibc/index_array.h>
 #include <mm/pt.h>
-#include <ipc/ipc.h>
 #include <eza/limits.h>
 
 #define INVALID_PID  IA_INVALID_VALUE
@@ -64,6 +63,7 @@ typedef uint32_t cpu_array_t;
 #define CPU_AFFINITY_ALL_CPUS 0
 
 struct __scheduler;
+struct __task_ipc;
 
 /* Abstract object for scheduling. */
 typedef struct __task_struct {
@@ -81,7 +81,7 @@ typedef struct __task_struct {
   struct __scheduler *scheduler;
   void *sched_data;
 
-  task_ipc_t *ipc;
+  struct __task_ipc *ipc;
   task_limits_t *limits;
 
   /* Arch-dependent context is located here */

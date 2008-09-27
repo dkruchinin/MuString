@@ -40,6 +40,7 @@
 #include <eza/arch/preempt.h>
 #include <eza/vm.h>
 #include <eza/limits.h>
+#include <ipc/ipc.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;

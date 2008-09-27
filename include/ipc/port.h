@@ -2,12 +2,11 @@
 #define __IPC_PORT__
 
 #include <eza/arch/types.h>
+#include <eza/task.h>
 #include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
 #include <eza/arch/arch_ipc.h>
-
-#define IPC_ACC_READ  0x1
-#define IPC_ACC_WRITE  0x2
+#include <ds/linked_array.h>
 
 typedef struct __ipc_port_message_t {
   ulong_t mode,data_size;
@@ -15,8 +14,16 @@ typedef struct __ipc_port_message_t {
 } ipc_port_message_t;
 
 typedef struct __ipc_port_t {
+  ulong_t flags;
+  spinlock_t lock;
+  linked_array_t msg_list;
+  atomic_t use_count;
+  ulong_t queue_size,avail_messages;
+  ipc_port_message_t **message_ptrs;
 } ipc_port_t;
 
+
 void initialize_ipc(void);
+status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size);
 
 #endif

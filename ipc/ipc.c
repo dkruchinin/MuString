@@ -8,7 +8,6 @@ void initialize_ipc(void)
 {
 }
 
-
 task_ipc_t *allocate_task_ipc(void)
 {
   page_frame_t *p = alloc_page(AF_PGEN | AF_ZERO);

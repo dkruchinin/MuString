@@ -32,15 +32,30 @@
 #include <eza/arch/mm_types.h>
 #include <eza/arch/preempt.h>
 #include <eza/spinlock.h>
+#include <ipc/ipc.h>
+#include <ipc/port.h>
 
 task_t *idle_tasks[NR_CPUS];
 
 #define STEP 300
 
+static void thread1(void *data) {
+    status_t id;
+    kprintf( "** Creating a port ...\n" );
+    id = ipc_create_port(current_task(),IPC_BLOCKED_ACCESSS,
+                         IPC_DEFAULT_PORT_MESSAGES);
+    kprintf( "port id: %d\n", id );
+    for(;;);
+}
+
 void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
 
+  if( kernel_thread(thread1,NULL) != 0 ) {
+      panic( "Can't create thread for testing port IPC functionality !\n" );
+  }
+  
   for( ;; ) {
     if( swks.system_ticks_64 >= target_tick ) {
       kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
