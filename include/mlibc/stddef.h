@@ -50,6 +50,7 @@
 #define container_of(ptr, type, member) \
   (type *)((char *)(ptr) - offsetof(type, member))
 
+#define round_up(a, b) ((((a) + ((b) - 1)) / (b)) * (b))
 #define align_up(s,a)    (((s)+((a)-1)) & ~((a)-1))
 #define align_down(s,a)  ((s) & ~((a)-1))
 

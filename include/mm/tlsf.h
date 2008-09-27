@@ -61,6 +61,7 @@
 #define __TLSF_H__
 
 #include <ds/list.h>
+#include <mlibc/stddef.h>
 #include <mm/page.h>
 #include <mm/mmpool.h>
 #include <mm/pfalloc.h>
@@ -80,33 +81,49 @@
 #define TLSF_SLDS_MIN 2 /* Minimal number of SLDs in each FLD entry */
 #define TLSF_FLDS_MAX 8 /* Maximum number of FLDs */
 #define TLSF_FLD_BITMAP_SIZE TLSF_FLD_SIZE /* FLD bitmap size */
-#define TLSF_SLD_BITMAP_SIZE (TLSF_FLD_SIZE * TLSF_SLD_SIZE) /* FIXME DK: roundup to 8 */
+#define TLSF_SLD_BITMAP_SIZE round_up((TLSF_FLD_SIZE * TLSF_SLD_SIZE), 8) /* SLD bitmap size */
 
 /**
- * 
+ * @struct tlsf_node_t
+ * TLSF FLD node(i.e. SLD)
+ * containing information about each SLD node in
+ * the FLD that owns given node.
  */
 typedef struct __tlsf_node {
-  int blocks_no;
-  int max_avail_size;
-  list_head_t blocks;
+  int blocks_no;      /**< Total number of page blocks in node */
+  int max_avail_size; /**< Size of max available block */
+  list_head_t blocks; /**< The list of all blocks in node */
 } tlsf_node_t;
 
+/**
+ * @typedef uint8_t tlsf_bitmap_t
+ * Standard TLSF bitmap.
+ */
 typedef uint8_t tlsf_bitmap_t;
 
+/**
+ * @struct tlsf_t
+ * TLSF allocator structure containing
+ * all TLSF-allocator-specific information.
+ */
 typedef struct __tlsf {
   struct {
-    tlsf_node_t nodes[TLSF_SLD_SIZE];
-    int avail_nodes;    
-  } map[TLSF_FLD_SIZE];
-  list_head_t *percpu_cache;  
-  spinlock_t lock;  
-  mm_pool_type_t owner;
-  page_idx_t first_page_idx;
-  page_idx_t last_page_idx;
+    tlsf_node_t nodes[TLSF_SLD_SIZE]; /**< FLD nodes(i.e. SLDs) */
+    int total_blocks;                 /**< Total number of available blocks in all nodes */
+  } map[TLSF_FLD_SIZE];               /**< TLSF map that contains FLDs */
+  list_head_t *percpu_cache;          /* TODO DK: <-- */
+  spinlock_t lock;
+  mm_pool_type_t owner;               /**< Type of pool that owns given TLSF allocator */
+  page_idx_t first_page_idx;          /**< Very first page index in TLSF */
+  page_idx_t last_page_idx;           /**< Very last page index in TLSF */
   uint8_t slds_bitmap[TLSF_SLD_BITMAP_SIZE];
   uint8_t fld_bitmap;  
 } tlsf_t;
 
+/**
+ * Initialize tlsf allocator.
+ * @param pool - A pointer to pool allocator bins to.
+ */
 void tlsf_alloc_init(mm_pool_t *pool);
 
 #ifdef TLSF_DEBUG

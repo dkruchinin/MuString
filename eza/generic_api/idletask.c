@@ -33,7 +33,7 @@
 #include <eza/arch/preempt.h>
 #include <eza/spinlock.h>
 
-task_t *idle_tasks[NR_CPUS];
+task_t *idle_tasks[MAX_CPUS];
 
 #define STEP 300
 

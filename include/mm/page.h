@@ -152,7 +152,7 @@ static inline void pframe_memnull(page_frame_t *start, int block_size)
   register int sz = block_size;
 
   while (--sz >= 0)
-    memset(pframe_to_virt(start + block_size), 0, PAGE_SIZE);
+    memset(pframe_to_virt(start), 0, PAGE_SIZE * block_size);
 }
 #else
 #define pframe_memnull(start, block_size) arch_page_memnull(start, block_size)

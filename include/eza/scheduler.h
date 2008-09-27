@@ -67,7 +67,7 @@ void sched_timer_tick(void);
 
 void idle_loop(void);
 
-extern task_t *idle_tasks[];
+extern task_t *idle_tasks[MAX_CPUS];
 
 status_t sched_change_task_state(task_t *task,task_state_t state);
 void sched_reschedule_task(task_t *task);

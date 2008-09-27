@@ -71,7 +71,7 @@ static spinlock_t cpu_data_lock;
 static eza_sched_taskdata_t *allocate_task_sched_data(void)
 {
   /* TODO: [mt] Allocate memory via slabs !!!  */
-  page_frame_t *page = alloc_page(AF_PGEN);  
+  page_frame_t *page = alloc_page(AF_PGEN);
   return (eza_sched_taskdata_t *)pframe_to_virt(page);
 }
 

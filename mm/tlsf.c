@@ -41,39 +41,62 @@
 #include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 
+/*
+ * information TLSF holds in the _private
+ * field of page_frame structure.
+ * (note: size of _private field is 32 bits)
+ */
 union tlsf_priv {
   uint32_t pad;
   struct {
-    uint16_t flags;
-    uint16_t size;    
+    uint16_t flags; /* TLSF-specific flags */
+    uint16_t size;  /* size of pages block */
   };
 };
 
+/* TLSF main indices */
 struct tlsf_idxs {
-  int fldi;
-  int sldi;
+  int fldi; /* FLD index */
+  int sldi; /* SLD index */
 };
 
-#define TLSF_PB_MARK  0x01
-#define TLSF_PB_HEAD  0x02
-#define TLSF_PB_TAIL  0x04
+#define TLSF_PB_MARK  0x01 /* Each TLSF page must have this flag */
+#define TLSF_PB_HEAD  0x02 /* Determines that a page is a block head */
+#define TLSF_PB_TAIL  0x04 /* Determines that a page is a block tail */
 #define TLSF_PB_MASK  0x07
 
+/* First available power of two */
 static const int FLD_FPOW2 = 0;
+
+/* Very last power of two */
 static const int FLD_LPOW2 = TLSF_FLD_SIZE + TLSF_FIRST_OFFSET - 2;
 static const int MAX_BLOCK_SIZE = (1 << (TLSF_FLD_SIZE + TLSF_FIRST_OFFSET - 1));
 
 static inline void get_tlsf_ids(uint16_t size, struct tlsf_idxs *ids);
 static inline uint16_t size_from_tlsf_ids(struct tlsf_idxs *ids);
 
-#define __bitno(pow2)      ((pow2) >> 1)
-#define __fld_offset(fldi) ((fldi) ? (TLSF_SLD_SIZE << ((fldi) - 1)) : TLSF_SLD_SIZE)
-#define __fldi(size)       (__power2fldi(bit_find_msf(size)))
-#define __sldi(size, fldi) (((size) & ~(1 << __fldi2power(fldi)) /  __fld_offset(fldi))
-#define __fldi2power(fldi) ((fldi) ? ((fldi) + TLSF_FIRST_OFFSET - 1) : 0)
+#define __bitno(pow2)                           \
+  ((pow2) >> 1)
+
+/* Get number of SLDs in given FLD index */
+#define __fld_offset(fldi)                                  \
+  ((fldi) ? (TLSF_SLD_SIZE << ((fldi) - 1)) : TLSF_SLD_SIZE)
+#define __fldi(size)                            \
+  (__power2fldi(bit_find_msf(size)))
+#define __sldi(size, fldi)                                      \
+  (((size) & ~(1 << __fldi2power(fldi)) /  __fld_offset(fldi))
+
+/* Convert FLD index to corresponding power of 2 */
+#define __fldi2power(fldi)                      \
+  ((fldi) ? ((fldi) + TLSF_FIRST_OFFSET - 1) : 0)
+
+/* Convert power of two to corresponding FLD index */
 #define __power2fldi(pow)                                               \
   (((pow) >= TLSF_FIRST_OFFSET) ? ((pow) - TLSF_FIRST_OFFSET + 1) : 0)
-#define __sld_bitmap(tlsf, fldi) (*(tlsf_bitmap_t *)((tlsf)->slds_bitmap + (fldi) * TLSF_SLD_SIZE))
+
+/* Get a chunk of SLDs bitmap corresponding to given fldi and sldi */
+#define __sld_bitmap(tlsf, fldi)                                    \
+  (*(tlsf_bitmap_t *)((tlsf)->slds_bitmap + (fldi) * TLSF_SLD_SIZE))
 
 #define __fld_mark_avail(tlsf, fldi)            \
   (bit_set(&(tlsf)->fld_bitmap, fldi))
@@ -88,6 +111,14 @@ static inline uint16_t size_from_tlsf_ids(struct tlsf_idxs *ids);
 #define __sld_is_avail(tlsf, fldi, sldi)                            \
   (bit_test(&(tlsf)->slds_bitmap[(fldi) * TLSF_SLD_SIZE], sldi))
 
+/*
+ * All free TLSF pages are grouped into blocks. Block of size N
+ * represents N continuos pages. TLSF only interested in block's
+ * head(very first page) and its tail, so all we should to know
+ * about the block is where its very first and very last pages
+ * are located.
+ * __make_block creates a block.
+ */
 static inline void __make_block(page_frame_t *head, page_frame_t *tail)
 {
   list_init_node(&head->node);
@@ -98,6 +129,7 @@ static inline void __make_block(page_frame_t *head, page_frame_t *tail)
   tail->node.prev = &head->node;
 }
 
+/* get block size. */
 static inline uint16_t __block_size(page_frame_t *block)
 {
   union tlsf_priv priv = { block->_private };
@@ -134,17 +166,20 @@ static inline void __block_flags_set_mask(page_frame_t *block, uint16_t mask)
   block->_private = priv.pad;
 }
 
+/* Find next available FLD index after "start" index */
 static inline int __find_next_fldi(tlsf_t *tlsf, int start)
 {
   return bit_find_lsf(tlsf->fld_bitmap & ~((1 << (start + 1)) - 1));
 }
 
+/* Find next available SLD index after "sldi_start" index */
 static inline int __find_next_sldi(tlsf_t *tlsf, int fldi, int sldi_start)
 {
   return
     bit_find_lsf(__sld_bitmap(tlsf, fldi) & ~((1 << (sldi_start + 1)) - 1));
 }
 
+/* Get TLSF FLD index and SLD index by block size */
 static void get_tlsf_ids(uint16_t size, struct tlsf_idxs *ids)
 {
   int pow2 = bit_find_msf(size);
@@ -153,6 +188,7 @@ static void get_tlsf_ids(uint16_t size, struct tlsf_idxs *ids)
   ids->sldi = (size & ~(1 << pow2)) / __fld_offset(ids->fldi);
 }
 
+/* Get block size from its FLD and SLD indices */
 static inline uint16_t size_from_tlsf_ids(struct tlsf_idxs *ids)
 {
   uint16_t size = 1 << __fldi2power(ids->fldi);
@@ -165,6 +201,10 @@ static inline void __block_init(page_frame_t *block_root, uint16_t size)
 {
   page_frame_t *tail = list_entry(block_root->node.next, page_frame_t, node);
 
+  /*
+   * "initialized" block must have PB_HEAD and PB_TAIL flags set
+   * on its frist and the last page respectively.
+   */
   bit_set(&block_root->_private, __bitno(TLSF_PB_HEAD));
   bit_set(&tail->_private, __bitno(TLSF_PB_TAIL));
   __block_size_set(block_root, size);
@@ -182,12 +222,17 @@ static inline void __block_deinit(page_frame_t *block_root)
     list_init_node(&tail->node);
 }
 
+/*
+ * insert a block to the TLSF structures and
+ * update FLD and SLD bits if necessary.
+ */
 static void __block_insert(tlsf_t *tlsf, page_frame_t *block_root,
                                   uint16_t size, struct tlsf_idxs *ids)
 {
   tlsf_node_t *sld_node;
-
   sld_node = tlsf->map[ids->fldi].nodes + ids->sldi;
+
+  /* The greates block should be the last block in blocks list */
   if (size > sld_node->max_avail_size) {
     list_add2tail(&sld_node->blocks, list_head(&block_root->head));
     sld_node->max_avail_size = size;
@@ -201,12 +246,17 @@ static void __block_insert(tlsf_t *tlsf, page_frame_t *block_root,
    */
   if (sld_node->blocks_no++ == 0) {
     __sld_mark_avail(tlsf, ids->fldi, ids->sldi);
+    
     /* Also it might be the first one in the corresponding FLD */
-    if (tlsf->map[ids->fldi].avail_nodes++ == 0)
+    if (tlsf->map[ids->fldi].total_blocks++ == 0)
       __fld_mark_avail(tlsf, ids->fldi);
   }
 }
 
+/*
+ * Remove block from the TLSF structures and
+ * update TLSF internal bits and counters if necessary.
+ */
 static void __block_remove(tlsf_t *tlsf, page_frame_t *block_root,
                            uint16_t size, struct tlsf_idxs *ids)
 {
@@ -223,14 +273,16 @@ static void __block_remove(tlsf_t *tlsf, page_frame_t *block_root,
 
     __sld_mark_unavail(tlsf, ids->fldi, ids->sldi);
     sld_node->max_avail_size = 0;
-    if (--tlsf->map[ids->fldi].avail_nodes == 0) {
+    if (--tlsf->map[ids->fldi].total_blocks == 0) {
       /* Unfortunatelly that was the last available SLD node on given FLD */
       __fld_mark_unavail(tlsf, ids->fldi);
     }
   }
   else {
-    sld_node->max_avail_size =
-      __block_size(list_entry(list_node_last(&sld_node->blocks), page_frame_t, head));
+    if (sld_node->max_avail_size == __block_size(block_root)) {
+      sld_node->max_avail_size =
+        __block_size(list_entry(list_node_last(&sld_node->blocks), page_frame_t, head));
+    }
   }
 }
 
@@ -253,6 +305,13 @@ static void block_remove(tlsf_t *tlsf, page_frame_t *block_root)
   __block_deinit(block_root);
 }
 
+/*
+ * Get left neighbour of the block "block_root".
+ * Left neighbour is a block that has
+ * physical address of its first page leaster than an address of
+ * "head" page of the block_root.
+ * return NULL left neighbour wasn't found.
+ */
 static inline page_frame_t *__left_neighbour(page_frame_t *block_root)
 {
   page_frame_t *page;
@@ -264,19 +323,30 @@ static inline page_frame_t *__left_neighbour(page_frame_t *block_root)
   return list_entry(page->node.prev, page_frame_t, node);
 }
 
+/*
+ * Get right neighbour of the "block_root" or return NULL if neighbour
+ * wasn't found.
+ * Right neighbour is a block that has physical address of its tail head page
+ * greater than an address of tail page of block_root.
+ */
 static inline page_frame_t *__right_neighbour(page_frame_t *block_root)
 {
   page_frame_t *page;
 
   page = pframe_by_number(pframe_number(list_entry(block_root->node.next,
                                                    page_frame_t, node) + 1));
-  if (!bit_test(&page->_private, __bitno(TLSF_PB_HEAD))) {
+  if (!bit_test(&page->_private, __bitno(TLSF_PB_HEAD)))
     return NULL;
-  }
   
   return page;
 }
 
+/*
+ * Split block "block_root" into two new blocks. The head of block with size
+ * (__block_size(block_root) - split_size) will be equal to current head of block_root
+ * The head of new block that is cutted from original block root will have size
+ * split_size and its root page is a page after tail page of new block_root.
+ */
 static page_frame_t *split(tlsf_t *tlsf, page_frame_t *block_root, uint16_t split_size)
 {
   int offset = __block_size(block_root) - split_size;
@@ -294,20 +364,23 @@ static page_frame_t *split(tlsf_t *tlsf, page_frame_t *block_root, uint16_t spli
 #define try_merge_left(tls, block_root)  try_merge(tlsf, block_root, -1)
 #define try_merge_right(tlsf, block_root) try_merge(tlsf, block_root, 1)
 
+/*
+ * Try to find block_root neighbours and merge them to one block with
+ * size equal to __block_size(block_root) + __block_size(found_neighbour)
+ */
 static page_frame_t *try_merge(tlsf_t *tlsf, page_frame_t *block_root, int side)
 {
   page_frame_t *neighbour;
   uint16_t n_size, n_flags, size;
-  struct tlsf_idxs n_ids;
-
+  
   size = __block_size(block_root);
-  if (side < 0) { /* get page block left neighbour */
+  if (side < 0) { /* get block's left neighbour */
     if (pframe_number(block_root) <= tlsf->first_page_idx)
       goto out;
     
     neighbour = __left_neighbour(block_root);
   }
-  else { /* get page block right neighbour */
+  else { /* get block's right neighbour */
     if ((pframe_number(block_root) + size) > tlsf->last_page_idx)
       goto out;
 
@@ -318,15 +391,21 @@ static page_frame_t *try_merge(tlsf_t *tlsf, page_frame_t *block_root, int side)
 
   n_size = __block_size(neighbour);
   n_flags = __block_flags(neighbour);
-  get_tlsf_ids(n_size, &n_ids);
 
-  /* if result block is too big, merging can't be completed */
+  /* if the result block is too big, merging can't be completed */
   if ((size + n_size) >= MAX_BLOCK_SIZE)
     goto out;
 
-  /* Wow, it seems that blocks can be successfully coalesced */
+  /*
+   * Wow, it seems that blocks can be successfully coalesced
+   * So its neighbour may be safely removed from its indices.
+   */
   block_remove(tlsf, neighbour);
   if (pframe_number(block_root) > pframe_number(neighbour)) {
+    /*
+     * neighbour is on the left of root_block, so neigbour's head page
+     * will be the head of result block.
+     */
     page_frame_t *tmp = block_root;
 
     block_root = neighbour;
@@ -342,16 +421,26 @@ static page_frame_t *try_merge(tlsf_t *tlsf, page_frame_t *block_root, int side)
   return block_root;
 }
 
+/*
+ * Find suitable block which have size greater or equal to "size".
+ * Strategy: "good fit".
+ */
 static page_frame_t *find_suitable_block(tlsf_t *tlsf, uint16_t size)
 {
   struct tlsf_idxs ids;
   page_frame_t *block = NULL;
   list_node_t *n = NULL;
-  
+
+  /* Frist of all let's see if the is any blocks in the corresponding FLD */
   get_tlsf_ids(size, &ids);
   if (__fld_is_avail(tlsf, ids.fldi)) {
+    /*
+     * If there exists a block in the corresponding SLD and
+     * if it has suitable size, all is ok.
+     */
     if (__sld_is_avail(tlsf, ids.fldi, ids.sldi)) {
       tlsf_node_t *node = tlsf->map[ids.fldi].nodes + ids.sldi;
+
       if (node->max_avail_size >= size) {
         n = (size == (1 << __fldi2power(ids.fldi))) ?
           list_node_first(&node->blocks) : list_node_last(&node->blocks);
@@ -359,12 +448,21 @@ static page_frame_t *find_suitable_block(tlsf_t *tlsf, uint16_t size)
       }
     }
 
+    /*
+     * If there wasn't suitable block in the SLD that ties with "size",
+     * try to get first available block in the next SLD. (if exists)
+     */
     ids.sldi = __find_next_sldi(tlsf, ids.fldi, ids.sldi);
     if (ids.sldi > 0) {
       n = list_node_first(&tlsf->map[ids.fldi].nodes[ids.sldi].blocks);
       goto found;
     }
   }
+
+  /*
+   * Otherwise, try to get first available block in the next
+   * FLDi.
+   */
   if ((ids.fldi = __find_next_fldi(tlsf, ids.fldi)) < 0)
     goto out;
 
@@ -436,18 +534,17 @@ static page_frame_t *__alloc_pages(int n, void *data)
 
   block_remove(tlsf, block_root);
   size = __block_size(block_root);
-  if (size > n) { /* split block if necessary */
-    page_frame_t *tmp = split(tlsf, block_root, size - n);
-    block_insert(tlsf, tmp, size - n);
-  }
+  if (size > n) /* split block if necessary */
+    block_insert(tlsf, split(tlsf, block_root, size - n), size - n);
 
-  spinlock_unlock(&tlsf->lock);
   atomic_sub(&pool->free_pages, n);
+  spinlock_unlock(&tlsf->lock);
   
   out:  
   return block_root;
 }
 
+/* initialize TLSF pages hierarchy */
 static void build_tlsf_map(tlsf_t *tlsf, page_frame_t *pages, page_idx_t npages)
 {
   int i, j;
@@ -455,7 +552,7 @@ static void build_tlsf_map(tlsf_t *tlsf, page_frame_t *pages, page_idx_t npages)
   /* initialize TLSF map */
   for (i = 0; i < TLSF_FLD_SIZE; i++) {
     tlsf_node_t *nodes = tlsf->map[i].nodes;    
-    tlsf->map[i].avail_nodes = 0;
+    tlsf->map[i].total_blocks = 0;
     
     for (j = 0; j < TLSF_SLD_SIZE; j++) {
       nodes[j].blocks_no = 0;
@@ -463,15 +560,22 @@ static void build_tlsf_map(tlsf_t *tlsf, page_frame_t *pages, page_idx_t npages)
       nodes[j].max_avail_size = 0;
     }
   }
-  
-  /* initialize bitmaps */
+    
   tlsf->first_page_idx = tlsf->last_page_idx = - 1;
+  /* initialize bitmaps */
   memset(&tlsf->fld_bitmap, 0, sizeof(tlsf->fld_bitmap));
   memset(tlsf->slds_bitmap, 0, sizeof(*(tlsf->slds_bitmap)) * TLSF_SLD_BITMAP_SIZE);
 
-  /* insert available blocks to the corresponding TLSF map entries */
+  /*
+   * Insert available blocks to the corresponding TLSF FLDs and SLDs.
+   * All available pages are inserted one-by-one from right to left.
+   * __free_pages will merge all continuos pages. Typically page blocks
+   * are splitted from left to right. I.e. page block header is always
+   * the lefmost page in the block, so it's better to free pages starting
+   * from the last one.
+   */
   for (i = npages - 1; i >= 0; i--) {
-    if (pages[i].flags & PF_RESERVED)
+    if (pages[i].flags & PF_RESERVED) /*  */
       continue;
     if (tlsf->last_page_idx < 0)
       tlsf->last_page_idx = pframe_number(pages + i);
@@ -500,10 +604,16 @@ void tlsf_alloc_init(mm_pool_t *pool)
   long free_pages;
   
   memset(tlsf, 0, sizeof(*tlsf));
-  check_tlsf_defs();
+  check_tlsf_defs(); /* some paranoic checks */
   tlsf->owner = pool->type;
   spinlock_initialize(&tlsf->lock, "TLSF spinlock");
-  free_pages = atomic_get(&pool->free_pages);  
+
+  /*
+   * build_tlsf_map uses function __free_pages which
+   * increments pool's free_pages counter. We don't
+   * want counter becomes invalid.
+   */
+  free_pages = atomic_get(&pool->free_pages);
   build_tlsf_map(tlsf, pool->pages, pool->total_pages);
   atomic_set(&pool->free_pages, free_pages);
   pool->allocator.type = PFA_TLSF;

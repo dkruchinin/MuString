@@ -139,7 +139,7 @@ void arch_mm_init(void)
   _kernel_extended_end =
     PAGE_ALIGN((uintptr_t)page_frames_array + sizeof(page_frame_t) * swks.mem_total_pages);
   kprintf(" Scanned: %ldM, %ld pages\n", (long)_b2mb(max_phys_addr - min_phys_addr),
-          (long)swks.mem_total_pages);  
+          (long)swks.mem_total_pages);
 }
 
 static int prepare_page(page_idx_t idx, ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx)
@@ -247,7 +247,7 @@ void arch_mm_remap_pages(void)
   if(ret != 0)
     panic( "arch_mm_remap_pages(): Can't remap physical pages (DMA identical mapping) !" );
 
-    verify_mapping("identity", 0x1000, IDENT_MAP_PAGES - 1, 1);
+  verify_mapping("identity", 0x1000, IDENT_MAP_PAGES - 1, 1);
   
   /* Now we should remap all available physical memory starting at 'KERNEL_BASE'. */
   mm_init_pfiter_index(&pfi, &pfi_index_ctx, 0, swks.mem_total_pages - 1);

@@ -33,7 +33,7 @@
 #include <eza/arch/types.h>
 
 /* Idalloc-specific page frame flags (_private) */
-#define IDALLOC_PAGE       0x01 /* Page owner is idalloc */
+#define IDALLOC_PAGE       0x01 /* Page owner is idalloc` */
 #define IDALLOC_PAGE_INUSE 0x02 /* Page is in use */
 #define IDALLOC_PAGE_FULL  0x04 /* Page is full and can not be used */
 
