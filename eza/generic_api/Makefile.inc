@@ -16,4 +16,5 @@ LIBEZA_OBJS=eza/generic_api/main.o \
 	eza/generic_api/process.o \
 	eza/generic_api/schedulers/sched_default.o \
 	eza/generic_api/security.o \
-	eza/generic_api/vm.o
+	eza/generic_api/vm.o \
+	eza/generic_api/limits.o

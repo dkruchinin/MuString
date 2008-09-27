@@ -39,6 +39,7 @@
 #include <eza/spinlock.h>
 #include <eza/arch/preempt.h>
 #include <eza/vm.h>
+#include <eza/limits.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
@@ -108,6 +109,8 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
   page_frame_iterator_t pfi;
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_idx_ctx;
   pid_t pid, ppid;
+  task_limits_t *limits;
+  task_ipc_t *ipc;
 
   /* TODO: [mt] Add memory limit check. */
   /* goto task_create_fault; */  
@@ -155,6 +158,23 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
     goto free_stack_pages;
   }
 
+  /* Setup limits. */
+  limits = allocate_task_limits();
+  if(limits==NULL) {
+    goto free_stack_pages;
+  } else {
+    set_default_task_limits(limits);
+    task->limits = limits;
+  }
+
+  /* Setup IPC stuff. */
+  ipc = allocate_task_ipc();
+  if(ipc==NULL) {
+    goto free_limits;
+  } else {
+    task->ipc = ipc;
+  }
+  
   if(parent != NULL) {
     ppid = parent->pid;
   } else {
@@ -177,6 +197,7 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
 
   *t = task;
   return 0;
+free_limits:
   /* TODO: Unmap stack pages here. [mt] */
 free_stack_pages:
   /* TODO: Free all stack pages here. [mt] */  

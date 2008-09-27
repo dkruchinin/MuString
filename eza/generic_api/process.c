@@ -122,7 +122,7 @@ status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t
   return r;
 }
 
-status_t do_process_control(task_t *target,ulong_t cmd, ulong_t arg)
+status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
 {
   switch( cmd ) {
     case SYS_PR_CTL_SET_ENTRYPOINT:
@@ -144,7 +144,7 @@ status_t do_process_control(task_t *target,ulong_t cmd, ulong_t arg)
   return -EINVAL;
 }
 
-status_t sys_process_control(pid_t pid, ulong_t cmd, ulong_t arg)
+status_t sys_task_control(pid_t pid, ulong_t cmd, ulong_t arg)
 {
   status_t r;
   task_t *task = pid_to_task(pid);
@@ -158,13 +158,13 @@ status_t sys_process_control(pid_t pid, ulong_t cmd, ulong_t arg)
     goto out_release;
   }
 
-  r = do_process_control(task,cmd,arg);
+  r = do_task_control(task,cmd,arg);
 out_release:
   release_task_struct(task);
   return r;
 }
 
-status_t sys_create_process(task_creation_flags_t flags)
+status_t sys_create_task(task_creation_flags_t flags)
 {
   task_t *task;
   status_t r;

@@ -95,5 +95,14 @@ page_frame_t *alloc_pages(int n, pfalloc_flags_t flags);
  */
 void free_pages(page_frame_t *pages);
 
+static inline void *alloc_pages_addr(int n, pfalloc_flags_t flags)
+{
+  page_frame_t *pf = alloc_pages(n,flags);
+  if( pf != NULL ) {
+      return pframe_to_virt(pf);
+  }
+  return NULL;
+}
+
 #endif /* __PFALLOC_H__ */
 

@@ -93,10 +93,10 @@ static int create_init_mm(task_t *task)
                     INIT_STACK_START, INIT_STACK_PAGES,
                     MAP_ACC_MASK );
 
-  r = do_process_control(task,SYS_PR_CTL_SET_ENTRYPOINT,INIT_CODE_START);
+  r = do_task_control(task,SYS_PR_CTL_SET_ENTRYPOINT,INIT_CODE_START);
   kprintf( "** Setting entrypoint: %d\n", r );
 
-  r |= do_process_control(task,SYS_PR_CTL_SET_STACK,INIT_STACK_START + PAGE_SIZE - 32);
+  r |= do_task_control(task,SYS_PR_CTL_SET_STACK,INIT_STACK_START + PAGE_SIZE - 32);
   kprintf( "** Setting stack: %d\n", r );
 
   idx = mm_pin_virtual_address(&task->page_dir,INIT_CODE_START);

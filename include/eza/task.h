@@ -29,6 +29,8 @@
 #include <eza/arch/context.h>
 #include <mlibc/index_array.h>
 #include <mm/pt.h>
+#include <ipc/ipc.h>
+#include <eza/limits.h>
 
 #define INVALID_PID  IA_INVALID_VALUE
 #define NUM_PIDS  65536
@@ -78,6 +80,9 @@ typedef struct __task_struct {
   /* Scheduler-related stuff. */
   struct __scheduler *scheduler;
   void *sched_data;
+
+  task_ipc_t *ipc;
+  task_limits_t *limits;
 
   /* Arch-dependent context is located here */
   uint8_t arch_context[];
