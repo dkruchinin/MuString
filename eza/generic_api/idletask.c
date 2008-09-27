@@ -35,7 +35,7 @@
 #include <ipc/ipc.h>
 #include <ipc/port.h>
 
-task_t *idle_tasks[NR_CPUS];
+task_t *idle_tasks[MAX_CPUS];
 
 #define STEP 300
 

@@ -58,6 +58,7 @@ static void __arch_setup_ctx(task_t *newtask,uint64_t rsp)
   /* Setup CR3 */
   ctx->cr3 = _k2p((uintptr_t)&(newtask->page_dir.entries[0]));
   ctx->rsp = rsp;
+  ctx->fs = KERNEL_SELECTOR(KDATA_DES);
 }
 
 void kernel_thread_helper(void (*fn)(void*), void *data)
@@ -112,7 +113,7 @@ void initialize_idle_tasks(void)
 
   init_pfiter_alloc(&pfi);
   for( cpu = 0; cpu < MAX_CPUS; cpu++ ) {
-    ts_page = alloc_page(AF_PGEN);
+    ts_page = alloc_page(AF_PGEN | AF_ZERO);
     if( ts_page == NULL ) {
       panic( "initialize_idle_tasks(): Can't allocate main structure for idle task !" );  
     }
@@ -121,6 +122,7 @@ void initialize_idle_tasks(void)
     idle_tasks[cpu] = task;
 
     /* Setup PIDs and default priorities. */
+    spinlock_initialize(&task->lock, "Task's spinlock");
     task->pid = task->ppid = 0;
     task->cpu = cpu;
 

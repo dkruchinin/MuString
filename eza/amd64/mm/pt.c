@@ -91,8 +91,8 @@ static inline pml4_entry_t *vaddr_to_pml4(uintptr_t vaddr,page_directory_t *pd)
 }
 
 static int populate_pdp3_entry(pdp3_entry_t *entry, mmap_flags_t flags)
-{  
-  page_frame_t *pf = alloc_page(AF_PGEN);
+{
+  page_frame_t *pf = alloc_page(AF_PGEN | AF_ZERO);
   if( pf != NULL ) {
     register uintptr_t pfn = pframe_number(pf);
 
@@ -121,7 +121,7 @@ static int populate_pdp3_entry(pdp3_entry_t *entry, mmap_flags_t flags)
 
 static int populate_pde2_entry(pde2_entry_t *entry, mmap_flags_t flags)
 {
-  page_frame_t *pf = alloc_page(AF_PGEN);
+  page_frame_t *pf = alloc_page(AF_PGEN | AF_ZERO);
   if( pf != NULL ) {
     register uintptr_t pfn = pframe_number(pf);
 
@@ -157,7 +157,7 @@ static int map_pde2_range( pde2_entry_t *pde2, uintptr_t virt_addr, uintptr_t en
   do {
     pte_t *pte = (pte_t *)p2k_code(v) + ((virt_addr >> 12) & 0x1ff);
     register uintptr_t page_base;
-    
+
     iter_next(pfi);
     ASSERT(iter_isrunning(pfi));
     page_base = (uintptr_t)pfi->pf_idx;
@@ -260,8 +260,8 @@ static int map_pml4_range(pml4_entry_t *pml4, uintptr_t virt_addr, uintptr_t end
 }
 
 static int populate_pml4_entry(pml4_entry_t *entry, mmap_flags_t flags)
-{  
-  page_frame_t *pf = alloc_page(AF_PGEN);  
+{
+  page_frame_t *pf = alloc_page(AF_PGEN | AF_ZERO);
   if( pf != NULL ) {
     register uintptr_t pfn = pframe_number(pf);
 
@@ -335,7 +335,6 @@ int mm_map_pages(page_directory_t *pd, page_frame_iterator_t *pfi, uintptr_t vir
 
     pml4++;
     virt_addr = to_addr;
-    break;
   } while(length > L4_ENTRY_RANGE);
 
   return 0;

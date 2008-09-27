@@ -30,8 +30,16 @@
 page_frame_t *alloc_pages(int n, pfalloc_flags_t flags)
 {
   page_frame_t *pages = NULL;
-  mm_pool_t *pool = mmpools_get_pool(__pool_type(flags & PAGE_POOLS_MASK));
+  mm_pool_t *pool;
 
+  if (!(flags & PAGE_POOLS_MASK))
+    flags |= AF_PGEN;
+
+  pool = mmpools_get_pool(__pool_type(flags & PAGE_POOLS_MASK));
+  if (!pool->is_active) {
+    kprintf(KO_WARNING "alloc_pages: Can't allocate from pool \"%s\" (pool is no active)\n",
+            mmpools_get_pool_name(pool->type));
+  }
   if (atomic_get(&pool->free_pages) < n)
     goto out;
   
