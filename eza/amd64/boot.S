@@ -185,7 +185,7 @@ start64:
 			
 			xorq %rdx, %rdx
 			movl 0(%esi), %edx		/* mods->mod_start */
-			movq $0xffff800000000000, %r10
+			/*movq $0xffff800000000000, %r10*/
 			addq %r10, %rdx
 			movq %rdx, 8(%rdi)
 			

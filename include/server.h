@@ -45,4 +45,7 @@ uint32_t server_get_num(void); /* get real number of servers */
 uintptr_t server_get_start_phy_addr(void); /* get start physical address */
 uintptr_t server_get_end_phy_addr(void); /* get end physical address */
 
+/* initing servers */
+void server_run_tasks(void);
+
 #endif /* __SERVER_H__ */
