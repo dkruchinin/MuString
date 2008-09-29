@@ -47,6 +47,7 @@
 #include <eza/arch/smp.h>
 #include <eza/arch/apic.h>
 #include <eza/arch/atomic.h>
+#include <ipc/port.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0

@@ -177,7 +177,9 @@ void io_apic_bsp_init(void)
 
 void io_apic_init(void)
 {
-  kprintf("[HW] IO APIC registering ... ");
+  hw_interrupt_controller_t ioapic=io_apic_cont;
+  
+  kprintf("[HW] IO APIC registering(%p) ... ",ioapic);
   //register_hw_interrupt_controller( &io_apic_cont );
   kprintf("OK\n");
 }

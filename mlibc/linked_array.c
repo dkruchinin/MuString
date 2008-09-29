@@ -54,6 +54,8 @@ int linked_array_initialize(linked_array_t *arr,ulong_t items)
   arr->items = items;
 
   linked_array_reset(arr);
+
+  return 0;
 }
 
 void linked_array_reset(linked_array_t *arr)
