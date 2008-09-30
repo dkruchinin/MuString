@@ -68,8 +68,17 @@ arch_hw_activate_task:
   movq %rsi, %gs:(CPU_SCHED_STAT_CURRENT_OFFT)
   movq %rcx, %gs:(CPU_SCHED_STAT_KSTACK_OFFT)
 
-  /* First, save fs and rsp */
-  mov %fs,ARCH_CTX_FS_OFFSET(%rdx)
+  /* First, save segment registers */
+  mov %gs:(CPU_SCHED_STAT_USER_FS_OFFT), %rax
+  mov %rax,ARCH_CTX_FS_OFFSET(%rdx)
+  mov %gs:(CPU_SCHED_STAT_USER_ES_OFFT), %rax
+  mov %rax,ARCH_CTX_ES_OFFSET(%rdx)
+  mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT), %rax
+  mov %rax,ARCH_CTX_GS_OFFSET(%rdx)
+  mov %gs:(CPU_SCHED_STAT_USER_DS_OFFT), %rax
+  mov %rax,ARCH_CTX_DS_OFFSET(%rdx)
+
+  /* Save %rsp */
   mov %rsp,ARCH_CTX_RSP_OFFSET(%rdx) 
 
   /* Determine if we need to reload %cr3 */
@@ -82,10 +91,18 @@ arch_hw_activate_task:
 
 leave_cr3:
 
-  /* Now we can reload %rsp and %fs and return to perform actual context switch. */
-  movq ARCH_CTX_RSP_OFFSET(%rdi), %rsp
-  mov ARCH_CTX_FS_OFFSET(%rdi), %fs
+  /* Now we can restore segment registers */
+  mov ARCH_CTX_FS_OFFSET(%rdi),%rax
+  mov %rax, %gs:(CPU_SCHED_STAT_USER_FS_OFFT)
+  mov ARCH_CTX_ES_OFFSET(%rdi),%rax
+  mov %rax, %gs:(CPU_SCHED_STAT_USER_ES_OFFT)
+  mov ARCH_CTX_GS_OFFSET(%rdi),%rax
+  mov %rax, %gs:(CPU_SCHED_STAT_USER_GS_OFFT)
+  mov ARCH_CTX_DS_OFFSET(%rdi),%rax
+  mov %rax, %gs:(CPU_SCHED_STAT_USER_DS_OFFT)
 
+  /* Now we can reload %rsp and return to perform actual context switch. */
+  movq ARCH_CTX_RSP_OFFSET(%rdi), %rsp
   retq
 
 __return_from_sleep:

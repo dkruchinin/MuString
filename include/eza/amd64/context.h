@@ -148,6 +148,8 @@
 #define ARCH_CTX_RSP_OFFSET  0x8
 #define ARCH_CTX_FS_OFFSET   0x10
 #define ARCH_CTX_GS_OFFSET   0x18
+#define ARCH_CTX_ES_OFFSET   0x20
+#define ARCH_CTX_DS_OFFSET   0x28
 
 #ifdef __ASM__
 
@@ -161,7 +163,10 @@
 	cmp $KERNEL_SELECTOR(KTEXT_DES),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ;\
 	je label; \
         swapgs ;  \
-        mov %gs: CPU_SCHED_STAT_KERN_DS_OFFT,%ds; \
+        mov %ds, %gs:CPU_SCHED_STAT_USER_DS_OFFT;       \
+        mov %es, %gs:CPU_SCHED_STAT_USER_ES_OFFT;       \
+        mov %fs, %gs:CPU_SCHED_STAT_USER_FS_OFFT;       \
+        mov %gs:(CPU_SCHED_STAT_KERN_DS_OFFT),%ds;      \
 label:	;\
 	incq %gs:CPU_SCHED_STAT_IRQCNT_OFFT ;\
 	SAVE_ALL ;\
@@ -191,7 +196,7 @@ typedef struct __context_t { /* others don't interesting... */
 } __attribute__ ((packed)) context_t;
 
 typedef struct __arch_context_t {
-  uintptr_t cr3, rsp, fs, gs;
+    uintptr_t cr3, rsp, fs, gs, es, ds;
 } arch_context_t;
 
 /* Structure that represents GPRs on the stack upon entering

@@ -49,7 +49,7 @@
 /* ovl 0x0,%rax; syscall; jmp <spin> */
 // 0x0f, 0x05,    
 static char init_code[] = { 0x48, 0x31, 0xc0, \
-                            0x0f,0x05, \
+                            0x90,0x90, \
                             0xeb, 0xf9 };
 #define INIT_CODE_SIZE 7
 

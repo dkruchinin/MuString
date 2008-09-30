@@ -286,7 +286,7 @@ static void def_scheduler_tick(void)
       current->state = TASK_STATE_RUNNABLE;
       kprintf( "** CPU %d: TIMESLICE IS OVER ! NEXT TIMESLICE: %d\n",
                cpu_id(), tdata->time_slice );
-      sched_set_current_need_resched();
+      //sched_set_current_need_resched();
     }
   } else if( discipl == SCHED_FIFO ) {
   } else {

@@ -32,6 +32,7 @@
 #define AMD_MSR_SFMASK  0xc0000084
 #define AMD_MSR_FS      0xc0000100
 #define AMD_MSR_GS      0xc0000101
+#define AMD_MSR_GS_KRN  0xc0000102
 #define EFER_MSR_NUM    0xc0000080
 /* flags */
 #define AMD_SCE_FLAG    0

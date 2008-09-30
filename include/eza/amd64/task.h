@@ -33,8 +33,10 @@ extern cpu_sched_stat_t PER_CPU_VAR(cpu_sched_stat);
 
 #define arch_activate_idle_task(cpu) \
   { register task_t *t = idle_tasks[cpu]; \
-    write_msr(AMD_MSR_GS,(uint64_t)raw_percpu_get_var(cpu_sched_stat,cpu)); \
-    load_stack_pointer(t->kernel_stack.high_address-128); \
+    write_msr(AMD_MSR_GS,0); \
+    write_msr(AMD_MSR_GS_KRN,(uint64_t)raw_percpu_get_var(cpu_sched_stat,cpu)); \
+    __asm__ __volatile__( "swapgs" );                                           \
+    load_stack_pointer(t->kernel_stack.high_address-128);                       \
   }
 
 #endif

@@ -163,7 +163,13 @@ no_preemption_in_interrupt:
    */
 userspace_ret_from_int:
   cli
-  mov %gs: CPU_SCHED_STAT_USER_DS_OFFT,%ds
+  /* First, load user %gs via %ds and %eax */
+
+  /* %gs now points to valid saved data. */
+  mov %gs:(CPU_SCHED_STAT_USER_DS_OFFT),%ds
+  mov %gs:(CPU_SCHED_STAT_USER_ES_OFFT),%es
+  mov %gs:(CPU_SCHED_STAT_USER_FS_OFFT),%fs
+
   swapgs
 ret_from_int:
   popq %rax
