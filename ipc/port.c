@@ -158,7 +158,8 @@ static status_t __put_sender_into_sleep(task_t *sender,ipc_port_t *port)
   return 0;
 }
 
-static status_t __put_receiver_into_sleep(task_t *sender,ipc_port_t *port)
+static status_t __put_receiver_into_sleep(task_t *sender,ipc_port_t *port,
+                                          ipc_port_message_t *msg)
 {
   return 0;
 }
@@ -379,15 +380,12 @@ status_t ipc_port_send(task_t *sender,ulong_t port,ulong_t snd_size,
 
   /* OK, new message is ready for sending. */
   __add_message_to_port_queue(p,msg,id);
-
+  __notify_message_arrived(p);
+  
   if( p->flags & IPC_BLOCKED_ACCESS ||
       rcv_size != 0 ) {
     /* Sender should wait for the reply, so put it into sleep here. */
-    __notify_message_arrived(p);
-    __put_receiver_into_sleep(sender,p);
-  } else {
-    /* Just notify the receiver. */
-    __notify_message_arrived(p);
+      __put_sender_into_sleep(sender,p,msg);
   }
 
   return msg->retcode;
@@ -421,7 +419,7 @@ recv_cycle:
     if( flags & IPC_BLOCKED_ACCESS ) {
       /* No luck: need to sleep. */
       IPC_UNLOCK_PORT_W(p);
-      __put_sender_into_sleep(owner,p);
+      __put_receiver_into_sleep(owner,p);
       goto recv_cycle;
     } else {
       r = -EAGAIN;
