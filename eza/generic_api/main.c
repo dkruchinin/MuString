@@ -49,8 +49,6 @@
 #include <eza/arch/atomic.h>
 #include <ipc/port.h>
 
-static RW_SPINLOCK_DEFINE(rw_lock);
-
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
 };
