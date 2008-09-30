@@ -104,5 +104,12 @@ static inline void *alloc_pages_addr(int n, pfalloc_flags_t flags)
   return NULL;
 }
 
+static inline void free_pages_addr(void *addr)
+{
+  if( addr != NULL ) {
+    free_pages(virt_to_pframe(addr));
+  }
+}
+
 #endif /* __PFALLOC_H__ */
 

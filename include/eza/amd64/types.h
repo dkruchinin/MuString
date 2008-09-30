@@ -66,6 +66,8 @@ typedef uint64_t unative_t;
 typedef uint64_t native_t;
 typedef uint64_t ipl_t;
 
+typedef ulong_t lock_t;
+
 /* bit-related types. */
 typedef uint32_t bit_idx_t;
 

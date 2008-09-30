@@ -3,6 +3,7 @@
 #include <mm/pfalloc.h>
 #include <mm/page.h>
 #include <ds/linked_array.h>
+#include <mlibc/string.h>
 
 void initialize_ipc(void)
 {
@@ -14,9 +15,15 @@ task_ipc_t *allocate_task_ipc(void)
   if( p!= NULL ) {
     task_ipc_t *ipc = (task_ipc_t*)pframe_to_virt(p);
 
+    memset(ipc,0,sizeof(task_ipc_t));
+
     atomic_set(&ipc->use_count,1);
     ipc->num_ports = 0;
+    ipc->num_open_ports = 0;
     ipc->ports = NULL;
+    ipc->open_ports = NULL;
+    spinlock_initialize(&ipc->port_lock, "");
+    spinlock_initialize(&ipc->open_port_lock, "");
     semaphore_initialize(&ipc->sem,1);
     return ipc;
   }

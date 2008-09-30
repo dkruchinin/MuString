@@ -48,6 +48,8 @@
 #include <eza/arch/apic.h>
 #include <eza/arch/atomic.h>
 
+static RW_SPINLOCK_DEFINE(rw_lock);
+
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
 };
@@ -108,7 +110,7 @@ void main_routine(void) /* this function called from boostrap assembler code */
   kcons->enable();
   print_kernel_version_info();
   kprintf("[MB] Modules: %d\n",init.c);
-
+  
   /* init memory manager stuff - stage 0 */
   arch_cpu_init(0);
   kprintf("[LW] Initialized CPU vectors.\n");

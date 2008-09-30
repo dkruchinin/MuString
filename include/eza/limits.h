@@ -6,8 +6,9 @@
 
 #define LIMIT_IPC_MAX_PORTS  0
 #define LIMIT_IPC_MAX_PORT_MESSAGES  1
+#define LIMIT_IPC_MAX_OPEN_PORTS 2
 
-#define LIMIT_NUM_LIMITS 2
+#define LIMIT_NUM_LIMITS 3
 
 typedef struct __task_limits {
   spinlock_t lock;

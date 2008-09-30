@@ -120,6 +120,8 @@ void start_init(void)
   status_t r;
   task_t *init;
 
+  for(;;);
+
   r = create_task( current_task(), 0, TPL_USER, &init );
   kprintf( "**** Create inittask: %d\n", r );
   if( !r ) {
