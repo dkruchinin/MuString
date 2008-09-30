@@ -89,8 +89,8 @@ static void main_routine_stage1(void)
   initialize_ipc();
 
   /* OK, we can proceed. */
-  //start_init();
-   server_run_tasks();
+  start_init();
+  //server_run_tasks();
  
   /* Enter idle loop. */
 

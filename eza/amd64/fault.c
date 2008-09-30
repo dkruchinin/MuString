@@ -28,6 +28,8 @@
 #include <eza/arch/interrupt.h>
 #include <eza/kernel.h>
 #include <mlibc/kprintf.h>
+#include <eza/arch/mm.h>
+#include <eza/smp.h>
 
 #define kernel_fault(f) \
     (f->cs == gdtselector(KTEXT_DES))
@@ -141,17 +143,22 @@ void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_fr
   l1: goto l1;
 }
 
+extern tss_t tss[];
+
 void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
-    uint64_t a;
+  uint64_t a;
+  tss_t *ts = &tss[0];
+ 
   if( kernel_fault(stack_frame) ) {
     kprintf( "#PF in kernel mode: RIP = 0x%X\n", stack_frame->rip );    
   }
   get_fault_address(a);
-  kprintf( "[!!!] Unhandled PF exception ! Stopping (CODE: %d, See page 225). Address: %p\n",
-           stack_frame->error_code, a);
+//  kprintf( "[!!!] Unhandled PF exception ! Stopping (CODE: %d, See page 225). Address: %p\n",
+//           stack_frame->error_code, a);
+  kprintf( "dump_tss: rsp0=%p,\n",
+            ts->rsp0);
   l1: goto l1;
-
 }
 
 void reserved_exception_fault_handler_impl(interrupt_stack_frame_t *stack_frame)

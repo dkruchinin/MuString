@@ -335,6 +335,12 @@ static void def_schedule(void)
   bool need_switch;
   uint64_t t1,t2;
 
+  if( current->pid != 0 ) {
+      kprintf( "******\n" );
+      sched_reset_current_need_resched();
+      return;
+  }
+
   if( in_interrupt() ) {
     kprintf( KO_WARNING "schedule(): Scheduling from interrupt !\n" );
     return;

@@ -120,8 +120,6 @@ common_interrupt:
   call do_irq
 
 return_from_common_interrupt:
-  RESTORE_ALL
-
   /* To avoid nested schedulings (when current process is scheduled
    * during its schedule path, we disable interrupts when checking
    * for rescheduling to occur. Interrupts will be re-enabled either
@@ -151,6 +149,7 @@ return_from_common_interrupt:
   call schedule
 
 no_preemption_in_interrupt:
+  RESTORE_ALL
   /* Now we can enable interrupts. */
   sti
   cmp $KERNEL_SELECTOR(KTEXT_DES),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)
