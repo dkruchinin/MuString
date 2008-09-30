@@ -6,3 +6,4 @@ tags
 *~
 *.o
 *.a
+config.h

@@ -26,6 +26,10 @@ ifeq ($(PARANOIC),y)
      CFLAGS += -Werror
 endif
 
+ifeq ($(CONFIG_SMP),y)
+     CFLAGS += -DCONFIG_SMP
+endif
+
 MUIOBJS=$(LIBEZA_OBJS) $(LIBARCHEZA_OBJS) $(LIBMM_OBJS) \
         $(LIBEZA_CORE_OBJS) $(MLIBC_OBJS) $(LIBSERVER_OBJS) $(KERNEL_OBJS) \
 	$(IPC_OBJS)

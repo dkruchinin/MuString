@@ -13,3 +13,5 @@ Project.ede
 *.img
 bochsrc
 TAGS
+config
+Makefile.inc

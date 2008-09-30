@@ -17,37 +17,17 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2005,2008 Tirra <madtirra@jarios.org>
  *
- * server/server.c: servers going multiboot functions
+ * include/eza/amd64/elf.c: elf architecture depended definion
  *
  */
 
+#ifndef __EZA_ARCH_ELF_H__
+#define __EZA_ARCH_ELF_H__
+
 #include <eza/arch/types.h>
-#include <mm/pt.h>
-#include <mlibc/kprintf.h>
-#include <server.h>
+#include <kernel/elf.h>
 
-uint32_t server_get_num(void)
-{
-  return init.c;
-}
+typedef elf64_t elf_head_t;
 
-uintptr_t server_get_start_phy_addr(void)
-{
-  if(server_get_num()>0) 
-    return init.server[0].addr;
-  else
-    return nil;
-}
-
-uintptr_t server_get_end_phy_addr(void)
-{
-  int i=server_get_num();
-
-  if(i>0) {
-    if(i>MAX_PRIVBOOT_SERVERS)      i=MAX_PRIVBOOT_SERVERS;
-    return init.server[i-1].addr+init.server[i-1].size;
-  } else
-    return nil;
-}
-
+#endif
 

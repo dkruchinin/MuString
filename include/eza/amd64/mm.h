@@ -13,7 +13,7 @@ extern int _low_kernel_end;
 extern uintptr_t _kernel_extended_end;
 
 #define LAST_BIOS_PAGE (BIOS_END_ADDR >> PAGE_WIDTH)
-#define KERNEL_FIRST_FREE_ADDRESS ((void *)PAGE_ALIGN(&_kernel_end))
+#define KERNEL_FIRST_FREE_ADDRESS ((void *)PAGE_ALIGN(_kernel_extended_end))
 #define KERNEL_FIRST_ADDRESS ((void *)&_kernel_start)
 #define IDENT_MAP_PAGES (_mb2b(16) >> PAGE_WIDTH)
 

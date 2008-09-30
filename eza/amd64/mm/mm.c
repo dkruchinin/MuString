@@ -24,6 +24,7 @@
  */
 
 #include <config.h>
+#include <server.h>
 #include <ds/iterator.h>
 #include <ds/list.h>
 #include <mlibc/kprintf.h>
@@ -130,11 +131,25 @@ static void scan_phys_mem(void)
 #endif /* CONFIG_IOMMU */
 }
 
+static void __extend_kernel_end(void)
+{
+   uintptr_t addr = server_get_end_phy_addr();
+   if (!addr) {
+      _kernel_extended_end = (uintptr_t)PAGE_ALIGN(KERNEL_FIRST_ADDRESS);
+      return;
+   }
+
+   _kernel_extended_end = (uintptr_t)PAGE_ALIGN(p2k_code(addr));
+
+}
+
 void arch_mm_init(void)
 {
   kprintf("[MM] Scanning physical memory...\n");
   scan_phys_mem();
   swks.mem_total_pages = max_phys_addr >> PAGE_WIDTH;
+  __extend_kernel_end();
+
   page_frames_array = KERNEL_FIRST_FREE_ADDRESS;  
   _kernel_extended_end =
     PAGE_ALIGN((uintptr_t)page_frames_array + sizeof(page_frame_t) * swks.mem_total_pages);
