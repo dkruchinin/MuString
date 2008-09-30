@@ -26,6 +26,8 @@
 #ifndef __STDDEF_H__
 #define __STDDEF_H__
 
+#include <mlibc/bitwise.h>
+
 #ifndef offsetof
 /**
  * @def offsetof(st, m)
@@ -53,7 +55,12 @@
 #define round_up(a, b) ((((a) + ((b) - 1)) / (b)) * (b))
 #define align_up(s,a)    (((s)+((a)-1)) & ~((a)-1))
 #define align_down(s,a)  ((s) & ~((a)-1))
+#define round_up_pow2(x) (bit_find_msf(x))
+#define round_down_pow2(x)                      \
+  ({ int p2 = bit_find_msf(x);                  \
+     (p2 > (x)) ? (p2 >> 1) : p2; })
 
 #define is_powerof2(num) ((num) & ~((num) - 1))
+#define ABS(x) (((x) < 0) ? -(x) : (x))
 
 #endif /* __STDDEF_H__ */

@@ -54,7 +54,7 @@ typedef struct __spinlock_type {
 
 #define SPINLOCK_DEFINE(s) spinlock_t s = {     \
         .__spin_val = __SPINLOCK_UNLOCKED_V,         \
-    };
+    }
 
 #define spinlock_lock(u) \
   preempt_disable(); \
