@@ -163,14 +163,16 @@ no_preemption_in_interrupt:
    */
 userspace_ret_from_int:
   cli
-  /* First, load user %gs via %ds and %eax */
 
-  /* %gs now points to valid saved data. */
+  /* Restore user segment registers. */
   mov %gs:(CPU_SCHED_STAT_USER_DS_OFFT),%ds
   mov %gs:(CPU_SCHED_STAT_USER_ES_OFFT),%es
   mov %gs:(CPU_SCHED_STAT_USER_FS_OFFT),%fs
 
+  /* Now restore user %gs */
+  mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
   swapgs
+  mov %eax,%gs
 ret_from_int:
   popq %rax
   iretq

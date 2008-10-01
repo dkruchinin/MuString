@@ -49,15 +49,17 @@
 /* ovl 0x0,%rax; syscall; jmp <spin> */
 // 0x0f, 0x05,    
 static char init_code[] = { 0x48, 0x31, 0xc0, \
-                            0x90,0x90, \
-                            0xeb, 0xf9 };
-#define INIT_CODE_SIZE 7
+                            0x0f,0x05,        \
+                            0x48, 0x89, 0xc3, \
+                            0xeb, 0xf6 };
+#define INIT_CODE_SIZE 10
 
 static void t(void)
 {
     __asm__ __volatile__(
         "1: xorq %rax,%rax\n"
         " syscall\n"
+        "movq %rax, %rbx\n"
         "jmp 1b\n");
 
 }
