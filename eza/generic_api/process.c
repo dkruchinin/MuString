@@ -186,6 +186,6 @@ status_t sys_get_pid(void)
 {
 //  kprintf( "sys_get_pid(): Process %d (CPU #%d) wants to know its PID.\n",
 //           current_task()->pid, cpu_id() );
-    syscall_counter++;
+  syscall_counter++;
   return current_task()->pid;
 }

@@ -189,7 +189,7 @@ common_exception_path:
    * skip %rax on the stack since we saved it before calling SAVE_ALL
    * %r10 contains the value of %rsp before aligning for saving XMM data.
    */
-  mov %r10, %rdi; \
+  mov %r10, %rdi;
   add $SAVED_GPR_SIZE + 8, %rdi 
 
   /* Now we call call the handler. */

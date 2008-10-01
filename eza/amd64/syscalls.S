@@ -50,13 +50,13 @@ syscall_point:
 	movq %gs:CPU_SCHED_STAT_KSTACK_OFFT,%rsp
 
 	/* After changing stack pointer, we can enable IRQs */
-//	sti
+	sti
 
 	SAVE_GPR
 	call *syscall_table(,%rax,8)
 	RESTORE_GPR
 
-//	cli
+	cli
 	/* Restore back user stack pointer. Interrupts will be
 	 * restored after performing the SYSRET command.
 	 */
