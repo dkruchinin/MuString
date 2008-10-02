@@ -54,7 +54,6 @@ int linked_array_initialize(linked_array_t *arr,ulong_t items)
   arr->items = items;
 
   linked_array_reset(arr);
-
   return 0;
 }
 
@@ -160,4 +159,10 @@ void linked_array_deinitialize(linked_array_t *arr)
 {
   arr->head = arr->items;
   arr->item_size = INVALID_ITEM_IDX;
+}
+
+bool linked_array_is_initialized(linked_array_t *arr)
+{
+  return (arr->array != NULL && arr->items != 0 &&
+          arr->head <= arr->items && arr->item_size != INVALID_ITEM_IDX);
 }

@@ -135,7 +135,9 @@ static void __extend_kernel_end(void)
 {
    uintptr_t addr = server_get_end_phy_addr();
    if (!addr) {
+      kprintf("chiki\n%p\n",KERNEL_FIRST_ADDRESS);
       _kernel_extended_end = (uintptr_t)PAGE_ALIGN(KERNEL_FIRST_ADDRESS);
+      //      for(;;);
       return;
    }
 

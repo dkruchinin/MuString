@@ -107,7 +107,7 @@ static void arch_syscall_setup_cpu(void)
 	    ((uint64_t)(gdtselector(KTEXT_DES) | PL_KERNEL) << 32));
   write_msr(AMD_MSR_LSTAR,(uint64_t)syscall_point);
   /* Disable interrupts upon entering syscalls. */
-  write_msr(AMD_MSR_SFMASK,~0x200);
+  write_msr(AMD_MSR_SFMASK,0x200);
 
   return;
 }

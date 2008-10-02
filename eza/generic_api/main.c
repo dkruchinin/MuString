@@ -90,7 +90,7 @@ static void main_routine_stage1(void)
 
   /* OK, we can proceed. */
   //start_init();
-   server_run_tasks();
+  server_run_tasks();
  
   /* Enter idle loop. */
 
@@ -110,7 +110,7 @@ void main_routine(void) /* this function called from boostrap assembler code */
   kcons->enable();
   print_kernel_version_info();
   kprintf("[MB] Modules: %d\n",init.c);
-
+  
   /* init memory manager stuff - stage 0 */
   arch_cpu_init(0);
   kprintf("[LW] Initialized CPU vectors.\n");

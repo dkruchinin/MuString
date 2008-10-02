@@ -140,6 +140,11 @@ static inline page_idx_t virt_to_pframe_id(void *virt)
   return idx;
 }
 
+static inline page_frame_t *virt_to_pframe( void *addr )
+{
+  return pframe_by_number(virt_to_pframe_id(addr));
+}
+
 /**
  * @fn static inline void pframe_memnull(page_frame_t *start, int block_size)
  * @brief Fill block of @a block_size continuos pages with zero's

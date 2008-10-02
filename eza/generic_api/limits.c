@@ -23,4 +23,5 @@ void set_default_task_limits(task_limits_t *l)
 {
   l->limits[LIMIT_IPC_MAX_PORTS] = IPC_DEFAULT_PORTS;
   l->limits[LIMIT_IPC_MAX_PORT_MESSAGES] = IPC_DEFAULT_PORT_MESSAGES;
+  l->limits[LIMIT_IPC_MAX_OPEN_PORTS] = IPC_DEFAULT_OPEN_PORTS;
 }

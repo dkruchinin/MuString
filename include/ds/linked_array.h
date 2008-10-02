@@ -97,4 +97,6 @@ void linked_array_free_item(linked_array_t *arr,ulong_t item);
  */
 void linked_array_reset(linked_array_t *arr);
 
+bool linked_array_is_initialized(linked_array_t *arr);
+
 #endif

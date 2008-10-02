@@ -34,12 +34,15 @@ syscall_table:
 	.quad	sys_get_pid       	/* 0 */
 	.quad 	sys_create_task
 	.quad 	sys_task_control
+	.quad   sys_mmap
 
-/* Dn't change the order of these macros. */
+/* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \
 	(syscall_point-syscall_table)/8
 
 syscall_point:
+	/* Local interrupts are disabled upon entering the entrypoint.
+	 */
 	cmp $NUM_OF_SYSCALLS,%rax
 	jnc bad_syscall_number
 

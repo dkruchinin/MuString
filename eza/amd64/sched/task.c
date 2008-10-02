@@ -58,7 +58,10 @@ static void __arch_setup_ctx(task_t *newtask,uint64_t rsp)
   /* Setup CR3 */
   ctx->cr3 = _k2p((uintptr_t)&(newtask->page_dir.entries[0]));
   ctx->rsp = rsp;
-  ctx->fs = KERNEL_SELECTOR(KDATA_DES);
+  ctx->fs = USER_SELECTOR(UDATA_DES);
+  ctx->es = USER_SELECTOR(UDATA_DES);
+  ctx->gs = USER_SELECTOR(UDATA_DES);
+  ctx->ds = USER_SELECTOR(UDATA_DES);
 }
 
 void kernel_thread_helper(void (*fn)(void*), void *data)
@@ -191,7 +194,6 @@ status_t kernel_thread(void (*fn)(void *), void *data)
 static uint64_t __setup_kernel_task_context(task_t *task)
 {
   regs_t *regs = (regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
-  uint64_t flags;
 
   /* Prepare a fake CPU-saved context */
   memset( regs, 0, sizeof(regs_t) );
@@ -213,7 +215,6 @@ static uint64_t __setup_kernel_task_context(task_t *task)
 static uint64_t __setup_user_task_context(task_t *task)
 {
   regs_t *regs = (regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
-  uint64_t flags;
 
   /* Prepare a fake CPU-saved context */
   memset( regs, 0, sizeof(regs_t) );

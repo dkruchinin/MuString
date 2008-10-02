@@ -60,11 +60,14 @@ typedef uint64_t uintptr_t;
 typedef uint32_t pid_t;
 typedef uint32_t usec_t;
 typedef int32_t status_t;
+typedef uint32_t shm_id_t;
 
 /* abstraction typedef */
 typedef uint64_t unative_t;
 typedef uint64_t native_t;
 typedef uint64_t ipl_t;
+
+typedef ulong_t lock_t;
 
 /* bit-related types. */
 typedef uint32_t bit_idx_t;

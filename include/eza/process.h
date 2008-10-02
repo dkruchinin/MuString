@@ -26,6 +26,7 @@
 
 #include <eza/task.h>
 #include <eza/arch/types.h>
+#include <kernel/syscalls.h>
 
 #define SYS_PR_CTL_SET_ENTRYPOINT 0x0
 #define SYS_PR_CTL_SET_STACK 0x1
@@ -49,50 +50,5 @@ task_t *pid_to_task(pid_t pid);
  *              requested;
  */
 status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg);
-
-/**
- * @fn status_t sys_task_control( pid_t pid, ulong_t cmd, ulong_t arg);
- * @brief Main function for controlling tasks.
- *
- * @param target - Task to control
- * @param cmd - Command. Possible commands are:
- *   SYS_PR_CTL_SET_ENTRYPOINT
- *     Set entrypoint for a newly created task to @a arg. Target task will start
- *     execution from target entrypoint.
- *     This command can be applied only to tasks whose state is 'TASK_STATE_JUST_BORN'.
- *     Otherwise, -EINVAL is returned.
- *
- *   SYS_PR_CTL_SET_STACK
- *     Set top of user stack for a newly created task to @a arg. Target task will
- *     start execution using this new stack.
- *     This command can be applied only to tasks whose state is 'TASK_STATE_JUST_BORN'.
- *     Otherwise, -EINVAL is returned.
- *
- *   SYS_PR_CTL_GET_ENTRYPOINT
- *     Get target process's entrypoint.
- *     This command can be applied only to tasks whose state is 'TASK_STATE_JUST_BORN'.
- *     Otherwise, -EINVAL is returned.
- *
- *   SYS_PR_CTL_GET_STACK
- *     Get top of user stack of target task.
- *     This command can be applied only to tasks whose state is 'TASK_STATE_JUST_BORN'.
- *     Otherwise, -EINVAL is returned.
- *
- * @param arg - Command's argument.
- * @param - Return value. Rreturn values are command-specific.
- * In general, for 'setters', this function returns zero on successful completion,
- * otherwise it returns on of the following errors (negated):
- *    EINVAL - invalid command/argument;
- *    ESRCH - invalid task was specified;
- *    EACCESS - calling process is not allowed to perform the command
- *              requested;
- *    EFAULT - argument points to insufficient address in userspace;
- *    
- */
-status_t sys_task_control( pid_t pid, ulong_t cmd, ulong_t arg);
-
-status_t sys_create_task(task_creation_flags_t flags);
-
-status_t sys_get_pid(void);
 
 #endif

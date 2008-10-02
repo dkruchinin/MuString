@@ -333,15 +333,6 @@ static void def_schedule(void)
   task_t *current = current_task();
   task_t *next;
   bool need_switch;
-  uint64_t t1,t2;
-
-  if( in_interrupt() ) {
-    kprintf( KO_WARNING "schedule(): Scheduling from interrupt !\n" );
-    return;
-  }
-
-  t1 = t2 = 0;
-  asm __volatile__ ( "rdtsc" : "=r"(t1) );
 
   /* From this moment we are in atomic context until 'arch_activate_task()'
    * finishes its job or until interrupts will be enabled in no context
@@ -378,11 +369,9 @@ static void def_schedule(void)
   UNLOCK_CPU_SCHED_DATA(sched_data);
   UNLOCK_TASK_STRUCT(current);
 
-  asm __volatile__ ( "rdtsc" : "=r"(t2) );
-  kprintf( "** [%d] RESCHED TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , timeslice: %d , D: %d**\n",
+  kprintf( "** [%d] RESCHED TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , timeslice: %d **\n",
            cpu_id(), current_task()->pid, need_switch,
-           next->pid, EZA_TASK_SCHED_DATA(next)->time_slice,
-           t2 - t1);
+           next->pid, EZA_TASK_SCHED_DATA(next)->time_slice );
 
   if( need_switch ) {
     arch_activate_task(next);

@@ -44,13 +44,25 @@
 #define INIT_CODE_PAGES 1
 
 #define INIT_STACK_START INIT_CODE_START+0x100000
-#define INIT_STACK_PAGES 1
+#define INIT_STACK_PAGES 4
 
 /* ovl 0x0,%rax; syscall; jmp <spin> */
-static char init_code[] = { 0xb8, 0, 0, 0, 0,   \
-                            0x0f, 0x05,         \
-                            0xeb, 0xfe };
-#define INIT_CODE_SIZE 9
+// 0x0f, 0x05,    
+static char init_code[] = { 0x48, 0x31, 0xc0, \
+                            0x0f,0x05,        \
+                            0x48, 0x89, 0xc3, \
+                            0xeb, 0xf6 };
+#define INIT_CODE_SIZE 10
+
+static void t(void)
+{
+    __asm__ __volatile__(
+        "1: xorq %rax,%rax\n"
+        " syscall\n"
+        "movq %rax, %rbx\n"
+        "jmp 1b\n");
+
+}
 
 static int create_init_mm(task_t *task)
 {
@@ -88,7 +100,7 @@ static int create_init_mm(task_t *task)
 
   mm_init_pfiter_index(&pfi, &pfi_idx_ctx,
                        pframe_number(stack),
-                       pframe_number(stack) );
+                       pframe_number(stack) + INIT_STACK_PAGES-1 );
   r = mm_map_pages( &task->page_dir, &pfi,
                     INIT_STACK_START, INIT_STACK_PAGES,
                     MAP_ACC_MASK );
@@ -96,7 +108,8 @@ static int create_init_mm(task_t *task)
   r = do_task_control(task,SYS_PR_CTL_SET_ENTRYPOINT,INIT_CODE_START);
   kprintf( "** Setting entrypoint: %d\n", r );
 
-  r |= do_task_control(task,SYS_PR_CTL_SET_STACK,INIT_STACK_START + PAGE_SIZE - 32);
+  r |= do_task_control(task,SYS_PR_CTL_SET_STACK,INIT_STACK_START +
+                       PAGE_SIZE*INIT_STACK_PAGES - 32);
   kprintf( "** Setting stack: %d\n", r );
 
   idx = mm_pin_virtual_address(&task->page_dir,INIT_CODE_START);

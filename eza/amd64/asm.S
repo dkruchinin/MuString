@@ -120,8 +120,6 @@ common_interrupt:
   call do_irq
 
 return_from_common_interrupt:
-  RESTORE_ALL
-
   /* To avoid nested schedulings (when current process is scheduled
    * during its schedule path, we disable interrupts when checking
    * for rescheduling to occur. Interrupts will be re-enabled either
@@ -151,6 +149,7 @@ return_from_common_interrupt:
   call schedule
 
 no_preemption_in_interrupt:
+  RESTORE_ALL
   /* Now we can enable interrupts. */
   sti
   cmp $KERNEL_SELECTOR(KTEXT_DES),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)
@@ -164,8 +163,16 @@ no_preemption_in_interrupt:
    */
 userspace_ret_from_int:
   cli
-  mov %gs: CPU_SCHED_STAT_USER_DS_OFFT,%ds
+
+  /* Restore user segment registers. */
+  mov %gs:(CPU_SCHED_STAT_USER_DS_OFFT),%ds
+  mov %gs:(CPU_SCHED_STAT_USER_ES_OFFT),%es
+  mov %gs:(CPU_SCHED_STAT_USER_FS_OFFT),%fs
+
+  /* Now restore user %gs */
+  mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
   swapgs
+  mov %eax,%gs
 ret_from_int:
   popq %rax
   iretq
@@ -182,7 +189,7 @@ common_exception_path:
    * skip %rax on the stack since we saved it before calling SAVE_ALL
    * %r10 contains the value of %rsp before aligning for saving XMM data.
    */
-  mov %r10, %rdi; \
+  mov %r10, %rdi;
   add $SAVED_GPR_SIZE + 8, %rdi 
 
   /* Now we call call the handler. */
