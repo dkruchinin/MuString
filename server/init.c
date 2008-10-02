@@ -33,6 +33,7 @@
 #include <mm/pt.h>
 #include <eza/arch/elf.h>
 #include <kernel/elf.h>
+#include <kernel/vm.h>
 #include <mlibc/kprintf.h>
 #include <server.h>
 
@@ -49,7 +50,7 @@ static status_t __create_task_mm(task_t *task, int num)
   status_t r;
 
   /*TODO: make default macro for stack pages*/
-  stack=alloc_pages(4,AF_PGEN);
+  stack=alloc_pages(USER_STACK_SIZE,AF_PGEN);
   if(!stack)
     return -1;
 
@@ -62,27 +63,27 @@ static status_t __create_task_mm(task_t *task, int num)
 
   memcpy(&ehead,pframe_id_to_virt(code),sizeof(elf_head_t));
 
-  kprintf("elf entry -> %p\n",ehead.e_entry);
+  /*  kprintf("elf entry -> %p\n",ehead.e_entry); */
 
   /*remap pages*/
   mm_init_pfiter_index(&pfi,&pfi_idx_ctx,code,code+code_size-1);
 
   r = mm_map_pages( &task->page_dir, &pfi,
-                    0x1fffff000000, code_size,
+                    USER_START_VIRT, code_size,
                     MAP_RW );
 
   if(r!=0)
     return -1;
 
-  mm_init_pfiter_index(&pfi,&pfi_idx_ctx,pframe_number(stack),pframe_number(stack)+4);
-  r=mm_map_pages(&task->page_dir,&pfi,0x1fffff000000+(code_size<<PAGE_WIDTH),4,MAP_RW);
+  mm_init_pfiter_index(&pfi,&pfi_idx_ctx,pframe_number(stack),pframe_number(stack)+USER_STACK_SIZE);
+  r=mm_map_pages(&task->page_dir,&pfi,USER_START_VIRT+(code_size<<PAGE_WIDTH),USER_STACK_SIZE,MAP_RW);
   if(r!=0)
     return -1;
 
-  r=do_task_control(task,SYS_PR_CTL_SET_ENTRYPOINT,0x1fffff000000+ehead.e_entry);
-  r|=do_task_control(task,SYS_PR_CTL_SET_STACK,0x1fffff000000+(code_size<<12)+(4<<PAGE_WIDTH));
+  r=do_task_control(task,SYS_PR_CTL_SET_ENTRYPOINT,USER_START_VIRT+ehead.e_entry);
+  r|=do_task_control(task,SYS_PR_CTL_SET_STACK,USER_START_VIRT+(code_size<<12)+(USER_STACK_SIZE<<PAGE_WIDTH));
 
-  idx=mm_pin_virtual_address(&task->page_dir,0x1fffff000000);
+  idx=mm_pin_virtual_address(&task->page_dir,USER_START_VIRT);
   idx=mm_pin_virtual_address(&task->page_dir,KERNEL_BASE + 0x8000);
 
   if(r!=0)
@@ -99,18 +100,20 @@ static status_t __create_task_mm(task_t *task, int num)
 
 void server_run_tasks(void)
 {
-  int i=server_get_num();
+  int i=server_get_num(),a;
   task_t *server;
   status_t r;
 
   if(i<=0)
     return;
-  while(i>0) {
-    r=create_task(current_task(),0,TPL_USER,&server);
-    if(!r) r=__create_task_mm(server,0);
-    if(!r) r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
 
-    i--;
+  for(a=0;a<i;a++) {
+    r=create_task(current_task(),a,TPL_USER,&server);
+    if(r)      continue;
+    r=__create_task_mm(server,a);
+    if(r)      continue;
+    r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
+    if(r)      continue;
   }
 
   return;

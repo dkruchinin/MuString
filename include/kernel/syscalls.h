@@ -14,11 +14,11 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  */
 
 #ifndef __K_SYSCALLS_H__
-#define  __K_SYSCALLS_H__
+#define __K_SYSCALLS_H__
 
 #include <eza/arch/types.h>
 #include <eza/task.h>
@@ -27,6 +27,7 @@
 #define SC_GET_PID         0
 #define SC_CREATE_TASK     1
 #define SC_TASK_CONTROL    2
+#define SC_MMAP            3
 
 /**
  * @fn status_t sys_get_pid(void)
@@ -102,5 +103,18 @@ status_t sys_create_task(task_creation_flags_t flags);
  *    
  */
 status_t sys_task_control( pid_t pid, ulong_t cmd, ulong_t arg);
+
+/**
+ * @fn status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_t offset);
+ * @brief mmap (shared) memory
+ *
+ * @param addr - address where you want to map memory
+ * @param size - size of memory to map
+ * @param flags - mapping flags
+ * @param fd - id of shared memory area
+ * @param offset - offset of the shared area to map
+ *
+ */
+status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_t offset);
 
 #endif
