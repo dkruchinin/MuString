@@ -46,11 +46,11 @@ typedef struct __cpu_sched_stat {
 #ifndef __ASM__
 
 #define read_css_field(field,v) \
-  __asm__ __volatile__(  "movq %%gs:(%%rax), %%rax" \
-			 :"=r"(v) : "a" ( offset_of(cpu_sched_stat_t,field)) );
+  __asm__ __volatile__(  "movq %%gs:(%%rbx), %%rax" \
+			 :"=r"(v) : "b" ( offset_of(cpu_sched_stat_t,field)) );
 
 #define write_css_field(field,v) \
-  __asm__ volatile(  "movq %%rax, %%gs:(%%rbx)" \
+  __asm__ volatile(  "movq %%r, %%gs:(%%rbx)" \
                      ::"a"(v), "b"( offset_of(cpu_sched_stat_t,field)) );
 
 #define inc_css_field(field) \

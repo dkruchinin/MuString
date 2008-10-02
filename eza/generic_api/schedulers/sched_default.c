@@ -82,7 +82,7 @@ static void free_task_sched_data(eza_sched_taskdata_t *data)
 
 static eza_sched_cpudata_t *allocate_cpu_sched_data(cpu_id_t cpu) {
   /* TODO: [mt] Allocate memory via slabs !!!  */
-  page_frame_t *page = alloc_page(AF_PGEN);
+  page_frame_t *page = alloc_pages(16, AF_PGEN);
   eza_sched_cpudata_t *cpudata = (eza_sched_cpudata_t *)pframe_to_virt(page);
 
   if( cpudata != NULL ) {
@@ -113,7 +113,7 @@ static void initialize_cpu_sched_data(eza_sched_cpudata_t *cpudata, cpu_id_t cpu
     eza_sched_prio_array_t *array = &cpudata->arrays[arr];
     list_head_t *lh = &array->queues[0];
 
-    memset(&array->bitmap[0], EZA_SCHED_BITMAP_PATTERN, sizeof(array->bitmap));
+    memset(&array->bitmap[0], EZA_SCHED_BITMAP_PATTERN, sizeof(eza_sched_type_t)*EZA_SCHED_TOTAL_WIDTH);
 
     for( i=0; i<EZA_SCHED_TOTAL_PRIOS; i++ ) {
       list_init_head(lh);
@@ -186,6 +186,7 @@ static inline status_t __activate_local_task(task_t *task, eza_sched_cpudata_t *
   __recalculate_timeslice_and_priority(task);
   task->state = TASK_STATE_RUNNABLE;
   __add_task_to_array(sched_data->active_array,task);
+  sched_data->stats->active_tasks++;
 
   kprintf( "++ NEW PRIO: %d, CURRENT: %p, CRRENT PRIO: %d\n", EZA_TASK_PRIORITY(task), current_task(), cdata->priority );
   if( EZA_TASK_PRIORITY(task) < cdata->priority ) {
@@ -200,12 +201,15 @@ static inline status_t __activate_local_task(task_t *task, eza_sched_cpudata_t *
 static inline void __deactivate_local_task(task_t *task, eza_sched_cpudata_t *sched_data)
 {
   /* In case target task is running, we must reschedule it. */
-  task->state = TASK_STATE_STOPPED;
-  __move_to_sleepers(sched_data,task);
-
   if( task->state == TASK_STATE_RUNNING ) {
     sched_set_current_need_resched();
   }
+
+  task->state = TASK_STATE_STOPPED;
+  __move_to_sleepers(sched_data,task);
+
+  sched_data->stats->active_tasks--;
+  sched_data->stats->sleeping_tasks++;
 }
 
 static cpu_id_t def_cpus_supported(void){
@@ -223,6 +227,7 @@ static status_t def_add_cpu(cpu_id_t cpu)
 
   cpudata = allocate_cpu_sched_data(cpu);
   if( cpudata == NULL ) {
+    panic( "Can't allocate data for CPU N%d\n",cpu );
     return -ENOMEM;
   }
 
@@ -283,7 +288,8 @@ static status_t def_add_task(task_t *task)
 {
   cpu_id_t cpu = cpu_id();
   eza_sched_taskdata_t *sdata;
-
+  eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
+  
   if( sched_cpu_data[cpu] == NULL || task->state != TASK_STATE_JUST_BORN ) {
     return -EINVAL;
   }
@@ -307,9 +313,6 @@ static status_t def_add_task(task_t *task)
   sdata->max_timeslice = 0;
 
   UNLOCK_TASK_STRUCT(task);
-
-  kprintf( ">> ADDED TASK: %d\n", task->pid );
-  
   return 0;
 }
 
@@ -397,6 +400,7 @@ static status_t __change_local_task_state(task_t *task,task_state_t new_state)
   prev_state = task->state;
   LOCK_CPU_SCHED_DATA(sched_data);
 
+  kprintf( "** Changing local task state: %d\n", new_state );
   switch(new_state) {
     case TASK_STATE_RUNNABLE:
       if( prev_state == TASK_STATE_JUST_BORN

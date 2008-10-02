@@ -68,8 +68,9 @@ static void main_routine_stage1(void)
   set_cpu_online(0,1);  /* We're online. */
   sched_add_cpu(0);
 
-  arch_initialize_irqs(); 
+  arch_initialize_irqs();
   arch_specific_init();
+
   /* Initialize known hardware devices. */
   initialize_common_hardware();
   /* Since the PIC is initialized, all interrupts from the hardware
@@ -89,9 +90,9 @@ static void main_routine_stage1(void)
   initialize_ipc();
 
   /* OK, we can proceed. */
-  start_init();
+  //start_init();
   //server_run_tasks();
- 
+
   /* Enter idle loop. */
 
   kprintf( "CPU #0 is entering idle loop. Current task: %p, CPU ID: %d\n",
@@ -157,7 +158,7 @@ void main_smpap_routine(void)
   static cpu_id_t cpu = 1;
 
   kprintf("CPU#%d Hello folks! I'm here\n", cpu);
-  
+ 
   /* Ramap physical memory using page directory preparead be master CPU. */
   arch_cpu_init(cpu);
 

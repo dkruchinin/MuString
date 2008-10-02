@@ -55,6 +55,7 @@ typedef struct __scheduler {
 
 typedef struct __scheduler_cpu_stats {
   uint64_t task_switches, idle_switches, idle_ticks;
+  uint64_t active_tasks,sleeping_tasks;
 } scheduler_cpu_stats_t;
 
 void initialize_scheduler(void);

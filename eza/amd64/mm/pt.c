@@ -47,6 +47,8 @@
 
 /* TODO DK: REDESIGN!!! */
 
+int __map_verbose = 0;
+
 typedef struct __pml4_entry {
   unsigned present: 1;
   unsigned rw: 1;
@@ -94,7 +96,10 @@ static int populate_pdp3_entry(pdp3_entry_t *entry, mmap_flags_t flags)
 {
   page_frame_t *pf = alloc_page(AF_PGEN | AF_ZERO);
   if( pf != NULL ) {
-    register uintptr_t pfn = pframe_number(pf);
+      register uintptr_t pfn = pframe_number(pf);
+      if (__map_verbose) {
+          kprintf("ALLOC: pfn=%d\n", pfn);
+      }
 
     entry->present = 1;
     if (!(flags & MAP_ACC_MASK) || (flags & MAP_RDONLY))
@@ -123,7 +128,10 @@ static int populate_pde2_entry(pde2_entry_t *entry, mmap_flags_t flags)
 {
   page_frame_t *pf = alloc_page(AF_PGEN | AF_ZERO);
   if( pf != NULL ) {
-    register uintptr_t pfn = pframe_number(pf);
+      register uintptr_t pfn = pframe_number(pf);
+      if (__map_verbose) {
+          kprintf("ALLOC: pfn=%d\n", pfn);
+      }
 
     entry->present = 1;
     if (!(flags & MAP_ACC_MASK) || (flags & MAP_RDONLY))
@@ -263,7 +271,10 @@ static int populate_pml4_entry(pml4_entry_t *entry, mmap_flags_t flags)
 {
   page_frame_t *pf = alloc_page(AF_PGEN | AF_ZERO);
   if( pf != NULL ) {
-    register uintptr_t pfn = pframe_number(pf);
+      register uintptr_t pfn = pframe_number(pf);
+      if (__map_verbose) {
+          kprintf("ALLOC: pfn=%d\n", pfn);
+      }
 
     entry->present = 1;
     if (!(flags & MAP_ACC_MASK) || (flags & MAP_RDONLY))

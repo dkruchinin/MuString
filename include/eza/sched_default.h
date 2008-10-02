@@ -101,7 +101,7 @@ typedef struct __eza_sched_cpudata {
   scheduler_cpu_stats_t *stats;
   eza_sched_prio_array_t *active_array;
   eza_sched_prio_array_t arrays[EZA_SCHED_NUM_ARRAYS];
-  list_head_t non_active_tasks;
+  list_head_t non_active_tasks; 
   cpu_id_t cpu_id;
 } eza_sched_cpudata_t;
 

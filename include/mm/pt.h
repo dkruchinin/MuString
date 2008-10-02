@@ -110,4 +110,5 @@ int mm_map_pages( page_directory_t *top_level_pgd, page_frame_iterator_t *pfi,
  */
 page_idx_t mm_pin_virtual_address( page_directory_t *pd, uintptr_t virt_addr );
 
+extern int __map_verbose;
 #endif
