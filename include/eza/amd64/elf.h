@@ -14,30 +14,20 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2005,2008 Tirra <madtirra@jarios.org>
  *
- * include/kernel.h: contains main kernel types and prototypes for common
- *                   kernel routines.
+ * include/eza/amd64/elf.c: elf architecture depended definion
  *
  */
 
-#ifndef __KERNEL_H__
-#define __KERNEL_H__ 
+#ifndef __EZA_ARCH_ELF_H__
+#define __EZA_ARCH_ELF_H__
 
-#define LOGBUFFER_LEN  32768
+#include <eza/arch/types.h>
+#include <kernel/elf.h>
 
-#define _b2kb(b)    ((b) >> 10)
-#define _kb2b(kb)   ((kb) << 10)
-#define _kb2mb(kb)  ((kb) >> 10)
-#define _mb2kb(mb)  ((mb) << 10)
-#define _b2mb(b)    (_kb2mb(_b2kb(b)))
-#define _mb2b(mb)   (_kb2b(_mb2kb(mb)))
+typedef elf64_t elf_head_t;
 
-#define likely(x)   __builtin_expect((x),1)
-#define unlikely(x) __builtin_expect((x),0)
-
-void panic(const char *format, ...);
-   
-#endif /* __KERNEL_H__ */
+#endif
 

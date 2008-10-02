@@ -14,7 +14,7 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2005,2008 Tirra <madtirra@jarios.org>
  *
  * server/server.c: servers going multiboot functions
@@ -22,6 +22,8 @@
  */
 
 #include <eza/arch/types.h>
+#include <mm/pt.h>
+#include <mlibc/kprintf.h>
 #include <server.h>
 
 uint32_t server_get_num(void)
@@ -47,4 +49,5 @@ uintptr_t server_get_end_phy_addr(void)
   } else
     return nil;
 }
+
 

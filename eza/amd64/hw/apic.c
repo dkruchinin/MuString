@@ -105,6 +105,11 @@ static void __disable_apic(void)
   local_apic->svr.reg=svr.reg;
 }
 
+void apic_shootout(void)
+{
+  __disable_apic();
+}
+
 static void __local_apic_clear(void)
 {
   uint32_t max_lvt;

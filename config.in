@@ -1,0 +1,12 @@
+# MuiString 
+# config: file with MuiString configuration
+# This file for configure script processing
+# Originally written by MadTirra <madtirra@jarios.org>
+# (c) 2008 MuiString Core Team http://mstring.jarios.org
+
+ARCH = %arch
+
+DEBUG = %debug
+
+CONFIG_SMP = %smp
+

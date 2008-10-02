@@ -1,0 +1,29 @@
+# This is a file with tools paths and default 
+# build flags
+# Originally written by MadTirra <madtirra@jarios.org>
+# (c) 2008 MuiString core development team
+# http://mstring.jarios.org
+#
+
+
+-include config
+
+CC = %cc
+MAKE = %make -s
+LD = %ld
+OBJDUMP = %objdump
+OBJCOPY = %objcopy
+AS = %as
+ASFLAGS = 
+CFLAGS = -Wall -nostdlib -nostdinc -fno-builtin -fomit-frame-pointer -g
+LDFLAGS = -M
+Q = @
+GREP = %grep
+ECHO = %echo
+LN = %ln
+GMAP = eza/gmap.py
+
+
+ATSIGN ?= @
+
+SYMTAB_SECTION=".section symtab.data, \"a\", $(ATSIGN)progbits;"

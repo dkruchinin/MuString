@@ -86,6 +86,24 @@ void kprintf(const char *fmt, ...)
   va_end(ap);
 }
 
+void sprintf(char *str, const char *fmt, ...)
+{
+  va_list ap;
+
+  va_start(ap, fmt);
+  vsprintf(str, fmt, ap);
+  va_end(ap);
+}
+
+void snprintf(char *str, size_t size, const char *fmt, ...)
+{
+  va_list ap;
+
+  va_start(ap, fmt);
+  vsnprintf(str, size, fmt, ap);
+  va_end(ap)
+}
+
 void vkprintf(const char *fmt, va_list ap)
 {
   char tmp_buf[TMPBUF_SIZE];

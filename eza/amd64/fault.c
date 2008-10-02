@@ -97,7 +97,7 @@ void bound_range_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 
 void invalid_opcode_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
-    kprintf( "  [!!] #Invalid opcode exception raised !\n" );
+    kprintf( "  [!!] #Invalid opcode exception raised ! (%p)\n", stack_frame->rip );
 }
 
 void device_not_available_fault_handler_impl(interrupt_stack_frame_t *stack_frame)

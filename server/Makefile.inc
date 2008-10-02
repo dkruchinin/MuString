@@ -1,2 +1,2 @@
-LIBSERVER_OBJS=server/server.o
+LIBSERVER_OBJS=server/server.o server/init.o
 
