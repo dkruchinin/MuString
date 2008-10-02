@@ -138,15 +138,18 @@ static ipc_port_message_t *___extract_message_from_port_queue(ipc_port_t *p)
   return msg;
 }
 
-static status_t __put_sender_into_sleep(task_t *sender,ipc_port_t *port,
+static void __put_sender_into_sleep(task_t *sender,ipc_port_t *port,
                                         ipc_port_message_t *msg)
 {
-  return 0;
 }
 
-static status_t __put_receiver_into_sleep(task_t *sender,ipc_port_t *port)
+static void __put_receiver_into_sleep(task_t *sender,ipc_port_t *port)
 {
-  return 0;
+  wait_queue_task_t w;
+
+  w.task=sender;
+  waitqueue_add_task(&port->waitqueue,&w);
+  waitqueue_yield(&w);
 }
 
 static status_t __allocate_port(ipc_port_t **out_port,ulong_t flags,

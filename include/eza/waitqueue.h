@@ -36,10 +36,10 @@ typedef struct __wait_queue {
   spinlock_t q_lock;
 } wait_queue_t;
 
-typedef struct __wait_queue_waiter {
+typedef struct __wait_queue_task {
   list_node_t l;
   task_t *task;
-} wait_queue_waiter_t;
+} wait_queue_task_t;
 
 #define LOCK_WAITQUEUE(w)                       \
   interrupts_disable();                         \
@@ -56,8 +56,8 @@ static inline void waitqueue_initialize(wait_queue_t *wq)
   spinlock_initialize(&wq->q_lock,"");
 }
 
-static inline void waitqueue_add_waiter(wait_queue_t *wq,
-                                        wait_queue_waiter_t *w)
+static inline void waitqueue_add_task(wait_queue_t *wq,
+                                      wait_queue_task_t *w)
 {
   list_init_node(&w->l);
 
@@ -82,16 +82,21 @@ static inline void waitqueue_wake_one_waiter(wait_queue_t *wq)
 {
   LOCK_WAITQUEUE(wq);
   if(wq->num_waiters > 0) {
-    wait_queue_waiter_t *waiter;
+    wait_queue_task_t *waiter;
     list_node_t *n = list_node_first(&wq->waiters);
 
     wq->num_waiters--;
     list_del(n);
     UNLOCK_WAITQUEUE(wq);
 
-    waiter = container_of(n,wait_queue_waiter_t,l);
+    waiter = container_of(n,wait_queue_task_t,l);
     sched_change_task_state(waiter->task,TASK_STATE_RUNNABLE);
   }
+}
+
+static inline void waitqueue_yield(wait_queue_task_t *w)
+{
+  sched_change_task_state(w->task,TASK_STATE_SLEEPING);
 }
 
 #endif

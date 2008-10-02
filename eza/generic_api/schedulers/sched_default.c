@@ -168,28 +168,18 @@ static inline void __recalculate_timeslice_and_priority(task_t *task)
   }
 }
 
-/* NOTE: Task must be locked !
- */
-static inline void __reschedule_task(task_t *task)
-{
-  if( task->cpu == cpu_id() ) {
-    kprintf( "** LOCAL NEED RESCHED: %d\n", cpu_id() );
-    sched_set_current_need_resched();
-  } else {
-    kprintf( "** REMOTE NEED RESCHED: CPU %d, TASK's CPU: %d\n", cpu_id(), task->cpu );
-  }
-}
-
 /* NOTE: Task and CPUdata must be locked prior to calling this function !
  */
 static inline void __move_to_sleepers(eza_sched_cpudata_t *sched_data,task_t *task)
 {
-  //  list_del();
+  eza_sched_taskdata_t *tdata = EZA_TASK_SCHED_DATA(task);
+  list_del(&tdata->runlist);
+  list_add2tail(&sched_data->non_active_tasks,&tdata->runlist);
 }
 
 /* Task must be locked while calling this function !
  */
-static inline status_t __activate_task(task_t *task, eza_sched_cpudata_t *sched_data)
+static inline status_t __activate_local_task(task_t *task, eza_sched_cpudata_t *sched_data)
 {
   eza_sched_taskdata_t *cdata = (eza_sched_taskdata_t *)current_task()->sched_data;
 
@@ -199,27 +189,23 @@ static inline status_t __activate_task(task_t *task, eza_sched_cpudata_t *sched_
 
   kprintf( "++ NEW PRIO: %d, CURRENT: %p, CRRENT PRIO: %d\n", EZA_TASK_PRIORITY(task), current_task(), cdata->priority );
   if( EZA_TASK_PRIORITY(task) < cdata->priority ) {
-    __reschedule_task(current_task());
+    sched_set_current_need_resched();
   }
 
   return 0;
 }
 
-/* Task must be locked while calling this function !
+/* NOTE: Task must be locked while calling this function !
  */
-static inline status_t __deactivate_task(task_t *task, eza_sched_cpudata_t *sched_data)
+static inline void __deactivate_local_task(task_t *task, eza_sched_cpudata_t *sched_data)
 {
   /* In case target task is running, we must reschedule it. */
-  if( task->state == TASK_STATE_RUNNING ) {
-    __reschedule_task(task);
-  } else { /* TASK_STATE_RUNNABLE */
-    if( task->cpu == cpu_id() ) {
-      __move_to_sleepers(sched_data,task);
-    } else {
-    }
-  }
+  task->state = TASK_STATE_STOPPED;
+  __move_to_sleepers(sched_data,task);
 
-  return 0;
+  if( task->state == TASK_STATE_RUNNING ) {
+    sched_set_current_need_resched();
+  }
 }
 
 static cpu_id_t def_cpus_supported(void){
@@ -392,13 +378,22 @@ static void def_reset(void)
   }
 }
 
-static status_t def_change_task_state(task_t *task,task_state_t new_state)
+/* NOTE: task must be locked before calling this function ! */
+static status_t __change_remote_task_state(task_t *task,task_state_t new_state)
+{
+  task->flags &= ~TASK_FLAG_UNDER_STATE_CHANGE;
+  UNLOCK_TASK_STRUCT(task);
+  kprintf( KO_WARNING "Changing state for remote tasks is not possible !\n" );
+  return -EINVAL;
+}
+
+/* NOTE: task must be locked before calling this function ! */
+static status_t __change_local_task_state(task_t *task,task_state_t new_state)
 {
   status_t r = -EINVAL;
   task_state_t prev_state;
   eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
 
-  LOCK_TASK_STRUCT(task);
   prev_state = task->state;
   LOCK_CPU_SCHED_DATA(sched_data);
 
@@ -406,13 +401,15 @@ static status_t def_change_task_state(task_t *task,task_state_t new_state)
     case TASK_STATE_RUNNABLE:
       if( prev_state == TASK_STATE_JUST_BORN
 	  || prev_state == TASK_STATE_STOPPED) {
-	r = __activate_task(task,sched_data);
+	__activate_local_task(task,sched_data);
+        r = 0;
       }
       break;
     case TASK_STATE_STOPPED:
         if( task->state == TASK_STATE_RUNNABLE
 	    || task->state == TASK_STATE_RUNNING ) {
-	  r = __deactivate_task(task,sched_data);
+	  __deactivate_local_task(task,sched_data);
+          r = 0;
 	}
        break;
     default:
@@ -422,6 +419,17 @@ static status_t def_change_task_state(task_t *task,task_state_t new_state)
   UNLOCK_CPU_SCHED_DATA(sched_data);
   UNLOCK_TASK_STRUCT(task);
   return r;
+}
+
+static status_t def_change_task_state(task_t *task,task_state_t new_state)
+{
+  LOCK_TASK_STRUCT(task);
+
+  if( task->cpu == cpu_id() ) {
+    return __change_local_task_state(task,new_state);
+  } else {
+    return __change_remote_task_state(task,new_state);
+  }
 }
 
 static status_t def_setup_idle_task(task_t *task)

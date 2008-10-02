@@ -47,7 +47,7 @@ typedef struct __scheduler {
   void (*reset)(void);
   status_t (*change_task_state)(task_t *task,task_state_t state);
   status_t (*setup_idle_task)(task_t *task);
-    status_t (*scheduler_control)(task_t *task, ulong_t cmd,ulong_t arg);
+  status_t (*scheduler_control)(task_t *task, ulong_t cmd,ulong_t arg);
 } scheduler_t;
 
 #define GRAB_SCHEDULER(s)

@@ -195,6 +195,7 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
   /* Setup scheduler-related stuff. */
   task->scheduler = NULL;
   task->sched_data = NULL;
+  task->flags = 0;
 
   *t = task;
   return 0;
