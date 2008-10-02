@@ -148,38 +148,7 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t flags,
  */
 status_t arch_process_context_control(task_t *task,ulong_t cmd,ulong_t arg);
 
-/**
- * @fn status_t create_task(task_t *parent,task_creation_flags_t flags,
- *                          task_privelege_t priv, task_t **new_task)
- * @brief Create a new task (object for scheduling).
- *
- * This routine is the kernel main routine for creating new threads.
- * The following conditions are met during kernel creation:
- *   - new thread will have its own unique PID;
- *   - the caling thread will be the parent of the new thread;
- *   - new thread will have its own kernel stack;
- *   - CPU ID of new thread will be equal to its parent's;
- *   - new thread's state will be 'TASK_STATE_JUST_BORN';
- *   - new thread will be registered in default scheduler and ready for
- *     scheduling;
- *   - new thread will have its own memory space unless the 'CLONE_MM' flag
- *     is specified;
- *
- * @param parent - Parent for new task. May be NULL, which means that no
- *                 parent-related information will be set in new thread.
- * @param flags - Task creation flags. Possible values are:
- *                CLONE_MM - new task will share its memory space with its
- *                           parent (suitable for creation 'threads').
- * @param priv - Privilege level of new task. Possible values are:
- *               TPL_KERNEL - the highest privilege level (kernel).
- *                            Used for kernel threads.
- *               TPL_USER - the least privilege level.
- *                          Used for creation all user processes.
- * @param new_task - Where to put pointer to the new task.
- * @return If new task was successfully created, this function returns 0.
- *         Otherwise, negation of the following error codes is returned:
- *         ENOMEM   No memory was available.
- */
+
 status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t priv,
                      task_t **new_task);
 

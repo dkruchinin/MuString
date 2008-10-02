@@ -1,15 +1,21 @@
 #include <ipc/port.h>
+#include <ipc/ipc.h>
 #include <eza/arch/arch_ipc.h>
+#include <eza/arch/context.h>
+#include <mlibc/kprintf.h>
+#include <eza/arch/types.h>
+#include <eza/arch/task.h>
+#include <eza/errno.h>
 
-arch_ipc_port_ctx_t send_ctx,recv_ctx;
-
-arch_ipc_port_ctx_t *arch_ipc_get_sender_port_ctx(task_t *caller)
+status_t arch_setup_port_message_buffers(task_t *caller,
+                                         ipc_port_message_t *message)
 {
-    return &send_ctx;
+    if( message->flags & IPC_BLOCKED_ACCESS ) {
+        message->send_buffer = arch_get_syscall_stack_frame(caller);
+        message->receive_buffer = message->send_buffer;
+        return 0;
+    } else {
+        kprintf( KO_WARNING "Non-blocking ports aren't implemented yet !\n" );
+        return -EINVAL;
+    }
 }
-
-arch_ipc_port_ctx_t *arch_ipc_get_receiver_port_ctx(task_t *caller)
-{
-    return &recv_ctx;
-}
-

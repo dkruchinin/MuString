@@ -28,16 +28,19 @@
 #include <eza/task.h>
 #include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
-#include <eza/arch/arch_ipc.h>
 #include <ds/linked_array.h>
 #include <ds/list.h>
+#include <eza/waitqueue.h>
+
+struct __ipc_port_t;
 
 typedef struct __ipc_port_messsage_t {
-  ulong_t data_size,reply_size,id;
+  ulong_t data_size,reply_size,id,flags;
   task_t *sender;
-  arch_ipc_port_ctx_t *ctx;
+  void *send_buffer,*receive_buffer;
   list_node_t l;
   status_t retcode;
+  struct __ipc_port_t *port;  
 } ipc_port_message_t;
 
 typedef struct __ipc_port_t {
@@ -49,6 +52,7 @@ typedef struct __ipc_port_t {
   list_head_t messages;
   ipc_port_message_t **message_ptrs;
   task_t *owner;
+  wait_queue_t waitqueue;
 } ipc_port_t;
 
 #define IPC_LOCK_PORT(p) spinlock_lock(&p->lock)
@@ -62,7 +66,10 @@ status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size);
 status_t ipc_open_port(task_t *owner,ulong_t port,ulong_t flags,
                        task_t *opener);
 
-arch_ipc_port_ctx_t *arch_ipc_get_sender_port_ctx(task_t *caller);
-arch_ipc_port_ctx_t *arch_ipc_get_receiver_port_ctx(task_t *caller);
+/* 
+ *
+ */
+status_t arch_setup_port_message_buffers(task_t *caller,
+                                         ipc_port_message_t *message);
 
 #endif

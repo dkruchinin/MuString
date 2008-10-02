@@ -72,27 +72,12 @@ static void __put_port(ipc_port_t *port)
   atomic_dec(&port->use_count);
 }
 
-/* NOTE: IPC must be unlocked ! */
-static arch_ipc_port_ctx_t *__get_message_arch_ctx(task_t *sender,
-                                                   ulong_t port_flags)
-{
-  arch_ipc_port_ctx_t *ctx = arch_ipc_get_sender_port_ctx(sender);
-
-  if( ctx != NULL ) {
-    if( !(port_flags & IPC_BLOCKED_ACCESS) ) {
-      ctx = NULL;
-      /* TODO: [mt] implement non blocking ports. */
-    }
-  }
-
-  return ctx;
-}
-
-static ipc_port_message_t *__allocate_port_message(void)
+static ipc_port_message_t *__allocate_port_message(ipc_port_t *port)
 {
   ipc_port_message_t *m = alloc_pages_addr(1,AF_PGEN);
   list_init_node(&m->l);
   m->retcode = 0;
+  m->port = port;
   return m;
 }
 
@@ -194,6 +179,7 @@ static status_t __allocate_port(ipc_port_t **out_port,ulong_t flags,
   p->owner = owner;
 
   list_init_head(&p->messages);
+  waitqueue_initialize(&p->waitqueue);
   *out_port = p;
   return 0;
 }
@@ -339,7 +325,12 @@ status_t ipc_port_send(task_t *sender,ulong_t port,ulong_t snd_size,
   if( !ipc ) {
     return -EINVAL;
   }
-  
+
+  /* TODO: [mt] Now only max 112 bytes can be sent vis ports. */
+  if( snd_size > 112 || rcv_size > 112 ) {
+    return -EINVAL;
+  }
+
   if( !snd_size || port >= sender->ipc->num_open_ports ) {
     return -EINVAL;
   }
@@ -356,7 +347,7 @@ status_t ipc_port_send(task_t *sender,ulong_t port,ulong_t snd_size,
     return -EBUSY;
   }
 
-  msg = __allocate_port_message();
+  msg = __allocate_port_message(p);
   if(msg==NULL) {
     return -ENOMEM;
   }
@@ -371,21 +362,22 @@ status_t ipc_port_send(task_t *sender,ulong_t port,ulong_t snd_size,
   msg->sender = sender;
   msg->data_size = snd_size;
   msg->reply_size = rcv_size;
-  msg->ctx = __get_message_arch_ctx(sender,p->flags);
+  msg->flags = flags;
+  /* Setup message data in arch-specific manner. */
+  r = arch_setup_port_message_buffers(sender,msg);
 
-  if( msg->ctx==NULL) {
-    r = -ENOMEM;
+  if( r != 0 ) {
     goto free_message_id;
   }
 
   /* OK, new message is ready for sending. */
   __add_message_to_port_queue(p,msg,id);
   __notify_message_arrived(p);
-  
+
   if( p->flags & IPC_BLOCKED_ACCESS ||
       rcv_size != 0 ) {
     /* Sender should wait for the reply, so put it into sleep here. */
-      __put_sender_into_sleep(sender,p,msg);
+    __put_sender_into_sleep(sender,p,msg);
   }
 
   return msg->retcode;
@@ -426,7 +418,7 @@ recv_cycle:
     }
   } else {
     /* Got something ! */
-    msg = ___extract_message_from_port_queue(p);
+      msg = ___extract_message_from_port_queue(p);
   }
   IPC_UNLOCK_PORT_W(p);
 

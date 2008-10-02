@@ -34,9 +34,6 @@ typedef struct __task_ipc {
   ipc_port_t **open_ports;
   linked_array_t open_ports_array;
   spinlock_t open_port_lock;
-
-  /* Singletones for blocking operations. */
-  arch_ipc_port_ctx_t *task_port_ctx;
 } task_ipc_t;
 
 task_ipc_t *allocate_task_ipc(void);

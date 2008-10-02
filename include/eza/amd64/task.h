@@ -28,6 +28,7 @@
 #include <eza/arch/asm.h>
 #include <eza/task.h>
 #include <eza/arch/cpu.h>
+#include <eza/context.h>
 
 extern cpu_sched_stat_t PER_CPU_VAR(cpu_sched_stat);
 
@@ -38,6 +39,11 @@ extern cpu_sched_stat_t PER_CPU_VAR(cpu_sched_stat);
     __asm__ __volatile__( "swapgs" );                                           \
     load_stack_pointer(t->kernel_stack.high_address-128);                       \
   }
+
+static regs_t *arch_get_syscall_stack_frame(task_t *caller)
+{
+    return (regs_t *)(caller->kernel_stack.high_address-sizeof(regs_t));
+}
 
 #endif
 

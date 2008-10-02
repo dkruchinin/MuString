@@ -20,7 +20,6 @@
  * eza/generic_api/process.c: base system process-related functions.
  */
 
-
 #include <eza/task.h>
 #include <mm/pt.h>
 #include <eza/smp.h>
@@ -37,6 +36,7 @@
 #include <eza/security.h>
 #include <eza/arch/current.h>
 #include <eza/rw_spinlock.h>
+#include <kernel/syscalls.h>
 
 typedef uint32_t hash_level_t;
 
