@@ -17,7 +17,7 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *
- * include/eza/waitqueue.h: base system process-related functions.
+ * include/eza/waitqueue.h: prototypes for waitqueues.
  */
 
 #ifndef __WAITQUEUE_H__
@@ -26,9 +26,7 @@
 #include <eza/task.h>
 #include <eza/spinlock.h>
 #include <ds/list.h>
-#include <eza/arch/interrupt.h>
 #include <eza/arch/types.h>
-#include <eza/scheduler.h>
 
 typedef struct __wait_queue {
   list_head_t waiters;
@@ -39,7 +37,10 @@ typedef struct __wait_queue {
 typedef struct __wait_queue_task {
   list_node_t l;
   task_t *task;
+  ulong_t flags;  
 } wait_queue_task_t;
+
+#define WQ_EVENT_OCCURED  0x1
 
 #define LOCK_WAITQUEUE(w)                       \
   interrupts_disable();                         \
@@ -49,54 +50,11 @@ typedef struct __wait_queue_task {
   interrupts_enable();                          \
   spinlock_unlock(&w->q_lock)
 
-static inline void waitqueue_initialize(wait_queue_t *wq)
-{
-  list_init_head(&wq->waiters);
-  wq->num_waiters=0;
-  spinlock_initialize(&wq->q_lock,"");
-}
-
-static inline void waitqueue_add_task(wait_queue_t *wq,
-                                      wait_queue_task_t *w)
-{
-  list_init_node(&w->l);
-
-  LOCK_WAITQUEUE(wq);
-  list_add2tail(&wq->waiters,&w->l);
-  wq->num_waiters++;
-  UNLOCK_WAITQUEUE(wq);
-}
-
-static inline bool waitqueue_is_empty(wait_queue_t *wq)
-{
-  /* No need to lock - we just read a pointer. */
-  return list_is_empty(&wq->waiters);
-}
-
-static inline ulong_t waitqueue_get_waiters_number(wait_queue_t *wq)
-{
-  return wq->num_waiters;
-}
-
-static inline void waitqueue_wake_one_waiter(wait_queue_t *wq)
-{
-  LOCK_WAITQUEUE(wq);
-  if(wq->num_waiters > 0) {
-    wait_queue_task_t *waiter;
-    list_node_t *n = list_node_first(&wq->waiters);
-
-    wq->num_waiters--;
-    list_del(n);
-    UNLOCK_WAITQUEUE(wq);
-
-    waiter = container_of(n,wait_queue_task_t,l);
-    sched_change_task_state(waiter->task,TASK_STATE_RUNNABLE);
-  }
-}
-
-static inline void waitqueue_yield(wait_queue_task_t *w)
-{
-  sched_change_task_state(w->task,TASK_STATE_SLEEPING);
-}
+void waitqueue_initialize(wait_queue_t *wq);
+void waitqueue_add_task(wait_queue_t *wq,wait_queue_task_t *w);
+bool waitqueue_is_empty(wait_queue_t *wq);
+ulong_t waitqueue_get_tasks_number(wait_queue_t *wq);
+void waitqueue_wake_one_task(wait_queue_t *wq);
+void waitqueue_yield(wait_queue_task_t *w);
 
 #endif

@@ -60,6 +60,6 @@ void smp_local_timer_interrupt_tick(void)
     if(cpu_id() == 0) {
         timer_tick();
     }
-  sched_timer_tick();
+    sched_timer_tick();
 }
 #endif

@@ -27,11 +27,11 @@
 
 #include <eza/arch/types.h>
 
-#define ARCH_MEMSET
-extern void *arch_memset(void *dest,int sym,size_t size);
+//#define ARCH_MEMSET
+//extern void *arch_memset(void *dest,int sym,size_t size);
 
-#define ARCH_MEMCPY
-extern void *arch_memcpy(void *dest, const void *src, size_t size);
+//#define ARCH_MEMCPY
+//extern void *arch_memcpy(void *dest, const void *src, size_t size);
 
 
 #endif /* __ARCH_STRING_H__ */

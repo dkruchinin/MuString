@@ -19,11 +19,8 @@ task_ipc_t *allocate_task_ipc(void)
 
     atomic_set(&ipc->use_count,1);
     ipc->num_ports = 0;
-    ipc->num_open_ports = 0;
     ipc->ports = NULL;
-    ipc->open_ports = NULL;
     spinlock_initialize(&ipc->port_lock, "");
-    spinlock_initialize(&ipc->open_port_lock, "");
     semaphore_initialize(&ipc->sem,1);
     return ipc;
   }

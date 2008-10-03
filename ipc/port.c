@@ -38,6 +38,12 @@ static bool __port_matches_flags(ipc_port_t *port,ulong_t flags)
   return true;
 }
 
+static void __put_port(ipc_port_t *p)
+{
+  atomic_dec(&p->open_count);
+  /* TODO: [mt] Free port memory upon deletion. */
+}
+
 static status_t __get_port(task_ipc_t *ipc,ulong_t port,ulong_t flags,
                   ipc_port_t **out_port)
 {
@@ -59,17 +65,11 @@ static status_t __get_port(task_ipc_t *ipc,ulong_t port,ulong_t flags,
   }
   atomic_inc(&p->open_count);
   IPC_UNLOCK_PORTS(ipc);
-
   *out_port = p;
   return 0;
 out_unlock:
   IPC_UNLOCK_PORTS(ipc);
   return r;
-}
-
-static void __put_port(ipc_port_t *port)
-{
-  atomic_dec(&port->use_count);
 }
 
 static ipc_port_message_t *__allocate_port_message(ipc_port_t *port)
@@ -78,6 +78,7 @@ static ipc_port_message_t *__allocate_port_message(ipc_port_t *port)
   list_init_node(&m->l);
   m->retcode = 0;
   m->port = port;
+  event_initialize(&m->event);
   return m;
 }
 
@@ -105,6 +106,7 @@ static void __free_port_message(ipc_port_message_t *msg)
 static void __notify_message_arrived(ipc_port_t *port)
 {
   kprintf( "++ Notifying the port owner: %d\n", port->owner->pid );
+  waitqueue_wake_one_task(&port->waitqueue);
 }
 
 static void __add_message_to_port_queue( ipc_port_t *port,
@@ -138,17 +140,18 @@ static ipc_port_message_t *___extract_message_from_port_queue(ipc_port_t *p)
   return msg;
 }
 
-static void __put_sender_into_sleep(task_t *sender,ipc_port_t *port,
-                                        ipc_port_message_t *msg)
-{
-}
-
-static void __put_receiver_into_sleep(task_t *sender,ipc_port_t *port)
+/* NOTE: Port must be W-locked before calling this function ! */
+static void __put_receiver_into_sleep(task_t *receiver,ipc_port_t *port)
 {
   wait_queue_task_t w;
 
-  w.task=sender;
+  w.task=receiver;
   waitqueue_add_task(&port->waitqueue,&w);
+
+  /* Now we can unlock the port. */
+  IPC_UNLOCK_PORT_W(port);
+
+  kprintf( "[port]: putting receiver %d into sleep.\n",receiver->pid );
   waitqueue_yield(&w);
 }
 
@@ -232,8 +235,7 @@ status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size)
   /* Ok, it seems that we can create a new port. */
   r = __allocate_port(&port,flags,size,owner);
   if( r != 0 ) {
-    linked_array_free_item(&ipc->ports_array,id);
-    goto out_unlock;
+    goto free_id;
   }
 
   /* Install new port. */
@@ -243,116 +245,52 @@ status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size)
   IPC_UNLOCK_PORTS(ipc);
 
   r = id;
+  UNLOCK_IPC(ipc);
   kprintf( "++ PORT ADDRESS: %p\n", port );
+  return r;
+free_id:
+  linked_array_free_item(&ipc->ports_array,id);
 out_unlock:
   UNLOCK_IPC(ipc);
   return r;
 }
 
-status_t ipc_open_port(task_t *owner,ulong_t port,ulong_t flags,
-                       task_t *opener)
-{
-  task_ipc_t *ipc=opener->ipc;
-  status_t r;
-  ipc_port_t *p;
-  ulong_t id;
 
-  /* Don't deal with daemons ! */
-  if( !owner->ipc || !opener->ipc ) {
-    return -EINVAL;
-  }
-
-  LOCK_IPC(ipc);
-  if(ipc->num_open_ports >= opener->limits->limits[LIMIT_IPC_MAX_OPEN_PORTS]) {
-    r = -EMFILE;
-    goto out_unlock;
-  }
-
-  /* First, locate target port. */
-  r = __get_port(owner->ipc,port,flags,&p);
-  if( r ) {
-    goto out_unlock;
-  }
-
-  /* Now we can install this port in our descriptor table. */
-  r = -ENOMEM;
-
-  /* First port opened ? */
-  if( !ipc->open_ports ) {
-    ipc->open_ports = alloc_pages_addr(1,AF_PGEN|AF_ZERO);
-    if( !ipc->open_ports ) {
-      goto out_put_port;
-    }
-  }
-
-  /* First port opened ? */
-  if( !linked_array_is_initialized(&ipc->open_ports_array) ) {
-    if( linked_array_initialize(&ipc->open_ports_array,
-                                  opener->limits->limits[LIMIT_IPC_MAX_OPEN_PORTS]) != 0 ) {
-        /* TODO: [mt] allocate/free memory via slabs. */
-        goto out_put_port;
-      }
-  }
-
-  /* Get free descriptor. */
-  id = linked_array_alloc_item(&ipc->open_ports_array);
-  if(id == INVALID_ITEM_IDX) {
-    r = -EMFILE;
-    goto out_put_port;
-  }
-
-  /* Install this opened port. */
-  IPC_LOCK_OPEN_PORTS(ipc);
-  ipc->open_ports[id]=p;
-  ipc->num_open_ports++;
-  IPC_UNLOCK_OPEN_PORTS(ipc);
-
-  UNLOCK_IPC(ipc);
-  return id;
-out_put_port:
-  __put_port(p);
-out_unlock:
-  UNLOCK_IPC(ipc);
-  return r;
-}
-
-status_t ipc_port_send(task_t *sender,ulong_t port,ulong_t snd_size,
+status_t ipc_port_send(task_t *receiver,ulong_t port,ulong_t snd_size,
                        ulong_t rcv_size,ulong_t flags)
 {
-  task_ipc_t *ipc=sender->ipc;
+  task_ipc_t *ipc=receiver->ipc;
   status_t r;
   ipc_port_t *p;
   ipc_port_message_t *msg;
   ulong_t id;
+  task_t *sender = current_task();
 
   if( !ipc ) {
     return -EINVAL;
   }
 
   /* TODO: [mt] Now only max 112 bytes can be sent vis ports. */
-  if( snd_size > 112 || rcv_size > 112 ) {
+  if( !snd_size || snd_size > 112 || rcv_size > 112 ) {
     return -EINVAL;
   }
 
-  if( !snd_size || port >= sender->ipc->num_open_ports ) {
+  /* First, locate target port. */
+  r = __get_port(receiver->ipc,port,flags,&p);
+  if( r ) {
     return -EINVAL;
   }
 
-  IPC_LOCK_OPEN_PORTS(ipc);
-  p = ipc->open_ports[port];
-  IPC_UNLOCK_OPEN_PORTS(ipc);
-
-  if( !p ) {
-    return -EINVAL;
-  }
-
+  /* First check without locking the port. */
   if( p->avail_messages == p->queue_size ) {
-    return -EBUSY;
+    r = -EBUSY;
+    goto put_port;
   }
 
   msg = __allocate_port_message(p);
-  if(msg==NULL) {
-    return -ENOMEM;
+  if( msg==NULL ) {
+    r = -ENOMEM;
+    goto put_port;
   }
 
   id = __allocate_port_message_id(p);
@@ -362,16 +300,19 @@ status_t ipc_port_send(task_t *sender,ulong_t port,ulong_t snd_size,
   }
 
   /* Setup this message. */
-  msg->sender = sender;
   msg->data_size = snd_size;
   msg->reply_size = rcv_size;
   msg->flags = flags;
+
   /* Setup message data in arch-specific manner. */
   r = arch_setup_port_message_buffers(sender,msg);
 
   if( r != 0 ) {
     goto free_message_id;
   }
+
+  /* Finally, setup event. */
+  event_set_task(&msg->event,sender);
 
   /* OK, new message is ready for sending. */
   __add_message_to_port_queue(p,msg,id);
@@ -380,14 +321,20 @@ status_t ipc_port_send(task_t *sender,ulong_t port,ulong_t snd_size,
   if( p->flags & IPC_BLOCKED_ACCESS ||
       rcv_size != 0 ) {
     /* Sender should wait for the reply, so put it into sleep here. */
-    __put_sender_into_sleep(sender,p,msg);
+    kprintf( "[port]: putting sender %d into sleep.\n",sender->pid );
+    event_yield( &msg->event );
   }
 
+  kprintf( "[port] Sender returned from sleep.\n" );
+  /* Release the port. */
+  __put_port(p);
   return msg->retcode;
 free_message_id:
   __free_port_message_id(p,id);
 free_message:
   __free_port_message(msg);
+put_port:
+  __put_port(p);
   return r;
 }
 
@@ -412,8 +359,10 @@ recv_cycle:
     msg = NULL;
     /* No incoming messages: sleep (if requested). */
     if( flags & IPC_BLOCKED_ACCESS ) {
-      /* No luck: need to sleep. */
-      IPC_UNLOCK_PORT_W(p);
+        /* No luck: need to sleep. We don't unlock the port right now
+         * since in will be unlocked after putting the receiver in
+         * in the port's waitqueue.
+         */
       __put_receiver_into_sleep(owner,p);
       goto recv_cycle;
     } else {
@@ -429,7 +378,7 @@ recv_cycle:
     r = msg->id;
     /* Release this message id to the future messages. */
     kprintf( "(**) ipc_port_receive(): Got a message N%d from %d !\n",
-             r,msg->sender->pid );
+             r,msg->event.task->pid );
   }
 
   return r;

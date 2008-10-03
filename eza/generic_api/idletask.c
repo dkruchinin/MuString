@@ -37,9 +37,31 @@
 
 task_t *idle_tasks[MAX_CPUS];
 
-#define STEP 300
+#define STEP 5000
 
 ulong_t syscall_counter = 0;
+
+task_t *server_task;
+status_t server_port;
+
+static void thread2(void *data)
+{
+    status_t id,r;
+
+    kprintf( "[Server] Strting ...\n" );
+    id = ipc_create_port(current_task(),IPC_BLOCKED_ACCESS,
+                         IPC_DEFAULT_PORT_MESSAGES);
+    kprintf( "[Server] Creating a port. id = %d\n",id );
+
+    server_task = current_task();
+    server_port = id;
+
+    kprintf( "[Server] Waitng for incoming messages ...\n" );
+    r = ipc_port_receive(current_task(), id, IPC_BLOCKED_ACCESS);
+    kprintf( "[Server] Got a message: %d\n", r );
+
+    for(;;);
+}
 
 static void thread1(void *data) {
     status_t id,r;
@@ -50,14 +72,14 @@ static void thread1(void *data) {
     kprintf( "port id: %d\n", id );
 
     kprintf( "** Opening the port ... " );
-    r = ipc_open_port(current_task(),id,IPC_BLOCKED_ACCESS,current_task());
+//    r = ipc_open_port(current_task(),id,IPC_BLOCKED_ACCESS,current_task());
     kprintf( "port descriptor: %d\n", r );
 
-    kprintf( "** Opening insufficient port port (1) : %d\n",
-             ipc_open_port(current_task(),1,IPC_BLOCKED_ACCESS,current_task()) );
+//    kprintf( "** Opening insufficient port port (1) : %d\n",
+//             ipc_open_port(current_task(),1,IPC_BLOCKED_ACCESS,current_task()) );
 
     kprintf( "** Opening the port one more time ... " );
-    r = ipc_open_port(current_task(),id,IPC_BLOCKED_ACCESS,current_task());
+//    r = ipc_open_port(current_task(),id,IPC_BLOCKED_ACCESS,current_task());
     kprintf( "port id: %d\n", r );
 
     kprintf( "** Sending a message to the port ... " );
@@ -99,13 +121,31 @@ static void thread1(void *data) {
     for(;;);
 }
 
+static void thread3(void *data)
+{
+  status_t r;
+  char buf[32];
+
+  kprintf( "[Client] Starting ...\n" );
+  r = ipc_port_send(server_task,server_port,32,32,IPC_BLOCKED_ACCESS);
+  kprintf( "[Client] Sending data through the port: %d\n", r );
+  for(;;);
+}
+
 void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
 
-  //if( kernel_thread(thread1,NULL) != 0 ) {
-  //    panic( "Can't create thread for testing port IPC functionality !\n" );
-  //}
+  if( cpu_id() == 0 ) {
+      /* Start server */
+      if( kernel_thread(thread2,NULL) != 0 ) {
+          panic( "Can't create server thread for testing port IPC functionality !\n" );
+      }
+      /* Start client */
+      if( kernel_thread(thread3,NULL) != 0 ) {
+          panic( "Can't create client thread for testing port IPC functionality !\n" );
+      }
+  }
 
   for( ;; ) {
     if( swks.system_ticks_64 >= target_tick ) {

@@ -58,7 +58,7 @@ static spinlock_t cpu_data_lock;
 #define EZA_TASK_PRIORITY(t) ((eza_sched_taskdata_t *)t->sched_data)->priority
 #define EZA_TASK_SCHED_DATA(t) ((eza_sched_taskdata_t *)t->sched_data)
 
-#define PRIO_TO_TIMESLICE(p) (p*5)
+#define PRIO_TO_TIMESLICE(p) (p*5*1)
 
 #define LOCK_EZA_SCHED_DATA(t) \
   lock_local_interrupts(); \
@@ -101,14 +101,6 @@ static void initialize_cpu_sched_data(eza_sched_cpudata_t *cpudata, cpu_id_t cpu
 {
   uint32_t arr,i;
 
-  spinlock_initialize(&cpudata->lock, "Eza scheduler runqueue lock");
-  list_init_head(&cpudata->non_active_tasks);
-  cpudata->active_array = &cpudata->arrays[0];
-
-  /* Initialize scheduler statistics for this CPU. */
-  cpudata->stats = &swks.cpu_stat[cpu].sched_stats;
-  cpudata->cpu_id = cpu;
-
   for( arr=0; arr<EZA_SCHED_NUM_ARRAYS; arr++ ) {
     eza_sched_prio_array_t *array = &cpudata->arrays[arr];
     list_head_t *lh = &array->queues[0];
@@ -120,6 +112,13 @@ static void initialize_cpu_sched_data(eza_sched_cpudata_t *cpudata, cpu_id_t cpu
       lh++;
     }
   }
+
+  spinlock_initialize(&cpudata->lock, "Eza scheduler runqueue lock");
+  cpudata->active_array = &cpudata->arrays[0];
+
+  /* Initialize scheduler statistics for this CPU. */
+  cpudata->stats = &swks.cpu_stat[cpu].sched_stats;
+  cpudata->cpu_id = cpu;
 }
 
 static status_t setup_new_task(task_t *task)
@@ -168,15 +167,6 @@ static inline void __recalculate_timeslice_and_priority(task_t *task)
   }
 }
 
-/* NOTE: Task and CPUdata must be locked prior to calling this function !
- */
-static inline void __move_to_sleepers(eza_sched_cpudata_t *sched_data,task_t *task)
-{
-  eza_sched_taskdata_t *tdata = EZA_TASK_SCHED_DATA(task);
-  list_del(&tdata->runlist);
-  list_add2tail(&sched_data->non_active_tasks,&tdata->runlist);
-}
-
 /* Task must be locked while calling this function !
  */
 static inline status_t __activate_local_task(task_t *task, eza_sched_cpudata_t *sched_data)
@@ -200,16 +190,20 @@ static inline status_t __activate_local_task(task_t *task, eza_sched_cpudata_t *
  */
 static inline void __deactivate_local_task(task_t *task, eza_sched_cpudata_t *sched_data)
 {
+  eza_sched_taskdata_t *tdata = EZA_TASK_SCHED_DATA(task);
+
   /* In case target task is running, we must reschedule it. */
   if( task->state == TASK_STATE_RUNNING ) {
     sched_set_current_need_resched();
   }
 
   task->state = TASK_STATE_STOPPED;
-  __move_to_sleepers(sched_data,task);
+
+  __remove_task_from_array(tdata->array,task);
 
   sched_data->stats->active_tasks--;
   sched_data->stats->sleeping_tasks++;
+  kprintf( "+++++++++++ DEACTIVATED LOCAL TASK: %d\n", task->pid );
 }
 
 static cpu_id_t def_cpus_supported(void){
@@ -288,7 +282,6 @@ static status_t def_add_task(task_t *task)
 {
   cpu_id_t cpu = cpu_id();
   eza_sched_taskdata_t *sdata;
-  eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
   
   if( sched_cpu_data[cpu] == NULL || task->state != TASK_STATE_JUST_BORN ) {
     return -EINVAL;
@@ -311,6 +304,7 @@ static status_t def_add_task(task_t *task)
   task->cpu = cpu;
   sdata->sched_discipline = SCHED_RR; /* TODO: [mt] must be SCHED_ADAPTIVE */
   sdata->max_timeslice = 0;
+  sdata->array = NULL;
 
   UNLOCK_TASK_STRUCT(task);
   return 0;
@@ -391,7 +385,8 @@ static status_t __change_remote_task_state(task_t *task,task_state_t new_state)
 }
 
 /* NOTE: task must be locked before calling this function ! */
-static status_t __change_local_task_state(task_t *task,task_state_t new_state)
+static status_t __change_local_task_state(task_t *task,task_state_t new_state,
+                                          lazy_sched_handler_t handler,void *data)
 {
   status_t r = -EINVAL;
   task_state_t prev_state;
@@ -400,7 +395,12 @@ static status_t __change_local_task_state(task_t *task,task_state_t new_state)
   prev_state = task->state;
   LOCK_CPU_SCHED_DATA(sched_data);
 
-  kprintf( "** Changing local task state: %d\n", new_state );
+  /* In case we're performing a 'lazy' schedule, perform some extra checks.*/
+  if( handler != NULL && !handler(data) ) {
+    kprintf( "[*] Breaking lazy scheduling loop.\n" );
+    goto out_unlock;
+  }
+
   switch(new_state) {
     case TASK_STATE_RUNNABLE:
       if( prev_state == TASK_STATE_JUST_BORN
@@ -410,6 +410,7 @@ static status_t __change_local_task_state(task_t *task,task_state_t new_state)
       }
       break;
     case TASK_STATE_STOPPED:
+    case TASK_STATE_SLEEPING:
         if( task->state == TASK_STATE_RUNNABLE
 	    || task->state == TASK_STATE_RUNNING ) {
 	  __deactivate_local_task(task,sched_data);
@@ -420,20 +421,27 @@ static status_t __change_local_task_state(task_t *task,task_state_t new_state)
       break;
   }
 
+out_unlock:
   UNLOCK_CPU_SCHED_DATA(sched_data);
   UNLOCK_TASK_STRUCT(task);
   return r;
 }
 
-static status_t def_change_task_state(task_t *task,task_state_t new_state)
+static status_t __change_task_state(task_t *task,task_state_t new_state,
+                                    lazy_sched_handler_t h,void *data)
 {
   LOCK_TASK_STRUCT(task);
 
   if( task->cpu == cpu_id() ) {
-    return __change_local_task_state(task,new_state);
+    return __change_local_task_state(task,new_state,h,data);
   } else {
     return __change_remote_task_state(task,new_state);
   }
+}
+
+status_t def_change_task_state(task_t *task,task_state_t new_state)
+{
+  return __change_task_state(task,new_state,NULL,NULL);
 }
 
 static status_t def_setup_idle_task(task_t *task)
@@ -516,6 +524,13 @@ static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
   return -EINVAL;
 }
 
+static status_t def_change_task_state_lazy(task_t *task, task_state_t state,
+                                           lazy_sched_handler_t handler,
+                                           void *data)
+{
+  return __change_task_state(task,state,handler,data);
+}
+
 static struct __scheduler eza_default_scheduler = {
   .id = "Eza default scheduler",
   .cpus_supported = def_cpus_supported,
@@ -525,6 +540,7 @@ static struct __scheduler eza_default_scheduler = {
   .schedule = def_schedule,
   .reset = def_reset,
   .change_task_state = def_change_task_state,
+  .change_task_state_lazy = def_change_task_state_lazy,
   .setup_idle_task = def_setup_idle_task,
   .scheduler_control = def_scheduler_control,
 };

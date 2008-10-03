@@ -31,15 +31,16 @@
 #include <ds/linked_array.h>
 #include <ds/list.h>
 #include <eza/waitqueue.h>
+#include <eza/event.h>
 
 struct __ipc_port_t;
 
 typedef struct __ipc_port_messsage_t {
   ulong_t data_size,reply_size,id,flags;
-  task_t *sender;
   void *send_buffer,*receive_buffer;
   list_node_t l;
   status_t retcode;
+  event_t event;
   struct __ipc_port_t *port;  
 } ipc_port_message_t;
 
@@ -63,8 +64,8 @@ typedef struct __ipc_port_t {
 
 void initialize_ipc(void);
 status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size);
-status_t ipc_open_port(task_t *owner,ulong_t port,ulong_t flags,
-                       task_t *opener);
+status_t ipc_port_send(task_t *receiver,ulong_t port,ulong_t snd_size,
+                       ulong_t rcv_size,ulong_t flags);
 
 /* 
  *

@@ -46,33 +46,30 @@ typedef struct __cpu_sched_stat {
 #ifndef __ASM__
 
 #define read_css_field(field,v) \
-  __asm__ __volatile__(  "movq %%gs:(%%rbx), %%rax" \
-			 :"=r"(v) : "b" ( offset_of(cpu_sched_stat_t,field)) );
+  __asm__ __volatile__(  "movq %%gs:(%0), %%rax" \
+                         :"=a"(v) : "R" ( offset_of(cpu_sched_stat_t,field)) );
 
 #define write_css_field(field,v) \
   __asm__ volatile(  "movq %%r, %%gs:(%%rbx)" \
-                     ::"a"(v), "b"( offset_of(cpu_sched_stat_t,field)) );
+                     ::"a"(v), "b"( offset_of(cpu_sched_stat_t,field)) : "%rax" );
 
 #define inc_css_field(field) \
-  __asm__ volatile(  "incq %%gs:(%%rax)" \
-                     :: "a"(offset_of(cpu_sched_stat_t,field)) );
-
+  __asm__ volatile(  "incq %%gs:(%0)" \
+                     :: "r"(offset_of(cpu_sched_stat_t,field)) );
 
 #define dec_css_field(field) \
-  __asm__ volatile(  "decq %%gs:(%%rax)" \
-                     :: "a"(offset_of(cpu_sched_stat_t,field)) );
+  __asm__ volatile(  "decq %%gs:(%0)" \
+                     :: "r"(offset_of(cpu_sched_stat_t,field)) );
 
 #define set_css_task_flag(flag) \
-  __asm__ volatile(  "bts %%rax, %%gs:(%%rbx)" \
-                     :: "a"(flag), "b"(offset_of(cpu_sched_stat_t,flags)) );
+  __asm__ volatile(  "bts %0, %%gs:(%1)" \
+                     :: "r"(flag), "r"(offset_of(cpu_sched_stat_t,flags)) );
 
 #define reset_css_task_flag(flag) \
-  __asm__ volatile(  "btr %%rax, %%gs:(%%rbx)" \
-                     :: "a"(flag), "b"(offset_of(cpu_sched_stat_t,flags)) );
-
+  __asm__ volatile(  "btr %0, %%gs:(%1)" \
+                     :: "r"(flag), "r"(offset_of(cpu_sched_stat_t,flags)) );
 
 struct __task_struct;
-
 
 static inline void arch_sched_set_current_need_resched(void)
 {
