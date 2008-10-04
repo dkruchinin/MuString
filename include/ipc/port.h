@@ -35,13 +35,19 @@
 
 struct __ipc_port_t;
 
+typedef enum __ipc_port_message_type {
+  PORT_MESSAGE_PULSE = 0,
+} ipc_port_message_type_t;
+
 typedef struct __ipc_port_messsage_t {
   ulong_t data_size,reply_size,id,flags;
   void *send_buffer,*receive_buffer;
   list_node_t l;
   status_t retcode;
   event_t event;
-  struct __ipc_port_t *port;  
+  struct __ipc_port_t *port;
+  ipc_port_message_type_t type;
+  task_t *receiver;  /* To handle 'reply()' properly. */
 } ipc_port_message_t;
 
 typedef struct __ipc_port_t {
@@ -63,14 +69,20 @@ typedef struct __ipc_port_t {
 #define IPC_UNLOCK_PORT_W(p) spinlock_unlock(&p->lock)
 
 void initialize_ipc(void);
+
 status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size);
 status_t ipc_port_send(task_t *receiver,ulong_t port,ulong_t snd_size,
                        ulong_t rcv_size,ulong_t flags);
+status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
+                          ulong_t recv_buf,ulong_t recv_len);
 
 /* 
  *
  */
 status_t arch_setup_port_message_buffers(task_t *caller,
                                          ipc_port_message_t *message);
+
+status_t arch_copy_port_message_to_receiver(task_t *receiver,
+                                            ipc_port_message_t *message);
 
 #endif

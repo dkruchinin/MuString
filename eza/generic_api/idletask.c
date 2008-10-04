@@ -47,6 +47,7 @@ status_t server_port;
 static void thread2(void *data)
 {
     status_t id,r;
+    char buf[32];
 
     kprintf( "[Server] Strting ...\n" );
     id = ipc_create_port(current_task(),IPC_BLOCKED_ACCESS,
@@ -57,67 +58,9 @@ static void thread2(void *data)
     server_port = id;
 
     kprintf( "[Server] Waitng for incoming messages ...\n" );
-    r = ipc_port_receive(current_task(), id, IPC_BLOCKED_ACCESS);
+    r = ipc_port_receive(current_task(), id, IPC_BLOCKED_ACCESS,buf,32);
     kprintf( "[Server] Got a message: %d\n", r );
 
-    for(;;);
-}
-
-static void thread1(void *data) {
-    status_t id,r;
-
-    kprintf( "** Creating a port ... " );
-    id = ipc_create_port(current_task(),IPC_BLOCKED_ACCESS,
-                         IPC_DEFAULT_PORT_MESSAGES);
-    kprintf( "port id: %d\n", id );
-
-    kprintf( "** Opening the port ... " );
-//    r = ipc_open_port(current_task(),id,IPC_BLOCKED_ACCESS,current_task());
-    kprintf( "port descriptor: %d\n", r );
-
-//    kprintf( "** Opening insufficient port port (1) : %d\n",
-//             ipc_open_port(current_task(),1,IPC_BLOCKED_ACCESS,current_task()) );
-
-    kprintf( "** Opening the port one more time ... " );
-//    r = ipc_open_port(current_task(),id,IPC_BLOCKED_ACCESS,current_task());
-    kprintf( "port id: %d\n", r );
-
-    kprintf( "** Sending a message to the port ... " );
-    r = ipc_port_send(current_task(),id,32,32,0);
-    kprintf( "r = %d\n",r );
-
-    kprintf( "** Sending another message to the port ...\n" );
-    r = ipc_port_send(current_task(),id,32,32,0);
-    kprintf( "r = %d\n",r );
-
-    kprintf( "** Receiving a message from the port ... " );
-    r = ipc_port_receive(current_task(),id,0);
-    kprintf( "r = %d\n",r );
-
-    kprintf( "** Receiving another message from the port ... " );
-    r = ipc_port_receive(current_task(),id,0);
-    kprintf( "r = %d\n",r );
-
-    kprintf( "** Receiving the third message from the port ... " );
-    r = ipc_port_receive(current_task(),id,0);
-    kprintf( "r = %d\n",r );
-
-    kprintf( "** Sending a message to the port ... " );
-    r = ipc_port_send(current_task(),id,32,32,0);
-    kprintf( "r = %d\n",r );
-
-    kprintf( "** Sending a message to the port ... " );
-    r = ipc_port_send(current_task(),id,32,32,0);
-    kprintf( "r = %d\n",r );
-    
-    kprintf( "** Receiving a message from the port ... " );
-    r = ipc_port_receive(current_task(),id,0);
-    kprintf( "r = %d\n",r );
-
-    kprintf( "** Receiving a message from the port ... " );
-    r = ipc_port_receive(current_task(),id,0);
-    kprintf( "r = %d\n",r );
-    
     for(;;);
 }
 

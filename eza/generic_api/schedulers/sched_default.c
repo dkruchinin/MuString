@@ -39,6 +39,7 @@
 #include <eza/arch/interrupt.h>
 #include <eza/security.h>
 #include <eza/interrupt.h>
+#include <eza/arch/profile.h>
 
 /* Our own scheduler. */
 static struct __scheduler eza_default_scheduler;
@@ -310,12 +311,17 @@ static status_t def_add_task(task_t *task)
   return 0;
 }
 
+long __t1;
+
 static void def_schedule(void)
 {
   eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
   task_t *current = current_task();
   task_t *next;
   bool need_switch;
+
+//  kprintf( "ENTERING SCHEDULE STEP (%d).\n", cpu_id() );
+//  __READ_TIMESTAMP_COUNTER(__t1);
 
   /* From this moment we are in atomic context until 'arch_activate_task()'
    * finishes its job or until interrupts will be enabled in no context
@@ -341,6 +347,7 @@ static void def_schedule(void)
     current->state = TASK_STATE_RUNNABLE;
   }
 
+  /* Do we really need to swicth hardware context ? */
   if( next != current ) {
     need_switch = true;
   } else {

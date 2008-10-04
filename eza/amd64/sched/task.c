@@ -37,6 +37,7 @@
 #include <eza/arch/scheduler.h>
 #include <eza/arch/current.h>
 #include <eza/process.h>
+#include <eza/arch/profile.h>
 
 /* Located on 'amd64/asm.S' */
 extern void kthread_fork_path(void);
@@ -64,9 +65,16 @@ static void __arch_setup_ctx(task_t *newtask,uint64_t rsp)
   ctx->ds = USER_SELECTOR(UDATA_DES);
 }
 
+extern long __t1;
+long __t2;
+
 void kernel_thread_helper(void (*fn)(void*), void *data)
 {
-  fn(data);
+//  __READ_TIMESTAMP_COUNTER(__t2);
+//  kprintf( "******* CONTEXT SWITCH TIME: %d\n", __t2 - __t1 );
+//  for(;;);
+
+    fn(data);
   l2: goto l2;
 }
 
@@ -207,7 +215,7 @@ static uint64_t __setup_kernel_task_context(task_t *task)
    * to their kernel stacks.
    */
   regs->old_rsp = task->kernel_stack.high_address - 128;
-  regs->rflags = KERNEL_RFLAGS;
+  regs->rflags = 0; //KERNEL_RFLAGS;
 
   return sizeof(regs_t);
 }

@@ -32,6 +32,11 @@
 #include <ipc/ipc.h>
 #include <eza/container.h>
 
+#define MAX_PORT_MSG_LENGTH  64
+
+#define REF_PORT(p)  atomic_inc(&p->open_count)
+#define UNREF_PORT(p)  atomic_dec(&p->open_count)
+
 /* NOTE: port must be locked upon calling this function ! */
 static bool __port_matches_flags(ipc_port_t *port,ulong_t flags)
 {
@@ -40,18 +45,20 @@ static bool __port_matches_flags(ipc_port_t *port,ulong_t flags)
 
 static void __put_port(ipc_port_t *p)
 {
-  atomic_dec(&p->open_count);
+  UNREF_PORT(p);
   /* TODO: [mt] Free port memory upon deletion. */
 }
 
-static status_t __get_port(task_ipc_t *ipc,ulong_t port,ulong_t flags,
+
+static status_t __get_port(task_t *task,ulong_t port,ulong_t flags,
                   ipc_port_t **out_port)
 {
   ipc_port_t *p;
   status_t r;
+  task_ipc_t *ipc = task->ipc;
 
   IPC_LOCK_PORTS(ipc);
-  if(port >= ipc->num_ports ||
+  if(port >= task->limits->limits[LIMIT_IPC_MAX_PORTS] ||
      ipc->ports[port] == NULL) {
     r=-EINVAL;
     goto out_unlock;
@@ -63,12 +70,13 @@ static status_t __get_port(task_ipc_t *ipc,ulong_t port,ulong_t flags,
     r=-EPERM;
     goto out_unlock;
   }
-  atomic_inc(&p->open_count);
+  REF_PORT(p);
   IPC_UNLOCK_PORTS(ipc);
   *out_port = p;
   return 0;
 out_unlock:
   IPC_UNLOCK_PORTS(ipc);
+  *out_port = NULL;
   return r;
 }
 
@@ -128,6 +136,14 @@ static void __free_port_message_id(ipc_port_t *port,ulong_t id)
   IPC_UNLOCK_PORT_W(port);
 }
 
+static status_t __copy_message_data_to_receiver(task_t *receiver,
+                                                ipc_port_message_t *msg)
+{
+  /* TODO: [mt] Support all port types, not only 'pulses'. */
+  
+  return 0;
+}
+
 /* NOTE: port must be locked before calling this function ! */
 static ipc_port_message_t *___extract_message_from_port_queue(ipc_port_t *p)
 {
@@ -163,6 +179,7 @@ static status_t __allocate_port(ipc_port_t **out_port,ulong_t flags,
     return -ENOMEM;
   }
 
+  /* TODO: [mt] Allocate array of proper size for port messages */
   p->message_ptrs = alloc_pages_addr(1,AF_PGEN|AF_ZERO);
   if( p->message_ptrs == NULL ) {
     return -ENOMEM;
@@ -259,24 +276,24 @@ out_unlock:
 status_t ipc_port_send(task_t *receiver,ulong_t port,ulong_t snd_size,
                        ulong_t rcv_size,ulong_t flags)
 {
-  task_ipc_t *ipc=receiver->ipc;
   status_t r;
   ipc_port_t *p;
   ipc_port_message_t *msg;
   ulong_t id;
   task_t *sender = current_task();
 
-  if( !ipc ) {
+  if( !receiver->ipc ) {
     return -EINVAL;
   }
 
-  /* TODO: [mt] Now only max 112 bytes can be sent vis ports. */
-  if( !snd_size || snd_size > 112 || rcv_size > 112 ) {
+  /* TODO: [mt] Now only max ~64 vbytes can be sent vis ports. */
+  if( !snd_size || snd_size > MAX_PORT_MSG_LENGTH ||
+      rcv_size > MAX_PORT_MSG_LENGTH ) {
     return -EINVAL;
   }
 
   /* First, locate target port. */
-  r = __get_port(receiver->ipc,port,flags,&p);
+  r = __get_port(receiver,port,flags,&p);
   if( r ) {
     return -EINVAL;
   }
@@ -303,6 +320,9 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,ulong_t snd_size,
   msg->data_size = snd_size;
   msg->reply_size = rcv_size;
   msg->flags = flags;
+
+  /* TODO: [mt] implement all port message types. */
+  msg->type = PORT_MESSAGE_PULSE;
 
   /* Setup message data in arch-specific manner. */
   r = arch_setup_port_message_buffers(sender,msg);
@@ -338,21 +358,38 @@ put_port:
   return r;
 }
 
-status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags)
+static ipc_port_t *__get_port_for_server(task_t *server,ulong_t port)
+{
+  task_ipc_t *ipc = server->ipc;
+  ipc_port_t *p;
+  ulong_t maxport = server->limits->limits[LIMIT_IPC_MAX_PORTS];
+
+  IPC_LOCK_PORTS(ipc);
+  if( port >= maxport ) {
+    p = NULL;
+  } else {
+    p = ipc->ports[port];
+    if( p != NULL ) {
+      REF_PORT(p);
+    }
+  }
+  IPC_UNLOCK_PORTS(ipc);
+  return p;
+}
+
+status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
+                          ulong_t recv_buf,ulong_t recv_len)
 {
   status_t r;
-  task_ipc_t *ipc = owner->ipc;
   ipc_port_t *p;
   ipc_port_message_t *msg;
-  
-  IPC_LOCK_PORTS(ipc);
-  if( port >= ipc->num_ports ) {
-    r=-EINVAL;
-    goto out_unlock;
-  }
-  p = ipc->ports[port];
-  IPC_UNLOCK_PORTS(ipc);
 
+  p = __get_port_for_server(owner,port);
+  if( p == NULL ) {
+    return -EINVAL;
+  }
+
+  /* Main 'Receive' cycle. */
 recv_cycle:
   IPC_LOCK_PORT_W(p);
   if( list_is_empty(&p->messages) ) {
@@ -366,28 +403,58 @@ recv_cycle:
       __put_receiver_into_sleep(owner,p);
       goto recv_cycle;
     } else {
-      r = -EAGAIN;
+      r = -EWOULDBLOCK;
     }
   } else {
     /* Got something ! */
-      msg = ___extract_message_from_port_queue(p);
+    msg = ___extract_message_from_port_queue(p);
+    /* To avoid races between threads that handle the same port. */
+    msg->receiver = owner;
   }
   IPC_UNLOCK_PORT_W(p);
 
   if(msg != NULL) {
     r = msg->id;
-    /* Release this message id to the future messages. */
-    kprintf( "(**) ipc_port_receive(): Got a message N%d from %d !\n",
-             r,msg->event.task->pid );
   }
 
-  return r;
-out_unlock:
-  IPC_UNLOCK_PORTS(ipc);
+  /* Release the port. */
+  __put_port(p);
   return r;
 }
 
-status_t ipc_port_reply()
+status_t ipc_port_reply(task_t *owner, ulong_t port, ulong_t msg_id,
+                        ulong_t reply_buf,ulong_t reply_len)
 {
-  return -ENOSYS;
+  status_t r;
+  ipc_port_t *p;
+  ipc_port_message_t *msg;
+
+  p = __get_port_for_server(owner,port);
+  if( p == NULL ) {
+    return -EINVAL;
+  }
+
+  IPC_LOCK_PORT(p);
+  if( msg_id < p->queue_size ) {
+    msg = p->message_ptrs[msg_id];
+  } else {
+    msg = NULL;
+  }
+  IPC_UNLOCK_PORT(p);
+
+  if( msg == NULL ) {
+    r=-EINVAL;
+    goto out;
+  }
+
+  if( msg->receiver != owner ) {
+    r=-EINVAL;
+    goto out;
+  }
+
+  /* Ok, we can reply to this message. */
+  r = 0;
+out:
+  __put_port(p);
+  return r;
 }

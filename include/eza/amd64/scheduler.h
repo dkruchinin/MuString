@@ -75,7 +75,7 @@ static inline void arch_activate_task(task_t *to)
   tss->rsp0 = to->kernel_stack.high_address;
 
   /* Let's jump ! */
-  kprintf( "******* ACTIVATING TASK: %d (CPU: %d)\n", to->pid, to->cpu );
+//  kprintf( "******* ACTIVATING TASK: %d (CPU: %d)\n", to->pid, to->cpu );
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
 }
 
