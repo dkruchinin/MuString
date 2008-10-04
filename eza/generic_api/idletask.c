@@ -60,6 +60,9 @@ static void thread2(void *data)
     kprintf( "[Server] Waitng for incoming messages ...\n" );
     r = ipc_port_receive(current_task(), id, IPC_BLOCKED_ACCESS,buf,32);
     kprintf( "[Server] Got a message: %d\n", r );
+    kprintf( "[Server] Replying message N%d\n", r );
+    r = ipc_port_reply(current_task(), id, r, buf, 32);
+    kprintf( "r = %d\n", r );
 
     for(;;);
 }
@@ -71,7 +74,7 @@ static void thread3(void *data)
 
   kprintf( "[Client] Starting ...\n" );
   r = ipc_port_send(server_task,server_port,32,32,IPC_BLOCKED_ACCESS);
-  kprintf( "[Client] Sending data through the port: %d\n", r );
+  kprintf( "[Client] Data was sent through the port: %d\n", r );
   for(;;);
 }
 

@@ -75,6 +75,8 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,ulong_t snd_size,
                        ulong_t rcv_size,ulong_t flags);
 status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
                           ulong_t recv_buf,ulong_t recv_len);
+status_t ipc_port_reply(task_t *owner, ulong_t port, ulong_t msg_id,
+                        ulong_t reply_buf,ulong_t reply_len);
 
 /* 
  *

@@ -32,10 +32,11 @@ status_t arch_copy_port_message_to_receiver(task_t *receiver,
   /* TODO: [mt] Implement data transfers for all port types, not only 'pulses'. */
   switch(message->type) {
     case PORT_MESSAGE_PULSE:
-      
       r = 0;
       break;
     default:
+      kprintf( KO_WARNING "arch_copy_port_message_to_receiver(): Unknown message type:\n",
+               message->type);
       r=-EINVAL;
       break;
   }

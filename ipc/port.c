@@ -133,6 +133,7 @@ static void __free_port_message_id(ipc_port_t *port,ulong_t id)
 {
   IPC_LOCK_PORT_W(port);
   ___free_port_message_id(port,id);
+  port->message_ptrs[id] = NULL;
   IPC_UNLOCK_PORT_W(port);
 }
 
@@ -396,10 +397,10 @@ recv_cycle:
     msg = NULL;
     /* No incoming messages: sleep (if requested). */
     if( flags & IPC_BLOCKED_ACCESS ) {
-        /* No luck: need to sleep. We don't unlock the port right now
-         * since in will be unlocked after putting the receiver in
-         * in the port's waitqueue.
-         */
+      /* No luck: need to sleep. We don't unlock the port right now
+       * since in will be unlocked after putting the receiver in the
+       * port's waitqueue.
+     */
       __put_receiver_into_sleep(owner,p);
       goto recv_cycle;
     } else {
@@ -413,8 +414,21 @@ recv_cycle:
   }
   IPC_UNLOCK_PORT_W(p);
 
-  if(msg != NULL) {
-    r = msg->id;
+  /* We provide a reliable message delivery mechanism, which means
+   * that if it was impossible to copy data from a message to the receiver's
+   * buffer, we insert the message back to the queue to allow it be processed
+   * later.
+   */
+  if( msg != NULL ) {
+    r=arch_copy_port_message_to_receiver(owner,msg);
+    if( !r ) {
+      r = msg->id;
+    } else {
+      /* It was impossible to copy message to the buffer, so insert it
+       * to the queue again.
+       */
+      __add_message_to_port_queue(p,msg,msg->id);
+    }
   }
 
   /* Release the port. */
@@ -452,7 +466,15 @@ status_t ipc_port_reply(task_t *owner, ulong_t port, ulong_t msg_id,
     goto out;
   }
 
+  /* TODO: [mt] copy data to sender's buffer. */
+
+  /* Free this message so its ID will be used yet again. */
+  __free_port_message_id(p,msg->id);
+
   /* Ok, we can reply to this message. */
+  kprintf( "[++] Replying back to %d\n", msg->event.task->pid );
+  event_raise(&msg->event);
+
   r = 0;
 out:
   __put_port(p);
