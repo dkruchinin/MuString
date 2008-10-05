@@ -151,10 +151,10 @@ void arch_mm_init(void)
   scan_phys_mem();
   swks.mem_total_pages = max_phys_addr >> PAGE_WIDTH;
   __extend_kernel_end();
-
   page_frames_array = KERNEL_FIRST_FREE_ADDRESS;  
   _kernel_extended_end =
     PAGE_ALIGN((uintptr_t)page_frames_array + sizeof(page_frame_t) * swks.mem_total_pages);
+  kprintf("UPD: %p\n", _kernel_extended_end);
   kprintf(" Scanned: %ldM, %ld pages\n", (long)_b2mb(max_phys_addr - min_phys_addr),
           (long)swks.mem_total_pages);
 }

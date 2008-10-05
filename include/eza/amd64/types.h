@@ -60,6 +60,7 @@ typedef uint64_t uintptr_t;
 typedef uint32_t pid_t;
 typedef uint32_t usec_t;
 typedef int32_t status_t;
+typedef uint32_t shm_id_t;
 
 /* abstraction typedef */
 typedef uint64_t unative_t;

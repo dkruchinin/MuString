@@ -1,2 +1,2 @@
-KERNEL_OBJS=kernel/version.o
+KERNEL_OBJS=kernel/version.o kernel/mmap.o
 

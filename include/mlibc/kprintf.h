@@ -90,6 +90,9 @@ typedef struct kbuffer {
  */
 void kprintf(const char *fmt, ...);
 
+void sprintf(char *str, const char *fmt, ...);
+void snprintf(char *str, size_t size, const char *fmt, ...);
+
 /**
  * @fn vkprintf(const char *, va_list);
  * @brief vkprintf is similar to vprintf from standard library
