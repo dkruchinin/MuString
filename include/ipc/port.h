@@ -50,10 +50,6 @@ typedef struct __ipc_port_messsage_t {
   task_t *receiver;  /* To handle 'reply()' properly. */
 } ipc_port_message_t;
 
-typedef struct __ipc_port_strategy {
-    status_t ()();
-} ipc_port_strategy_t;
-
 typedef struct __ipc_port_t {
   ulong_t flags;
   spinlock_t lock;

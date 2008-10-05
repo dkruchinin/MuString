@@ -7,6 +7,10 @@
 #include <mm/pt.h>
 #include <eza/task.h>
 
+/* TODO: [mt] lock/unlock task VM via semaphores ! */
+#define LOCK_TASK_VM(t)
+#define UNLOCK_TASK_VM(t)
+
 typedef struct __vm_range {
   list_node_t l;
   uintptr_t phys_addr,virt_addr,num_pages;

@@ -8,6 +8,7 @@
 #include <ds/linked_array.h>
 #include <eza/spinlock.h>
 #include <eza/arch/arch_ipc.h>
+#include <ipc/buffer.h>
 
 /* Blocking mode */
 #define IPC_BLOCKED_ACCESS  0x1
@@ -17,7 +18,7 @@
 /* TODO: [mt] Changes IPC_DEFAULT_PORTS to a smoller value !!! */
 #define IPC_DEFAULT_PORTS  512
 #define IPC_DEFAULT_PORT_MESSAGES  512
-#define IPC_DEFAULT_OPEN_PORTS  512
+#define IPC_DEFAULT_USER_BUFFERS 512
 
 typedef struct __task_ipc {
   semaphore_t sem;
@@ -28,6 +29,12 @@ typedef struct __task_ipc {
   ipc_port_t **ports;
   linked_array_t ports_array;
   spinlock_t port_lock;
+
+  /* Userspace buffers-related stuff. */
+  spinlock_t buffer_lock;
+  ipc_user_buffer_t **user_buffers;
+  linked_array_t buffers_array;
+  ulong_t num_buffers;
 } task_ipc_t;
 
 task_ipc_t *allocate_task_ipc(void);
@@ -38,5 +45,7 @@ task_ipc_t *allocate_task_ipc(void);
 #define IPC_LOCK_PORTS(ipc) spinlock_lock(&ipc->port_lock)
 #define IPC_UNLOCK_PORTS(ipc) spinlock_unlock(&ipc->port_lock)
 
+#define IPC_LOCK_BUFFERS(ipc) spinlock_lock(&ipc->buffer_lock);
+#define IPC_UNLOCK_BUFFERS(ipc) spinlock_unlock(&ipc->buffer_lock);
 
 #endif
