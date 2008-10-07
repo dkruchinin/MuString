@@ -51,6 +51,8 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
   task_t *task;
   int _flags;
 
+  kprintf(">>>>>>>>>> allocced %d pages\n",size);
+
   /* simple check */
   if(!addr || !size) {
     return -EINVAL;
@@ -81,6 +83,8 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
   } else 
     return -ENOSYS;
   
+  kprintf(">>>>>>>>>> allocced %d pages\n",size);
+
   return 0;
 }
 
