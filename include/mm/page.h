@@ -76,11 +76,7 @@ typedef struct __page_frame {
   page_idx_t idx;      /**< Page frame index in the pframe_pages_array */
   atomic_t refcount;   /**< Number of references to the physical page */
   page_flags_t flags;  /**< Page flags */
-  union {
-    uint32_t _private;
-    uint16_t __size;
-    uint16_t __flags;
-  };
+  uint32_t _private;   /**< Private data that may be used by internal page frame allocator */  
 } page_frame_t;
 
 #define PF_ITER_UNDEF_VAL (-0xf)

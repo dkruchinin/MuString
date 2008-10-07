@@ -68,9 +68,7 @@
 #include <eza/spinlock.h>
 #include <eza/arch/types.h>
 
-#ifdef DEBUG_MM
 #define TLSF_DEBUG
-#endif /* DEBUG_MM */
 
 #define TLSF_FLD_SIZE       5 /**< TLSF first level directory size */
 #define TLSF_SLD_SIZE       4 /**< TLSF second level directory size */

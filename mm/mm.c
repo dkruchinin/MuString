@@ -96,7 +96,10 @@ void mm_init(void)
             atomic_get(&pool->free_pages), pool->reserved_pages);
     mmpools_init_pool_allocator(pool);
   }
-
+  {
+    #include <mm/tlsf.h>
+    tlsf_memdump(pool->allocator.alloc_ctx);
+  }
   /* Now we can remap memory */
   arch_mm_remap_pages();
   kprintf("[MM] All pages were successfully remapped\n");

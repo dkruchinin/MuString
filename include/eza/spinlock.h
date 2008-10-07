@@ -45,8 +45,11 @@
 #define spinlock_initialize(x,y)                \
   (((spinlock_t *)x)->__spin_val = __SPINLOCK_UNLOCKED_V)
 
-#define rw_spinlock_initialize(x,y)                         \
-  (((rw_spinlock_t *)x)->__r=0;((rw_spinlock_t *)x)->__w=0)
+#define rw_spinlock_initialize(x,y)             \
+  do {                                          \
+    (rw_spinlock_t *)((x)->__r=0);              \
+    (rw_spinlock_t *)((x)->__w=0);              \
+  } while (0)
 
 #define SPINLOCK_DEFINE(s) spinlock_t s = {     \
     .__spin_val = __SPINLOCK_UNLOCKED_V,        \

@@ -35,7 +35,7 @@
 #include <eza/process.h>
 #include <eza/security.h>
 #include <eza/arch/current.h>
-#include <eza/rw_spinlock.h>
+#include <eza/spinlock.h>
 #include <kernel/syscalls.h>
 
 typedef uint32_t hash_level_t;
@@ -46,10 +46,10 @@ static list_head_t pid_to_struct_hash[PID_HASH_LEVELS];
 
 /* Macros for dealing with PID-to-task hash locks.
  * _W means 'for writing', '_R' means 'for reading' */
-#define LOCK_PID_HASH_LEVEL_R(l) rw_spinlock_lock_read(&pid_to_struct_locks[l])
-#define UNLOCK_PID_HASH_LEVEL_R(l) rw_spinlock_unlock_read(&pid_to_struct_locks[l])
-#define LOCK_PID_HASH_LEVEL_W(l) rw_spinlock_lock_write(&pid_to_struct_locks[l])
-#define UNLOCK_PID_HASH_LEVEL_W(l) rw_spinlock_unlock_write(&pid_to_struct_locks[l])
+#define LOCK_PID_HASH_LEVEL_R(l) spinlock_lock_read(&pid_to_struct_locks[l])
+#define UNLOCK_PID_HASH_LEVEL_R(l) spinlock_unlock_read(&pid_to_struct_locks[l])
+#define LOCK_PID_HASH_LEVEL_W(l) spinlock_lock_write(&pid_to_struct_locks[l])
+#define UNLOCK_PID_HASH_LEVEL_W(l) spinlock_unlock_write(&pid_to_struct_locks[l])
 
 void initialize_process_subsystem(void)
 {
