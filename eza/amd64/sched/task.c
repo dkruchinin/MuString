@@ -215,7 +215,7 @@ static uint64_t __setup_kernel_task_context(task_t *task)
    * to their kernel stacks.
    */
   regs->old_rsp = task->kernel_stack.high_address - 128;
-  regs->rflags = 0; //KERNEL_RFLAGS;
+  regs->rflags = KERNEL_RFLAGS;
 
   return sizeof(regs_t);
 }

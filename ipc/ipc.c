@@ -21,6 +21,10 @@ task_ipc_t *allocate_task_ipc(void)
     spinlock_initialize(&ipc->port_lock, "");
     semaphore_initialize(&ipc->sem,1);
     spinlock_initialize(&ipc->buffer_lock, "");
+
+    ipc->cached_data.cached_page1 = alloc_pages_addr(1, AF_PGEN | AF_ZERO);
+    ipc->cached_data.cached_page2 = alloc_pages_addr(1, AF_PGEN | AF_ZERO);
+
     return ipc;
   }
   return NULL;

@@ -31,17 +31,14 @@
 #include <ds/linked_array.h>
 #include <ipc/ipc.h>
 #include <eza/container.h>
+#include <ipc/buffer.h>
+#include <mlibc/stddef.h>
+#include <kernel/vm.h>
 
-#define MAX_PORT_MSG_LENGTH  64
+#define MAX_PORT_MSG_LENGTH  (1024*1700)
 
 #define REF_PORT(p)  atomic_inc(&p->open_count)
 #define UNREF_PORT(p)  atomic_dec(&p->open_count)
-
-/* NOTE: port must be locked upon calling this function ! */
-static bool __port_matches_flags(ipc_port_t *port,ulong_t flags)
-{
-  return true;
-}
 
 static void __put_port(ipc_port_t *p)
 {
@@ -49,9 +46,7 @@ static void __put_port(ipc_port_t *p)
   /* TODO: [mt] Free port memory upon deletion. */
 }
 
-
-static status_t __get_port(task_t *task,ulong_t port,ulong_t flags,
-                  ipc_port_t **out_port)
+static status_t __get_port(task_t *task,ulong_t port,ipc_port_t **out_port)
 {
   ipc_port_t *p;
   status_t r;
@@ -65,11 +60,6 @@ static status_t __get_port(task_t *task,ulong_t port,ulong_t flags,
   }
   p = ipc->ports[port];
 
-  /* Check access mode, if any */
-  if( flags != 0 && !__port_matches_flags(p,flags) ) {
-    r=-EPERM;
-    goto out_unlock;
-  }
   REF_PORT(p);
   IPC_UNLOCK_PORTS(ipc);
   *out_port = p;
@@ -80,13 +70,15 @@ out_unlock:
   return r;
 }
 
-static ipc_port_message_t *__allocate_port_message(ipc_port_t *port)
+static ipc_port_message_t *__allocate_port_message(task_t *task,ipc_port_t *port)
 {
-  ipc_port_message_t *m = alloc_pages_addr(1,AF_PGEN);
+  ipc_port_message_t *m = &task->ipc->cached_data.cached_port_message;
   list_init_node(&m->l);
   m->retcode = 0;
   m->port = port;
+
   event_initialize(&m->event);
+  event_set_task(&m->event,task);
   return m;
 }
 
@@ -104,11 +96,6 @@ static ulong_t __allocate_port_message_id(ipc_port_t *port)
   id = linked_array_alloc_item(&port->msg_array);
   IPC_UNLOCK_PORT_W(port);
   return id;
-}
-
-static void __free_port_message(ipc_port_message_t *msg)
-{
-  free_pages_addr(msg);
 }
 
 static void __notify_message_arrived(ipc_port_t *port)
@@ -135,14 +122,6 @@ static void __free_port_message_id(ipc_port_t *port,ulong_t id)
   ___free_port_message_id(port,id);
   port->message_ptrs[id] = NULL;
   IPC_UNLOCK_PORT_W(port);
-}
-
-static status_t __copy_message_data_to_receiver(task_t *receiver,
-                                                ipc_port_message_t *msg)
-{
-  /* TODO: [mt] Support all port types, not only 'pulses'. */
-  
-  return 0;
 }
 
 /* NOTE: port must be locked before calling this function ! */
@@ -264,7 +243,6 @@ status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size)
 
   r = id;
   UNLOCK_IPC(ipc);
-  kprintf( "++ PORT ADDRESS: %p\n", port );
   return r;
 free_id:
   linked_array_free_item(&ipc->ports_array,id);
@@ -273,9 +251,76 @@ out_unlock:
   return r;
 }
 
+static status_t __transfer_message_data_to_receiver(ipc_port_message_t *msg,
+                                                    ulong_t recv_buf,ulong_t recv_len,
+                                                    ipc_port_receive_stats_t *stats)
+{
+  status_t r;
 
-status_t ipc_port_send(task_t *receiver,ulong_t port,ulong_t snd_size,
-                       ulong_t rcv_size,ulong_t flags)
+  recv_len=MIN(recv_len,msg->data_size);
+  if( msg->data_size <= IPC_BUFFERED_PORT_LENGTH ) {
+    /* Short message - copy it from the buffer. */
+    r=copy_to_user((void *)recv_buf,msg->send_buffer,recv_len);
+  } else {
+    /* Long message - process it via buffer. */
+    r=ipc_transfer_buffer_data(&msg->snd_buf,0,recv_len,
+                               (void *)recv_buf,false);
+  }
+
+  if( !r ) {
+    if( stats ) {
+      stats->msg_id=msg->id;
+      stats->bytes_received=recv_len;
+    }
+  }
+
+  return r;
+}
+
+static status_t __setup_send_message_data(task_t *task,ipc_port_message_t *msg,
+                                          uintptr_t snd_buf,ulong_t snd_size,
+                                          uintptr_t rcv_buf,ulong_t rcv_size)
+{
+  status_t r=-EFAULT;
+  task_ipc_t *ipc = task->ipc;
+
+  /* Process send buffer */
+  if( snd_size < IPC_BUFFERED_PORT_LENGTH ) {
+    msg->send_buffer=ipc->cached_data.cached_page1;
+    if( copy_from_user(msg->send_buffer,(void*)snd_buf,snd_size ) ) {
+      goto out;
+    }
+  } else {
+    msg->snd_buf.chunks=ipc->cached_data.cached_page1;
+    r = ipc_setup_buffer_pages(task,&msg->snd_buf,snd_buf,snd_size);
+    if( r ) {
+      goto out;
+    }
+  }
+
+  /* Process receive buffer, if any. */
+  if( rcv_size > 0 ) {
+    if( rcv_size < IPC_BUFFERED_PORT_LENGTH ) {
+      msg->receive_buffer=ipc->cached_data.cached_page2;
+    } else {
+      msg->rcv_buf.chunks=ipc->cached_data.cached_page2;
+      r = ipc_setup_buffer_pages(task,&msg->rcv_buf,rcv_buf,rcv_size);
+      if( r ) {
+        goto out;
+      }
+    }
+  }
+
+  /* Setup this message. */
+  msg->data_size = snd_size;
+  msg->reply_size = rcv_size;
+  r = 0;
+out:
+    return r;
+}
+
+status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
+                       ulong_t snd_size,uintptr_t rcv_buf,ulong_t rcv_size)
 {
   status_t r;
   ipc_port_t *p;
@@ -294,7 +339,7 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,ulong_t snd_size,
   }
 
   /* First, locate target port. */
-  r = __get_port(receiver,port,flags,&p);
+  r = __get_port(receiver,port,&p);
   if( r ) {
     return -EINVAL;
   }
@@ -305,7 +350,7 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,ulong_t snd_size,
     goto put_port;
   }
 
-  msg = __allocate_port_message(p);
+  msg = __allocate_port_message(sender,p);
   if( msg==NULL ) {
     r = -ENOMEM;
     goto put_port;
@@ -314,26 +359,15 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,ulong_t snd_size,
   id = __allocate_port_message_id(p);
   if( id==INVALID_ITEM_IDX ) {
     r = -EBUSY;
-    goto free_message;
+    goto put_port;
   }
 
-  /* Setup this message. */
-  msg->data_size = snd_size;
-  msg->reply_size = rcv_size;
-  msg->flags = flags;
-
-  /* TODO: [mt] implement all port message types. */
-  msg->type = PORT_MESSAGE_PULSE;
-
   /* Setup message data in arch-specific manner. */
-  r = arch_setup_port_message_buffers(sender,msg);
-
+  r = __setup_send_message_data(sender,msg,snd_buf,snd_size,
+                                rcv_buf,rcv_size);
   if( r != 0 ) {
     goto free_message_id;
   }
-
-  /* Finally, setup event. */
-  event_set_task(&msg->event,sender);
 
   /* OK, new message is ready for sending. */
   __add_message_to_port_queue(p,msg,id);
@@ -352,8 +386,6 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,ulong_t snd_size,
   return msg->retcode;
 free_message_id:
   __free_port_message_id(p,id);
-free_message:
-  __free_port_message(msg);
 put_port:
   __put_port(p);
   return r;
@@ -379,15 +411,16 @@ static ipc_port_t *__get_port_for_server(task_t *server,ulong_t port)
 }
 
 status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
-                          ulong_t recv_buf,ulong_t recv_len)
+                          ulong_t recv_buf,ulong_t recv_len,
+                          ipc_port_receive_stats_t *stats)
 {
-  status_t r;
+  status_t r=-EINVAL;
   ipc_port_t *p;
   ipc_port_message_t *msg;
-
+  
   p = __get_port_for_server(owner,port);
-  if( p == NULL ) {
-    return -EINVAL;
+  if( !p ) {
+    return r;
   }
 
   /* Main 'Receive' cycle. */
@@ -420,10 +453,8 @@ recv_cycle:
    * later.
    */
   if( msg != NULL ) {
-    r=arch_copy_port_message_to_receiver(owner,msg);
-    if( !r ) {
-      r = msg->id;
-    } else {
+    r=__transfer_message_data_to_receiver(msg,recv_buf,recv_len,stats);
+    if(r) {
       /* It was impossible to copy message to the buffer, so insert it
        * to the queue again.
        */
@@ -431,7 +462,6 @@ recv_cycle:
     }
   }
 
-  /* Release the port. */
   __put_port(p);
   return r;
 }

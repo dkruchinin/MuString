@@ -32,21 +32,24 @@
 #include <ds/list.h>
 #include <eza/waitqueue.h>
 #include <eza/event.h>
+#include <ipc/buffer.h>
 
 struct __ipc_port_t;
 
-typedef enum __ipc_port_message_type {
-  PORT_MESSAGE_PULSE = 0,
-} ipc_port_message_type_t;
+#define IPC_BUFFERED_PORT_LENGTH  1024
+
+typedef struct __ipc_port_receive_stats {
+  ulong_t msg_id,bytes_received;
+} ipc_port_receive_stats_t;
 
 typedef struct __ipc_port_messsage_t {
-  ulong_t data_size,reply_size,id,flags;
+  ulong_t data_size,reply_size,id;
   void *send_buffer,*receive_buffer;
   list_node_t l;
   status_t retcode;
   event_t event;
   struct __ipc_port_t *port;
-  ipc_port_message_type_t type;
+  ipc_user_buffer_t snd_buf, rcv_buf;
   task_t *receiver;  /* To handle 'reply()' properly. */
 } ipc_port_message_t;
 
@@ -71,20 +74,12 @@ typedef struct __ipc_port_t {
 void initialize_ipc(void);
 
 status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size);
-status_t ipc_port_send(task_t *receiver,ulong_t port,ulong_t snd_size,
-                       ulong_t rcv_size,ulong_t flags);
+status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
+                       ulong_t snd_size,uintptr_t rcv_buf,ulong_t rcv_size);
 status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
-                          ulong_t recv_buf,ulong_t recv_len);
+                          ulong_t recv_buf,ulong_t recv_len,
+                          ipc_port_receive_stats_t *stats);
 status_t ipc_port_reply(task_t *owner, ulong_t port, ulong_t msg_id,
                         ulong_t reply_buf,ulong_t reply_len);
-
-/* 
- *
- */
-status_t arch_setup_port_message_buffers(task_t *caller,
-                                         ipc_port_message_t *message);
-
-status_t arch_copy_port_message_to_receiver(task_t *receiver,
-                                            ipc_port_message_t *message);
 
 #endif

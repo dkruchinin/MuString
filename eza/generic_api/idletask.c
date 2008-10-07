@@ -44,12 +44,43 @@ ulong_t syscall_counter = 0;
 task_t *server_task;
 status_t server_port;
 
+#define SND_BUF_SIZE 2200
+#define RCV_BUF_SIZE 32000
+
+char buf[RCV_BUF_SIZE];
+ulong_t snd_buf[SND_BUF_SIZE];
+
+static void __compare_buffers(ulong_t *buf,
+                              ulong_t *pattern, ulong_t size)
+{
+  ulong_t i;
+
+  for(i=0;i<size;i++) {
+    if( buf[i] != pattern[i] ) {
+      kprintf( "[BUFFERS DONT MATCH !] pos %d (%p), 0x%X : 0x%X\n",
+               i, &buf[i], buf[i],pattern[i]);
+      return;
+    }
+  }
+  kprintf( "[BUFFERS MATCH !!!]\n" );
+}
+
+static void __prepare_send_buffer()
+{
+  int i;
+
+  for(i=0;i<SND_BUF_SIZE;i++) {
+    snd_buf[i]=i;
+  }
+}
+
 static void thread2(void *data)
 {
     status_t id,r;
-    char buf[32];
+    ipc_port_receive_stats_t rcv_stats;
 
     kprintf( "[Server] Strting ...\n" );
+
     id = ipc_create_port(current_task(),IPC_BLOCKED_ACCESS,
                          IPC_DEFAULT_PORT_MESSAGES);
     kprintf( "[Server] Creating a port. id = %d\n",id );
@@ -58,11 +89,13 @@ static void thread2(void *data)
     server_port = id;
 
     kprintf( "[Server] Waitng for incoming messages ...\n" );
-    r = ipc_port_receive(current_task(), id, IPC_BLOCKED_ACCESS,buf,32);
-    kprintf( "[Server] Got a message: %d\n", r );
-    kprintf( "[Server] Replying message N%d\n", r );
-    r = ipc_port_reply(current_task(), id, r, buf, 32);
-    kprintf( "r = %d\n", r );
+    r = ipc_port_receive(current_task(), id, IPC_BLOCKED_ACCESS,(ulong_t)buf,
+                         64,&rcv_stats);
+    kprintf( "[Server] Got a message: status=%d\n", r );
+    if( !r ) {
+      kprintf( "[Server]: Message id: %d, Data length: %d\n",
+               rcv_stats.msg_id,rcv_stats.bytes_received);
+    }
 
     for(;;);
 }
@@ -71,10 +104,11 @@ static void thread3(void *data)
 {
   status_t r;
   char buf[32];
-
+  char *test_data="Hello from IPC subsystem !";
+  
   kprintf( "[Client] Starting ...\n" );
-  r = ipc_port_send(server_task,server_port,32,32,IPC_BLOCKED_ACCESS);
-  kprintf( "[Client] Data was sent through the port: %d\n", r );
+//  r = ipc_port_send(server_task,server_port,32,32,IPC_BLOCKED_ACCESS);
+//  kprintf( "[Client] Data was sent through the port: %d\n", r );
   for(;;);
 }
 

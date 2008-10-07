@@ -61,6 +61,9 @@
      (p2 > (x)) ? (p2 >> 1) : p2; })
 
 #define is_powerof2(num) ((num) & ~((num) - 1))
+
 #define ABS(x) (((x) < 0) ? -(x) : (x))
+#define MIN(a,b) ((a)<(b) ? (a) : (b) )
+#define MAX(a,b) ((a)>(b) ? (a) : (b) )
 
 #endif /* __STDDEF_H__ */

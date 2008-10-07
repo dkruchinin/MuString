@@ -382,3 +382,29 @@ page_idx_t mm_pin_virtual_address( page_directory_t *pd, uintptr_t virt_addr )
 
   return idx;
 }
+
+/* Fast, AMD64-specific page lookup routine. */
+static page_idx_t  arch_mm_pin_virtual_address(uintptr_t addr)
+{
+    page_idx_t idx;
+
+    /* %rcx - PTE offset
+     * %
+     */
+    
+    __asm__ __volatile__(                       \
+        "shr $12,%1\n"                          \
+        "movq %1, %%rcx\n"                      \
+        "andq $0x1ff, %%rcx\n"                  \
+        "shr $0x9, %1\n"                        \
+        "movq %1, %%rdx\n"                      \
+        "andq $0x1ff, %%rdx\n"                  \
+        "shr $0x9, %1\n"                        \
+        "andq $0x1ff, %1\n"                     \
+        "movq %1, %%rdx\n"                      \
+        "shr $0x9, %1\n"                        \
+        : "=a"(idx)                             \
+        : "r"(addr) : "rcx" );
+    
+    return idx;
+}

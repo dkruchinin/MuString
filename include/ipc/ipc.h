@@ -20,6 +20,11 @@
 #define IPC_DEFAULT_PORT_MESSAGES  512
 #define IPC_DEFAULT_USER_BUFFERS 512
 
+typedef struct __ipc_cached_data {
+  void *cached_page1, *cached_page2;
+  ipc_port_message_t cached_port_message;
+} ipc_cached_data_t;
+
 typedef struct __task_ipc {
   semaphore_t sem;
   atomic_t use_count;
@@ -35,6 +40,9 @@ typedef struct __task_ipc {
   ipc_user_buffer_t **user_buffers;
   linked_array_t buffers_array;
   ulong_t num_buffers;
+
+  /* Cached singletones for synchronous operations. */
+  ipc_cached_data_t cached_data;
 } task_ipc_t;
 
 task_ipc_t *allocate_task_ipc(void);
