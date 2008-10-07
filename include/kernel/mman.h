@@ -26,7 +26,7 @@
 
 #include <eza/arch/types.h>
 
-#define NOFD  (1 << 16)
+#define NOFD  (1 << 24)
 
 #define MMAP_NONCACHABLE  0x02
 #define MMAP_RDONLY       0x04

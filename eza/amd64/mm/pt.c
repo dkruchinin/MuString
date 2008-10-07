@@ -102,7 +102,7 @@ static int populate_pdp3_entry(pdp3_entry_t *entry, mmap_flags_t flags)
     else if (flags & MAP_RW)
       entry->rw = 1;    
 
-    entry->us = (flags & MAP_KERNEL) ? 0 : 1;
+    entry->us = 1;
     entry->pwt = 0;
     entry->pcd = (flags & MAP_DONTCACHE) ? 1 : 0;
     entry->a = 0;
@@ -131,7 +131,7 @@ static int populate_pde2_entry(pde2_entry_t *entry, mmap_flags_t flags)
     else if (flags & MAP_RW)
       entry->rw = 1;
 
-    entry->us = (flags & MAP_KERNEL) ? 0 : 1;
+    entry->us = 1;
     entry->pwt = 0;
     entry->pcd = (flags & MAP_DONTCACHE) ? 1 : 0;
     entry->a = 0;
@@ -271,7 +271,7 @@ static int populate_pml4_entry(pml4_entry_t *entry, mmap_flags_t flags)
     else if (flags & MAP_RW)
       entry->rw = 1;
     
-    entry->us = (flags & MAP_KERNEL) ? 0 : 1;
+    entry->us = 1;
     entry->pwt = 0;
     entry->pcd = (flags & MAP_DONTCACHE) ? 1 : 0;
     entry->a = 0;

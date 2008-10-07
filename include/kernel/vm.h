@@ -26,7 +26,7 @@
 
 #include <eza/arch/types.h>
 
-#define USER_START_VIRT  0x1fffff000000
+#define USER_START_VIRT  0x1000000
 
 #define USER_STACK_SIZE  4
 
