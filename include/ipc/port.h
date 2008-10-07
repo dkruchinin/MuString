@@ -43,10 +43,9 @@ typedef struct __ipc_port_receive_stats {
 } ipc_port_receive_stats_t;
 
 typedef struct __ipc_port_messsage_t {
-  ulong_t data_size,reply_size,id;
+  ulong_t data_size,reply_size,id,replied_size;
   void *send_buffer,*receive_buffer;
   list_node_t l;
-  status_t retcode;
   event_t event;
   struct __ipc_port_t *port;
   ipc_user_buffer_t snd_buf, rcv_buf;

@@ -70,11 +70,10 @@ out_unlock:
   return r;
 }
 
-static ipc_port_message_t *__allocate_port_message(task_t *task,ipc_port_t *port)
+static ipc_port_message_t *__task_port_message(task_t *task,ipc_port_t *port)
 {
   ipc_port_message_t *m = &task->ipc->cached_data.cached_port_message;
   list_init_node(&m->l);
-  m->retcode = 0;
   m->port = port;
 
   event_initialize(&m->event);
@@ -277,6 +276,36 @@ static status_t __transfer_message_data_to_receiver(ipc_port_message_t *msg,
   return r;
 }
 
+static status_t __transfer_reply_data(ipc_port_message_t *msg,
+                                      uintptr_t reply_buf,ulong_t reply_len,
+                                      bool from_server)
+{
+  status_t r=0;
+
+  reply_len=MIN(reply_len,msg->reply_size);
+  if( reply_len > 0 ) {
+    if( msg->reply_size <= IPC_BUFFERED_PORT_LENGTH ) {
+      /* Short message - copy it from the buffer. */
+      if( from_server ) {
+        r=copy_from_user(msg->receive_buffer,(void*)reply_buf,reply_len);
+      } else {
+        r=copy_to_user((void*)reply_buf,msg->receive_buffer,reply_len);
+      }
+    } else {
+      /* Long message - process it via buffer. */
+      r=ipc_transfer_buffer_data(&msg->rcv_buf,0,reply_len,
+                               (void *)reply_buf,from_server);
+    }
+  }
+
+  /* If we're replying to the message, setup size properly. */
+  if( from_server ) {
+    msg->replied_size=reply_len;
+  }
+
+  return r;
+}
+
 static status_t __setup_send_message_data(task_t *task,ipc_port_message_t *msg,
                                           uintptr_t snd_buf,ulong_t snd_size,
                                           uintptr_t rcv_buf,ulong_t rcv_size)
@@ -350,7 +379,7 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
     goto put_port;
   }
 
-  msg = __allocate_port_message(sender,p);
+  msg = __task_port_message(sender,p);
   if( msg==NULL ) {
     r = -ENOMEM;
     goto put_port;
@@ -376,14 +405,18 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
   if( p->flags & IPC_BLOCKED_ACCESS ||
       rcv_size != 0 ) {
     /* Sender should wait for the reply, so put it into sleep here. */
-    kprintf( "[port]: putting sender %d into sleep.\n",sender->pid );
     event_yield( &msg->event );
   }
 
-  kprintf( "[port] Sender returned from sleep.\n" );
+  /* Copy reply data to our buffers. */
+  r=__transfer_reply_data(msg,rcv_buf,rcv_size,false);
+  if( !r ) {
+    r=msg->replied_size;
+  }
+
   /* Release the port. */
   __put_port(p);
-  return msg->retcode;
+  return r;
 free_message_id:
   __free_port_message_id(p,id);
 put_port:
@@ -496,13 +529,15 @@ status_t ipc_port_reply(task_t *owner, ulong_t port, ulong_t msg_id,
     goto out;
   }
 
-  /* TODO: [mt] copy data to sender's buffer. */
+  r=__transfer_reply_data(msg,reply_buf,reply_len,true);
+  if( r ) {
+    goto out;
+  }
 
   /* Free this message so its ID will be used yet again. */
   __free_port_message_id(p,msg->id);
 
-  /* Ok, we can reply to this message. */
-  kprintf( "[++] Replying back to %d\n", msg->event.task->pid );
+  /* Ok, wake up the sender. */
   event_raise(&msg->event);
 
   r = 0;

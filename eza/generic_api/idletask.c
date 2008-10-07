@@ -44,8 +44,8 @@ ulong_t syscall_counter = 0;
 task_t *server_task;
 status_t server_port;
 
-#define SND_BUF_SIZE 2200
-#define RCV_BUF_SIZE 32000
+#define SND_BUF_SIZE 140000
+#define RCV_BUF_SIZE 1400000
 
 char buf[RCV_BUF_SIZE];
 ulong_t snd_buf[SND_BUF_SIZE];
@@ -60,6 +60,9 @@ static void __compare_buffers(ulong_t *buf,
       kprintf( "[BUFFERS DONT MATCH !] pos %d (%p), 0x%X : 0x%X\n",
                i, &buf[i], buf[i],pattern[i]);
       return;
+    } else {
+        //     kprintf( "[%d] 0x%X : 0x%X\n",i,
+        //         buf[i], pattern[i]);
     }
   }
   kprintf( "[BUFFERS MATCH !!!]\n" );
@@ -78,6 +81,8 @@ static void thread2(void *data)
 {
     status_t id,r;
     ipc_port_receive_stats_t rcv_stats;
+    char *server_reply="Hello from server !";
+    ulong_t reply_len=strlen(server_reply)+1;
 
     kprintf( "[Server] Strting ...\n" );
 
@@ -90,11 +95,24 @@ static void thread2(void *data)
 
     kprintf( "[Server] Waitng for incoming messages ...\n" );
     r = ipc_port_receive(current_task(), id, IPC_BLOCKED_ACCESS,(ulong_t)buf,
-                         64,&rcv_stats);
+                         RCV_BUF_SIZE,&rcv_stats);
     kprintf( "[Server] Got a message: status=%d\n", r );
     if( !r ) {
       kprintf( "[Server]: Message id: %d, Data length: %d\n",
                rcv_stats.msg_id,rcv_stats.bytes_received);
+      if( rcv_stats.bytes_received < 64 ) {
+          kprintf( "[Server]: Received string: %s\n",buf );
+      } else {
+          __compare_buffers((ulong_t *)buf,snd_buf,
+                            rcv_stats.bytes_received/sizeof(ulong_t));
+          r=ipc_port_reply(current_task(),id,rcv_stats.msg_id,
+                           server_reply,reply_len);
+          kprintf( "[Server]: Replying to the message: %d with %d bytes of data.\n",
+                   r, reply_len );
+          kprintf( "[Server] Waitng for incoming messages ...\n" );
+          r = ipc_port_receive(current_task(), id, IPC_BLOCKED_ACCESS,(ulong_t)buf,
+                               RCV_BUF_SIZE,&rcv_stats);
+      }
     }
 
     for(;;);
@@ -103,12 +121,34 @@ static void thread2(void *data)
 static void thread3(void *data)
 {
   status_t r;
-  char buf[32];
+  char _buf[32];
   char *test_data="Hello from IPC subsystem !";
-  
-  kprintf( "[Client] Starting ...\n" );
-//  r = ipc_port_send(server_task,server_port,32,32,IPC_BLOCKED_ACCESS);
-//  kprintf( "[Client] Data was sent through the port: %d\n", r );
+  ulong_t snd_len=strlen(test_data)+1;
+
+  kprintf( "[Client] Starting ... Going to send %d bytes to the server.\n",
+           snd_len);
+  r = ipc_port_send(server_task,server_port,(ulong_t)test_data,
+                    snd_len,(ulong_t)_buf,sizeof(_buf));
+  kprintf( "[Client] Data was sent through the port: %d\n", r );
+  for(;;);
+}
+
+static void thread4(void *data)
+{
+  status_t r;
+  char _buf[64];
+  char *test_data="Hello from IPC subsystem !";
+  ulong_t snd_len=sizeof(snd_buf);
+
+  __prepare_send_buffer();
+
+  kprintf( "[Client] Starting ... Going to send %d bytes to the server.\n",
+           snd_len);
+  r = ipc_port_send(server_task,server_port,(ulong_t)snd_buf,
+                    snd_len,(ulong_t)_buf,sizeof(_buf));
+  kprintf( "[Client] Data was sent through the port: %d\n", r );
+  kprintf( "[Client] Reply size: %d, data: %s\n", r, _buf );
+
   for(;;);
 }
 
@@ -122,7 +162,7 @@ void idle_loop(void)
           panic( "Can't create server thread for testing port IPC functionality !\n" );
       }
       /* Start client */
-      if( kernel_thread(thread3,NULL) != 0 ) {
+      if( kernel_thread(thread4,NULL) != 0 ) {
           panic( "Can't create client thread for testing port IPC functionality !\n" );
       }
   }

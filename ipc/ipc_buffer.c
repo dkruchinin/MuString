@@ -68,11 +68,14 @@ status_t ipc_setup_buffer_pages(task_t *owner,ipc_user_buffer_t *buf,
   ulong_t chunk_num;
   status_t r=-EFAULT;
   uintptr_t adr;
-  ulong_t first;
+  ulong_t first,ssize;
   ipc_user_buffer_chunk_t *pchunk;
 
+  buf->length=0;
+  buf->num_chunks=0;
+  ssize=size;
+
   LOCK_TASK_VM(owner);
-  buf->length=size;
 
   /* Process the first chunk. */
   idx = mm_pin_virtual_address(pd,start_addr);
@@ -95,33 +98,27 @@ status_t ipc_setup_buffer_pages(task_t *owner,ipc_user_buffer_t *buf,
   start_addr+=first;
   chunk_num=1;
 
-  /* Process medium chunks. */
-  while( size >= PAGE_SIZE ) {
+  /* Process the rest of chunks. */
+  while( size ) {
     idx=mm_pin_virtual_address(pd,start_addr);
     if( idx == INVALID_PAGE_IDX ) {
       goto out;
     }
     pchunk++;
     chunk_num++;
-    size-=PAGE_SIZE;
+
+    if(size<PAGE_SIZE) {
+      size=0;
+    } else {
+      size-=PAGE_SIZE;
+    }
 
     pchunk->kaddr = pframe_id_to_virt(idx);
     start_addr+=PAGE_SIZE;
   }
 
-  /* Process the last chunk. */
-  if(size > 0) {
-    idx=mm_pin_virtual_address(pd,start_addr);
-    if( idx == INVALID_PAGE_IDX ) {
-      goto out;
-    }
-
-    pchunk++;
-    pchunk->kaddr=pframe_id_to_virt(idx);
-    chunk_num++;
-  }
-
   buf->num_chunks=chunk_num;
+  buf->length=ssize;
   r = 0;
 out:
   UNLOCK_TASK_VM(owner);
@@ -182,7 +179,7 @@ status_t ipc_transfer_buffer_data(ipc_user_buffer_t *buf,ulong_t buf_offset,
 
     if( to_buffer ) {
       r=copy_from_user(dest_kaddr,user_addr,delta);
-    } else { 
+    } else {
       r=copy_to_user(user_addr,dest_kaddr,delta);
     }
     if( r ) {
@@ -200,7 +197,7 @@ status_t ipc_transfer_buffer_data(ipc_user_buffer_t *buf,ulong_t buf_offset,
 
     if( to_buffer ) {
       r=copy_from_user(dest_kaddr,user_addr,delta);
-    } else { 
+    } else {
       r=copy_to_user(user_addr,dest_kaddr,delta);
     }
     if( r ) {
@@ -215,6 +212,7 @@ status_t ipc_transfer_buffer_data(ipc_user_buffer_t *buf,ulong_t buf_offset,
     delta=MIN(PAGE_SIZE,to_copy);
     chunk++;
 
+    dest_kaddr=chunk->kaddr;
     if( to_buffer ) {
       r=copy_from_user(dest_kaddr,user_addr,delta);
     } else { 
