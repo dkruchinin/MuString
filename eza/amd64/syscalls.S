@@ -35,6 +35,10 @@ syscall_table:
 	.quad 	sys_create_task
 	.quad 	sys_task_control
 	.quad   sys_mmap
+	.quad   sys_create_port
+	.quad   sys_port_send           /* 5 */
+	.quad   sys_port_receive
+	.quad   sys_port_reply
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \
