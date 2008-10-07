@@ -28,6 +28,7 @@
 #include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 #include <eza/arch/preempt.h>
+#include <eza/arch/interrupt.h>
 
 typedef struct __rw_spinlock_type {
     lock_t __r, __w;

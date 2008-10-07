@@ -62,5 +62,6 @@
 
 #define is_powerof2(num) ((num) & ~((num) - 1))
 #define ABS(x) (((x) < 0) ? -(x) : (x))
+#define bitnumber(po2) ((po2) >> 1)
 
 #endif /* __STDDEF_H__ */

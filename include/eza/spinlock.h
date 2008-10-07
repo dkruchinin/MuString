@@ -31,41 +31,108 @@
 #include <eza/arch/types.h>
 #include <eza/arch/mbarrier.h>
 #include <eza/arch/preempt.h>
-
-#define __SPINLOCK_LOCKED_V 1
-#define __SPINLOCK_UNLOCKED_V 0
-
-typedef struct __spinlock_type {
-    long_t __spin_val;
-} spinlock_t;
+#include <eza/arch/interrupt.h>
+#include <eza/arch/spinlock.h>
 
 #ifdef CONFIG_SMP
 
-#include <eza/arch/spinlock.h>
-
-#define spinlock_trylock(x)
+/* simple spinlocks... */
 #define mbarrier_leave()
 
 #define spinlock_declare(s)  spinlock_t s
 #define spinlock_extern(s)   extern spinlock_t s
 
 #define spinlock_initialize(x,y)                \
-    ((spinlock_t *)x)->__spin_val = __SPINLOCK_UNLOCKED_V
+  (((spinlock_t *)x)->__spin_val = __SPINLOCK_UNLOCKED_V)
+
+#define rw_spinlock_initialize(x,y)                         \
+  (((rw_spinlock_t *)x)->__r=0;((rw_spinlock_t *)x)->__w=0)
 
 #define SPINLOCK_DEFINE(s) spinlock_t s = {     \
-        .__spin_val = __SPINLOCK_UNLOCKED_V,         \
-    }
+    .__spin_val = __SPINLOCK_UNLOCKED_V,        \
+  }
 
-#define spinlock_lock(u) \
-  preempt_disable(); \
-  arch_spinlock_lock(u);
+#define RW_SPINLOCK_DEFINE(s) rw_spinlock_t s = {     \
+    .__r = 0,                                         \
+    .__w = 0,                                         \
+  };
 
-#define spinlock_unlock(u) \
-  arch_spinlock_unlock(u); \
-  preempt_enable();
+#define __lock_spin(type, s...)                 \
+  do {                                          \
+    preempt_disable();                          \
+    arch_spinlock_##type(s);                    \
+  } while (0)
+
+#define __unlock_spin(type, s...)               \
+  do {                                          \
+    arch_spinlock_##type(s);                    \
+    preempt_enable();                           \
+  } while (0)
+
+#define __lock_irqsafe(type, s...)              \
+  do {                                          \
+    interrupts_disable();                       \
+    arch_spinlock_##type(s);                    \
+  } while (0)
+
+#define __unlock_irqsafe(type, s...)            \
+  do {                                          \
+    arch_spinlock_##type(s);                    \
+    interrupts_enable();                        \
+  } while (0)
+
+/* locking functions */
+#define spinlock_lock(s)                        \
+  __lock_spin(lock, s)
+#define spinlock_lock_read(s)                   \
+  __lock_spin(lock_read, s)
+#define spinlock_lock_write(s)                  \
+  __lock_spin(lock_write, s)
+#define spinlock_lock_bit(bitmap, bit)          \
+  __lock_spin(lock_bit, bitmap, bit)
+#define spinlock_lock_irqsafe(s)                \
+  __lock_irqsafe(lock, s)
+#define spinlock_lock_read_irqsafe(s)           \
+  __lock_irqsafe(lock_read, s)
+#define spinlock_lock_write_irqsafe(s)          \
+  __lock_irqsafe(lock_write, s)
+#define spinlock_lock_bit_irqsafe(bitmap, bit)  \
+  __lock_irqsafe(lock_bit, bitmap, bit)
+
+/* TODO DK: add trylock and islock for RW locks, irq locks */
+#define spinlock_trylock(s)                     \
+  ({ bool isok; preempt_disable();              \
+     isok = spinlock_trylock(s);                \
+     if (!isok)                                 \
+       preempt_enable();                        \
+     isok; })
+
+#define spinlock_is_locked(s) arch_spinlock_is_locked(s)
+
+/* unlocking functions */
+#define spinlock_unlock(s)                      \
+  __unlock_spin(unlock, s)
+#define spinlock_unlock_read(s)                 \
+  __unlock_spin(unlock_read, s)
+#define spinlock_unlock_write(s)                \
+  __unlock_spin(unlock_write, s)
+#define spinlock_unlock_bit(bitmap, bit)        \
+  __unlock_spin(unlock_bit, bitmap, bit)
+#define spinlock_unlock_irqsafe(s)              \
+  __unlock_irqsafe(unlock, s)
+#define spinlock_unlock_read_irqsafe(s)         \
+  __unlock_irqsafe(unlock_read, s)
+#define spinlock_unlock_write_irqsafe(s)        \
+  __unlock_irqsafe(unlock_write, s)
+#define spinlock_unlock_bit_irqsafe(unlock, bitmap, bit)    \
+  __unlock_irqsafe(unlock_bit, bitmap, bit)
 
 #else
 
+/* FIXME DK: He-he-he, it seems all this stuff wouldn't built properly if SMP is disabled (: */
+
+/* simple spinlcocks */
+#define SPINLOCK_DEFINE(s)
 #define spinlock_declare(s)  
 #define spinlock_extern(s)   
 #define spinlock_initialize_macro(s)  
@@ -74,6 +141,18 @@ typedef struct __spinlock_type {
 #define spinlock_lock(x) preempt_disable()
 #define spinlock_trylock(x) /* the same like above */
 #define spinlock_unlock(x) preempt_enable()
+
+/* IRQ-safe */
+#define spinlock_lock_irqsafe(s)
+#define spinlock_unlock_irqsafe(s)
+
+/* RW-spinlocks */
+#define RW_SPINLOCK_DEFINE(x)
+#define rw_spinlock_initialize(x, name)
+#define rw_spinlock_lock_read(x) preempt_disable()
+#define rw_spinlock_lock_write(x) preempt_disable()
+#define rw_spinlock_unlock_read(x) preempt_enable()
+#define rw_spinlock_unlock_write(x) preempt_enable()
 
 #endif /* CONFIG_SMP */
 #endif /* __EZA_SPINLOCK_H__ */

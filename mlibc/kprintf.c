@@ -101,7 +101,7 @@ void snprintf(char *str, size_t size, const char *fmt, ...)
 
   va_start(ap, fmt);
   vsnprintf(str, size, fmt, ap);
-  va_end(ap)
+  va_end(ap);
 }
 
 void vkprintf(const char *fmt, va_list ap)

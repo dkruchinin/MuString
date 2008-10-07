@@ -55,6 +55,7 @@ typedef uint16_t page_flags_t;
 #define PF_PDMA       0x01 /**< DMA pool is page owner */
 #define PF_PGEN       0x02 /**< GENERAL pool is page owner */
 #define PF_RESERVED   0x04 /**< Page is reserved */
+#define PF_SLAB_LOCK  0x08 /**< Page lock (used by slab allocator) */
 
 #define __pool_type(flags) ((flags) >> 1)
 #define PAGE_POOLS_MASK (PF_PGEN | PF_PDMA)
@@ -70,12 +71,16 @@ typedef uint16_t page_flags_t;
  * @see pframe_pages_array
  */
 typedef struct __page_frame {
-  list_head_t head;   /**< Obvious */
-  list_node_t node;   /**< Obvious */
-  page_idx_t idx;     /**< Page frame index in the pframe_pages_array */
-  atomic_t refcount;  /**< Number of references to the physical page */
-  uint32_t _private;  /**< Private data that may be used by page allocator */
-  page_flags_t flags; /**< Page flags */
+  list_head_t head;    /**< Obvious */
+  list_node_t node;    /**< Obvious */
+  page_idx_t idx;      /**< Page frame index in the pframe_pages_array */
+  atomic_t refcount;   /**< Number of references to the physical page */
+  page_flags_t flags;  /**< Page flags */
+  union {
+    uint32_t _private;
+    uint16_t __size;
+    uint16_t __flags;
+  };
 } page_frame_t;
 
 #define PF_ITER_UNDEF_VAL (-0xf)
