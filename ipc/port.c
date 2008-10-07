@@ -35,7 +35,7 @@
 #include <mlibc/stddef.h>
 #include <kernel/vm.h>
 
-#define MAX_PORT_MSG_LENGTH  (1024*1700)
+#define MAX_PORT_MSG_LENGTH  MB(2)
 
 #define REF_PORT(p)  atomic_inc(&p->open_count)
 #define UNREF_PORT(p)  atomic_dec(&p->open_count)
@@ -99,7 +99,6 @@ static ulong_t __allocate_port_message_id(ipc_port_t *port)
 
 static void __notify_message_arrived(ipc_port_t *port)
 {
-  kprintf( "++ Notifying the port owner: %d\n", port->owner->pid );
   waitqueue_wake_one_task(&port->waitqueue);
 }
 
@@ -146,7 +145,6 @@ static void __put_receiver_into_sleep(task_t *receiver,ipc_port_t *port)
   /* Now we can unlock the port. */
   IPC_UNLOCK_PORT_W(port);
 
-  kprintf( "[port]: putting receiver %d into sleep.\n",receiver->pid );
   waitqueue_yield(&w);
 }
 
@@ -164,10 +162,7 @@ static status_t __allocate_port(ipc_port_t **out_port,ulong_t flags,
     return -ENOMEM;
   }
 
-  if( !(flags & IPC_BLOCKED_ACCESS) ) {
-    kprintf( KO_WARNING "Non-blocking ports aren't implemented yet !\n" );
-    return -EINVAL;
-  }
+  /* TODO: [mt] Support flags during IPC port creation. */
 
   atomic_set(&p->use_count,1);
   atomic_set(&p->open_count,0);
@@ -195,8 +190,12 @@ status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size)
 
   LOCK_IPC(ipc);
 
+  if( !size ) {
+    size=owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES];
+  }
+
   if(size > owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES] ) {
-    r = -E2BIG;
+    r = -EMFILE;
     goto out_unlock;
   }
 
@@ -361,6 +360,10 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
     return -EINVAL;
   }
 
+  if( receiver == sender ) {
+    return -EDEADLOCK;
+  }
+
   /* TODO: [mt] Now only max ~64 vbytes can be sent vis ports. */
   if( !snd_size || snd_size > MAX_PORT_MSG_LENGTH ||
       rcv_size > MAX_PORT_MSG_LENGTH ) {
@@ -402,11 +405,8 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
   __add_message_to_port_queue(p,msg,id);
   __notify_message_arrived(p);
 
-  if( p->flags & IPC_BLOCKED_ACCESS ||
-      rcv_size != 0 ) {
-    /* Sender should wait for the reply, so put it into sleep here. */
-    event_yield( &msg->event );
-  }
+  /* Sender should wait for the reply, so put it into sleep here. */
+  event_yield( &msg->event );
 
   /* Copy reply data to our buffers. */
   r=__transfer_reply_data(msg,rcv_buf,rcv_size,false);
@@ -450,7 +450,7 @@ status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
   status_t r=-EINVAL;
   ipc_port_t *p;
   ipc_port_message_t *msg;
-  
+
   p = __get_port_for_server(owner,port);
   if( !p ) {
     return r;
@@ -505,6 +505,10 @@ status_t ipc_port_reply(task_t *owner, ulong_t port, ulong_t msg_id,
   status_t r;
   ipc_port_t *p;
   ipc_port_message_t *msg;
+
+  if( !reply_buf || reply_len > MAX_PORT_MSG_LENGTH ) {
+    return -EINVAL;
+  }
 
   p = __get_port_for_server(owner,port);
   if( p == NULL ) {

@@ -38,6 +38,14 @@ struct __ipc_port_t;
 
 #define IPC_BUFFERED_PORT_LENGTH  1024
 
+/* TODO: [mt] Encode/decode 'receive()' return values properly. */
+#define ENCODE_RECV_RETURN_VALUE(msg_id,rcv_size)       \
+    ( ((msg_id) << 22) | rcv_size )
+#define DECODE_RECV_MSG_ID(encoded)             \
+    ((encoded)>>22)
+#define DECODE_RECV_MSG_SIZE(encoded)           \
+    ((encoded) & 0x3fffff)
+
 typedef struct __ipc_port_receive_stats {
   ulong_t msg_id,bytes_received;
 } ipc_port_receive_stats_t;

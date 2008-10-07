@@ -179,7 +179,7 @@ static inline status_t __activate_local_task(task_t *task, eza_sched_cpudata_t *
   __add_task_to_array(sched_data->active_array,task);
   sched_data->stats->active_tasks++;
 
-  kprintf( "++ NEW PRIO: %d, CURRENT: %p, CRRENT PRIO: %d\n", EZA_TASK_PRIORITY(task), current_task(), cdata->priority );
+//  kprintf( "++ NEW PRIO: %d, CURRENT: %p, CRRENT PRIO: %d\n", EZA_TASK_PRIORITY(task), current_task(), cdata->priority );
   if( EZA_TASK_PRIORITY(task) < cdata->priority ) {
     sched_set_current_need_resched();
   }
@@ -204,7 +204,7 @@ static inline void __deactivate_local_task(task_t *task, eza_sched_cpudata_t *sc
 
   sched_data->stats->active_tasks--;
   sched_data->stats->sleeping_tasks++;
-  kprintf( "+++++++++++ DEACTIVATED LOCAL TASK: %d\n", task->pid );
+//  kprintf( "+++++++++++ DEACTIVATED LOCAL TASK: %d\n", task->pid );
 }
 
 static cpu_id_t def_cpus_supported(void){
@@ -359,9 +359,9 @@ static void def_schedule(void)
   UNLOCK_CPU_SCHED_DATA(sched_data);
   UNLOCK_TASK_STRUCT(current);
 
-  kprintf( "** [%d] RESCHED TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , timeslice: %d **\n",
-           cpu_id(), current_task()->pid, need_switch,
-           next->pid, EZA_TASK_SCHED_DATA(next)->time_slice );
+//  kprintf( "** [%d] RESCHED TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , timeslice: %d **\n",
+//           cpu_id(), current_task()->pid, need_switch,
+//           next->pid, EZA_TASK_SCHED_DATA(next)->time_slice );
 
   if( need_switch ) {
     arch_activate_task(next);

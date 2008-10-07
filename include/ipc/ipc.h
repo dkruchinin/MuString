@@ -20,6 +20,8 @@
 #define IPC_DEFAULT_PORT_MESSAGES  512
 #define IPC_DEFAULT_USER_BUFFERS 512
 
+#define IPC_MAX_PORT_MESSAGES  512
+
 typedef struct __ipc_cached_data {
   void *cached_page1, *cached_page2;
   ipc_port_message_t cached_port_message;
