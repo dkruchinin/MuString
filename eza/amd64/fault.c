@@ -17,7 +17,8 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *
- * eza/amd64/fault.c: contains routines for dealing with x86_64 CPU fauls.
+ * eza/amd64/fault.c: contains routines for dealing with x86_64 CPU fauls
+ *     and provides routines for dealing with exception fixups.
  *
  */
 
@@ -34,19 +35,17 @@
 /* Markers of exception table. */
 ulong_t __ex_table_start,__ex_table_end;
 
-#define kernel_fault(f) \
-    (f->cs == gdtselector(KTEXT_DES))
+struct __fixup_record_t {
+  uint64_t fault_address,fixup_address;
+}; 
 
-#define get_fault_address(x) \
-    __asm__ __volatile__( "movq %%cr2, %0" : "=r"(x) )
-
-typedef struct __fault_descr {
+struct __fault_descr_t {
   uint32_t slot;
   void (*handler)();
-} fault_descr_t;
+};
 
 /* The list of exceptions we want to install. */
-static fault_descr_t faults_to_install[] = {
+static struct __fault_descr_t faults_to_install[] = {
   {DE_FAULT, divide_by_zero_fault_handler},
   {DB_FAULT, debug_fault_handler},
   {NMI_FAULT, nmi_fault_handler},
@@ -69,136 +68,19 @@ static fault_descr_t faults_to_install[] = {
   {0,0},
 };
 
-
-void divide_by_zero_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+uint64_t fixup_fault_address(uint64_t fault_address)
 {
-  kprintf( "  [!!] #DE exception raised !\n" );
-}
+  struct __fixup_record_t *fr=(struct __fixup_record_t *)&__ex_table_start;
+  struct __fixup_record_t *end=(struct __fixup_record_t *)&__ex_table_end;
 
-void debug_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-  kprintf( "  [!!] #Debug exception raised !\n" );
-}
-
-void nmi_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-  kprintf( "  [!!] #NMI exception raised !\n" );
-}
-
-void breakpoint_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-  kprintf( "  [!!] #Breakpoint exception raised !\n" );
-}
-
-void overflow_fault_handler_impl(void)
-{
-  kprintf( "  [!!] #Overflow exception raised !\n" );
-}
-
-void bound_range_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-    kprintf( "  [!!] #Bound range exception raised !\n" );
-}
-
-void invalid_opcode_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-    kprintf( "  [!!] #Invalid opcode exception raised ! (%p)\n", stack_frame->rip );
-}
-
-void device_not_available_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-    kprintf( "  [!!] #Dev not available exception raised !\n" );
-}
-
-void doublefault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
-{
-    kprintf( "  [!!] #Double fault exception raised !\n" );
-}
-
-void coprocessor_segment_overrun_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-    kprintf( "  [!!] #FPU segment overrun exception raised !\n" );
-}
-
-void invalid_tss_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
-{
-    kprintf( "  [!!] #Invalid TSS exception raised !\n" );
-}
-
-void segment_not_present_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
-{
-    kprintf( "  [!!] #Segment not present exception raised !\n" );
-}
-
-void stack_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
-{
-    kprintf( "  [!!] #Stack exception raised !\n" );
-}
-
-void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
-{
-  if( kernel_fault(stack_frame) ) {
-    kprintf( "#GPF in kernel mode: RIP = 0x%X\n", stack_frame->rip );    
+  while( fr<end ) {
+    if( fr->fault_address == fault_address ) {
+      return fr->fixup_address;
+    }
+    fr++;
   }
-
-  kprintf( "[!!!] Unhandled GPF exception ! Stopping (CODE: %d) ...\n",
-           stack_frame->error_code );
-  l1: goto l1;
+  return 0;
 }
-
-extern tss_t tss[];
-
-void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
-{
-  uint64_t a;
-  tss_t *ts = &tss[0];
- 
-  if( kernel_fault(stack_frame) ) {
-    kprintf( "#PF in kernel mode: RIP = 0x%X\n", stack_frame->rip );    
-  }
-  get_fault_address(a);
-  kprintf( "[!!!] Unhandled PF exception ! Stopping (CODE: %d, See page 225). Address: %p\n",
-           stack_frame->error_code, a);
-  kprintf( "dump_tss: rsp0=%p,\n",
-            ts->rsp0);
-  l1: goto l1;
-}
-
-void reserved_exception_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-    kprintf( "  [!!] #Reserved exception raised !\n" );
-}
-
-void fpu_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-    kprintf( "  [!!] #FPU exception raised !\n" );
-}
-
-void alignment_check_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
-{
-    kprintf( "  [!!] #Alignment check exception raised !\n" );
-}
-
-void machine_check_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-    kprintf( "  [!!] #Machine check exception raised !\n" );
-}
-
-void simd_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-    kprintf( "  [!!] #SIMD exception raised !\n" );
-}
-
-void security_exception_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-    kprintf( "  [!!] #Security exception raised !\n" );
-}
-
-void reserved_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-  kprintf( "  [!!] #Reserved fault exception raised !\n" );  
-}
-
 
 void install_fault_handlers(void)
 {

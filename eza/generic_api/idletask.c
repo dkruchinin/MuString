@@ -68,9 +68,8 @@ static void thread2(void *data)
     memset(buf,0,sizeof(buf));
     r=ipc_port_receive(current_task(), server_port, IPC_BLOCKED_ACCESS,
                        (ulong_t)buf,sizeof(buf),&rcv_stats);
-
     if( !r ) {
-      kprintf( "[Server]: %s\n" );
+      kprintf( "[Server]: %s\n", buf );
       r=ipc_port_reply(current_task(),server_port,rcv_stats.msg_id,
                        (uintptr_t)server_reply,reply_len);
       if( r<0 ) {
@@ -109,19 +108,6 @@ static void thread3(void *data)
 void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
-  char b1[300];
-  status_t r;
-  char *pattern205="abcdefghijklmnopqrstuvwxyz0123+++++-----ABCDEFGHIJKLMNOPQRSTUVWXYZ01230123456789aAbBcCdDeEfFgGhHiIjJ"
-      "/////abcdefghijklmnopqrstuvwxyz0123+++++-----ABCDEFGHIJKLMNOPQRSTUVWXYZ01230123456789aAbBcCdDeEfFgGhHiIjJ";
-
-  memset( b1,0,sizeof(b1));
-  kprintf( "-- CALLING\n" );
-  r=copy_user(b1,pattern205,205);
-  kprintf( "-- DONE !\n" );
-
-  kprintf( ">> %s\n", b1 );
-  kprintf( "res=%d\n", r );
-  for(;;);
 
   if( cpu_id() == 0 ) {
       /* Start server */
