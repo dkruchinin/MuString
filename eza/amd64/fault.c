@@ -31,6 +31,9 @@
 #include <eza/arch/mm.h>
 #include <eza/smp.h>
 
+/* Markers of exception table. */
+ulong_t __ex_table_start,__ex_table_end;
+
 #define kernel_fault(f) \
     (f->cs == gdtselector(KTEXT_DES))
 

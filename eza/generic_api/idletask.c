@@ -109,6 +109,19 @@ static void thread3(void *data)
 void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
+  char b1[300];
+  status_t r;
+  char *pattern205="abcdefghijklmnopqrstuvwxyz0123+++++-----ABCDEFGHIJKLMNOPQRSTUVWXYZ01230123456789aAbBcCdDeEfFgGhHiIjJ"
+      "/////abcdefghijklmnopqrstuvwxyz0123+++++-----ABCDEFGHIJKLMNOPQRSTUVWXYZ01230123456789aAbBcCdDeEfFgGhHiIjJ";
+
+  memset( b1,0,sizeof(b1));
+  kprintf( "-- CALLING\n" );
+  r=copy_user(b1,pattern205,205);
+  kprintf( "-- DONE !\n" );
+
+  kprintf( ">> %s\n", b1 );
+  kprintf( "res=%d\n", r );
+  for(;;);
 
   if( cpu_id() == 0 ) {
       /* Start server */

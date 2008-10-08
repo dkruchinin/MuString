@@ -46,6 +46,10 @@ SECTIONS {
 
 		*(.eh_frame);
 
+                __ex_table_start = .;
+		*(.ex_table);
+		__ex_table_end = .;
+
 		symbol_table = .;
 		*(symtab.*);            /* Symbol table, must be LAST symbol!*/
 
