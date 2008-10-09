@@ -52,14 +52,9 @@ static inline void preempt_enable(void)
   }
 }
 
-/*
-static int read_atomic_counter(void)
+static inline void cond_reschedule(void)
 {
-  uint64_t c;
-
-  read_css_field(preempt_count,c);
-  return c;
+  COND_RESCHED_CURRENT;
 }
-*/
 
 #endif

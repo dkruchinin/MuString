@@ -71,6 +71,8 @@ void waitqueue_wake_one_task(wait_queue_t *wq)
     waiter = container_of(n,wait_queue_task_t,l);
     waiter->flags |= WQ_EVENT_OCCURED;
     sched_change_task_state(waiter->task,TASK_STATE_RUNNABLE);
+  } else {
+    UNLOCK_WAITQUEUE(wq);
   }
 }
 

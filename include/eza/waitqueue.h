@@ -43,12 +43,12 @@ typedef struct __wait_queue_task {
 #define WQ_EVENT_OCCURED  0x1
 
 #define LOCK_WAITQUEUE(w)                       \
-  interrupts_disable();                         \
-  spinlock_lock(&w->q_lock)
+    interrupts_disable();                       \
+    spinlock_lock(&w->q_lock)
 
 #define UNLOCK_WAITQUEUE(w)                     \
-  interrupts_enable();                          \
-  spinlock_unlock(&w->q_lock)
+    spinlock_unlock(&w->q_lock);                \
+    interrupts_enable();                          
 
 void waitqueue_initialize(wait_queue_t *wq);
 void waitqueue_add_task(wait_queue_t *wq,wait_queue_task_t *w);

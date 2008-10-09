@@ -34,6 +34,7 @@
 #include <ipc/buffer.h>
 #include <mlibc/stddef.h>
 #include <kernel/vm.h>
+#include <eza/arch/preempt.h>
 
 #define MAX_PORT_MSG_LENGTH  MB(2)
 
@@ -146,7 +147,7 @@ static void __put_receiver_into_sleep(task_t *receiver,ipc_port_t *port)
   IPC_UNLOCK_PORT_W(port);
 
   waitqueue_yield(&w);
-  kprintf( "> Waking up server: %d\n", receiver->pid );
+//  kprintf( "> Waking up server: %d\n", receiver->pid );
 }
 
 static status_t __allocate_port(ipc_port_t **out_port,ulong_t flags,
@@ -387,16 +388,28 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
     goto put_port;
   }
 
+  if( sender->pid == 4 ) {
+//      kprintf( "[1] ATOMIC: %d\n", in_atomic() );
+  }
+
   msg = __task_port_message(sender,p);
   if( msg==NULL ) {
     r = -ENOMEM;
     goto put_port;
   }
 
+  if( sender->pid == 4 ) {
+//      kprintf( "[2] ATOMIC: %d\n", in_atomic() );
+  }
+
   id = __allocate_port_message_id(p);
   if( id==INVALID_ITEM_IDX ) {
     r = -EBUSY;
     goto put_port;
+  }
+
+  if( sender->pid == 4 ) {
+//      kprintf( "[3] ATOMIC: %d\n", in_atomic() );
   }
 
   /* Setup message data in arch-specific manner. */
@@ -406,16 +419,30 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
     goto free_message_id;
   }
 
+  if( sender->pid == 4 ) {
+//      kprintf( "[4] ATOMIC: %d\n", in_atomic() );
+  }
+
+  
   /* OK, new message is ready for sending. */
   __add_message_to_port_queue(p,msg,id);
+  if( sender->pid == 4 ) {
+//      kprintf( "[5] ATOMIC: %d\n", in_atomic() );
+  }
+
   __notify_message_arrived(p);
 
+  if( sender->pid == 4 ) {
+//      kprintf( "[6] ATOMIC: %d\n", in_atomic() );
+  }
+
+  
   /* Sender should wait for the reply, so put it into sleep here. */
-  kprintf( "ipc_port_send(): Putting client %d into sleep.\n",
-           sender->pid);
+//  kprintf( "ipc_port_send(): Putting client %d into sleep. ATOMIC: %d\n",
+//           sender->pid, in_atomic() );
   event_yield( &msg->event );
-  kprintf( "ipc_port_send(): Client %d returned from sleep.\n",
-           sender->pid);
+//  kprintf( "ipc_port_send(): Client %d returned from sleep. ATOMIC: %d\n",
+//           sender->pid, in_atomic() );
   
   /* Copy reply data to our buffers. */
   r=__transfer_reply_data(msg,rcv_buf,rcv_size,false);

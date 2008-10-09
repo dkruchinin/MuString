@@ -40,6 +40,8 @@
 #include <eza/security.h>
 #include <eza/interrupt.h>
 #include <eza/arch/profile.h>
+#include <eza/arch/preempt.h>
+#include <eza/arch/asm.h>
 
 /* Our own scheduler. */
 static struct __scheduler eza_default_scheduler;
@@ -48,11 +50,17 @@ static struct __scheduler eza_default_scheduler;
 static eza_sched_cpudata_t *sched_cpu_data[EZA_SCHED_CPUS];
 static spinlock_t cpu_data_lock;
 
-#define LOCK_CPU_ARRAY() spinlock_lock(&cpu_data_lock)
-#define UNLOCK_CPU_ARRAY() spinlock_unlock(&cpu_data_lock)
+#define LOCK_CPU_ARRAY()                        \
+    spinlock_lock(&cpu_data_lock)
 
-#define LOCK_CPU_SCHED_DATA(d) spinlock_lock(&d->lock)
-#define UNLOCK_CPU_SCHED_DATA(d) spinlock_unlock(&d->lock)
+#define UNLOCK_CPU_ARRAY()                      \
+    spinlock_unlock(&cpu_data_lock)
+
+#define LOCK_CPU_SCHED_DATA(d)                  \
+    spinlock_lock(&d->lock)
+
+#define UNLOCK_CPU_SCHED_DATA(d)                \
+    spinlock_unlock(&d->lock)
 
 #define CPU_SCHED_DATA() sched_cpu_data[cpu_id()]
 
@@ -62,12 +70,10 @@ static spinlock_t cpu_data_lock;
 #define PRIO_TO_TIMESLICE(p) (p*5*1)
 
 #define LOCK_EZA_SCHED_DATA(t) \
-  lock_local_interrupts(); \
-  spinlock_lock(&t->sched_lock);
+  spinlock_lock(&t->sched_lock)
 
 #define UNLOCK_EZA_SCHED_DATA(t) \
-  spinlock_unlock(&t->sched_lock); \
-  unlock_local_interrupts();
+  spinlock_unlock(&t->sched_lock)
 
 static eza_sched_taskdata_t *allocate_task_sched_data(void)
 {
@@ -209,10 +215,11 @@ static inline void __deactivate_local_task(task_t *task, eza_sched_cpudata_t *sc
 {
   eza_sched_taskdata_t *tdata = EZA_TASK_SCHED_DATA(task);
 
-  kprintf( "+++++++++++ DEACTIVATED LOCAL TASK: %d, STATE: %d\n",
-           task->pid,task->state );
+//  kprintf( "+++++++++++ DEACTIVATED LOCAL TASK: %d, STATE: %d\n",
+//           task->pid,task->state );
   /* In case target task is running, we must reschedule it. */
   if( task->state == TASK_STATE_RUNNING ) {
+//    kprintf( ">>>> SETTING 'NEED RESCHEDULE'\n" );
     sched_set_current_need_resched();
   }
 
@@ -223,7 +230,7 @@ static inline void __deactivate_local_task(task_t *task, eza_sched_cpudata_t *sc
   sched_data->stats->active_tasks--;
   sched_data->stats->sleeping_tasks++;
   //kprintf( "+++++++++++ DEACTIVATED LOCAL TASK: %d\n", task->pid );
-  __dump_prio_array(sched_data,192,"DEACT LOCAL");
+//  __dump_prio_array(sched_data,192,"DEACT LOCAL");
 }
 
 static cpu_id_t def_cpus_supported(void){
@@ -378,7 +385,7 @@ static void def_schedule(void)
   UNLOCK_CPU_SCHED_DATA(sched_data);
   UNLOCK_TASK_STRUCT(current);
 
-//  kprintf( "** [%d] RESCHED TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , timeslice: %d **\n",
+//  kprintf( "** [%d] RESCHED TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , TS: %d **\n",
 //           cpu_id(), current_task()->pid, need_switch,
 //           next->pid, EZA_TASK_SCHED_DATA(next)->time_slice );
 
@@ -456,13 +463,23 @@ out_unlock:
 static status_t __change_task_state(task_t *task,task_state_t new_state,
                                     lazy_sched_handler_t h,void *data)
 {
+  status_t r;
+
+//  kprintf( "]]]]] BEFORE CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d\n",
+//           in_atomic(), current_task_needs_resched() );
+  interrupts_disable();
   LOCK_TASK_STRUCT(task);
 
   if( task->cpu == cpu_id() ) {
-    return __change_local_task_state(task,new_state,h,data);
+    r=__change_local_task_state(task,new_state,h,data);
   } else {
-    return __change_remote_task_state(task,new_state);
+    r=__change_remote_task_state(task,new_state);
   }
+  interrupts_enable();
+//  kprintf( "]]]]] AFTER CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d\n",
+//           in_atomic(), current_task_needs_resched() );
+  cond_reschedule();
+  return r;
 }
 
 status_t def_change_task_state(task_t *task,task_state_t new_state)

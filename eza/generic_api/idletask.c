@@ -35,6 +35,7 @@
 #include <ipc/ipc.h>
 #include <ipc/port.h>
 #include <eza/arch/asm.h>
+#include <eza/arch/preempt.h>
 
 task_t *idle_tasks[MAX_CPUS];
 
@@ -46,7 +47,9 @@ ulong_t syscall_counter = 0;
 task_t *server_task;
 status_t server_port;
 
-static void wait_ticks(ulong_t n, char *s)
+#define wait_ticks(x,y)
+
+static void __wait_ticks(ulong_t n, char *s)
 {
   uint64_t target_tick = swks.system_ticks_64 + n;
 
@@ -85,6 +88,7 @@ static void thread2(void *data)
       __asm__  __volatile__( "cli" );
       panic( "[Server]: Can't receive data from port ! %d\n", r );
     }
+    __wait_ticks(300, "Server");
   }
 }
 
@@ -97,14 +101,14 @@ static void thread4(void *data)
 
   while(1) {
     memset(_buf,0,sizeof(_buf));
-    kprintf( "[Client %d]: Sending data to server...\n",
-             current_task()->pid);
+    kprintf( "[Client %d]: Sending data to server. ATOMIC: %d\n",
+             current_task()->pid, in_atomic() );
     r = ipc_port_send(server_task,server_port,(ulong_t)test_data,
                       snd_len,(ulong_t)_buf,sizeof(_buf));
-    kprintf( "[Client %d]: Data was sent: %d\n",
-             current_task()->pid, r );
+    kprintf( "[Client %d]: Data was sent: %d, ATOMIC: %d\n",
+             current_task()->pid, r, in_atomic() );
     if( r >=0 ) {
-      kprintf( "[Client N2]: %s\n", _buf );
+        kprintf( "[Client %d]: %s\n", current_task()->pid, _buf );
     } else {
       __asm__  __volatile__( "cli" );
       panic( "[Client N2]: Can't receive response from server ! %d\n", r );      
@@ -123,14 +127,14 @@ static void thread5(void *data)
 
   while(1) {
     memset(_buf,0,sizeof(_buf));
-    kprintf( "[Client %d]: Sending data to server...\n",
-             current_task()->pid);
+    kprintf( "[Client %d]: Sending data to server. ATOMIC: %d\n",
+             current_task()->pid, in_atomic() );
     r = ipc_port_send(server_task,server_port,(ulong_t)test_data,
                       snd_len,(ulong_t)_buf,sizeof(_buf));
-    kprintf( "[Client %d]: Data was sent: %d\n",
-             current_task()->pid, r );
+    kprintf( "[Client %d]: Data was sent: %d, ATOMIC: %d\n",
+             current_task()->pid, r, in_atomic() );
     if( r >=0 ) {
-      kprintf( "[Client N3]: %s\n", _buf );
+      kprintf( "[Client %d]: %s\n", current_task()->pid,_buf );
     } else {
       __asm__  __volatile__( "cli" );
       panic( "[Client N3]: Can't receive response from server ! %d\n", r );      
