@@ -146,6 +146,7 @@ static void __put_receiver_into_sleep(task_t *receiver,ipc_port_t *port)
   IPC_UNLOCK_PORT_W(port);
 
   waitqueue_yield(&w);
+  kprintf( "> Waking up server: %d\n", receiver->pid );
 }
 
 static status_t __allocate_port(ipc_port_t **out_port,ulong_t flags,
@@ -410,8 +411,12 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
   __notify_message_arrived(p);
 
   /* Sender should wait for the reply, so put it into sleep here. */
+  kprintf( "ipc_port_send(): Putting client %d into sleep.\n",
+           sender->pid);
   event_yield( &msg->event );
-
+  kprintf( "ipc_port_send(): Client %d returned from sleep.\n",
+           sender->pid);
+  
   /* Copy reply data to our buffers. */
   r=__transfer_reply_data(msg,rcv_buf,rcv_size,false);
   if( !r ) {

@@ -37,6 +37,8 @@
 #include <eza/arch/smp.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
+#include <eza/swks.h>
+#include <eza/arch/mm_types.h>
 
 static int __map_apic_page(void)
 {
@@ -124,3 +126,8 @@ void arch_ap_specific_init(void)
 }
 
 #endif
+
+void arch_initialize_swks(void)
+{
+  swks.ioports_available=PAGE_SIZE-sizeof(tss_t);
+}

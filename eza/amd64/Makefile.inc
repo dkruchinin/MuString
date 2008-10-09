@@ -24,7 +24,8 @@ LIBARCHEZA_OBJS=eza/amd64/pmm.o eza/amd64/e820map.o \
 	eza/amd64/usercopy.o \
 	eza/amd64/faults/mem_faults.o \
 	eza/amd64/faults/fpu_faults.o \
-	eza/amd64/faults/common_faults.o
+	eza/amd64/faults/common_faults.o \
+	eza/amd64/resources/ioports.o
 
 ifeq ($(CONFIG_SMP),y)
 LIBARCHEZA_OBJS += eza/amd64/smpap.o \

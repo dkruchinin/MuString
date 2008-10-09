@@ -98,6 +98,8 @@ typedef struct {
   unsigned nx: 1;
 } __attribute__ ((packed)) pte_t;
 
+#define TYPE_LONG_SHIFT  6
+#define BITS_PER_LONG  64
 
 #ifdef CONFIG_ALWAYS_INLINE
 #define always_inline inline __attribute__((always_inline))

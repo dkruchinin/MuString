@@ -228,4 +228,8 @@ status_t sys_port_receive( ulong_t port, ulong_t flags, ulong_t recv_buf,
  */
 status_t sys_port_reply(ulong_t port, ulong_t msg_id,ulong_t reply_buf,
                         ulong_t reply_len);
+
+
+status_t sys_allocate_ioports(ulong_t first_port,ulong_t num_ports);
+
 #endif

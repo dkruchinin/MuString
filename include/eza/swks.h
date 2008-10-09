@@ -69,6 +69,8 @@ typedef struct __swks {
   uint16_t sub_version;
   uint16_t release;
 
+  /* IO ports stuff. */
+  ulong_t ioports_available;  
 } swks_t;
 
 
@@ -76,6 +78,7 @@ typedef struct __swks {
 extern swks_t swks;
 
 void initialize_swks(void);
+void arch_initialize_swks(void);
 
 #endif
 

@@ -34,20 +34,23 @@
 #include <eza/spinlock.h>
 #include <ipc/ipc.h>
 #include <ipc/port.h>
+#include <eza/arch/asm.h>
 
 task_t *idle_tasks[MAX_CPUS];
 
 #define STEP 5000
+#define TICKS_TO_WAIT 300
 
 ulong_t syscall_counter = 0;
 
 task_t *server_task;
 status_t server_port;
 
-static void wait_ticks(ulong_t n)
+static void wait_ticks(ulong_t n, char *s)
 {
   uint64_t target_tick = swks.system_ticks_64 + n;
 
+  kprintf( "wait_ticks(): %s\n",s );
   while(swks.system_ticks_64 < target_tick) {
   }
 }
@@ -66,10 +69,12 @@ static void thread2(void *data)
 
   while( 1 ) {
     memset(buf,0,sizeof(buf));
+    kprintf( "[Server]: Extracting a message ...\n" );
     r=ipc_port_receive(current_task(), server_port, IPC_BLOCKED_ACCESS,
                        (ulong_t)buf,sizeof(buf),&rcv_stats);
+    kprintf( "[Server]: Done ! %d\n",r );
     if( !r ) {
-      kprintf( "[Server]: %s\n", buf );
+      kprintf( "[Server]: %s [msg id: %d]\n",buf,rcv_stats.msg_id);
       r=ipc_port_reply(current_task(),server_port,rcv_stats.msg_id,
                        (uintptr_t)server_reply,reply_len);
       if( r<0 ) {
@@ -83,24 +88,122 @@ static void thread2(void *data)
   }
 }
 
-static void thread3(void *data)
+static void thread4(void *data)
 {
   status_t r;
   char _buf[64];
-  char *test_data="Server, are you there ?";
+  char *test_data="Server, are you there [2]?";
   ulong_t snd_len=strlen(test_data)+1;
 
   while(1) {
     memset(_buf,0,sizeof(_buf));
+    kprintf( "[Client %d]: Sending data to server...\n",
+             current_task()->pid);
     r = ipc_port_send(server_task,server_port,(ulong_t)test_data,
                       snd_len,(ulong_t)_buf,sizeof(_buf));
+    kprintf( "[Client %d]: Data was sent: %d\n",
+             current_task()->pid, r );
     if( r >=0 ) {
-      kprintf( "[Client]: %s\n", _buf );
+      kprintf( "[Client N2]: %s\n", _buf );
     } else {
       __asm__  __volatile__( "cli" );
-      panic( "[Client]: Can't receive response from server ! %d\n", r );      
+      panic( "[Client N2]: Can't receive response from server ! %d\n", r );      
     }
-    wait_ticks(100);
+    wait_ticks(TICKS_TO_WAIT, "2");
+  }
+  for(;;);
+}
+
+static void thread5(void *data)
+{
+  status_t r;
+  char _buf[64];
+  char *test_data="Server, are you there [3]?";
+  ulong_t snd_len=strlen(test_data)+1;
+
+  while(1) {
+    memset(_buf,0,sizeof(_buf));
+    kprintf( "[Client %d]: Sending data to server...\n",
+             current_task()->pid);
+    r = ipc_port_send(server_task,server_port,(ulong_t)test_data,
+                      snd_len,(ulong_t)_buf,sizeof(_buf));
+    kprintf( "[Client %d]: Data was sent: %d\n",
+             current_task()->pid, r );
+    if( r >=0 ) {
+      kprintf( "[Client N3]: %s\n", _buf );
+    } else {
+      __asm__  __volatile__( "cli" );
+      panic( "[Client N3]: Can't receive response from server ! %d\n", r );      
+    }
+    wait_ticks(TICKS_TO_WAIT, "3");
+  }
+  for(;;);
+}
+
+static void thread6(void *data)
+{
+  status_t r;
+  char _buf[64];
+  char *test_data="Server, are you there [4]?";
+  ulong_t snd_len=strlen(test_data)+1;
+
+  while(1) {
+    memset(_buf,0,sizeof(_buf));
+
+    kprintf( "[Client N4]: Sending data to server...\n" );
+    r = ipc_port_send(server_task,server_port,(ulong_t)test_data,
+                      snd_len,(ulong_t)_buf,sizeof(_buf));
+    kprintf( "[Client N4]: Data was sent: %d\n", r );
+    if( r >=0 ) {
+      kprintf( "[Client N4]: %s\n", _buf );
+    } else {
+      __asm__  __volatile__( "cli" );
+      panic( "[Client N4]: Can't receive response from server ! %d\n", r );      
+    }
+    wait_ticks(TICKS_TO_WAIT, "4");
+  }
+  for(;;);
+}
+
+
+static void thread3(void *data)
+{
+  status_t r;
+  char _buf[64];
+  char *test_data="Server, are you there [1]?";
+  ulong_t snd_len=strlen(test_data)+1;
+
+  kprintf( "Creating client N2 ...\n" );
+  if( kernel_thread(thread4,NULL) != 0 ) {
+    panic( "Can't create client thread N2 for testing port IPC functionality !\n" );
+  }
+
+  kprintf( "Creating client N3 ...\n" );
+  if( kernel_thread(thread5,NULL) != 0 ) {
+    panic( "Can't create client thread N3 for testing port IPC functionality !\n" );
+  }
+
+  sched_change_task_state(current_task(), TASK_STATE_STOPPED);
+  for(;;);
+  
+  kprintf( "Creating client N4 ...\n" );
+  if( kernel_thread(thread6,NULL) != 0 ) {
+    panic( "Can't create client thread N4 for testing port IPC functionality !\n" );
+  }
+
+  while(1) {
+    memset(_buf,0,sizeof(_buf));
+    kprintf( "[Client N1]: Sending data to server...\n" );
+    r = ipc_port_send(server_task,server_port,(ulong_t)test_data,
+                      snd_len,(ulong_t)_buf,sizeof(_buf));
+    kprintf( "[Client N1]: Data was sent: %d\n", r );
+    if( r >=0 ) {
+      kprintf( "[Client N1]: %s\n", _buf );
+    } else {
+      __asm__  __volatile__( "cli" );
+      panic( "[Client N1]: Can't receive response from server ! %d\n", r );      
+    }
+    wait_ticks(TICKS_TO_WAIT, "1" );
   }
   for(;;);
 }
@@ -110,14 +213,12 @@ void idle_loop(void)
   uint64_t target_tick = swks.system_ticks_64 + 100;
 
   if( cpu_id() == 0 ) {
-      /* Start server */
-      if( kernel_thread(thread2,NULL) != 0 ) {
-          panic( "Can't create server thread for testing port IPC functionality !\n" );
-      }
-      /* Start client */
-      if( kernel_thread(thread3,NULL) != 0 ) {
-          panic( "Can't create client thread for testing port IPC functionality !\n" );
-      }
+    if( kernel_thread(thread2,NULL) != 0 ) {
+      panic( "Can't create server thread for testing port IPC functionality !\n" );
+    }
+    if( kernel_thread(thread3,NULL) != 0 ) {
+      panic( "Can't create client thread for testing port IPC functionality !\n" );
+    }
   }
 
   for( ;; ) {

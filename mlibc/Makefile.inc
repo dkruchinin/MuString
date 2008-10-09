@@ -10,4 +10,5 @@ MLIBC_OBJS+=mlibc/stdlib.o\
 	mlibc/unistd.o \
 	mlibc/index_array.o \
 	mlibc/linked_array.o \
-	mlibc/waitqueue.o
+	mlibc/waitqueue.o \
+	mlibc/rbtree.o

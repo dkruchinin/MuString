@@ -81,6 +81,21 @@ static void free_task_sched_data(eza_sched_taskdata_t *data)
   /* TODO: [mt] Free structure via slabs ! */
 }
 
+static inline void __dump_prio_array(eza_sched_cpudata_t *sched_data,
+                                     int prio, char *s)
+{
+    list_head_t *lh=&sched_data->active_array->queues[prio];
+    list_node_t *ln;
+
+    kprintf( "> [%s] Dumping prio %d:",s,prio );
+    list_for_each( lh, ln ) {
+        eza_sched_taskdata_t *td = container_of(ln,eza_sched_taskdata_t,
+                                                runlist);
+        kprintf( " %d ",td->task->pid );
+    }
+    kprintf( "\n" );
+}
+ 
 static eza_sched_cpudata_t *allocate_cpu_sched_data(cpu_id_t cpu) {
   /* TODO: [mt] Allocate memory via slabs !!!  */
   page_frame_t *page = alloc_pages(16, AF_PGEN);
@@ -179,7 +194,8 @@ static inline status_t __activate_local_task(task_t *task, eza_sched_cpudata_t *
   __add_task_to_array(sched_data->active_array,task);
   sched_data->stats->active_tasks++;
 
-//  kprintf( "++ NEW PRIO: %d, CURRENT: %p, CRRENT PRIO: %d\n", EZA_TASK_PRIORITY(task), current_task(), cdata->priority );
+//  kprintf( "++ ACTIVATING LOCAL TASK: %d NEW PRIO: %d, CURRENT: %p, CRRENT PRIO: %d\n",
+//           task->pid, EZA_TASK_PRIORITY(task), current_task()->pid, cdata->priority );
   if( EZA_TASK_PRIORITY(task) < cdata->priority ) {
     sched_set_current_need_resched();
   }
@@ -193,6 +209,8 @@ static inline void __deactivate_local_task(task_t *task, eza_sched_cpudata_t *sc
 {
   eza_sched_taskdata_t *tdata = EZA_TASK_SCHED_DATA(task);
 
+  kprintf( "+++++++++++ DEACTIVATED LOCAL TASK: %d, STATE: %d\n",
+           task->pid,task->state );
   /* In case target task is running, we must reschedule it. */
   if( task->state == TASK_STATE_RUNNING ) {
     sched_set_current_need_resched();
@@ -204,7 +222,8 @@ static inline void __deactivate_local_task(task_t *task, eza_sched_cpudata_t *sc
 
   sched_data->stats->active_tasks--;
   sched_data->stats->sleeping_tasks++;
-//  kprintf( "+++++++++++ DEACTIVATED LOCAL TASK: %d\n", task->pid );
+  //kprintf( "+++++++++++ DEACTIVATED LOCAL TASK: %d\n", task->pid );
+  __dump_prio_array(sched_data,192,"DEACT LOCAL");
 }
 
 static cpu_id_t def_cpus_supported(void){
