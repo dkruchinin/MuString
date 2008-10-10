@@ -154,8 +154,8 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
     kprintf( "#PF in kernel mode: RIP = 0x%X\n", stack_frame->rip );    
   }
   get_fault_address(a);
-  kprintf( "[!!!] Unhandled PF exception ! Stopping (CODE: %d, See page 225). Address: %p\n",
-           stack_frame->error_code, a);
+  kprintf( "[!!!] Unhandled PF exception ! Stopping (CODE: %d, See page 225). Address: %p\nRIP = %p\n",
+           stack_frame->error_code, a,stack_frame->rip);
   kprintf( "dump_tss: rsp0=%p,\n",
             ts->rsp0);
   l1: goto l1;
