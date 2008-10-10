@@ -29,6 +29,9 @@
 /* NOTE: 'syscall_point' must immediately follow the list
  * of syscalls since it is used for determening the amount
  * of available system calls.
+ * NOTE: since %rcx is used by the 'syscall' opcode for saving
+ * return address, processes that invoke 'syscall' must pass
+ * the fourth parameter via %r10.
  */
 syscall_table:
 	.quad	sys_get_pid       	/* 0 */
@@ -56,8 +59,13 @@ syscall_point:
 
 	/* After changing stack pointer, we can enable IRQs */
 	sti
-
 	SAVE_GPR
+
+	/* Since %rcx contains the return address, we should reload
+	 * %rcx from %r10.
+	 */
+	movq %r10,%rcx
+
 	call *syscall_table(,%rax,8)
 	RESTORE_GPR
 

@@ -295,7 +295,6 @@ static void def_scheduler_tick(void)
       __remove_task_from_array(cpudata->active_array,current);
       __recalculate_timeslice_and_priority(current);
       __add_task_to_array(cpudata->active_array,current);
-      current->state = TASK_STATE_RUNNABLE;
       kprintf( "** CPU %d: TIMESLICE IS OVER ! NEXT TIMESLICE: %d\n",
                cpu_id(), tdata->time_slice );
       sched_set_current_need_resched();
