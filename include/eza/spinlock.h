@@ -42,10 +42,10 @@
 #define spinlock_declare(s)  spinlock_t s
 #define spinlock_extern(s)   extern spinlock_t s
 
-#define spinlock_initialize(x,y)                \
+#define spinlock_initialize(x,y...)                \
   (((spinlock_t *)x)->__spin_val = __SPINLOCK_UNLOCKED_V)
 
-#define rw_spinlock_initialize(x,y)             \
+#define rw_spinlock_initialize(x,y...)             \
   do {                                          \
     (rw_spinlock_t *)((x)->__r=0);              \
     (rw_spinlock_t *)((x)->__w=0);              \

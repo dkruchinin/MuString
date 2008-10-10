@@ -22,7 +22,7 @@
  *
  */
 
-#include <eza/arch/mm_types.h>
+#include <mm/slab.h>
 #include <eza/arch/page.h>
 #include <eza/arch/cpu.h>
 #include <eza/kconsole.h>
@@ -89,7 +89,7 @@ static void main_routine_stage1(void)
   initialize_ipc();
 
   /* OK, we can proceed. */
-  //start_init();
+  start_init();
   //server_run_tasks();
  
   /* Enter idle loop. */
@@ -107,19 +107,22 @@ void main_routine(void) /* this function called from boostrap assembler code */
   /* After initializing memory stuff, the master CPU should perform
    * the final initializations.
    */
-  kcons->enable();
-  print_kernel_version_info();
-  kprintf("[MB] Modules: %d\n",init.c);
-  
+    
   /* init memory manager stuff - stage 0 */
   arch_cpu_init(0);
-  kprintf("[LW] Initialized CPU vectors.\n");
-  mm_init();
   install_fault_handlers();
-  initialize_irqs();
+  initialize_irqs();  
+  kcons->enable();
+  print_kernel_version_info();
+  kprintf("[MB] Modules: %d\n",init.c);  
+  kprintf("[LW] Initialized CPU vectors.\n");
+
+  mm_init();
+  slab_allocator_init();
+  
   initialize_scheduler();
 
-  initialize_timer();
+  initialize_timer();  
 
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.
