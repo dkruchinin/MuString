@@ -27,8 +27,10 @@
 #include <eza/arch/types.h>
 
 #define USER_VA_SIZE  0x100000000000     /* 16 Terabytes */
-#define USER_START_VIRT  0x1000000
+#define USER_START_VIRT  0x1001000
 #define USER_END_VIRT  (USER_START_VIRT+USER_VA_SIZE)
+
+#define USPACE_END       (USER_START_VIRT+USER_VA_SIZE)
 
 #define USER_STACK_SIZE  4
 

@@ -28,6 +28,8 @@
 #include <kernel/elf.h>
 
 typedef elf64_t elf_head_t;
+typedef elf64_pr_t elf_pr_t;
+typedef elf64_sh_t elf_sh_t;
 
 #endif
 
