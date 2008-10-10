@@ -24,10 +24,14 @@
 #include <eza/task.h>
 
 /* Syscalls identificators. */
-#define SC_GET_PID         0
-#define SC_CREATE_TASK     1
-#define SC_TASK_CONTROL    2
-#define SC_MMAP            3
+#define SC_GET_PID          0
+#define SC_CREATE_TASK      1
+#define SC_TASK_CONTROL     2
+#define SC_MMAP             3
+#define SC_CREATE_PORT      4
+#define SC_PORT_SEND        5
+#define SC_PORT_RECEIVE     6
+#define SC_PORT_REPLY       7
 
 /**
  * @fn status_t sys_get_pid(void)
@@ -92,7 +96,7 @@ status_t sys_create_task(task_creation_flags_t flags);
  *     Otherwise, -EINVAL is returned.
  *
  * @param arg - Command's argument.
- * @param - Return value. Rreturn values are command-specific.
+ * @return Rreturn values are command-specific.
  * In general, for 'setters', this function returns zero on successful completion,
  * otherwise it returns on of the following errors (negated):
  *    EINVAL - invalid command/argument;
@@ -106,8 +110,7 @@ status_t sys_task_control( pid_t pid, ulong_t cmd, ulong_t arg);
 
 /**
  * @fn status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_t offset);
- * @brief mmap (shared) memory
- *
+ * @brief mmap (shared) memory *
  * @param addr - address where you want to map memory
  * @param size - size of memory to map
  * @param flags - mapping flags
@@ -116,5 +119,117 @@ status_t sys_task_control( pid_t pid, ulong_t cmd, ulong_t arg);
  *
  */
 status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_t offset);
+
+
+/**
+ * @fn status_t sys_create_port( ulong_t flags, ulong_t queue_size )
+ * @brief Create an IPC port.
+ *
+ * This system call creates new IPC port for the calling process using
+ * target flags. The port will have queue size equal to the @a queue_size.
+ * After a new port have been successfully created, it can be used for
+ * receiving data.
+ *
+ * @param flags - Flags that control properties of a new port.
+ *    Currently no flags supported et all, so this parameter is ignored.
+ * @queue_size - size of the message queue for the port. If this value
+ *    exceeds the maximum port queue size allowed for the calling process,
+ *    this function will fail. Passing zero as queue size tells the kernel
+ *    to use the default port queue size.
+ *
+ * @return If a new port was successfully created this function returns
+ * its descriptor (a small positive/zero number). In case of failure,
+ * negations of the following error codes are returned:
+ *    EMFILE - calling process has reached the maximum number of allowed
+ *             IPC ports.
+ *    ENOMEM - memory allocation error occured during port allocation.
+ *    ERERM  - calling process wasn't allowed to create a new IPC port.
+ *    EINVAL - insufficient flags passed.
+ */
+status_t sys_create_port( ulong_t flags, ulong_t queue_size );
+
+/**
+ * @fn status_t sys_port_send(pid_t pid,ulong_t port,uintptr_t snd_buf,
+ *                            ulong_t snd_size,uintptr_t rcv_buf,ulong_t rcv_size)
+ * @brief Synchronously send data to target port.
+ *
+ * This system call synchronously sends data to target port that belongs
+ * to target process. After sending data, calling process is put into sleep
+ * until the receiver receives the data and replies to the calling process.
+ *
+ * @param pid Pid of the process that owns the port.
+ * @param port Identificator of the port.
+ * @param snd_buf Pointer to the buffer that contains data to be sent.
+ * @param snd_size Number of bytes to be sent.
+ * @param rcv_buf Pointer to buffer that will contain reply data.
+ * @param rcv_size Size of the receive buffer.
+ *
+ * @return After successful data transfer, this function returns amount
+ * of bytes in the server reply message. Otherwise, negations of
+ * the following errors are returned:
+ *    ESRCH - Insufficient pid was used.
+ *    EFAULT - Insufficient memory address was passed.
+ *    EBUSY  - No free space in target port for storing this request.
+ *    ENOMEM - Memory allocation error occured while processing this
+ *             request.
+ *    DEADLOCK - Sender is trying to send message to itself.
+ *    EINVAL - This return is returned upon the following conditions:
+ *             a) insufficient port number was provided;
+ *             b) message had insufficient size (currently only up to 2MB
+ *                can be transferred via ports).
+ */
+status_t sys_port_send(pid_t pid,ulong_t port,uintptr_t snd_buf,
+                       ulong_t snd_size,uintptr_t rcv_buf,ulong_t rcv_size);
+
+/**
+ * @fn status_t sys_port_receive( ulong_t port, ulong_t flags, ulong_t recv_buf,
+ *                                ulong_t recv_len)
+ * @brief Receives data from target port.
+ *
+ * This system call receives data from target port and stores it to target
+ * buffer. This function won't put the calling process into sleep
+ * (until available messages appear) unless a special flag is specified.
+ *
+ * @param port Target port that belongs to the calling process.
+ * @param flags Flags that control this operation. The following flags
+ *    are currently supported:
+ *       IPC_BLOCKED_ACCESS - put calling process into sleep until
+ *                            new messages appear.
+ * @param recv Output buffer where to put received data.
+ * @param recv_len Size of output buffer.
+ *
+ * @return Upon successful reception of a new message, this function
+ *  returns its ID and size encoded in the following form:
+ *       bits 21-0: message size;
+ *       bits 22-31: message id.
+ *  Otherwise, negations of the following errors are returned:
+ *     EINVAL - insufficient port number was provided.
+ *     EFAULT - Insufficient memory address was passed.
+ *     EWOULDBLOCK - Non-blocking access was requested and there are
+ *                   no messages available in the queue.
+ */
+status_t sys_port_receive( ulong_t port, ulong_t flags, ulong_t recv_buf,
+                           ulong_t recv_len);
+
+/**
+ * @fn status_t sys_port_reply(ulong_t port, ulong_t msg_id,ulong_t reply_buf,
+ *                             ulong_t reply_len)
+ * @brief Reply to port message.
+ *
+ * This system call replies to target port message which means the following:
+ *   a) copy reply data to the sender (i.e. the process, that has sent
+ *      the message);
+ *   b) wake up the sender;
+ *
+ * @param port The port used for message reception.
+ * @param msg_id Message ID.
+ * @param reply_buf Buffer that contains data to reply.
+ * @param reply_len Number of bytes to send.
+ */
+status_t sys_port_reply(ulong_t port, ulong_t msg_id,ulong_t reply_buf,
+                        ulong_t reply_len);
+
+
+status_t sys_allocate_ioports(ulong_t first_port,ulong_t num_ports);
 
 #endif

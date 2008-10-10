@@ -14,6 +14,7 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
+ * (c) Copyright newlib dev team - originally based on newlib amd64 port.
  * (c) Copyright 2006,2007,2008 MuiString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2005,2008 MadTirra <madtirra@jarios.org>
  *

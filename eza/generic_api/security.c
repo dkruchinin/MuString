@@ -40,10 +40,16 @@ static bool def_check_scheduler_control(task_t *target,ulong_t cmd, ulong_t arg)
   return true;
 }
 
+static bool def_check_allocate_ioports(task_t *target,ulong_t port,ulong_t num_ports)
+{
+  return true;
+}
+
 static security_operations_t def_sops = {
   .check_process_control = def_check_process_control,
   .check_create_process = def_check_create_process,
   .check_scheduler_control = def_check_scheduler_control,
+  .check_allocate_ioports = def_check_allocate_ioports,
 };
 
 security_operations_t *security_ops = &def_sops;

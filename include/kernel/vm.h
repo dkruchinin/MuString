@@ -26,9 +26,30 @@
 
 #include <eza/arch/types.h>
 
-#define USER_START_VIRT  0x1fffff000000
+#define USER_VA_SIZE  0x100000000000     /* 16 Terabytes */
+#define USER_START_VIRT  0x1001000
+#define USER_END_VIRT  (USER_START_VIRT+USER_VA_SIZE)
+
+#define USPACE_END       (USER_START_VIRT+USER_VA_SIZE)
 
 #define USER_STACK_SIZE  4
+
+status_t copy_to_user(void *dest,void *src,ulong_t size);
+status_t copy_from_user(void *dest,void *src,ulong_t size);
+
+static inline bool valid_user_address(uintptr_t addr)
+{
+  return (addr >= USER_START_VIRT && addr < USER_END_VIRT);
+}
+
+static inline bool valid_user_address_range(uintptr_t addr,ulong_t size)
+{
+  if(addr >= USER_START_VIRT && addr < USER_END_VIRT) {
+    addr += size;
+    return (addr >= USER_START_VIRT && addr < USER_END_VIRT);
+  }
+  return false;
+}
 
 #endif /* __KERNEL_VM_H__ */
 

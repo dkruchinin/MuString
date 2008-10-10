@@ -10,7 +10,6 @@ LIBARCHEZA_OBJS=eza/amd64/pmm.o eza/amd64/e820map.o \
 	eza/amd64/timer.o \
 	eza/amd64/platform.o \
 	eza/amd64/interrupt.o \
-	eza/amd64/fault.o \
 	eza/amd64/mm/mm.o \
 	eza/amd64/mm/pt.o \
 	eza/amd64/sched/task.o \
@@ -21,7 +20,12 @@ LIBARCHEZA_OBJS=eza/amd64/pmm.o eza/amd64/e820map.o \
 	eza/amd64/hw/fake_apic.o \
 	eza/amd64/idt.o \
 	eza/amd64/syscalls.o \
-	eza/amd64/ipc/port.o
+	eza/amd64/usercopy.o \
+	eza/amd64/faults/mem_faults.o \
+	eza/amd64/faults/fpu_faults.o \
+	eza/amd64/faults/common_faults.o \
+	eza/amd64/fault.o \
+	eza/amd64/resources/ioports.o
 
 ifeq ($(CONFIG_SMP),y)
 LIBARCHEZA_OBJS += eza/amd64/smpap.o \

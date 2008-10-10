@@ -118,7 +118,7 @@ struct __tss { /* TSS definion structure */
   uint64_t reserve3;
   uint16_t reserve4;
   uint16_t iomap_base;
-  uint8_t iomap[TSS_IOMAP_SIZE];
+  uint8_t iomap[];
 } __attribute__ ((packed));
 typedef struct __tss tss_t;
 

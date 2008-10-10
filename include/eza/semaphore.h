@@ -11,12 +11,11 @@ typedef struct __rw_semaphore {
   volatile ulong_t __sem_val;
 } rw_semaphore_t;
 
-#define DEFINE_SEMAPHORE(n,c) {                 \
-  semaphore_t n = { .__sem_val = c; }
+#define DEFINE_SEMAPHORE(n,c)  semaphore_t n = { .__sem_val=c };
 
-#define DEFINE_RW_SEMAPHORE(n,c) {              \
-  rw_semaphore_t n = { .__sem_val = c; }
+#define DEFINE_RW_SEMAPHORE(n,c)  rw_semaphore_t n = { .__sem_val=c };
 
+#define DEFINE_MUTEX(n) semaphore_t n = { .__sem_val=1 };
 
 static inline void semaphore_initialize(semaphore_t *s,ulong_t c)
 {

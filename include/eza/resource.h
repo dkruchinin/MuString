@@ -27,6 +27,7 @@
 #include <ds/list.h>
 #include <eza/arch/types.h>
 #include <eza/spinlock.h>
+#include <eza/task.h>
 
 typedef enum __resource_type {
   RESOURCE_IO_PORT = 0,
@@ -52,6 +53,12 @@ static inline void init_resource(resource_t *resource,resource_type_t type)
   list_init_node(&resource->l);
   resource->add_ref = resource->release = NULL;
 }
+
+void initialize_ioports(void);
+
+status_t arch_allocate_ioports(task_t *task,ulong_t start_port,
+                               ulong_t num_ports);
+void initialize_resources(void);
 
 #endif
 

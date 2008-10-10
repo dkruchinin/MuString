@@ -25,6 +25,10 @@
 #ifndef __ARCH_FAULT_H__
 #define __ARCH_FAULT_H__ 
 
+#include <eza/arch/types.h>
+#include <eza/arch/page.h>
+#include <eza/arch/interrupt.h>
+
 enum __fault_ids {
   DE_FAULT = 0, /* Divide-by-Zero-Error */
   DB_FAULT = 1, /* Debug */
@@ -76,5 +80,9 @@ extern void security_exception_fault_handler(void);
 
 void install_fault_handlers(void);
 
+#define kernel_fault(stack_frame) \
+    (stack_frame->cs == gdtselector(KTEXT_DES))
+
+uint64_t fixup_fault_address(uint64_t fault_address);
 #endif
 

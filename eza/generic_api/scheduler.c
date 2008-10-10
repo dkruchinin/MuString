@@ -78,9 +78,6 @@ void initialize_scheduler(void)
   initialize_idle_tasks();
 }
 
-void reschedule_task(task_t *task) {
-}
-
 scheduler_t *sched_get_scheduler(const char *name)
 {
   scheduler_t *sched = NULL;
@@ -152,6 +149,16 @@ status_t sched_change_task_state(task_t *task,task_state_t state)
     return -ENOTTY;
   }
   return active_scheduler->change_task_state(task,state);
+}
+
+status_t sched_change_task_state_lazy(task_t *task,task_state_t state,
+                                      lazy_sched_handler_t handler,void *data)
+{
+  if(active_scheduler != NULL &&
+     active_scheduler->change_task_state_lazy != NULL) {
+    return active_scheduler->change_task_state_lazy(task,state,handler,data);
+  }
+  return -ENOTTY;
 }
 
 status_t sched_add_task(task_t *task)

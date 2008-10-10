@@ -46,6 +46,8 @@
 #define INIT_STACK_START INIT_CODE_START+0x100000
 #define INIT_STACK_PAGES 4
 
+#define STEP 300
+
 /* ovl 0x0,%rax; syscall; jmp <spin> */
 // 0x0f, 0x05,    
 static char init_code[] = { 0x48, 0x31, 0xc0, \
@@ -128,7 +130,7 @@ out:
   return r;
 }
 
-void start_init(void)
+void start_init1(void)
 {
   status_t r;
   task_t *init;
@@ -149,3 +151,29 @@ void start_init(void)
   }
 }
 
+static void test_init_thread(void *data)
+{
+  int round = 0;
+  uint64_t target_tick = swks.system_ticks_64 + 100;
+
+  for(;;) {
+    if( swks.system_ticks_64 >= target_tick ) {
+      kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
+               cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
+      target_tick += STEP;
+      round++;
+
+      if( round >= 3 ) {
+        kprintf( "****** DEACTIVATING MYSELF (%d)\n", current_task()->pid );
+        sched_change_task_state(current_task(), TASK_STATE_STOPPED);
+      }
+    }
+  }
+}
+
+void start_init(void)
+{
+  if( kernel_thread(test_init_thread,NULL) != 0 ) {
+    panic( "Can't start init thread !" );
+  }
+}

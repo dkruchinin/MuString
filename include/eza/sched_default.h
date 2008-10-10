@@ -80,6 +80,11 @@ typedef enum __sched_discipline {
   SCHED_ADAPTIVE = 2, /* Default 'O(1)-like' discipline. */
 } sched_discipline_t;
 
+typedef struct __eza_sched_prio_array {
+  eza_sched_type_t bitmap[EZA_SCHED_TOTAL_WIDTH];
+  list_head_t queues[EZA_SCHED_TOTAL_PRIOS];
+} eza_sched_prio_array_t;
+
 typedef struct __eze_sched_taskdata {
   spinlock_t sched_lock;
   priority_t static_priority, priority;
@@ -89,19 +94,14 @@ typedef struct __eze_sched_taskdata {
   task_t *task;
 
   time_slice_t max_timeslice;
+  eza_sched_prio_array_t *array;
 } eza_sched_taskdata_t;
-
-typedef struct __eza_sched_prio_array {
-  eza_sched_type_t bitmap[EZA_SCHED_TOTAL_WIDTH];
-  list_head_t queues[EZA_SCHED_TOTAL_PRIOS];
-} eza_sched_prio_array_t;
 
 typedef struct __eza_sched_cpudata {
   spinlock_t lock;
   scheduler_cpu_stats_t *stats;
   eza_sched_prio_array_t *active_array;
   eza_sched_prio_array_t arrays[EZA_SCHED_NUM_ARRAYS];
-  list_head_t non_active_tasks;
   cpu_id_t cpu_id;
 } eza_sched_cpudata_t;
 
@@ -119,6 +119,7 @@ static inline void __add_task_to_array(eza_sched_prio_array_t *array,task_t *tas
   eza_sched_taskdata_t *sched_data = (eza_sched_taskdata_t *)task->sched_data;
   priority_t prio = sched_data->priority;
 
+  sched_data->array = array;
   SET_BITMAP_BIT(array,prio);
   list_add2tail(&array->queues[prio],&sched_data->runlist);
 }
@@ -131,6 +132,8 @@ static inline void __remove_task_from_array(eza_sched_prio_array_t *array,task_t
   priority_t prio = sched_data->priority;
 
   list_del(&sched_data->runlist);
+  sched_data->array = NULL;
+
   if( list_is_empty( &array->queues[prio] ) ) {
     RESET_BITMAP_BIT(array,prio);
   }
@@ -147,7 +150,6 @@ static inline task_t *__get_most_prioritized_task(eza_sched_cpudata_t *sched_dat
       eza_sched_taskdata_t *sdata = list_entry(list_node_first(lh),eza_sched_taskdata_t,runlist);
       return sdata->task;
     } else {
-      kprintf( "__get_most_prioritized_task(): No runnable tasks for index %d\n", idx );
       RESET_BITMAP_BIT(array,idx);
     }
   }

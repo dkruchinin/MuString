@@ -49,6 +49,8 @@ typedef enum __task_creation_flag_t {
   CLONE_MM = 0x1,
 } task_creation_flags_t;
 
+#define TASK_FLAG_UNDER_STATE_CHANGE  0x1
+
 typedef enum __task_state {
   TASK_STATE_JUST_BORN = 0,
   TASK_STATE_RUNNABLE = 1,
@@ -74,6 +76,7 @@ typedef struct __task_struct {
   kernel_stack_t kernel_stack;
   page_directory_t page_dir;
   list_node_t pid_list;
+  ulong_t flags;
 
   spinlock_t lock;
 

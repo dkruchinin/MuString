@@ -37,6 +37,7 @@ typedef struct __security_operations_t {
   bool (*check_process_control)(task_t *target,ulong_t cmd, ulong_t arg);
   bool (*check_create_process)(task_creation_flags_t flags);
   bool (*check_scheduler_control)(task_t *target,ulong_t cmd, ulong_t arg);
+  bool (*check_allocate_ioports)(task_t *target,ulong_t port,ulong_t num_ports);  
 } security_operations_t;
 
 extern security_operations_t *security_ops;
