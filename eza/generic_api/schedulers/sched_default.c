@@ -546,6 +546,7 @@ static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
       if(arg <= EZA_SCHED_PRIORITY_MAX) {
         if( trusted_task(target) ) {
         } else {
+          return -EPERM;
         }
       }
       return -EINVAL;
