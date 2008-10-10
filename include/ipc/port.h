@@ -31,16 +31,33 @@
 #include <ds/linked_array.h>
 #include <ds/list.h>
 #include <eza/waitqueue.h>
+#include <eza/event.h>
+#include <ipc/buffer.h>
 
 struct __ipc_port_t;
 
+#define IPC_BUFFERED_PORT_LENGTH  1024
+
+/* TODO: [mt] Encode/decode 'receive()' return values properly. */
+#define ENCODE_RECV_RETURN_VALUE(msg_id,rcv_size)       \
+    ( ((msg_id) << 22) | rcv_size )
+#define DECODE_RECV_MSG_ID(encoded)             \
+    ((encoded)>>22)
+#define DECODE_RECV_MSG_SIZE(encoded)           \
+    ((encoded) & 0x3fffff)
+
+typedef struct __ipc_port_receive_stats {
+  ulong_t msg_id,bytes_received;
+} ipc_port_receive_stats_t;
+
 typedef struct __ipc_port_messsage_t {
-  ulong_t data_size,reply_size,id,flags;
-  task_t *sender;
+  ulong_t data_size,reply_size,id,replied_size;
   void *send_buffer,*receive_buffer;
   list_node_t l;
-  status_t retcode;
-  struct __ipc_port_t *port;  
+  event_t event;
+  struct __ipc_port_t *port;
+  ipc_user_buffer_t snd_buf, rcv_buf;
+  task_t *receiver;  /* To handle 'reply()' properly. */
 } ipc_port_message_t;
 
 typedef struct __ipc_port_t {
@@ -62,14 +79,14 @@ typedef struct __ipc_port_t {
 #define IPC_UNLOCK_PORT_W(p) spinlock_unlock(&p->lock)
 
 void initialize_ipc(void);
-status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size);
-status_t ipc_open_port(task_t *owner,ulong_t port,ulong_t flags,
-                       task_t *opener);
 
-/* 
- *
- */
-status_t arch_setup_port_message_buffers(task_t *caller,
-                                         ipc_port_message_t *message);
+status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size);
+status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
+                       ulong_t snd_size,uintptr_t rcv_buf,ulong_t rcv_size);
+status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
+                          ulong_t recv_buf,ulong_t recv_len,
+                          ipc_port_receive_stats_t *stats);
+status_t ipc_port_reply(task_t *owner, ulong_t port, ulong_t msg_id,
+                        ulong_t reply_buf,ulong_t reply_len);
 
 #endif

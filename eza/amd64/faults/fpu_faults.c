@@ -17,41 +17,43 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *
- * include/eza/security.h: security check procedures - related types and
- *                          prototypes.
+ * eza/amd64/faults/fpu_faults.c: contains routines for dealing with
+ *  FPU-related x86_64 CPU fauls.
+ *
  */
 
-#ifndef __SECURITY_H__
-#define  __SECURITY_H__
-
 #include <eza/arch/types.h>
-#include <eza/scheduler.h>
 #include <eza/arch/page.h>
-#include <eza/process.h>
+#include <eza/arch/fault.h>
+#include <eza/arch/mm_types.h>
+#include <eza/arch/interrupt.h>
+#include <eza/kernel.h>
+#include <mlibc/kprintf.h>
+#include <eza/arch/mm.h>
+#include <eza/smp.h>
 
-#define USERSPACE_TOP_ADDRESS 0xffffffffffff
-
-#define IS_USERSPACE_ADDRESS_VALID(addr) (addr < USERSPACE_TOP_ADDRESS)
-
-typedef struct __security_operations_t {
-  bool (*check_process_control)(task_t *target,ulong_t cmd, ulong_t arg);
-  bool (*check_create_process)(task_creation_flags_t flags);
-  bool (*check_scheduler_control)(task_t *target,ulong_t cmd, ulong_t arg);
-  bool (*check_allocate_ioports)(task_t *target,ulong_t port,ulong_t num_ports);  
-} security_operations_t;
-
-extern security_operations_t *security_ops;
-
-#define CAP_SCHED_POLICY 0
-
-static inline bool capable(task_t *task, ulong_t capability )
+void divide_by_zero_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
-  return true;
+  kprintf( "  [!!] #DE exception raised !\n" );
 }
 
-static inline bool trusted_task(task_t *task)
+void overflow_fault_handler_impl(void)
 {
-  return true;
+  kprintf( "  [!!] #Overflow exception raised !\n" );
 }
 
-#endif
+void coprocessor_segment_overrun_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+{
+    kprintf( "  [!!] #FPU segment overrun exception raised !\n" );
+}
+
+void fpu_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+{
+    kprintf( "  [!!] #FPU exception raised !\n" );
+}
+
+void simd_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+{
+    kprintf( "  [!!] #SIMD exception raised !\n" );
+}
+

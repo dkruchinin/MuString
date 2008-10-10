@@ -57,9 +57,9 @@ void timer_interrupt_handler(void *data)
 /* SMP-specific stuff. */
 void smp_local_timer_interrupt_tick(void)
 {
-  if(cpu_id() == 0) {
-    timer_tick();
-  }
-  sched_timer_tick();
+    if(cpu_id() == 0) {
+        timer_tick();
+    }
+    sched_timer_tick();
 }
 #endif

@@ -48,6 +48,7 @@
 #include <eza/arch/apic.h>
 #include <eza/arch/atomic.h>
 #include <ipc/port.h>
+#include <eza/resource.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
@@ -68,10 +69,12 @@ static void main_routine_stage1(void)
   set_cpu_online(0,1);  /* We're online. */
   sched_add_cpu(0);
 
-  arch_initialize_irqs(); 
+  arch_initialize_irqs();
   arch_specific_init();
+
   /* Initialize known hardware devices. */
   initialize_common_hardware();
+  initialize_resources();
   /* Since the PIC is initialized, all interrupts from the hardware
    * is disabled. So we can enable local interrupts since we will
    * receive interrups from the other CPUs via LAPIC upon unleashing
@@ -90,8 +93,8 @@ static void main_routine_stage1(void)
 
   /* OK, we can proceed. */
   //start_init();
-  server_run_tasks();
- 
+  //server_run_tasks();
+
   /* Enter idle loop. */
 
   kprintf( "CPU #0 is entering idle loop. Current task: %p, CPU ID: %d\n",
@@ -157,7 +160,7 @@ void main_smpap_routine(void)
   static cpu_id_t cpu = 1;
 
   kprintf("CPU#%d Hello folks! I'm here\n", cpu);
-  
+ 
   /* Ramap physical memory using page directory preparead be master CPU. */
   arch_cpu_init(cpu);
 

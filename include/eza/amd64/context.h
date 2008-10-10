@@ -79,15 +79,15 @@
  * to point just after saved GPRs area.
  */
 #define SAVE_MM \
-  mov %rsp, %r8; \
+  mov %rsp, %r13; \
   mov %rsp, %r10; \
-  and $0xfffffffffffffe00, %r8; \
-  mov %rsp, %r9; \
-  sub %r8, %r9; \
-  add $512, %r9; \
-  sub %r9, %rsp; \
+  and $0xfffffffffffffe00, %r13; \
+  mov %rsp, %r14; \
+  sub %r13, %r14; \
+  add $512, %r14; \
+  sub %r14, %rsp; \
   fxsave (%rsp); \
-  pushq %r9; \
+  pushq %r14; \
 
 #define RESTORE_MM \
   popq %r10; \

@@ -50,5 +50,7 @@ void initialize_swks(void)
   /*kprintf("[LW] Calibrating delay loop ...");
   swks.delay_loop=arch_calibrate_delay_loop();
   kprintf("%ld.\n",swks.delay_loop);*/
+
+  arch_initialize_swks();
 }
 
