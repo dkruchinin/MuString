@@ -193,6 +193,9 @@ static inline uintptr_t _k2p(uintptr_t p)
 
 #define TSS_BASIC_SIZE  104
 #define TSS_IOMAP_SIZE  ((4*4096)+1)  /* 16k&nil for mapping */
+#define TSS_DEFAULT_LIMIT  (TSS_BASIC_SIZE-1)
+#define TSS_IOPORTS_PAGES  1
+#define TSS_IOPORTS_LIMIT  (PAGE_SIZE-1)
 
 #define IO_PORTS        (IDT_ITEMS*1024)
 

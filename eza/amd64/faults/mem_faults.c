@@ -56,8 +56,8 @@ void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_fr
     kprintf( "#GPF in kernel mode: RIP = 0x%X\n", stack_frame->rip );    
   }
 
-  kprintf( "[!!!] Unhandled GPF exception ! Stopping (CODE: %d) ...\n",
-           stack_frame->error_code );
+  kprintf( "[!!!] Unhandled GPF exception ! RIP: %p (CODE: %d) ...\n",
+           stack_frame->rip, stack_frame->error_code );
   l1: goto l1;
 }
 
@@ -70,8 +70,8 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
     goto kernel_fault;
   }
 
-  kprintf( "[!!!] Unhandled user PF exception ! Stopping (CODE: %d, See page 225). Address: %p\n",
-           stack_frame->error_code, invalid_address);
+  kprintf( "[!!!] Unhandled user PF exception ! RIP: %p (CODE: %d, See page 225). Addr: %p\n",
+           stack_frame->rip,stack_frame->error_code, invalid_address);
   l2: goto l2;
 
 kernel_fault:

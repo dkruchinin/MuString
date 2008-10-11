@@ -24,14 +24,15 @@
 #include <eza/task.h>
 
 /* Syscalls identificators. */
-#define SC_GET_PID          0
-#define SC_CREATE_TASK      1
-#define SC_TASK_CONTROL     2
-#define SC_MMAP             3
-#define SC_CREATE_PORT      4
-#define SC_PORT_SEND        5
-#define SC_PORT_RECEIVE     6
-#define SC_PORT_REPLY       7
+#define SC_GET_PID             0
+#define SC_CREATE_TASK         1
+#define SC_TASK_CONTROL        2
+#define SC_MMAP                3
+#define SC_CREATE_PORT         4
+#define SC_PORT_SEND           5
+#define SC_PORT_RECEIVE        6
+#define SC_PORT_REPLY          7
+#define SC_ALLOCATE_IOPORTS    8
 
 /**
  * @fn status_t sys_get_pid(void)

@@ -1,3 +1,26 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ *
+ * eza/resources/ioports.c: Generic I/O ports-related logic.
+ *
+ */
+
 #include <eza/arch/types.h>
 #include <eza/errno.h>
 #include <eza/security.h>
@@ -32,14 +55,21 @@ static ioport_range_t *__allocate_ioports_range(void)
   /* TODO: [mt] Allocate ioport ranges via slabs. */
 }
 
-static bool __check_ioports_range(ulong_t first_port,ulong_t num_ports)
+static bool __check_ioports_range(ulong_t first_port,ulong_t last_port,
+                                  task_t **owner)
 {
   struct rb_node *n = ioports_root.rb_node;
   bool avail=true;
-  ulong_t last_port=first_port+num_ports-1;
 
+  *owner=NULL;
   while(n) {
     ioport_range_t *range=rb_entry(n,ioport_range_t,node);
+
+    /* First, check if we're completely inside of a known range. */
+    if( first_port >= range->start_port && last_port <= range->end_port ) {
+      *owner=range->owner;
+      return false;
+    }
 
     if( last_port < range->start_port ) {
       n=n->rb_left;
@@ -55,11 +85,10 @@ static bool __check_ioports_range(ulong_t first_port,ulong_t num_ports)
   return avail;
 }
 
-static status_t __free_ioports_range(ulong_t start_port,ulong_t num_ports)
+static status_t __free_ioports_range(ulong_t start_port,ulong_t last_port)
 {
   struct rb_node *parent=NULL;
   struct rb_node **p=&ioports_root.rb_node;
-  ulong_t last_port=start_port+num_ports-1;
   ioport_range_t *r=NULL;
 
   while( *p ) {
@@ -107,12 +136,11 @@ static status_t __free_ioports_range(ulong_t start_port,ulong_t num_ports)
   return 0;
 }
 
-static status_t __add_ioports_range(ulong_t start_port,ulong_t num_ports,
+static status_t __add_ioports_range(ulong_t start_port,ulong_t last_port,
                                     ioport_range_t **out_r,task_t **owner)
 {
   struct rb_node *parent=NULL;
   struct rb_node **p=&ioports_root.rb_node;
-  ulong_t last_port=start_port+num_ports-1;
   ioport_range_t *r=NULL;
 
   *out_r=NULL;
@@ -158,9 +186,25 @@ static status_t __add_ioports_range(ulong_t start_port,ulong_t num_ports,
 
   rb_link_node(&r->node,parent,p);
   r->start_port=start_port;
-  r->end_port=start_port+num_ports-1;
+  r->end_port=last_port;
 out:
   *out_r=r;
+  return 0;
+}
+
+static status_t __check_ioports( task_t *task,ulong_t first_port,
+                                 ulong_t end_port)
+{
+  if( !security_ops->check_access_ioports(current_task(),
+                                          first_port,end_port) ) {
+    return -EPERM;
+  }
+
+  if( end_port < first_port || first_port >= swks.ioports_available ||
+      end_port >= swks.ioports_available ) {
+    return -EINVAL;
+  }
+
   return 0;
 }
 
@@ -169,36 +213,70 @@ status_t sys_allocate_ioports(ulong_t first_port,ulong_t num_ports)
   status_t r;
   task_t *port_owner,*caller;
   ioport_range_t *range;
-
-  if( !security_ops->check_allocate_ioports( current_task(),
-                                             first_port,num_ports) ) {
-    return -EPERM;
-  }
+  ulong_t end_port=first_port+num_ports-1;
 
   caller=current_task();
+  r=__check_ioports(caller,first_port,num_ports);
+  if( r ) {
+    return r;
+  }
+  
   LOCK_IOPORTS;
 
-  r=__add_ioports_range(first_port,num_ports,&range,&port_owner);
+  r=__add_ioports_range(first_port,end_port,&range,&port_owner);
   if( r ) {
     /* This range is already ours ? */
     if( r == -EBUSY && port_owner == caller ) {
       r=0;
     } else {
-      goto out_free_ports;
+      goto out;
     }
   } else {
     range->owner=caller;
   }
 
-  r=arch_allocate_ioports(caller,first_port,num_ports);
+  UNLOCK_IOPORTS;
+  
+  r=arch_allocate_ioports(caller,first_port,end_port);
   if( r ) {
+    LOCK_IOPORTS;
     goto out_free_ports;
   }
 
-  UNLOCK_IOPORTS;
   return 0;
 out_free_ports:
-  __free_ioports_range(first_port,num_ports);  
+  __free_ioports_range(first_port,end_port);
+out:
+  UNLOCK_IOPORTS;
+  return r;
+}
+
+status_t sys_free_ioports(ulong_t first_port,ulong_t num_ports)
+{
+  status_t r;
+  task_t *port_owner,*caller;
+  ulong_t end_port;
+
+  end_port=first_port+num_ports-1;
+  kprintf( "sys_free_ioports(): Start port: 0x%X, End port: 0x%X, Num: 0x%X\n",
+           first_port,end_port,num_ports);
+
+  caller=current_task();
+  r=__check_ioports(caller,first_port,num_ports);
+  if( r ) {
+    return r;
+  }
+
+  LOCK_IOPORTS;
+  __check_ioports_range(first_port,end_port,&port_owner);
+  if( port_owner != caller ) {
+    r=-EACCES;
+    goto out; 
+  }
+
+  __free_ioports_range(first_port,end_port);
+  r=arch_free_ioports(caller,first_port,end_port);
+out:
   UNLOCK_IOPORTS;
   return r;
 }

@@ -180,6 +180,7 @@ label:	;\
 #ifndef __ASM__
 
 #include <eza/arch/types.h>
+#include <eza/arch/mm_types.h>
 
 typedef struct __context_t { /* others don't interesting... */
   uintptr_t sp;
@@ -197,6 +198,8 @@ typedef struct __context_t { /* others don't interesting... */
 
 typedef struct __arch_context_t {
     uintptr_t cr3, rsp, fs, gs, es, ds;
+    tss_t *tss;
+    uint16_t tss_limit;
 } arch_context_t;
 
 /* Structure that represents GPRs on the stack upon entering

@@ -42,6 +42,8 @@ syscall_table:
 	.quad   sys_port_send           /* 5 */
 	.quad   sys_port_receive
 	.quad   sys_port_reply
+	.quad   sys_allocate_ioports
+	.quad   sys_free_ioports
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *
  * include/eza/amd64/mm_types.h: types definions for gdt/idt operations
  *
@@ -134,6 +135,10 @@ extern tss_t *tssp; /* TSS */
 extern void arch_pmm_init(cpu_id_t cpu);
 extern void idt_init(void);
 extern void tss_init(tss_t *tp);
+
+/* context switching - related functions. */
+void load_tss(cpu_id_t cpu,tss_t *new_tss,uint16_t limit);
+void copy_tss(tss_t *dst_tss,tss_t *src_tss);
 
 /* gdt related misc functions */
 extern void gdt_tss_setbase(descriptor_t *p,uintptr_t baddre);

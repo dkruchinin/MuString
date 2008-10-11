@@ -49,20 +49,44 @@
 #define STEP 300
 
 /* ovl 0x0,%rax; syscall; jmp <spin> */
-// 0x0f, 0x05,    
-static char init_code[] = { 0x48, 0x31, 0xc0, \
-                            0x0f,0x05,        \
+// 0x0f, 0x05,
+//                             0xe6,0x10,
+static char init_code1[] = { 0x48, 0x31, 0xc0, \
+                            0xe6, 0x0,       \
                             0x48, 0x89, 0xc3, \
-                            0xeb, 0xf6 };
-#define INIT_CODE_SIZE 10
+                             0xeb, 0xf6 };
+
+
+static char init_code[] = { 0x48, 0xc7,0xc0,0x08,0x00,0x00,0x00,        \
+                            0x48, 0xc7, 0xc7, 0x10, 0x00, 0x00, 0x00,   \
+                            0x48, 0xc7, 0xc6, 0x32, 0x00, 0x00, 0x00,   \
+                            0x0f, 0x05,                                 \
+                            0x48, 0x89, 0xc3,                           \
+                            0x48, 0x09, 0xc0,                           \
+                            0x75, 0x02,                                 \
+                            0xe4, 0x32,                                 \
+                            0x48, 0xc7,0xc0,0x09,0x00,0x00,0x00,        \
+                            0x48, 0xc7, 0xc7, 0x12, 0x00, 0x00, 0x00,   \
+                            0x48, 0xc7, 0xc6, 0x20, 0x00, 0x00, 0x00,   \
+                            0x0f, 0x05,                                 \
+                            0xe4, 0x11,                                 \
+                            0x48, 0x89, 0xc3,                           \
+                            0xeb, 0xfe };
+
+#define INIT_CODE_SIZE  65
 
 static void t(void)
 {
     __asm__ __volatile__(
-        "1: xorq %rax,%rax\n"
-        " syscall\n"
+        "movq $8,%rax\n"
+        "movq $0x10,%rdi\n"
+        "movq $1,%rsi\n"
+        "syscall\n"
         "movq %rax, %rbx\n"
-        "jmp 1b\n");
+        "orq  %rax,%rax\n"
+        "jnz 2f\n"
+        "inb $0x10\n"
+        "2: jmp 2b\n");
 
 }
 
@@ -130,7 +154,7 @@ out:
   return r;
 }
 
-void start_init1(void)
+void start_userspace_init(void)
 {
   status_t r;
   task_t *init;
@@ -142,7 +166,7 @@ void start_init1(void)
   }
 
   if( !r ) {
-    kprintf( "** Init is ready !\n" );
+    kprintf( "** Init is ready ! PID: %d\n", init->pid );
     r = sched_change_task_state( init, TASK_STATE_RUNNABLE );
   }
 
@@ -156,17 +180,13 @@ static void test_init_thread(void *data)
   int round = 0;
   uint64_t target_tick = swks.system_ticks_64 + 100;
 
+  start_userspace_init();
+
   for(;;) {
     if( swks.system_ticks_64 >= target_tick ) {
-      kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
+      kprintf( " + [Init #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
                cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
-      target_tick += STEP;
-      round++;
-
-      if( round >= 3 ) {
-        kprintf( "****** DEACTIVATING MYSELF (%d)\n", current_task()->pid );
-        sched_change_task_state(current_task(), TASK_STATE_STOPPED);
-      }
+      target_tick += 300;
     }
   }
 }

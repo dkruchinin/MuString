@@ -57,7 +57,10 @@ static inline void init_resource(resource_t *resource,resource_type_t type)
 void initialize_ioports(void);
 
 status_t arch_allocate_ioports(task_t *task,ulong_t start_port,
-                               ulong_t num_ports);
+                               ulong_t end_port);
+status_t arch_free_ioports(task_t *task,ulong_t start_port,
+                           ulong_t end_port);
+
 void initialize_resources(void);
 
 #endif

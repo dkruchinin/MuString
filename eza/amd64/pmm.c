@@ -50,7 +50,7 @@ idescriptor_t idt[IDT_ITEMS];
 void tss_init(tss_t *tp)
 {
   memset((void*)tp,'\0',sizeof(tss_t));
-
+  tp->iomap_base=TSS_BASIC_SIZE;
   return;
 }
 
@@ -62,6 +62,26 @@ tss_t *get_cpu_tss(cpu_id_t cpu)
 void idt_init(void)
 {
   return;
+}
+
+/* NOTE: Interrupts must be off when calling this routine ! */
+void load_tss(cpu_id_t cpu,tss_t *new_tss,uint16_t limit)
+{
+  if( new_tss ) {
+    descriptor_t *desc=&gdt[cpu][TSS_DES];
+    tss_descriptor_t *tss_desc=(tss_descriptor_t *)desc;
+
+    tss_desc->type=AR_TSS;
+    gdt_tss_setbase(desc,(uintptr_t)new_tss);
+    gdt_tss_setlim(desc,(uintptr_t)limit);
+    tr_load(gdtselector(TSS_DES));
+  }
+}
+
+void copy_tss(tss_t *dst_tss,tss_t *src_tss)
+{
+  memset(dst_tss,0,sizeof(tss_t));
+  dst_tss->rsp0=src_tss->rsp0;
 }
 
 /* misc functions for gdt & idt */
@@ -159,7 +179,7 @@ void arch_pmm_init(cpu_id_t cpu)
 
   gdtr.limit = sizeof(gdt) / NR_CPUS;
   gdtr.base = (uint64_t)&gdt[cpu][0];
-  gdt_tss_setlim(&gdt[cpu][TSS_DES],(uintptr_t)TSS_BASIC_SIZE-1);
+  gdt_tss_setlim(&gdt[cpu][TSS_DES],(uintptr_t)TSS_BASIC_SIZE-1+1);
 
   idtr.limit = sizeof(idt);
   idtr.base = (uint64_t)idt;
