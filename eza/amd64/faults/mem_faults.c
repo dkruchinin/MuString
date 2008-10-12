@@ -61,17 +61,29 @@ void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_fr
   l1: goto l1;
 }
 
+static void __dump_regs(char *sp)
+{
+  regs_t *r=(regs_t *)sp;
+   kprintf("rax=%p,rdi=%p,rsi=%p\nrdx=%p,rcx=%p\n",
+	   r->rax,r->rdi,r->rsi,r->rdx,r->rcx);
+   return;
+}
+
+
 void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
   uint64_t invalid_address,fixup;
-
+char *sp=(char *)stack_frame-sizeof(regs_t);
+   
   get_fault_address(invalid_address);
   if( kernel_fault(stack_frame) ) {
     goto kernel_fault;
   }
 
-  kprintf( "[!!!] Unhandled user PF exception ! RIP: %p (CODE: %d, See page 225). Addr: %p\n",
-           stack_frame->rip,stack_frame->error_code, invalid_address);
+  kprintf( "[!!!] Unhandled user PF exception ! Stopping (CODE: %d, See page 225). Address: %p\nrip=%p\n",
+           stack_frame->error_code, invalid_address,stack_frame->rip);
+   __dump_regs(sp);
+
   l2: goto l2;
 
 kernel_fault:

@@ -103,6 +103,30 @@ static inline int bit_test(void *bitmap, int bitno)
 #endif /* ARCH_BIT_TEST */
 
 /**
+ * @fn static inline int bit_test_and_set(void *bitmap, int bitno)
+ * @brief Get old value of bit with number @a bitno and set @a bitno bit in the bitmap
+ *
+ * This function is similar to bit_set() except it copies old bit value before
+ * setting it to 1 and return that value after needed bit was setted.
+ * @note The limit of @a bitmap = sizeof(unsigned long)
+ *
+ * @param bitmap - A pointer to the bitmap
+ * @param bitno  - The number of bit to test and set
+ * @return Old value of bit with number @a bitno
+ */
+#ifndef ARCH_BIT_TEST_AND_SET
+static inline int bit_test_and_set(void *bitmap, int bitno)
+{
+  int val = (*(unsigned long *)bitmap & (1 << bitno));
+  *(unsigned long *)bitmap |= (1 << bitno);
+
+  return val;
+}
+#else
+#define bit_test_and_set(bitmap, bitno) arch_bit_test_and_set(bitmap, bitno)
+#endif /* ARCH_BIT_TEST_AND_SET */
+
+/**
  * @fn static inline long bit_find_lsf(unsigned long word)
  * Find first set least significant bit.
  *

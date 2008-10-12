@@ -75,9 +75,6 @@ static const int MAX_BLOCK_SIZE = (1 << (TLSF_FLD_SIZE + TLSF_FIRST_OFFSET - 1))
 static inline void get_tlsf_ids(uint16_t size, struct tlsf_idxs *ids);
 static inline uint16_t size_from_tlsf_ids(struct tlsf_idxs *ids);
 
-#define __bitno(pow2)                           \
-  ((pow2) >> 1)
-
 /* Get number of SLDs in given FLD index */
 #define __fld_offset(fldi)                                  \
   ((fldi) ? (TLSF_SLD_SIZE << ((fldi) - 1)) : TLSF_SLD_SIZE)
@@ -205,8 +202,8 @@ static inline void __block_init(page_frame_t *block_root, uint16_t size)
    * "initialized" block must have PB_HEAD and PB_TAIL flags set
    * on its frist and the last page respectively.
    */
-  bit_set(&block_root->_private, __bitno(TLSF_PB_HEAD));
-  bit_set(&tail->_private, __bitno(TLSF_PB_TAIL));
+  bit_set(&block_root->_private, bitnumber(TLSF_PB_HEAD));
+  bit_set(&tail->_private, bitnumber(TLSF_PB_TAIL));
   __block_size_set(block_root, size);
 }
 
@@ -214,8 +211,8 @@ static inline void __block_deinit(page_frame_t *block_root)
 {
   page_frame_t *tail = list_entry(block_root->node.next, page_frame_t, node);
   
-  bit_clear(&block_root->_private, __bitno(TLSF_PB_HEAD));
-  bit_clear(&tail->_private, __bitno(TLSF_PB_TAIL));
+  bit_clear(&block_root->_private, bitnumber(TLSF_PB_HEAD));
+  bit_clear(&tail->_private, bitnumber(TLSF_PB_TAIL));
   list_init_head(&block_root->head);  
   list_init_node(&block_root->node);
   if (block_root != tail)
@@ -317,7 +314,7 @@ static inline page_frame_t *__left_neighbour(page_frame_t *block_root)
   page_frame_t *page;
 
   page = pframe_by_number(pframe_number(block_root) - 1);
-  if (!bit_test(&page->_private, __bitno(TLSF_PB_TAIL)))
+  if (!bit_test(&page->_private, bitnumber(TLSF_PB_TAIL)))
     return NULL;
 
   return list_entry(page->node.prev, page_frame_t, node);
@@ -335,7 +332,7 @@ static inline page_frame_t *__right_neighbour(page_frame_t *block_root)
 
   page = pframe_by_number(pframe_number(list_entry(block_root->node.next,
                                                    page_frame_t, node) + 1));
-  if (!bit_test(&page->_private, __bitno(TLSF_PB_HEAD)))
+  if (!bit_test(&page->_private, bitnumber(TLSF_PB_HEAD)))
     return NULL;
   
   return page;
@@ -356,7 +353,7 @@ static page_frame_t *split(tlsf_t *tlsf, page_frame_t *block_root, uint16_t spli
   __make_block(new_block, pframe_by_number(pframe_number(new_block) + split_size - 1));
   __make_block(block_root, pframe_by_number(pframe_number(block_root) + offset - 1));  
   __block_size_set(block_root, offset);
-  bit_set(&new_block->_private, __bitno(TLSF_PB_MARK));
+  bit_set(&new_block->_private, bitnumber(TLSF_PB_MARK));
 
   return new_block;
 }
@@ -413,7 +410,7 @@ static page_frame_t *try_merge(tlsf_t *tlsf, page_frame_t *block_root, int side)
   }
 
   __block_size_set(neighbour, 0);
-  bit_clear(&neighbour->_private, __bitno(TLSF_PB_MARK));
+  bit_clear(&neighbour->_private, bitnumber(TLSF_PB_MARK));
   __make_block(block_root, neighbour);
   __block_size_set(block_root, size + n_size);
   
@@ -486,11 +483,11 @@ static void __free_pages(page_frame_t *pages, void *data)
 
   spinlock_lock(&tlsf->lock);
   n = __block_size(pages);
-  if (!bit_test(&pages->_private, __bitno(TLSF_PB_MARK))) {
+  if (!bit_test(&pages->_private, bitnumber(TLSF_PB_MARK))) {
     kprintf(KO_WARNING "TLSF: Freeing page frame #%d is NOT a TLSF frame!\n", page_idx);
     goto cant_free;
   }
-  if (bit_test(&pages->_private, __bitno(TLSF_PB_HEAD))) {
+  if (bit_test(&pages->_private, bitnumber(TLSF_PB_HEAD))) {
     kprintf(KO_WARNING "TLSF: Attemption to free already freed page %d!\n", page_idx);
     goto cant_free;
   }
@@ -581,7 +578,7 @@ static void build_tlsf_map(tlsf_t *tlsf, page_frame_t *pages, page_idx_t npages)
       tlsf->last_page_idx = pframe_number(pages + i);
     
     tlsf->first_page_idx = pframe_number(pages + i);
-    bit_set(&pages[i]._private, __bitno(TLSF_PB_MARK));
+    bit_set(&pages[i]._private, bitnumber(TLSF_PB_MARK));
     __block_size_set(pages + i, 1);
     __free_pages(pages + i, tlsf);
   }

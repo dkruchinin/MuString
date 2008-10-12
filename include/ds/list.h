@@ -85,6 +85,16 @@ static inline void list_init_node(list_node_t *node)
   node->prev = MLST_LIST_PREV;
 }
 
+static inline bool list_node_next_isbound(list_node_t *node)
+{
+  return (node->next != MLST_LIST_NEXT);
+}
+
+static inline bool list_node_prev_isbound(list_node_t *node)
+{
+  return (node->prev != MLST_LIST_PREV);
+}
+
 /**
  * @def list_entry(lst, nptr)
  * @brief Get item that holds @a nptr node

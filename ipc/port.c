@@ -236,7 +236,7 @@ status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size)
   }
 
   /* Install new port. */
-  IPC_LOCK_PORTS(ipc)
+  IPC_LOCK_PORTS(ipc);
   ipc->ports[id] = port;
   ipc->num_ports++;
   IPC_UNLOCK_PORTS(ipc);

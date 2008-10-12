@@ -40,10 +40,8 @@
 /* Atomic operation */
 static always_inline void arch_bit_set(volatile void *bitmap, int bit)
 {
-  __asm__ volatile ( __LOCK_PREFIX "bts %1, %0\n\t"
-                    : "=m" (*(volatile long *)bitmap)
-                    : "ir" (bit)
-                    : "memory");
+  __asm__ volatile (__LOCK_PREFIX "bts %1, %0\n\t"
+                    :: "m" (*(volatile long *)bitmap), "Ir" (bit));
 }
 
 #define ARCH_BIT_CLEAR
@@ -52,7 +50,7 @@ static always_inline void arch_bit_clear(volatile void *bitmap, int bit)
 {
   __asm__ volatile (__LOCK_PREFIX "btr %1, %0\n\t"
                     : "=m" (*(volatile long *)bitmap)
-                    : "ir" (bit)
+                    : "Ir" (bit)
                     : "memory");
 }
 
@@ -62,7 +60,7 @@ static always_inline void arch_bit_toggle(volatile void *bitmap, int bit)
 {
   __asm__ volatile (__LOCK_PREFIX "btc %1, %0\n\t"
                     : "=m" (*(volatile long *)bitmap)
-                    : "ir" (bit)
+                    : "Ir" (bit)
                     : "memory");
 }
 
@@ -75,10 +73,24 @@ static always_inline int arch_bit_test(volatile void *bitmap, int bitno)
   __asm__ volatile ("bt %1, %2\n\t"
                     "sbb %0, %0"
                     : "=r" (ret)
-                    : "ir" (bitno), "m" (*(volatile unsigned long *)bitmap));
+                    : "Ir" (bitno), "m" (*(volatile unsigned long *)bitmap));
 
   return ret;
 }
+
+#define ARCH_BIT_TEST_AND_SET
+/* Atomic operation */
+static always_inline int arch_bit_test_and_set(volatile void *bitmap, int bit)
+{
+  int val;  
+  __asm__ volatile ( __LOCK_PREFIX "bts %2, %0\n\t"
+                     "sbb %1, %1"
+                     : "=m" (*(volatile long *)bitmap), "=r" (val)
+                     : "Ir" (bit)
+                     : "memory");
+  return val;
+}
+
 
 #define ARCH_BIT_FIND_LSF
 static always_inline long arch_bit_find_lsf(unsigned long word)

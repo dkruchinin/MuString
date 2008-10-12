@@ -55,15 +55,13 @@
 #define round_up(a, b) ((((a) + ((b) - 1)) / (b)) * (b))
 #define align_up(s,a)    (((s)+((a)-1)) & ~((a)-1))
 #define align_down(s,a)  ((s) & ~((a)-1))
-#define round_up_pow2(x) (bit_find_msf(x))
-#define round_down_pow2(x)                      \
-  ({ int p2 = bit_find_msf(x);                  \
-     (p2 > (x)) ? (p2 >> 1) : p2; })
+#define round_up_pow2(x) (!is_powerof2(x) ? (1 << (bit_find_msf(x) + 1)) : (x))
+#define round_down_pow2(x) (!is_poweofr2(x) ? (1 << bit_find_msf(x)) : x)
 
-#define is_powerof2(num) ((num) & ~((num) - 1))
-
+#define is_powerof2(num) (((num) & ~((num) - 1)) == (num))
 #define ABS(x) (((x) < 0) ? -(x) : (x))
 #define MIN(a,b) ((a)<(b) ? (a) : (b) )
 #define MAX(a,b) ((a)>(b) ? (a) : (b) )
+#define bitnumber(po2) ((po2) >> 1)
 
 #endif /* __STDDEF_H__ */

@@ -100,42 +100,6 @@ static inline void tr_load(uint16_t s)
   asm volatile("ltr %0" : : "r" (s));
 }
 
-/* interrupts functions */
-
-/* interrupts_enable(): enabling interrupts and return
- * previous EFLAGS value.
- */
-static inline ipl_t interrupts_enable(void)
-{
-  ipl_t o;
-
-  __asm__ volatile (
-		    "pushfq\n"
-		    "popq %0\n"
-		    "sti\n"
-		    : "=r" (o)
-		    );
-
-  return o;
-}
-
-/* interrupts_disable(): return the same as interrupts_enable()
- * disabling interrupts.
- */
-static inline ipl_t interrupts_disable(void)
-{
-  ipl_t o;
-
-  __asm__ volatile (
-		    "pushfq\n"
-		    "popq %0\n"
-		    "cli\n"
-		    : "=r" (o)
-		    );
-
-  return o;
-}
-
 /* restore interrupts priority, i.e. restore EFLAGS */
 static inline void interrupts_restore(ipl_t b)
 {

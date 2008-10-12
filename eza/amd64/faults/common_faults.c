@@ -35,59 +35,72 @@
 void bound_range_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
     kprintf( "  [!!] #Bound range exception raised !\n" );
+    for(;;);
 }
 
 void invalid_opcode_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
     kprintf( "  [!!] #Invalid opcode exception raised ! (%p)\n", stack_frame->rip );
+    for(;;);
 }
 
 void device_not_available_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
     kprintf( "  [!!] #Dev not available exception raised !\n" );
+    for(;;);
 }
 
 void breakpoint_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
   kprintf( "  [!!] #Breakpoint exception raised !\n" );
+  for(;;);
 }
 
 void debug_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
   kprintf( "  [!!] #Debug exception raised !\n" );
+  for(;;);
 }
 
 void alignment_check_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
     kprintf( "  [!!] #Alignment check exception raised !\n" );
+    for(;;);
 }
 
 void machine_check_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
     kprintf( "  [!!] #Machine check exception raised !\n" );
+    for(;;);
 }
 
 void security_exception_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
     kprintf( "  [!!] #Security exception raised !\n" );
+    for(;;);
 }
 
 void reserved_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
   kprintf( "  [!!] #Reserved fault exception raised !\n" );  
+  for(;;);
 }
 
 void nmi_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
   kprintf( "  [!!] #NMI exception raised !\n" );
+  for(;;);
 }
 
 void doublefault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
-    kprintf( "  [!!] #Double fault exception raised !\n" );
+    kprintf( "  [!!] #Double fault exception raised ! RIP: %p\n",
+             stack_frame->rip);
+    for(;;);
 }
 
 void reserved_exception_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
     kprintf( "  [!!] #Reserved exception raised !\n" );
+    for(;;);
 }
