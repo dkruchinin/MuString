@@ -258,8 +258,6 @@ status_t sys_free_ioports(ulong_t first_port,ulong_t num_ports)
   ulong_t end_port;
 
   end_port=first_port+num_ports-1;
-  kprintf( "sys_free_ioports(): Start port: 0x%X, End port: 0x%X, Num: 0x%X\n",
-           first_port,end_port,num_ports);
 
   caller=current_task();
   r=__check_ioports(caller,first_port,num_ports);

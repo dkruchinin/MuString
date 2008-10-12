@@ -33,6 +33,7 @@
 #define SC_PORT_RECEIVE        6
 #define SC_PORT_REPLY          7
 #define SC_ALLOCATE_IOPORTS    8
+#define SC_FREE_IOPORTS        9
 
 /**
  * @fn status_t sys_get_pid(void)
@@ -230,7 +231,41 @@ status_t sys_port_receive( ulong_t port, ulong_t flags, ulong_t recv_buf,
 status_t sys_port_reply(ulong_t port, ulong_t msg_id,ulong_t reply_buf,
                         ulong_t reply_len);
 
-
+/**
+ * @fn status_t sys_allocate_ioports(ulong_t first_port,ulong_t num_ports)
+ *
+ * Allocate a region of I/O ports.
+ * This function reserves target range of I/O ports and makes them accessible
+ * for the calling process.
+ * @param first_port First I/O port of the range.
+ * @param num_ports Number of ports to reserve starting from the @a first_port.
+ *
+ * @return In case of successful I/O ports allocation this function returns
+ * zero. Otherwise, negation of the following errors is returned:
+ *   EPERM - Calling process doesn't have enough privileges to access these
+ *           I/O ports.
+ *   EINVAL - insufficient I/O ports range was provided.
+ *   ENOMEM - No free memory to complete the request.
+ *   EBUSY - Target I/O ports are already in use.
+ */
 status_t sys_allocate_ioports(ulong_t first_port,ulong_t num_ports);
+
+/**
+ * @fn status_t sys_free_ioports(ulong_t first_port,ulong_t num_ports)
+ *
+ * Free a region of I/O ports.
+ * This function frees target range of I/O ports and makes them unaccessible
+ * for the calling process.
+ * @param first_port First I/O port of the range.
+ * @param num_ports Number of ports to reserve starting from the @a first_port.
+ *
+ * @return In case of successful I/O ports deallocation this function returns
+ * zero. Otherwise, negation of the following errors is returned:
+ *   EPERM - Calling process doesn't have enough privileges to access these
+ *           I/O ports.
+ *   EINVAL - insufficient I/O ports range was provided.
+ *   EACCES - Target I/O ports don't belong to the calling process.
+ */
+status_t sys_free_ioports(ulong_t first_port,ulong_t num_ports);
 
 #endif
