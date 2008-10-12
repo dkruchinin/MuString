@@ -89,7 +89,7 @@ void mm_init(void)
   kprintf(" idalloc available pages: %ld\n", idalloc_meminfo.npages);
   for_each_active_mm_pool(pool) {
     char *name = mmpools_get_pool_name(pool->type);
-      
+    
     kprintf("[MM] Pages statistics of pool \"%s\":\n", name);
     kprintf(" | %-8s %-8s %-8s |\n", "Total", "Free", "Reserved");
     kprintf(" | %-8d %-8d %-8d |\n", pool->total_pages,

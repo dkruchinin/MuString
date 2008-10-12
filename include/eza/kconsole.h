@@ -28,6 +28,7 @@
 
 #include <eza/arch/types.h>
 #include <eza/vga.h>
+#include <eza/spinlock.h>
 
 #ifndef KCONS_DEF_BG
 #define KCONS_DEF_BG VC_BLACK
@@ -62,6 +63,7 @@ typedef struct __kconsole_type {
   void (*display_string)(const char*);
   void (*display_char)(const char);
   void (*disable)(void);
+  spinlock_t lock;
   bool is_enabled;
 } kconsole_t;
 

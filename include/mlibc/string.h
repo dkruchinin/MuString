@@ -27,7 +27,7 @@
 #define __STRING_H__ 
 
 #include <eza/arch/types.h>
-#include <eza/arch/string.h>
+//#include <eza/arch/string.h>
 
 #ifndef ARCH_MEMSET
 static inline void *memset(void *s, int c, size_t n)
