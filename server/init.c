@@ -88,20 +88,20 @@ static status_t __create_task_mm(task_t *task, int num)
   /* read elf headers */
   memcpy(&ehead,pframe_id_to_virt(code),sizeof(elf_head_t));
   /* printf elf header info */
-  kprintf("ELF header(%s): %d type, %d mach, %d version\n",ehead.e_ident,ehead.e_type,ehead.e_machine,ehead.e_version);
-  kprintf("Entry: %p,Image off: %p,sect off:%p\n",ehead.e_entry,ehead.e_phoff,ehead.e_shoff);
+  /*kprintf("ELF header(%s): %d type, %d mach, %d version\n",ehead.e_ident,ehead.e_type,ehead.e_machine,ehead.e_version);
+  kprintf("Entry: %p,Image off: %p,sect off:%p\n",ehead.e_entry,ehead.e_phoff,ehead.e_shoff);*/
 
   for(i=0;i<ehead.e_phnum;i++) {
     /* read program size */
     memcpy(&epr,pframe_id_to_virt(code)+sizeof(ehead)+i*(ehead.e_phentsize),sizeof(epr));
-    kprintf("PHeader(%d): offset: %p\nvirt: %p\nphy: %p\n",
-	    i,epr.p_offset,epr.p_vaddr,epr.p_paddr);
+    /*kprintf("PHeader(%d): offset: %p\nvirt: %p\nphy: %p\n",
+	    i,epr.p_offset,epr.p_vaddr,epr.p_paddr);*/
 
   }
   for(i=0;i<ehead.e_shnum;i++) {
     memcpy(&esh,pframe_id_to_virt(code)+ehead.e_shoff+i*(ehead.e_shentsize),sizeof(esh));
     if(esh.sh_size!=0) {
-      kprintf("SHeader(%d): shaddr: %p\nshoffset:%p\n",i,esh.sh_addr,esh.sh_offset);
+/*      kprintf("SHeader(%d): shaddr: %p\nshoffset:%p\n",i,esh.sh_addr,esh.sh_offset);*/
       if(esh.sh_flags & ESH_ALLOC && esh.sh_type==SHT_PROGBITS) {
 	if(esh.sh_flags & ESH_EXEC) {
 	  real_code_size+=esh.sh_size;
@@ -115,7 +115,7 @@ static status_t __create_task_mm(task_t *task, int num)
 	  last_data_offset=esh.sh_addr;
 	  last_data_size=esh.sh_size;
 	}
-	atom_usleep(100);
+/*	atom_usleep(100);*/
       } else if(esh.sh_flags & ESH_ALLOC && esh.sh_type==SHT_NOBITS) { /* seems to be an bss section */
 	bss_virt=esh.sh_addr; 
 	bss_size=esh.sh_size;
@@ -124,16 +124,16 @@ static status_t __create_task_mm(task_t *task, int num)
   }
 
   /* print debug info */
-  kprintf("Code: real size: %d, last_offset= %p, last section size= %d\n",
-	  real_code_size,last_offset,last_sect_size); /* code parsed values */
-  kprintf("Data: real size: %d, last offset= %p, last section size= %d\nData offset: %p\n",
-	  real_data_size,last_data_offset,last_data_size,real_data_offset);
+/*  kprintf("Code: real size: %d, last_offset= %p, last section size= %d\n",
+	  real_code_size,last_offset,last_sect_size);  code parsed values */
+/*  kprintf("Data: real size: %d, last offset= %p, last section size= %d\nData offset: %p\n",
+	  real_data_size,last_data_offset,last_data_size,real_data_offset);*/
   /* calculate text */
   code=init.server[num].addr+0x1000;
   text_size=real_code_size>>PAGE_WIDTH;
   if(real_code_size%PAGE_SIZE)    text_size++;
   data_bss=init.server[num].addr+real_data_offset-0x1000000;
-  kprintf("data bss: %p\n text: %p\n",data_bss,code);
+/*  kprintf("data bss: %p\n text: %p\n",data_bss,code);*/
   data_size=real_data_size>>PAGE_WIDTH;
   if(real_data_size%PAGE_SIZE)    data_size++;
   /* calculate bss */

@@ -232,7 +232,7 @@ static uint64_t __setup_user_task_context(task_t *task)
   regs->old_ss = USER_SELECTOR(UDATA_DES);
   regs->rip = 0;
   regs->old_rsp = 0;
-  regs->rflags = USER_RFLAGS;
+  regs->rflags = 0/*USER_RFLAGS*/;
 
   return sizeof(regs_t);
 }

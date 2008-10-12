@@ -52,10 +52,14 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
   status_t e;
   task_t *task;
   int _flags;
+#if 0
   mm_pool_t *pool;
+#endif
 
+#if 0
   kprintf(">>>>>>>>>> allocced %d pages, addr=%p, flags=%d, fd=%ld, offset=%p\n",
 	  size,addr,flags,fd,offset);
+#endif
 
   /* simple check */
   if(!addr || !size) {
@@ -64,24 +68,32 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
   task=current_task();
 
   if(fd>65535) {
+#if 0
     kprintf("mmap() no fd\n");
+#endif
     if(flags & MMAP_PHYS && offset) {
       /* TODO: ak, check rights */
+#if 0
       kprintf("mmap() yummie fuck\n");
+#endif
       mm_init_pfiter_index(&pfi,&pfi_idx_ctx,offset>>PAGE_WIDTH,(offset>>PAGE_WIDTH) + size - 1);
       e=mm_map_pages(&task->page_dir,&pfi,addr,size,MAP_RW|MMAP_NONCACHABLE); /* TODO: ak, valid mapping */
       if(e!=0) return e;
+#if 0
       kprintf("mmap() OK\n");
+#endif
       return 0;
     }
+#if 0
     kprintf("mmap() try to alloc\n");
     for_each_mm_pool(pool) {
       kprintf("free pages: %d\n", atomic_get(&pool->free_pages));
     }
+#endif
     aframe=alloc_pages(size,AF_PGEN);
     if(!aframe)
       return -ENOMEM; /* no free pages to allocate */
-    kprintf("mmap() allocated\n");
+
     if(flags & MMAP_RW) /*map_rd map_rdonly*/
       _flags |= MAP_RW;
     if(flags & MMAP_RDONLY)
@@ -93,7 +105,7 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
   } else 
     return -ENOSYS;
   
-  kprintf(">>>>OK>>>>>> allocced %d pages\n",size);
+
 
   return 0;
 }
