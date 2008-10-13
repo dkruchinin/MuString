@@ -77,6 +77,8 @@ arch_hw_activate_task:
   mov %rax,ARCH_CTX_GS_OFFSET(%rdx)
   mov %gs:(CPU_SCHED_STAT_USER_DS_OFFT), %rax
   mov %rax,ARCH_CTX_DS_OFFSET(%rdx)
+  mov %gs:(CPU_SCHED_STAT_USTACK_OFFT), %rax	
+  mov %rax,ARCH_CTX_URSP_OFFSET(%rdx)
 
   /* Save %rsp */
   mov %rsp,ARCH_CTX_RSP_OFFSET(%rdx) 
@@ -100,6 +102,8 @@ leave_cr3:
   mov %rax, %gs:(CPU_SCHED_STAT_USER_GS_OFFT)
   mov ARCH_CTX_DS_OFFSET(%rdi),%rax
   mov %rax, %gs:(CPU_SCHED_STAT_USER_DS_OFFT)
+  mov ARCH_CTX_URSP_OFFSET(%rdi),%rax
+  mov %rax,%gs:(CPU_SCHED_STAT_USTACK_OFFT)	
 
   /* Now we can reload %rsp and return to perform actual context switch. */
   movq ARCH_CTX_RSP_OFFSET(%rdi), %rsp
@@ -111,4 +115,3 @@ __return_from_sleep:
   popq %rax
   sti
   retq
-	

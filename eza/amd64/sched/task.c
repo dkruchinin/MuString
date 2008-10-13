@@ -63,6 +63,7 @@ static void __arch_setup_ctx(task_t *newtask,uint64_t rsp)
   ctx->es = USER_SELECTOR(UDATA_DES);
   ctx->gs = USER_SELECTOR(UDATA_DES);
   ctx->ds = USER_SELECTOR(UDATA_DES);
+  ctx->user_rsp = 0;
 
   /* Default TSS value which means: use per-CPU TSS. */
   ctx->tss=NULL;

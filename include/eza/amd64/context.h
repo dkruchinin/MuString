@@ -144,12 +144,13 @@
 #define SP_DELTA  16
 
 /* Kernel-space task context related stuff. */
-#define ARCH_CTX_CR3_OFFSET  0x0
-#define ARCH_CTX_RSP_OFFSET  0x8
-#define ARCH_CTX_FS_OFFSET   0x10
-#define ARCH_CTX_GS_OFFSET   0x18
-#define ARCH_CTX_ES_OFFSET   0x20
-#define ARCH_CTX_DS_OFFSET   0x28
+#define ARCH_CTX_CR3_OFFSET   0x0
+#define ARCH_CTX_RSP_OFFSET   0x8
+#define ARCH_CTX_FS_OFFSET    0x10
+#define ARCH_CTX_GS_OFFSET    0x18
+#define ARCH_CTX_ES_OFFSET    0x20
+#define ARCH_CTX_DS_OFFSET    0x28
+#define ARCH_CTX_URSP_OFFSET  0x30
 
 #ifdef __ASM__
 
@@ -197,7 +198,7 @@ typedef struct __context_t { /* others don't interesting... */
 } __attribute__ ((packed)) context_t;
 
 typedef struct __arch_context_t {
-    uintptr_t cr3, rsp, fs, gs, es, ds;
+    uintptr_t cr3, rsp, fs, gs, es, ds, user_rsp;
     tss_t *tss;
     uint16_t tss_limit;
 } arch_context_t;
