@@ -282,7 +282,7 @@ void arch_mm_remap_pages(void)
    */
   direct_mapping_area.phys_addr=0x1000;
   direct_mapping_area.virt_addr=0x1000;
-  direct_mapping_area.num_pages=IDENT_MAP_PAGES-1;
+  direct_mapping_area.num_pages=1024;
   direct_mapping_area.map_flags=MAP_KERNEL | MAP_RW;
   vm_register_user_mandatory_area(&direct_mapping_area);
 
@@ -303,17 +303,16 @@ status_t arch_vm_map_kernel_area(task_t *task)
   /* Just copy PML4 entry from kernel page directoy to user one. */
   *dst_pml4 = *src_pml4;
 
-  src_pml4 = (uintptr_t *)kernel_pt_directory.entries;
-  dst_pml4 = (uintptr_t *)task->page_dir.entries;
-  *dst_pml4 = *src_pml4;
-
   return 0;
 }
 
 void arch_smp_mm_init(int cpu)
 {
-  load_cr3( _k2p((uintptr_t)&kernel_pt_directory.entries[0]), 1, 1 );  
-  kprintf("[MM] CPU #%d mm was initialized\n", cpu);  
+    load_cr3( _k2p((uintptr_t)&kernel_pt_directory.entries[0]), 1, 1 );
+
+    if( cpu ) {
+        for(;;);
+    }
 }
 
 /* AMD 64-specific function for zeroizing a page. */

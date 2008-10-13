@@ -211,7 +211,7 @@ status_t sys_yield(void)
 }
 
 
-static status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
+status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
 {
   return task->scheduler->scheduler_control(task,cmd,arg);
 }

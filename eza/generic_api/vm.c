@@ -36,19 +36,14 @@ status_t vm_map_mandatory_areas(task_t *task)
   ITERATOR_CTX(page_frame,PF_ITER_INDEX) pfi_index_ctx;
   status_t r = 0;
 
-  kprintf( "++ Mapping kernel memory ... " );
   /* First, create kernel mapping for the most commin kernel areas. */
   r=arch_vm_map_kernel_area(task);
   if(r!=0) {
     return r;
   }
 
-  kprintf( "Done !\n" );
   list_for_each(&mand_list,it) {
     vm_range_t *area = list_entry(it,vm_range_t,l);
-
-    kprintf( "** Mapping area: %p to %p (%d pages)\n",
-             area->phys_addr,area->virt_addr,area->num_pages);
 
     mm_init_pfiter_index(&pfi,&pfi_index_ctx,
                          area->phys_addr/PAGE_SIZE,
@@ -88,10 +83,8 @@ status_t vm_initialize_task_mm( task_t *orig, task_t *target,
     /* TODO: [mt] Increment regerence counters for all pages on VM cloning. */
     r = 0;
   } else {
-    kprintf( "+ Initializing empty PML4 ... " );
     page_frame_t *page = alloc_page(AF_PGEN | AF_ZERO);
     if( page != NULL ) {
-      kprintf( " Done ! (%d)\n", page->idx );
       target->page_dir.entries = pframe_to_virt(page);
       r = vm_map_mandatory_areas(target);
     } else {

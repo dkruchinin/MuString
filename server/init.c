@@ -192,7 +192,7 @@ void server_run_tasks(void)
     return;
 
   for(a=0;a<i;a++) {
-    r=create_task(current_task(),a,TPL_USER,&server);
+    r=create_task(current_task(),0,TPL_USER,&server);
     if(r)      continue;
     r=__create_task_mm(server,a);
     if(r)      continue;

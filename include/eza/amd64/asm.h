@@ -147,7 +147,7 @@ static inline unative_t read_msr(uint32_t msr)
 static inline void load_cr3( uintptr_t phys_addr, uint8_t pcd, uint8_t pwt )
 {
   uintptr_t cr3_val = ( ((pwt & 1) << 3) | ((pcd & 1) << 4) );
-
+  
   /* Normalize new PML4 base. */
   phys_addr >>= 12;
 
@@ -157,7 +157,7 @@ static inline void load_cr3( uintptr_t phys_addr, uint8_t pcd, uint8_t pwt )
   /* Setup highest 20 bits of the PML4 base. */
   cr3_val |= ((phys_addr & (uintptr_t)0xfffff00000) << 12);
 
- __asm__ volatile(  "movq %%rax, %%cr3" :: "a" (cr3_val) );
+  __asm__ volatile(  "movq %0, %%cr3" :: "r" (cr3_val) );
 }
 
 /* Load RSP with a given value. It MUST NOT be a function since after

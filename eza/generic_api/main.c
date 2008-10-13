@@ -93,7 +93,7 @@ static void main_routine_stage1(void)
 
   /* OK, we can proceed. */
   //start_init();
-  server_run_tasks();
+  //server_run_tasks();
 
 
   //start_init();
@@ -103,7 +103,6 @@ static void main_routine_stage1(void)
 
   kprintf( "CPU #0 is entering idle loop. Current task: %p, CPU ID: %d\n",
            current_task(), cpu_id() );
-for(;;);
   idle_loop();
 }
 
@@ -167,14 +166,17 @@ void main_smpap_routine(void)
   static cpu_id_t cpu = 1;
 
   kprintf("CPU#%d Hello folks! I'm here\n", cpu);
- 
+
   /* Ramap physical memory using page directory preparead be master CPU. */
-  arch_cpu_init(cpu);
+  kprintf( "[CPU 1]: Beeeee !\n" );
 
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.
    */
+  arch_cpu_init(cpu);
+
   arch_activate_idle_task(cpu);
+
   /* Continue CPU initialization in new context. */
   cpu++;
   main_smpap_routine_stage1(1);

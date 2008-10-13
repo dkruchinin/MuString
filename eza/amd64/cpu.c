@@ -87,12 +87,13 @@ void arch_cpu_init(cpu_id_t cpu)
 
   /* prepare segmentation */
   arch_pmm_init(cpu);
-  
+
   /* disable i/o on upper levels */
   cpu_clean_iopl_nt_flags();
   /* disable align checking */
   cpu_clean_am_flag();
 
+  kprintf( "[4]\n" );
   /* setup syscall entrypoint */
   arch_syscall_setup_cpu();
 }

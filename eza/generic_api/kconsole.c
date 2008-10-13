@@ -65,12 +65,12 @@ static void vga_cons_display_string(const char *str)
   if (!__vga_cons.is_enabled)
     return;
   
-  spinlock_lock_irqsafe(&__vga_cons.lock);
+  spinlock_lock(&__vga_cons.lock);
   for(i = 0; str[i] != '\0'; i++)
     vga_putch(str[i]);
 
   vga_update_cursor();
-  spinlock_unlock_irqsafe(&__vga_cons.lock);
+  spinlock_unlock(&__vga_cons.lock);
 }
  
 static void vga_cons_display_char(const char c)
@@ -78,10 +78,10 @@ static void vga_cons_display_char(const char c)
   if (__vga_cons.is_enabled)
     return;
 
-  spinlock_lock_irqsafe(&__vga_cons.lock);
+  spinlock_lock(&__vga_cons.lock);
   vga_putch(c);
   vga_update_cursor();
-  spinlock_unlock_irqsafe(&__vga_cons.lock);
+  spinlock_unlock(&__vga_cons.lock);
 }
 
 kconsole_t *default_console()
