@@ -173,6 +173,8 @@ userspace_ret_from_int:
   mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
   swapgs
   mov %eax,%gs
+  popq %rax
+  iretq
 ret_from_int:
   popq %rax
   iretq

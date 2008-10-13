@@ -39,25 +39,34 @@
 #include <mlibc/unistd.h>
 #include <eza/swks.h>
 #include <eza/arch/mm_types.h>
+#include <mm/idalloc.h>
+
+extern volatile struct __local_apic_t *local_apic;
 
 static int __map_apic_page(void)
 {
   page_frame_iterator_t pfi;
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
   int32_t res;
+  uintptr_t apic_vaddr;
+
+  apic_vaddr=(uintptr_t)idalloc_allocate_vregion(1);
+  if( !apic_vaddr ) {
+    panic( "[MM] Can't allocate memory range for mapping APIC !\n" );
+  }
 
   mm_init_pfiter_index(&pfi, &pfi_index_ctx,
                        APIC_BASE >> PAGE_WIDTH,
                        APIC_BASE >> PAGE_WIDTH);
 
-  res=__mm_map_pages(&pfi,APIC_BASE,1,
+  res=__mm_map_pages(&pfi,apic_vaddr,1,
                      MAP_KERNEL | MAP_RW | MAP_DONTCACHE);
 
   if(res<0) {
-    kprintf("[MM] Cannot map IO page for APIC.\n");
-    return -1;
+    panic("[MM] Cannot map IO page for APIC.\n");
   }
 
+  local_apic=(struct __local_apic_t *)apic_vaddr;
   return 0;
 }
 
