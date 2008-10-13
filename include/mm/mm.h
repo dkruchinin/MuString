@@ -58,6 +58,7 @@ DEFINE_ITERATOR_CTX(page_frame, PF_ITER_LIST,
                     list_node_t *last_node);
 
 extern page_frame_t *page_frames_array; /**< An array of all available physical pages */
+extern uintptr_t kernel_min_vaddr; /**< The bottom address of kernel virtual memory space. */
 
 /**
  * @brief Initialize mm internals

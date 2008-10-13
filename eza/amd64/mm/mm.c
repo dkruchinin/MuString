@@ -48,6 +48,7 @@ static page_idx_t dma_pages = 0;
 static uint64_t min_phys_addr = 0, max_phys_addr = 0;
 
 static vm_range_t direct_mapping_area;
+uintptr_t kernel_min_vaddr;
 
 static void initialize_kernel_page_directory(void)
 {
@@ -285,6 +286,9 @@ void arch_mm_remap_pages(void)
   direct_mapping_area.num_pages=4095;
   direct_mapping_area.map_flags=MAP_KERNEL | MAP_RW;
   vm_register_user_mandatory_area(&direct_mapping_area);
+
+  /* TODO: [mt] redesign 'kernel_min_vaddr'. */
+  kernel_min_vaddr=KERNEL_BASE;
 
   /* All CPUs must initially reload their CR3 registers with already
    * initialized Level-4 page directory.

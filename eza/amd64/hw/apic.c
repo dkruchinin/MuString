@@ -42,27 +42,27 @@
 
 /*
  * Black mages from intel and amd wrote that
- * local APIC is memory mapped, I'm afraid on this 
+ * local APIC is memory mapped, I'm afraid on this
  * solution looks ugly ...
- * TODO: I get unclear sense while some higher 
+ * TODO: I get unclear sense while some higher
  * abstraction not being implemented.
  */
 
-volatile static struct __local_apic_t *local_apic=(struct __local_apic_t *)APIC_BASE;
+volatile struct __local_apic_t *local_apic;
 
-/* 
+/*
  * default functions to access APIC (local APIC)
  * I think that gcc can try to make optimization on it
  * to avoid I'm stay `volatile` flag here.
  */
 static inline uint32_t __apic_read(ulong_t rv)
 {
-  return *((volatile uint32_t *)(APIC_BASE+rv));
+    return *((volatile uint32_t *)((ulong_t)local_apic+rv));
 }
 
 static inline void __apic_write(ulong_t rv,uint32_t val)
 {
-  *((volatile uint32_t *)(APIC_BASE+rv))=val;
+    *((volatile uint32_t *)((ulong_t)local_apic+rv))=val;
 }
 
 static uint32_t __get_maxlvt(void)

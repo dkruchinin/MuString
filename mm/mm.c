@@ -36,6 +36,7 @@
 #include <mm/idalloc.h>
 #include <eza/kernel.h>
 #include <eza/arch/mm.h>
+#include <config.h>
 
 /* An array of all physical pages */
 page_frame_t *page_frames_array;
@@ -99,6 +100,15 @@ void mm_init(void)
 
   /* Now we can remap memory */
   arch_mm_remap_pages();
+
+  /* After all memory has been remapped, we can reserve some space
+   * for initial virtual memory range allocation.
+   */
+  idalloc_meminfo.num_vpages=IDALLOC_VPAGES;
+  idalloc_meminfo.avail_vpages=IDALLOC_VPAGES;
+  idalloc_meminfo.virt_top=kernel_min_vaddr;
+  kernel_min_vaddr-=IDALLOC_VPAGES*PAGE_SIZE;
+
   kprintf("[MM] All pages were successfully remapped\n");
 }
 
