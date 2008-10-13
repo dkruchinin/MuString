@@ -64,6 +64,9 @@ static inline cpu_id_t cpu_id(void)
 
 void arch_hw_activate_task(arch_context_t *new_ctx, task_t *new_task,
                            arch_context_t *old_ctx, uintptr_t kstack);
+void arch_hw_activate_task1(arch_context_t *new_ctx, task_t *new_task,
+                           arch_context_t *old_ctx, uintptr_t kstack);
+
 
 /* NOTE: Interrupts must be disabled before calling this function. */
 static inline void arch_activate_task(task_t *to)
@@ -88,7 +91,11 @@ static inline void arch_activate_task(task_t *to)
 
   /* Let's jump ! */
   kprintf( "******* ACTIVATING TASK: %d (CPU: %d)\n", to->pid, to->cpu );
-  arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
+  if( to->pid != 2 ) {
+      arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
+  } else {
+      arch_hw_activate_task1(to_ctx,to,from_ctx,to->kernel_stack.high_address);
+  }
 }
 
 #endif

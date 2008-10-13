@@ -282,7 +282,7 @@ void arch_mm_remap_pages(void)
    */
   direct_mapping_area.phys_addr=0x1000;
   direct_mapping_area.virt_addr=0x1000;
-  direct_mapping_area.num_pages=1024;
+  direct_mapping_area.num_pages=4095;
   direct_mapping_area.map_flags=MAP_KERNEL | MAP_RW;
   vm_register_user_mandatory_area(&direct_mapping_area);
 
