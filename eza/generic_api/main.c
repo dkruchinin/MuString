@@ -97,7 +97,7 @@ static void main_routine_stage1(void)
 
 
   //start_init();
-  //server_run_tasks();
+  server_run_tasks();
  
   /* Enter idle loop. */
 
