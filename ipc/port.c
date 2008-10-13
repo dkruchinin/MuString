@@ -259,7 +259,7 @@ static status_t __transfer_message_data_to_receiver(ipc_port_message_t *msg,
 
   recv_len=MIN(recv_len,msg->data_size);
   if( msg->data_size <= IPC_BUFFERED_PORT_LENGTH ) {
-    /* Short message - copy it from the buffer. */
+      /* Short message - copy it from the buffer. */
       r=copy_to_user((void *)recv_buf,msg->send_buffer,recv_len);
   } else {
     /* Long message - process it via buffer. */

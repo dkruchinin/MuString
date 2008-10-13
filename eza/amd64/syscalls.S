@@ -55,12 +55,13 @@ syscall_point:
 	cmp $NUM_OF_SYSCALLS,%rax
 	jnc bad_syscall_number
 
- 	swapgs
+	swapgs
 	movq %rsp,%gs:CPU_SCHED_STAT_USTACK_OFFT
 	movq %gs:CPU_SCHED_STAT_KSTACK_OFFT,%rsp
 
 	/* After changing stack pointer, we can enable IRQs */
 	sti
+	pushq %rax
 	SAVE_GPR
 
 	/* Since %rcx contains the return address, we should reload
@@ -70,12 +71,14 @@ syscall_point:
 
 	call *syscall_table(,%rax,8)
 	RESTORE_GPR
+	popq %rdi
 
 	cli
 	/* Restore back user stack pointer. Interrupts will be
 	 * restored after performing the SYSRET command.
 	 */
 	movq %gs:CPU_SCHED_STAT_USTACK_OFFT, %rsp
+
 	swapgs
 	sysretq
 bad_syscall_number:
