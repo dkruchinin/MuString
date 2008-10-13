@@ -38,6 +38,10 @@
 #include <eza/arch/mm.h>
 #include <config.h>
 
+#ifndef IDALLOC_VPAGES
+  #define IDALLOC_VPAGES 2
+#endif
+
 /* An array of all physical pages */
 page_frame_t *page_frames_array;
 
