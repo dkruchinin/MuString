@@ -58,7 +58,7 @@ static status_t __create_task_mm(task_t *task, int num)
   status_t r;
   int i;
 
-  stack=alloc_pages(USER_STACK_SIZE,AF_PGEN);
+  stack=alloc_pages(USER_STACK_SIZE,AF_PGEN|AF_ZERO);
   if(!stack)
     return -1;
 
