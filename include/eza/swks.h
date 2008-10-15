@@ -32,6 +32,7 @@
 #include <eza/interrupt.h>
 #include <eza/scheduler.h>
 #include <mm/mm.h>
+#include <eza/arch/page.h>
 
 enum __swks_constants {
   INITIAL_TICKS_VALUE = 0,
@@ -79,6 +80,8 @@ extern swks_t swks;
 
 void initialize_swks(void);
 void arch_initialize_swks(void);
+
+#define SWKS_PAGES  ((sizeof(swks)>>PAGE_WIDTH)+1)
 
 #endif
 

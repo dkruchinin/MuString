@@ -25,12 +25,17 @@
 #define __KERNEL_VM_H__
 
 #include <eza/arch/types.h>
+#include <eza/swks.h>
+#include <eza/arch/page.h>
 
-#define USER_VA_SIZE  0x100000000000     /* 16 Terabytes */
+#define USER_END_VIRT  0x100000000000   /* 16 Terabytes */
 #define USER_START_VIRT  0x1001000
-#define USER_END_VIRT  (USER_START_VIRT+USER_VA_SIZE)
+#define USER_VA_SIZE  (USER_END_VIRT-USER_START_VIRT)
 
-#define USPACE_END       (USER_START_VIRT+USER_VA_SIZE)
+#define USPACE_END       USER_END_VIRT
+
+#define USER_MAX_VIRT  (USER_END_VIRT-SWKS_PAGES*PAGE_SIZE)
+#define SWKS_VIRT_ADDR  USER_MAX_VIRT
 
 #define USER_STACK_SIZE  4
 
@@ -39,14 +44,14 @@ status_t copy_from_user(void *dest,void *src,ulong_t size);
 
 static inline bool valid_user_address(uintptr_t addr)
 {
-  return (addr >= USER_START_VIRT && addr < USER_END_VIRT);
+  return (addr >= USER_START_VIRT && addr < USER_MAX_VIRT);
 }
 
 static inline bool valid_user_address_range(uintptr_t addr,ulong_t size)
 {
-  if(addr >= USER_START_VIRT && addr < USER_END_VIRT) {
+  if(addr >= USER_START_VIRT && addr < USER_MAX_VIRT) {
     addr += size;
-    return (addr >= USER_START_VIRT && addr < USER_END_VIRT);
+    return (addr >= USER_START_VIRT && addr < USER_MAX_VIRT);
   }
   return false;
 }

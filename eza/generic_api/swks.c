@@ -31,9 +31,13 @@
 #include <mlibc/kprintf.h>
 #include <mlibc/string.h>
 #include <eza/smp.h>
+#include <eza/vm.h>
+#include <kernel/vm.h>
 
 /* Here it is ! */
 swks_t swks;
+
+static vm_range_t swks_area;
 
 void initialize_swks(void)
 {
@@ -52,5 +56,13 @@ void initialize_swks(void)
   kprintf("%ld.\n",swks.delay_loop);*/
 
   arch_initialize_swks();
+
+  /* Make the SWKS be mapped into every user address space. */
+  swks_area.phys_addr=k2p(&swks_area) & PAGE_ADDR_MASK;
+  swks_area.virt_addr=SWKS_VIRT_ADDR;
+  swks_area.num_pages=SWKS_PAGES;
+  swks_area.map_flags=MAP_RDONLY;
+
+  vm_register_user_mandatory_area(&swks_area);
 }
 
