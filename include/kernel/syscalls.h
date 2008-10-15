@@ -199,19 +199,19 @@ status_t sys_port_send(pid_t pid,ulong_t port,uintptr_t snd_buf,
  *                            new messages appear.
  * @param recv Output buffer where to put received data.
  * @param recv_len Size of output buffer.
+ * @param msg_info Structure that will contain message details.
  *
  * @return Upon successful reception of a new message, this function
- *  returns its ID and size encoded in the following form:
- *       bits 21-0: message size;
- *       bits 22-31: message id.
+ *  returns zero and fills in the structure.
  *  Otherwise, negations of the following errors are returned:
- *     EINVAL - insufficient port number was provided.
+ *     EINVAL - insufficient port number, or NULL buffer address,
+ *              or zero receive buffer length was provided.
  *     EFAULT - Insufficient memory address was passed.
  *     EWOULDBLOCK - Non-blocking access was requested and there are
  *                   no messages available in the queue.
  */
 status_t sys_port_receive( ulong_t port, ulong_t flags, ulong_t recv_buf,
-                           ulong_t recv_len);
+                           ulong_t recv_len,port_msg_info_t *msg_info);
 
 /**
  * @fn status_t sys_port_reply(ulong_t port, ulong_t msg_id,ulong_t reply_buf,

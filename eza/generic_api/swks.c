@@ -63,6 +63,6 @@ void initialize_swks(void)
   swks_area.num_pages=SWKS_PAGES;
   swks_area.map_flags=MAP_RDONLY;
 
-  vm_register_user_mandatory_area(&swks_area);
+  //vm_register_user_mandatory_area(&swks_area);
 }
 

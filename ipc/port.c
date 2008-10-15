@@ -253,7 +253,7 @@ out_unlock:
 
 static status_t __transfer_message_data_to_receiver(ipc_port_message_t *msg,
                                                     ulong_t recv_buf,ulong_t recv_len,
-                                                    ipc_port_receive_stats_t *stats)
+                                                    port_msg_info_t *stats)
 {
   status_t r;
 
@@ -268,10 +268,15 @@ static status_t __transfer_message_data_to_receiver(ipc_port_message_t *msg,
   }
 
   if( !r ) {
-    if( stats ) {
-      stats->msg_id=msg->id;
-      stats->bytes_received=recv_len;
-    }
+      port_msg_info_t info;
+
+      info.sender_pid=msg->sender->pid;
+      info.msg_id=msg->id;
+      info.msg_len=recv_len;
+
+      if( copy_to_user(stats,&info,sizeof(info)) ) {
+        r=-EFAULT;
+      }
   }
 
   return r;
@@ -348,6 +353,7 @@ static status_t __setup_send_message_data(task_t *task,ipc_port_message_t *msg,
   /* Setup this message. */
   msg->data_size = snd_size;
   msg->reply_size = rcv_size;
+  msg->sender=task;
   r = 0;
 out:
     return r;
@@ -481,12 +487,21 @@ static ipc_port_t *__get_port_for_server(task_t *server,ulong_t port)
 
 status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
                           ulong_t recv_buf,ulong_t recv_len,
-                          ipc_port_receive_stats_t *stats)
+                          port_msg_info_t *msg_info)
 {
   status_t r=-EINVAL;
   ipc_port_t *p;
   ipc_port_message_t *msg;
 
+  if( !recv_buf || !msg_info || !recv_len ) {
+    return -EINVAL;
+  }
+
+  if( !valid_user_address((ulong_t)msg_info) ||
+      !valid_user_address(recv_buf) ) {
+    return -EFAULT;
+  }
+  
   p = __get_port_for_server(owner,port);
   if( !p ) {
     return r;
@@ -522,7 +537,7 @@ recv_cycle:
    * later.
    */
   if( msg != NULL ) {
-    r=__transfer_message_data_to_receiver(msg,recv_buf,recv_len,stats);
+    r=__transfer_message_data_to_receiver(msg,recv_buf,recv_len,msg_info);
     if(r) {
       /* It was impossible to copy message to the buffer, so insert it
        * to the queue again.

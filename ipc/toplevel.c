@@ -31,16 +31,14 @@ status_t sys_port_send(pid_t pid,ulong_t port,uintptr_t snd_buf,
 }
 
 status_t sys_port_receive( ulong_t port, ulong_t flags, ulong_t recv_buf,
-                           ulong_t recv_len)
+                           ulong_t recv_len,port_msg_info_t *msg_info)
 {
-  ipc_port_receive_stats_t rcv_stats;
   status_t r;
 
-  r=ipc_port_receive(current_task(),port,flags,recv_buf,recv_len,&rcv_stats);
-  if( !r ) {
-    r=ENCODE_RECV_RETURN_VALUE(rcv_stats.msg_id,rcv_stats.bytes_received);
-  }
-
+  kprintf( "sys_port_receive():\n" );
+  r=ipc_port_receive(current_task(),port,flags,recv_buf,recv_len,msg_info);
+  kprintf( "r=%d\n" );
+  for(;;);
   return r;
 }
 

@@ -64,7 +64,7 @@ static void thread2(void *data)
   status_t r;
   char *server_reply="Yes, I am here. How can I help you ?";
   ulong_t reply_len=strlen(server_reply)+1;
-  ipc_port_receive_stats_t rcv_stats;
+  port_msg_info_t rcv_stats;
   char buf[64];
 
   server_port = ipc_create_port(current_task(),IPC_BLOCKED_ACCESS,

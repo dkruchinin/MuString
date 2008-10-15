@@ -38,18 +38,6 @@ struct __ipc_port_t;
 
 #define IPC_BUFFERED_PORT_LENGTH  1024
 
-/* TODO: [mt] Encode/decode 'receive()' return values properly. */
-#define ENCODE_RECV_RETURN_VALUE(msg_id,rcv_size)       \
-    ( ((msg_id) << 22) | rcv_size )
-#define DECODE_RECV_MSG_ID(encoded)             \
-    ((encoded)>>22)
-#define DECODE_RECV_MSG_SIZE(encoded)           \
-    ((encoded) & 0x3fffff)
-
-typedef struct __ipc_port_receive_stats {
-  ulong_t msg_id,bytes_received;
-} ipc_port_receive_stats_t;
-
 typedef struct __ipc_port_messsage_t {
   ulong_t data_size,reply_size,id,replied_size;
   void *send_buffer,*receive_buffer;
@@ -58,6 +46,7 @@ typedef struct __ipc_port_messsage_t {
   struct __ipc_port_t *port;
   ipc_user_buffer_t snd_buf, rcv_buf;
   task_t *receiver;  /* To handle 'reply()' properly. */
+  task_t *sender;
 } ipc_port_message_t;
 
 typedef struct __ipc_port_t {
@@ -72,6 +61,11 @@ typedef struct __ipc_port_t {
   wait_queue_t waitqueue;
 } ipc_port_t;
 
+typedef struct __port_msg_info {
+  uint16_t msg_id,msg_len;
+  pid_t sender_pid;
+} port_msg_info_t;
+
 #define IPC_LOCK_PORT(p) spinlock_lock(&p->lock)
 #define IPC_UNLOCK_PORT(p) spinlock_unlock(&p->lock)
 
@@ -85,7 +79,7 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
                        ulong_t snd_size,uintptr_t rcv_buf,ulong_t rcv_size);
 status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
                           ulong_t recv_buf,ulong_t recv_len,
-                          ipc_port_receive_stats_t *stats);
+                          port_msg_info_t *msg_info);
 status_t ipc_port_reply(task_t *owner, ulong_t port, ulong_t msg_id,
                         ulong_t reply_buf,ulong_t reply_len);
 
