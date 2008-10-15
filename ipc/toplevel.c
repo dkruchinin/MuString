@@ -33,13 +33,7 @@ status_t sys_port_send(pid_t pid,ulong_t port,uintptr_t snd_buf,
 status_t sys_port_receive( ulong_t port, ulong_t flags, ulong_t recv_buf,
                            ulong_t recv_len,port_msg_info_t *msg_info)
 {
-  status_t r;
-
-  kprintf( "sys_port_receive():\n" );
-  r=ipc_port_receive(current_task(),port,flags,recv_buf,recv_len,msg_info);
-  kprintf( "r=%d\n" );
-  for(;;);
-  return r;
+  return ipc_port_receive(current_task(),port,flags,recv_buf,recv_len,msg_info);
 }
 
 status_t sys_port_reply(ulong_t port, ulong_t msg_id,ulong_t reply_buf,

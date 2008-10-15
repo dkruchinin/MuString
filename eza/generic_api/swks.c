@@ -46,7 +46,6 @@ void initialize_swks(void)
   for (i = 0; i < sizeof(swks); i++) {
     *p++ = 0;
   }
-  //memset(&swks,0,sizeof(swks));
 
   swks.system_ticks_64 = INITIAL_TICKS_VALUE;
   swks.nr_cpus = NR_CPUS;
@@ -63,6 +62,6 @@ void initialize_swks(void)
   swks_area.num_pages=SWKS_PAGES;
   swks_area.map_flags=MAP_RDONLY;
 
-  //vm_register_user_mandatory_area(&swks_area);
+  vm_register_user_mandatory_area(&swks_area);
 }
 

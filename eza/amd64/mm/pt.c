@@ -102,10 +102,7 @@ static int populate_pdp3_entry(pdp3_entry_t *entry, mmap_flags_t flags)
       }
 
     entry->present = 1;
-    if (!(flags & MAP_ACC_MASK) || (flags & MAP_RDONLY))
-      entry->rw = 0; /* if access type is not set, page pages as read-only */
-    else if (flags & MAP_RW)
-      entry->rw = 1;    
+    entry->rw = 1;    
 
     entry->us = 1;
     entry->pwt = 0;
@@ -134,10 +131,7 @@ static int populate_pde2_entry(pde2_entry_t *entry, mmap_flags_t flags)
       }
 
     entry->present = 1;
-    if (!(flags & MAP_ACC_MASK) || (flags & MAP_RDONLY))
-      entry->rw = 0; /* if access type is not set, page pages as read-only */
-    else if (flags & MAP_RW)
-      entry->rw = 1;
+    entry->rw = 1;
 
     entry->us = 1;
     entry->pwt = 0;
@@ -277,10 +271,7 @@ static int populate_pml4_entry(pml4_entry_t *entry, mmap_flags_t flags)
       }
 
     entry->present = 1;
-    if (!(flags & MAP_ACC_MASK) || (flags & MAP_RDONLY))
-      entry->rw = 0; /* if access type is not set, page pages as read-only */
-    else if (flags & MAP_RW)
-      entry->rw = 1;
+    entry->rw = 1;
     
     entry->us = 1;
     entry->pwt = 0;
