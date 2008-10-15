@@ -41,13 +41,13 @@
 #define REF_PORT(p)  atomic_inc(&p->open_count)
 #define UNREF_PORT(p)  atomic_dec(&p->open_count)
 
-static void __put_port(ipc_port_t *p)
+void put_port(ipc_port_t *p)
 {
   UNREF_PORT(p);
   /* TODO: [mt] Free port memory upon deletion. */
 }
 
-static status_t __get_port(task_t *task,ulong_t port,ipc_port_t **out_port)
+status_t ipc_get_port(task_t *task,ulong_t port,ipc_port_t **out_port)
 {
   ipc_port_t *p;
   status_t r;
@@ -383,7 +383,7 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
   }
 
   /* First, locate target port. */
-  r = __get_port(receiver,port,&p);
+  r = ipc_get_port(receiver,port,&p);
   if( r ) {
     return -EINVAL;
   }
@@ -391,31 +391,19 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
   /* First check without locking the port. */
   if( p->avail_messages == p->queue_size ) {
     r = -EBUSY;
-    goto put_port;
-  }
-
-  if( sender->pid == 4 ) {
-//      kprintf( "[1] ATOMIC: %d\n", in_atomic() );
+    goto out_put_port;
   }
 
   msg = __task_port_message(sender,p);
   if( msg==NULL ) {
     r = -ENOMEM;
-    goto put_port;
-  }
-
-  if( sender->pid == 4 ) {
-//      kprintf( "[2] ATOMIC: %d\n", in_atomic() );
+    goto out_put_port;
   }
 
   id = __allocate_port_message_id(p);
   if( id==INVALID_ITEM_IDX ) {
     r = -EBUSY;
-    goto put_port;
-  }
-
-  if( sender->pid == 4 ) {
-//      kprintf( "[3] ATOMIC: %d\n", in_atomic() );
+    goto out_put_port;
   }
 
   /* Setup message data in arch-specific manner. */
@@ -425,30 +413,12 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
     goto free_message_id;
   }
 
-  if( sender->pid == 4 ) {
-//      kprintf( "[4] ATOMIC: %d\n", in_atomic() );
-  }
-
-  
   /* OK, new message is ready for sending. */
   __add_message_to_port_queue(p,msg,id);
-  if( sender->pid == 4 ) {
-//      kprintf( "[5] ATOMIC: %d\n", in_atomic() );
-  }
-
   __notify_message_arrived(p);
 
-  if( sender->pid == 4 ) {
-//      kprintf( "[6] ATOMIC: %d\n", in_atomic() );
-  }
-
-  
   /* Sender should wait for the reply, so put it into sleep here. */
-//  kprintf( "ipc_port_send(): Putting client %d into sleep. ATOMIC: %d\n",
-//           sender->pid, in_atomic() );
   event_yield( &msg->event );
-//  kprintf( "ipc_port_send(): Client %d returned from sleep. ATOMIC: %d\n",
-//           sender->pid, in_atomic() );
   
   /* Copy reply data to our buffers. */
   r=__transfer_reply_data(msg,rcv_buf,rcv_size,false);
@@ -457,32 +427,13 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
   }
 
   /* Release the port. */
-  __put_port(p);
+  put_port(p);
   return r;
 free_message_id:
   __free_port_message_id(p,id);
-put_port:
-  __put_port(p);
+out_put_port:
+  put_port(p);
   return r;
-}
-
-static ipc_port_t *__get_port_for_server(task_t *server,ulong_t port)
-{
-  task_ipc_t *ipc = server->ipc;
-  ipc_port_t *p;
-  ulong_t maxport = server->limits->limits[LIMIT_IPC_MAX_PORTS];
-
-  IPC_LOCK_PORTS(ipc);
-  if( port >= maxport ) {
-    p = NULL;
-  } else {
-    p = ipc->ports[port];
-    if( p != NULL ) {
-      REF_PORT(p);
-    }
-  }
-  IPC_UNLOCK_PORTS(ipc);
-  return p;
 }
 
 status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
@@ -501,9 +452,9 @@ status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
       !valid_user_address(recv_buf) ) {
     return -EFAULT;
   }
-  
-  p = __get_port_for_server(owner,port);
-  if( !p ) {
+
+  r = ipc_get_port(owner,port,&p);
+  if( r )  {
     return r;
   }
 
@@ -546,7 +497,7 @@ recv_cycle:
     }
   }
 
-  __put_port(p);
+  put_port(p);
   return r;
 }
 
@@ -561,9 +512,9 @@ status_t ipc_port_reply(task_t *owner, ulong_t port, ulong_t msg_id,
     return -EINVAL;
   }
 
-  p = __get_port_for_server(owner,port);
-  if( p == NULL ) {
-    return -EINVAL;
+  r = ipc_get_port(owner,port,&p);
+  if( r ) {
+    return r;
   }
 
   IPC_LOCK_PORT(p);
@@ -597,6 +548,6 @@ status_t ipc_port_reply(task_t *owner, ulong_t port, ulong_t msg_id,
 
   r = 0;
 out:
-  __put_port(p);
+  put_port(p);
   return r;
 }

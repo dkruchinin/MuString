@@ -225,10 +225,20 @@ static void ioport_thread(void *data)
     for(;;);
 }
 
+void interrupt_thread(void *data)
+{
+}
+
 void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
 
+  if( cpu_id() == 0 ) {
+      if( kernel_thread(interrupt_thread,NULL) != 0 ) {
+          panic( "Can't create server thread for testing port IPC functionality !\n" );
+      }
+  }
+  
 /*
   if( cpu_id() == 0 ) {
     if( kernel_thread(ioport_thread,NULL) != 0 ) {

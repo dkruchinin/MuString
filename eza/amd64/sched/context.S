@@ -113,5 +113,4 @@ __return_from_sleep:
   sti
   RESTORE_ALL
   popq %rax
-  sti
   retq

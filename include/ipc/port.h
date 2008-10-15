@@ -74,6 +74,8 @@ typedef struct __port_msg_info {
 
 void initialize_ipc(void);
 
+void put_port(ipc_port_t *p);
+status_t ipc_get_port(task_t *task,ulong_t port,ipc_port_t **out_port);
 status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size);
 status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
                        ulong_t snd_size,uintptr_t rcv_buf,ulong_t rcv_size);
