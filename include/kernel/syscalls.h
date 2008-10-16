@@ -21,6 +21,7 @@
 #define __K_SYSCALLS_H__
 
 #include <eza/arch/types.h>
+#include <ipc/port.h>
 #include <eza/task.h>
 
 /* Syscalls identificators. */
