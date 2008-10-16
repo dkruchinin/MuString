@@ -37,6 +37,7 @@
 #include <eza/arch/asm.h>
 #include <eza/arch/preempt.h>
 #include <kernel/syscalls.h>
+#include <eza/uinterrupt.h>
 
 task_t *idle_tasks[MAX_CPUS];
 
@@ -47,6 +48,8 @@ ulong_t syscall_counter = 0;
 
 task_t *server_task;
 status_t server_port;
+
+static char counters[512] __attribute__((aligned(PAGE_SIZE)));
 
 #define wait_ticks(x,y)
 
@@ -225,8 +228,37 @@ static void ioport_thread(void *data)
     for(;;);
 }
 
+status_t sys_wait_on_irq_array(ulong_t id);
+status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
+                                      ulong_t addr,ulong_t flags);
+
 void interrupt_thread(void *data)
 {
+    ulong_t irqs[]={10,6,1,4};
+    static int num_irqs=4;
+    status_t id=sys_create_irq_counter_array(irqs,num_irqs,counters,0);
+
+    kprintf( "IRQ buffer id: %d\n",id );
+    
+    if( id >= 0 ) {
+        int i=0;
+        status_t r;
+        char code;
+
+        code=inb(0x60);
+        while( i < 5000000 ) {
+            kprintf( "Waiting for irqs to arrive ...\n" );
+            r=sys_wait_on_irq_array(id);
+            if( !r ) {
+                code=inb(0x60);
+                kprintf( "CNT: %d, KEY: %d\n", counters[2], (int)code );
+//                counters[2]--;
+            }
+            i++;
+        }
+    }
+
+    for(;;);
 }
 
 void idle_loop(void)

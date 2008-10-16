@@ -109,7 +109,7 @@ static inline void discount_interrupt(void)
 
 static inline bool is_interrupts_enabled(void)
 {
-  return interrupts_read() & 0x200;
+  return (interrupts_read() & 0x200) != 0 ? 1: 0;
 }
 
 static inline void lock_local_interrupts(void)

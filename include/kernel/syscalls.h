@@ -22,6 +22,7 @@
 
 #include <eza/arch/types.h>
 #include <eza/task.h>
+#include <ipc/port.h>
 
 /* Syscalls identificators. */
 #define SC_GET_PID             0

@@ -8,8 +8,13 @@
 
 #define EVENT_OCCURED  0x1
 
-#define LOCK_EVENT(e) spinlock_lock(&e->__lock)
-#define UNLOCK_EVENT(e) spinlock_unlock(&e->__lock)
+#define LOCK_EVENT(e)                           \
+    interrupts_disable();                       \
+    spinlock_lock(&e->__lock)
+
+#define UNLOCK_EVENT(e)                         \
+    spinlock_unlock(&e->__lock);                \
+    interrupts_enable();
 
 typedef struct __event_t {
   spinlock_t __lock;
@@ -46,15 +51,16 @@ static inline void event_yield(event_t *event)
   UNLOCK_EVENT(event);
 
   if( t != NULL ) {
-    sched_change_task_state_lazy(t,TASK_STATE_SLEEPING,
+      sched_change_task_state_lazy(t,TASK_STATE_SLEEPING,
                                  event_lazy_sched_handler,event);
+      event->flags &= ~EVENT_OCCURED;
   }
 }
 
 static inline void event_raise(event_t *event)
 {
   task_t *t;
-    
+
   LOCK_EVENT(event);
   if( !(event->flags & EVENT_OCCURED) ) {
     event->flags |= EVENT_OCCURED;

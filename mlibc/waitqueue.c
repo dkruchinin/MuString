@@ -86,6 +86,7 @@ void waitqueue_yield(wait_queue_task_t *w)
 {
   sched_change_task_state_lazy(w->task,TASK_STATE_SLEEPING,
                                waitqueue_lazy_sched_handler,w);
+  w->flags &= ~WQ_EVENT_OCCURED;
 }
 
 

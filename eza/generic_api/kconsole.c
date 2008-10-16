@@ -61,27 +61,40 @@ static void vga_cons_disable(void)
 static void vga_cons_display_string(const char *str)
 {
   int i;
+  bool int_on=is_interrupts_enabled();    
 
   if (!__vga_cons.is_enabled)
     return;
-  
+
+  interrupts_disable();
   spinlock_lock(&__vga_cons.lock);
+
   for(i = 0; str[i] != '\0'; i++)
     vga_putch(str[i]);
 
   vga_update_cursor();
+
   spinlock_unlock(&__vga_cons.lock);
+  if(int_on) {
+    interrupts_enable();
+  }
 }
  
 static void vga_cons_display_char(const char c)
 {
+  bool int_on=is_interrupts_enabled();
   if (__vga_cons.is_enabled)
     return;
 
+  interrupts_disable();
   spinlock_lock(&__vga_cons.lock);
   vga_putch(c);
   vga_update_cursor();
   spinlock_unlock(&__vga_cons.lock);
+
+  if(int_on) {
+    interrupts_enable();
+  }
 }
 
 kconsole_t *default_console()
