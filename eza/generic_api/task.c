@@ -41,6 +41,7 @@
 #include <eza/vm.h>
 #include <eza/limits.h>
 #include <ipc/ipc.h>
+#include <eza/uinterrupt.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
@@ -159,6 +160,7 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
     goto free_stack_pages;
   }
 
+  r=-ENOMEM;
   /* Setup limits. */
   limits = allocate_task_limits();
   if(limits==NULL) {
@@ -175,7 +177,12 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
   } else {
     task->ipc = ipc;
   }
-  
+
+  task->uspace_events=allocate_task_uspace_events_data();
+  if( !task->uspace_events ) {
+    goto free_ipc;
+  }
+
   if(parent != NULL) {
     ppid = parent->pid;
   } else {
@@ -199,6 +206,8 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
 
   *t = task;
   return 0;
+free_ipc:
+  /* TODO: [mt] deallocate task's IPC structure. */
 free_limits:
   /* TODO: Unmap stack pages here. [mt] */
 free_stack_pages:

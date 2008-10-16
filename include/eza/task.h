@@ -31,8 +31,9 @@
 #include <mm/pt.h>
 #include <eza/limits.h>
 
-#define INVALID_PID  IA_INVALID_VALUE
-#define NUM_PIDS  65536
+#define INVALID_PID  ((pid_t)~0) 
+/* TODO: [mt] Manage NUM_PIDS properly ! */
+#define NUM_PIDS  32768
 
 /* PID-to-task_t translation hash stuff */
 #define PID_HASH_LEVEL_SHIFT  9 /* Levels of PID-to-task cache. */
@@ -66,6 +67,7 @@ typedef uint32_t cpu_array_t;
 
 struct __scheduler;
 struct __task_ipc;
+struct __userspace_events_data;
 
 /* Abstract object for scheduling. */
 typedef struct __task_struct {
@@ -87,6 +89,7 @@ typedef struct __task_struct {
   struct __task_ipc *ipc;
   task_limits_t *limits;
 
+  struct __userspace_events_data *uspace_events;
   /* Arch-dependent context is located here */
   uint8_t arch_context[];
 } task_t;
