@@ -52,6 +52,10 @@ help() {
     echo ">>Misc tools options"
     echo "--with-native-tools Use host environment tools"
     echo ""
+    echo "Debug options:"
+    echo "--debgu-mm   Enable memory management debugging"
+    echo "--debug-slab Enable slabs debugging"
+    echo ""
     echo "configure script version 0.1"
 }
 
@@ -79,6 +83,7 @@ GREP=`which grep`
 ECHO=`which echo`
 LN=`which ln`
 TOOLS="native"
+DEBUG_SLAB="no"
 
 # reading parameters
 loop=0
@@ -100,7 +105,7 @@ while [ $# -ne 0 ]; do
 	--debug=*)
 	DEBUG=`echo $1 | awk -F= {'print $2'}`
 	;;
-	--mm-debug=*)
+	--debug-mm=*)
 	DEBUG_MM=`echo $1 | awk -F= {'print $2'}`
 	;;
 	--enable-always-inline)
@@ -154,6 +159,9 @@ while [ $# -ne 0 ]; do
 	--with-objdump=*)
 	OBJDUMP=`echo $1 | awk -F= {'print $2'}`
 	;;
+    --debug-slab=*)
+    DEBUG_SLAB=`echo $1 | awk -F= {'print $2'}`
+    ;;
     esac
     shift
 done
@@ -308,6 +316,9 @@ echo "#define DEBUG_GENERAL" >> $conf_file
 fi
 if [ $DEBUG_MM = "yes" ];then
 echo "#define DEBUG_MM" >> $conf_file
+fi
+if [ $DEBUG_SLAB = "yes" ]; then
+echo "#define DEBUG_SLAB" >> $conf_file
 fi
 
 echo " " >> $conf_file

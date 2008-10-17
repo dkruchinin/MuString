@@ -35,8 +35,7 @@
 #include <kernel/vm.h>
 
 /* Here it is ! */
-swks_t swks;
-
+swks_t swks  __attribute__((aligned(PAGE_SIZE)));
 static vm_range_t swks_area;
 
 void initialize_swks(void)
@@ -57,7 +56,7 @@ void initialize_swks(void)
   arch_initialize_swks();
 
   /* Make the SWKS be mapped into every user address space. */
-  swks_area.phys_addr=k2p(&swks_area) & PAGE_ADDR_MASK;
+  swks_area.phys_addr=k2p(&swks) & PAGE_ADDR_MASK;
   swks_area.virt_addr=SWKS_VIRT_ADDR;
   swks_area.num_pages=SWKS_PAGES;
   swks_area.map_flags=MAP_RDONLY;
