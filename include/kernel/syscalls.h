@@ -35,6 +35,8 @@
 #define SC_PORT_REPLY          7
 #define SC_ALLOCATE_IOPORTS    8
 #define SC_FREE_IOPORTS        9
+#define SC_CREATE_IRQ_ARRAY    10
+#define SC_WAIT_ON_IRQ_ARRAY   11
 
 /**
  * @fn status_t sys_get_pid(void)
@@ -269,4 +271,63 @@ status_t sys_allocate_ioports(ulong_t first_port,ulong_t num_ports);
  */
 status_t sys_free_ioports(ulong_t first_port,ulong_t num_ports);
 
+/**
+ * @fn status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
+ *                                           ulong_t addr,ulong_t flags)
+ * @brief Create a shared memory object for delivering hardware interrupts
+ *        to userspace.
+ * 
+ * This function creates a so-called 'IRQ array' whcih is used for delivering
+ * hardware interrupts (IRQs) to userspace.
+ * Such arrays consist of two main parts: events bitmask and IRQ counters.
+ * a) event bitmask is used as flags to notify that one or more IRQs have
+ *    arrived. Application should than read and zeroize this mask atomically
+ *    to indocate that it has seen events.
+ * b) IRQ counters are used for counting target IRQs. Kernel-level logic only
+ *    increments these counters whereas user-space application only decrements
+ *    these counters.
+ *    For example, if case user wants to monitor two interrupts: 10 and 11,
+ *    an IRQ array containing 2 counters will be created so that 0th counter
+ *    tracks 10th IRQ and 1st counter tracks 11th IRQ.
+ *
+ * The structure of IRQ array is as follows:
+ *  struct __irq_array {
+ *     irq_event_mask_t event_mask;
+ *     irq_counter_t counters[];
+ *  };
+ *
+ * @param irq_array Array that contains all IRQ numbers to be monitored.
+ * @param irqs Number of elements in @a irq_array (i.e. number of interrupts
+ *        being watched).
+ * @param addr Page-aligned valid address in userspace for placing the array.
+ * @param flags Flags that control behavior of the array.
+ *
+ * @return In case of successful completion this function returns a non-negative
+ * identificator of the new array. Otherwise, a negation of the following errors
+ * is returned:
+ *      EINVAL  Base address, or number of irqs was zero on invalid, or address
+ *              wasn't page-aligned.
+ *      EFAULT  Address wasn't a valid user address.
+ *      EBUSY   One of interrupts being watched is already being watched by
+ *              another process.
+ *      ENOMEM  No free memory for internal kernel structures.
+ */
+status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
+                                      ulong_t addr,ulong_t flags);
+
+/**
+ * @fn status_t sys_wait_on_irq_array(ulong_t id)
+ * Wait for one of target IRQs to arrive.
+ *
+ * This function checks event mask for target IRQ array and suspends
+ * the calling process until one of interrupts being tracked arrives.
+ * After resuming calling process target IRQ array's event mask will
+ * reflect arrived IRQs and their counters will be incremented to
+ * reflect the amount of IRQs arrived.
+ *
+ * @param ID of the IRQ array being used.
+ * @return After occuring one or more IRQs, this function returns zero.
+ *         If insufficient buffer ID was used, -EINVAL is returned.
+ */
+status_t sys_wait_on_irq_array(ulong_t id);
 #endif

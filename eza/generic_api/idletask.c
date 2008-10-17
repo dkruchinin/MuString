@@ -232,14 +232,21 @@ status_t sys_wait_on_irq_array(ulong_t id);
 status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
                                       ulong_t addr,ulong_t flags);
 
+typedef struct __irq_arrray {
+  irq_event_mask_t ev_mask;
+  irq_counter_t irq_counters[];
+} irq_array_t;
+
+static irq_array_t __irq_array __attribute__((aligned(PAGE_SIZE)));
+
 void interrupt_thread(void *data)
 {
     ulong_t irqs[]={10,6,1,4};
     static int num_irqs=4;
-    status_t id=sys_create_irq_counter_array(irqs,num_irqs,counters,0);
-
+    status_t id=sys_create_irq_counter_array(irqs,num_irqs,
+                                             &__irq_array,0);
     kprintf( "IRQ buffer id: %d\n",id );
-    
+
     if( id >= 0 ) {
         int i=0;
         status_t r;
@@ -250,9 +257,13 @@ void interrupt_thread(void *data)
             kprintf( "Waiting for irqs to arrive ...\n" );
             r=sys_wait_on_irq_array(id);
             if( !r ) {
+                ulong_t mask=__irq_array.ev_mask;
+                __irq_array.ev_mask=0;
                 code=inb(0x60);
-                kprintf( "CNT: %d, KEY: %d\n", counters[2], (int)code );
-//                counters[2]--;
+                kprintf( "CNT: %d, KEY: %d, EVENT MASK: %X\n",
+                         __irq_array.irq_counters[2],
+                         (int)code,
+                         mask);
             }
             i++;
         }
