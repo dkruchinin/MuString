@@ -185,6 +185,9 @@ divide_by_zero_fault_handler:
   pushq %rax
   movl $0x0,%eax
 common_exception_path:
+	cli
+  jmp common_exception_path
+
   SAVE_ALL
   /* No we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to
@@ -201,6 +204,8 @@ common_exception_path:
   iretq
 
 error_code_exception_path:
+	cli
+  jmp error_code_exception_path
   SAVE_ALL
   /* No we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to
@@ -221,91 +226,109 @@ error_code_exception_path:
   iretq
 
 debug_fault_handler:
+	cli
   push %rax
   movl $0x1,%eax
   jmp common_exception_path
 
 nmi_fault_handler:
+	cli
   push %rax
   movl $0x2,%eax
   jmp common_exception_path
 
 breakpoint_fault_handler:
+	cli
   push %rax
   movl $0x3,%eax
   jmp common_exception_path
 
 overflow_fault_handler:
+	cli
   push %rax
   movl $0x4,%eax
   jmp common_exception_path
 
 bound_range_fault_handler:
+	cli
   push %rax
   movl $0x5,%eax
   jmp common_exception_path
 
 invalid_opcode_fault_handler:
+	cli
   push %rax
   movl $0x6,%eax
   jmp common_exception_path
 
 device_not_available_fault_handler:
+	cli
   push %rax
   movl $0x7,%eax
   jmp common_exception_path
 
 doublefault_fault_handler:
+  cli
   push %rax
   movl $0x8,%eax
   jmp common_exception_path
 
 invalid_tss_fault_handler:
+	cli
   push %rax
   movl $10,%eax
   jmp common_exception_path
 
 segment_not_present_fault_handler:
+	cli
   push %rax
   movl $11,%eax
   jmp common_exception_path
 
 stack_fault_handler:
+	cli
   push %rax
   movl $12,%eax
   jmp common_exception_path
 
 general_protection_fault_handler:
+	cli
   push %rax
   movl $13,%eax
   jmp error_code_exception_path
 
 page_fault_fault_handler:
+	cli
   push %rax
   movl $14,%eax
   jmp error_code_exception_path
 
 fpu_fault_handler:
+	cli
   push %rax
   movl $16,%eax
   jmp common_exception_path
 
 alignment_check_fault_handler:
+	cli
   push %rax
   movl $17,%eax
   jmp common_exception_path
 
 machine_check_fault_handler:
+	cli
   push %rax
   movl $18,%eax
   jmp common_exception_path
 
 simd_fault_handler:
+	cli
   push %rax
   movl $19,%eax
   jmp common_exception_path
 
 security_exception_fault_handler:
+	cli
   push %rax
   movl $30,%eax
   jmp common_exception_path 

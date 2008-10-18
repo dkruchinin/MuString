@@ -191,7 +191,7 @@ void server_run_tasks(void)
   if(i<=0)
     return;
 
-  kprintf("[SRV] Starting servers ... \n");
+  kprintf("... [SRV] Starting servers: %d ... \n",i);
 
   for(a=0;a<i;a++) {
     r=create_task(current_task(),0,TPL_USER,&server);

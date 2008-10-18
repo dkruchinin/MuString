@@ -94,6 +94,7 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
     if(!aframe)
       return -ENOMEM; /* no free pages to allocate */
 
+    _flags=0;
     if(flags & MMAP_RW) /*map_rd map_rdonly*/
       _flags |= MAP_RW;
     if(flags & MMAP_RDONLY)

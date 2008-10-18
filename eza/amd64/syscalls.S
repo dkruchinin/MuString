@@ -34,16 +34,19 @@
  * the fourth parameter via %r10.
  */
 syscall_table:
-	.quad	sys_get_pid       	/* 0 */
+	.quad	sys_get_pid       		/* 0 */
 	.quad 	sys_create_task
 	.quad 	sys_task_control
 	.quad   sys_mmap
 	.quad   sys_create_port
-	.quad   sys_port_send           /* 5 */
+	.quad   sys_port_send           	/* 5 */
 	.quad   sys_port_receive
 	.quad   sys_port_reply
 	.quad   sys_allocate_ioports
 	.quad   sys_free_ioports
+	.quad   sys_create_irq_counter_array	/* 10 */
+	.quad   sys_wait_on_irq_array
+	.quad   sys_log
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \
