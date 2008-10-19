@@ -182,12 +182,10 @@ ret_from_int:
 /* Here goes handlers for CPU-specific fault handlers ranged at [0 .. 31]
  */
 divide_by_zero_fault_handler:
+  cli
   pushq %rax
   movl $0x0,%eax
 common_exception_path:
-	cli
-  jmp common_exception_path
-
   SAVE_ALL
   /* No we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to
@@ -204,8 +202,6 @@ common_exception_path:
   iretq
 
 error_code_exception_path:
-	cli
-  jmp error_code_exception_path
   SAVE_ALL
   /* No we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to
@@ -292,13 +288,13 @@ stack_fault_handler:
   jmp common_exception_path
 
 general_protection_fault_handler:
-	cli
+  cli
   push %rax
   movl $13,%eax
   jmp error_code_exception_path
 
 page_fault_fault_handler:
-	cli
+  cli
   push %rax
   movl $14,%eax
   jmp error_code_exception_path
