@@ -36,8 +36,9 @@
 
 .global arch_delay_loop
 .global arch_fake_loop
-.global return_from_common_interrupt
 
+.global return_from_common_interrupt
+.global return_from_syscall
 .global divide_by_zero_fault_handler
 .global debug_fault_handler
 .global nmi_fault_handler
@@ -178,6 +179,18 @@ ret_from_int:
    */
   orq $RFLAGS_IF,HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
   iretq
+
+return_from_syscall:
+  RESTORE_GPR
+
+  cli
+  /* Restore back user stack pointer. Interrupts will be
+   * restored after performing the SYSRET command.
+   */
+  movq %gs:CPU_SCHED_STAT_USTACK_OFFT, %rsp
+
+  swapgs
+  sysretq
 
 /* Here goes handlers for CPU-specific fault handlers ranged at [0 .. 31]
  */
