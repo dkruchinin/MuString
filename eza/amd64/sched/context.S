@@ -110,7 +110,6 @@ leave_cr3:
   retq
 
 __return_from_sleep:
-  sti
   RESTORE_ALL
   popq %rax
   retq

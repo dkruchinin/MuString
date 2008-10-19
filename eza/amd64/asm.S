@@ -152,7 +152,6 @@ return_from_common_interrupt:
 no_preemption_in_interrupt:
   RESTORE_ALL
   /* Now we can enable interrupts. */
-  sti
   cmp $KERNEL_SELECTOR(KTEXT_DES),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)
   je ret_from_int
 
@@ -163,8 +162,6 @@ no_preemption_in_interrupt:
    * in case if another interrupt has occured.
    */
 userspace_ret_from_int:
-  cli
-
   /* Restore user segment registers. */
   mov %gs:(CPU_SCHED_STAT_USER_DS_OFFT),%ds
   mov %gs:(CPU_SCHED_STAT_USER_ES_OFFT),%es

@@ -343,7 +343,7 @@ static void def_schedule(void)
   eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
   task_t *current = current_task();
   task_t *next;
-  bool need_switch;
+  bool need_switch,ints_enabled;
 
 //  kprintf( "ENTERING SCHEDULE STEP (%d).\n", cpu_id() );
 //  __READ_TIMESTAMP_COUNTER(__t1);
@@ -352,7 +352,8 @@ static void def_schedule(void)
    * finishes its job or until interrupts will be enabled in no context
    * switch is required.
    */
-  if( is_interrupts_enabled() ) {
+  ints_enabled=is_interrupts_enabled();
+  if( ints_enabled ) {
     interrupts_disable();
   }
 
@@ -390,9 +391,10 @@ static void def_schedule(void)
 
   if( need_switch ) {
     arch_activate_task(next);
-  } else {
-    /* No context switch is needed. Just enable interrupts. */
-    interrupts_enable();
+  }
+
+  if( ints_enabled ) {
+      interrupts_enable();
   }
 }
 
