@@ -27,6 +27,7 @@
 #include <eza/arch/page.h>
 #include <eza/arch/current.h>
 #include <eza/errno.h>
+#include <eza/arch/cpu.h>
 
 .code64
 
@@ -173,10 +174,12 @@ userspace_ret_from_int:
   mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
   swapgs
   mov %eax,%gs
-  popq %rax
-  iretq
 ret_from_int:
   popq %rax
+
+  /* Make sure IF is set after returning from interrupt context. 
+   */
+  orq $RFLAGS_IF,HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
   iretq
 
 /* Here goes handlers for CPU-specific fault handlers ranged at [0 .. 31]

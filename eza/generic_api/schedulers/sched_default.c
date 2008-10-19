@@ -436,7 +436,8 @@ static status_t __change_local_task_state(task_t *task,task_state_t new_state,
   switch(new_state) {
     case TASK_STATE_RUNNABLE:
       if( prev_state == TASK_STATE_JUST_BORN
-	  || prev_state == TASK_STATE_STOPPED) {
+	  || prev_state == TASK_STATE_STOPPED ||
+          prev_state == TASK_STATE_SLEEPING ) {
 	__activate_local_task(task,sched_data);
         r = 0;
       }
@@ -471,10 +472,11 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
 
   if( task->cpu == cpu_id() ) {
     r=__change_local_task_state(task,new_state,h,data);
+    interrupts_enable();
   } else {
+    interrupts_enable();
     r=__change_remote_task_state(task,new_state);
   }
-  interrupts_enable();
 //  kprintf( "]]]]] AFTER CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d\n",
 //           in_atomic(), current_task_needs_resched() );
   cond_reschedule();
