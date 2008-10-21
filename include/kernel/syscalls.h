@@ -24,6 +24,8 @@
 #include <ipc/port.h>
 #include <eza/task.h>
 #include <ipc/port.h>
+#include <eza/time.h>
+#include <ipc/poll.h>
 
 /* Syscalls identificators. */
 #define SC_GET_PID             0
