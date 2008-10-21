@@ -38,6 +38,7 @@
 #define SC_FREE_IOPORTS        9
 #define SC_CREATE_IRQ_ARRAY    10
 #define SC_WAIT_ON_IRQ_ARRAY   11
+#define SC_IPC_PORT_POLL       12
 
 /**
  * @fn status_t sys_get_pid(void)
@@ -331,4 +332,25 @@ status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
  *         If insufficient buffer ID was used, -EINVAL is returned.
  */
 status_t sys_wait_on_irq_array(ulong_t id);
+
+/**
+ * @fn status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
+ * Performs I/O multiplexing on a given range of IPC ports.
+ *
+ * This function checks every port in a range for one of requested events
+ * to occur and puts the calling process into sleep util one of target
+ * events occur.
+ * The following event types are used:
+ *    POLLIN - data other than high-priority data may be read without blocking.
+ *    POLLRDNORM - normal data may be read without blocking.
+ * NOTE: Since IPC ports always block on send (i.e. 'write'), it is impossible
+ * to wait for an IPC port to become available for non-blocking write.
+ *
+ * @param pfds - array of structures that specify desired ports and events.
+ * @param nfds - number of structures in the array.
+ * @param timeout - operation timeout.
+ *        NOTE: Currently timeouts are not supported.
+ */
+status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout);
+
 #endif
