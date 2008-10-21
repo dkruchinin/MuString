@@ -32,6 +32,7 @@
 #include <mm/pfalloc.h>
 #include <mm/pt.h>
 #include <eza/arch/elf.h>
+#include <eza/kconsole.h>
 #include <kernel/elf.h>
 #include <kernel/vm.h>
 #include <mlibc/kprintf.h>
@@ -107,13 +108,16 @@ static status_t __create_task_mm(task_t *task, int num)
 	  real_code_size+=esh.sh_size;
 	  last_offset=esh.sh_addr;
 	  last_sect_size=esh.sh_size;
-	}
-	if(esh.sh_flags & ESH_WRITE) {
+	} else if(esh.sh_flags & ESH_WRITE) {
 	  real_data_size+=esh.sh_size;
 	  if(real_data_offset==0) 
 	    real_data_offset=esh.sh_addr;
 	  last_data_offset=esh.sh_addr;
 	  last_data_size=esh.sh_size;
+	} else { /* rodata */
+	  real_code_size+=esh.sh_size;
+	  last_offset=esh.sh_addr;
+	  last_sect_size=esh.sh_size;
 	}
 /*	atom_usleep(100);*/
       } else if(esh.sh_flags & ESH_ALLOC && esh.sh_type==SHT_NOBITS) { /* seems to be an bss section */
@@ -187,11 +191,13 @@ void server_run_tasks(void)
   int i=server_get_num(),a;
   task_t *server;
   status_t r;
+  kconsole_t *kconsole=default_console();
 
   if(i<=0)
     return;
 
-  kprintf("... [SRV] Starting servers: %d ... \n",i);
+  kprintf("[SRV] Starting servers: %d ... \n",i);
+  kconsole->disable(); /* shut off console */
 
   for(a=0;a<i;a++) {
     r=create_task(current_task(),0,TPL_USER,&server);
