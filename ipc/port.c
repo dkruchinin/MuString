@@ -481,10 +481,10 @@ status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
     return -EINVAL;
   }
 
-//  if( !valid_user_address((ulong_t)msg_info) ||
-//      !valid_user_address(recv_buf) ) {
-//    return -EFAULT;
-//  }
+  if( !valid_user_address((ulong_t)msg_info) ||
+      !valid_user_address(recv_buf) ) {
+    return -EFAULT;
+  }
 
   r = ipc_get_port(owner,port,&p);
   if( r )  {
