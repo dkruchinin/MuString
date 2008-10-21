@@ -37,6 +37,7 @@
 #include <eza/arch/current.h>
 #include <eza/spinlock.h>
 #include <kernel/syscalls.h>
+#include <kernel/vm.h>
 
 typedef uint32_t hash_level_t;
 
@@ -127,7 +128,7 @@ status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
   switch( cmd ) {
     case SYS_PR_CTL_SET_ENTRYPOINT:
     case SYS_PR_CTL_SET_STACK:
-      if( !IS_USERSPACE_ADDRESS_VALID(arg) ) {
+      if( !valid_user_address(arg) ) {
         return -EFAULT;
       }
       if( target->state == TASK_STATE_JUST_BORN ) {

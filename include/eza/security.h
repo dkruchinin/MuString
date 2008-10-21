@@ -29,10 +29,6 @@
 #include <eza/arch/page.h>
 #include <eza/process.h>
 
-#define USERSPACE_TOP_ADDRESS 0xffffffffffff
-
-#define IS_USERSPACE_ADDRESS_VALID(addr) (addr < USERSPACE_TOP_ADDRESS)
-
 typedef struct __security_operations_t {
   bool (*check_process_control)(task_t *target,ulong_t cmd, ulong_t arg);
   bool (*check_create_process)(task_creation_flags_t flags);

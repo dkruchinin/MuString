@@ -42,7 +42,19 @@ void waitqueue_add_task(wait_queue_t *wq,wait_queue_task_t *w)
 
   LOCK_WAITQUEUE(wq);
   list_add2tail(&wq->waiters,&w->l);
+  w->q=wq;
   wq->num_waiters++;
+  UNLOCK_WAITQUEUE(wq);
+}
+
+void waitqueue_remove_task(wait_queue_t *wq,wait_queue_task_t *w)
+{
+  LOCK_WAITQUEUE(wq);
+  if( w->q == wq ) {
+    wq->num_waiters--;
+    list_del(&w->l);
+    w->q=NULL;
+  }
   UNLOCK_WAITQUEUE(wq);
 }
 
@@ -65,10 +77,13 @@ void waitqueue_wake_one_task(wait_queue_t *wq)
     list_node_t *n = list_node_first(&wq->waiters);
 
     wq->num_waiters--;
+
     list_del(n);
     UNLOCK_WAITQUEUE(wq);
 
     waiter = container_of(n,wait_queue_task_t,l);
+    waiter->q=NULL;
+
     waiter->flags |= WQ_EVENT_OCCURED;
     sched_change_task_state(waiter->task,TASK_STATE_RUNNABLE);
   } else {

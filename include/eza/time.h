@@ -31,5 +31,10 @@ uint32_t delay_loop;
 
 void timer_tick(void);
 
+typedef struct __timeval {
+  ulong_t tv_sec;   /* seconds */
+  ulong_t tv_usec;  /* microseconds */
+} timeval_t;
+
 #endif
 

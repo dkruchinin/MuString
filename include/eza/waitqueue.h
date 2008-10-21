@@ -37,7 +37,8 @@ typedef struct __wait_queue {
 typedef struct __wait_queue_task {
   list_node_t l;
   task_t *task;
-  ulong_t flags;  
+  ulong_t flags;
+  wait_queue_t *q;  
 } wait_queue_task_t;
 
 #define WQ_EVENT_OCCURED  0x1
@@ -52,6 +53,7 @@ typedef struct __wait_queue_task {
 
 void waitqueue_initialize(wait_queue_t *wq);
 void waitqueue_add_task(wait_queue_t *wq,wait_queue_task_t *w);
+void waitqueue_remove_task(wait_queue_t *wq,wait_queue_task_t *w);
 bool waitqueue_is_empty(wait_queue_t *wq);
 ulong_t waitqueue_get_tasks_number(wait_queue_t *wq);
 void waitqueue_wake_one_task(wait_queue_t *wq);

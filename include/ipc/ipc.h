@@ -27,9 +27,13 @@ typedef struct __ipc_cached_data {
   ipc_port_message_t cached_port_message;
 } ipc_cached_data_t;
 
+typedef struct __ipc_pstats {
+  atomic_t active_queues; /* Number of waitqueues in the process is. */
+} ipc_pstats_t;
+
 typedef struct __task_ipc {
   semaphore_t sem;
-  atomic_t use_count;
+  atomic_t use_count;  /* Number of tasks using this IPC structure. */
 
   /* port-related stuff. */
   ulong_t num_ports;
@@ -45,6 +49,7 @@ typedef struct __task_ipc {
 
   /* Cached singletones for synchronous operations. */
   ipc_cached_data_t cached_data;
+  ipc_pstats_t *pstats;
 } task_ipc_t;
 
 task_ipc_t *allocate_task_ipc(void);
@@ -57,5 +62,8 @@ task_ipc_t *allocate_task_ipc(void);
 
 #define IPC_LOCK_BUFFERS(ipc) spinlock_lock(&ipc->buffer_lock);
 #define IPC_UNLOCK_BUFFERS(ipc) spinlock_unlock(&ipc->buffer_lock);
+
+#define IPC_TASK_ACCT_OPERATION(t) atomic_inc(&t->ipc->pstats->active_queues)
+#define IPC_TASK_UNACCT_OPERATION(t) atomic_dec(&t->ipc->pstats->active_queues)
 
 #endif

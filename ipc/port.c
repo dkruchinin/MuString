@@ -38,10 +38,10 @@
 
 #define MAX_PORT_MSG_LENGTH  MB(2)
 
-#define REF_PORT(p)  atomic_inc(&p->open_count)
-#define UNREF_PORT(p)  atomic_dec(&p->open_count)
+#define REF_PORT(p)  atomic_inc(&p->use_count)
+#define UNREF_PORT(p)  atomic_dec(&p->use_count)
 
-void put_port(ipc_port_t *p)
+void ipc_put_port(ipc_port_t *p)
 {
   UNREF_PORT(p);
   /* TODO: [mt] Free port memory upon deletion. */
@@ -135,6 +135,36 @@ static ipc_port_message_t *___extract_message_from_port_queue(ipc_port_t *p)
   return msg;
 }
 
+poll_event_t ipc_port_get_pending_events(ipc_port_t *port)
+{
+  poll_event_t e;
+
+  IPC_LOCK_PORT_W(port);
+  if(port->avail_messages) {
+    e=POLLIN | POLLRDNORM;
+  } else {
+    e=0;
+  }
+  IPC_UNLOCK_PORT_W(port);
+  return e;
+}
+
+void ipc_port_add_poller(ipc_port_t *port,task_t *poller, wait_queue_task_t *w)
+{
+  w->task=poller;
+
+  IPC_LOCK_PORT_W(port);
+  waitqueue_add_task(&port->waitqueue,w);
+  IPC_UNLOCK_PORT_W(port);
+}
+
+void ipc_port_remove_poller(ipc_port_t *port,wait_queue_task_t *w)
+{
+  IPC_LOCK_PORT_W(port);
+  waitqueue_remove_task(&port->waitqueue,w);
+  IPC_UNLOCK_PORT_W(port);
+}
+
 /* NOTE: Port must be W-locked before calling this function ! */
 static void __put_receiver_into_sleep(task_t *receiver,ipc_port_t *port)
 {
@@ -146,7 +176,9 @@ static void __put_receiver_into_sleep(task_t *receiver,ipc_port_t *port)
   /* Now we can unlock the port. */
   IPC_UNLOCK_PORT_W(port);
 
+  IPC_TASK_ACCT_OPERATION(receiver);
   waitqueue_yield(&w);
+  IPC_TASK_UNACCT_OPERATION(receiver);
 //  kprintf( "> Waking up server: %d\n", receiver->pid );
 }
 
@@ -167,7 +199,6 @@ static status_t __allocate_port(ipc_port_t **out_port,ulong_t flags,
   /* TODO: [mt] Support flags during IPC port creation. */
 
   atomic_set(&p->use_count,1);
-  atomic_set(&p->open_count,0);
   spinlock_initialize(&p->lock, "");
   /* TODO: [mt] allocate memory via slabs ! */
   linked_array_initialize(&p->msg_array,
@@ -418,7 +449,9 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
   __notify_message_arrived(p);
 
   /* Sender should wait for the reply, so put it into sleep here. */
+  IPC_TASK_ACCT_OPERATION(sender);
   event_yield( &msg->event );
+  IPC_TASK_UNACCT_OPERATION(sender);
   
   /* Copy reply data to our buffers. */
   r=__transfer_reply_data(msg,rcv_buf,rcv_size,false);
@@ -427,12 +460,12 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
   }
 
   /* Release the port. */
-  put_port(p);
+  ipc_put_port(p);
   return r;
 free_message_id:
   __free_port_message_id(p,id);
 out_put_port:
-  put_port(p);
+  ipc_put_port(p);
   return r;
 }
 
@@ -448,10 +481,10 @@ status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
     return -EINVAL;
   }
 
-  if( !valid_user_address((ulong_t)msg_info) ||
-      !valid_user_address(recv_buf) ) {
-    return -EFAULT;
-  }
+//  if( !valid_user_address((ulong_t)msg_info) ||
+//      !valid_user_address(recv_buf) ) {
+//    return -EFAULT;
+//  }
 
   r = ipc_get_port(owner,port,&p);
   if( r )  {
@@ -497,7 +530,7 @@ recv_cycle:
     }
   }
 
-  put_port(p);
+  ipc_put_port(p);
   return r;
 }
 
@@ -548,6 +581,6 @@ status_t ipc_port_reply(task_t *owner, ulong_t port, ulong_t msg_id,
 
   r = 0;
 out:
-  put_port(p);
+  ipc_put_port(p);
   return r;
 }
