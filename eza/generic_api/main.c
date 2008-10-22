@@ -159,22 +159,23 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
 
 void main_smpap_routine(void)
 {
-  static cpu_id_t cpu = 1;
+  static cpu_id_t cpu=1;
 
   kprintf("CPU#%d Hello folks! I'm here\n", cpu);
 
+  /* Perform generic CPU initialization. Memory will be initialized later. */
+  arch_cpu_init(cpu);
+
   /* Ramap physical memory using page directory preparead be master CPU. */
-  kprintf( "[CPU 1]: Beeeee !\n" );
+  arch_smp_mm_init(cpu);
 
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.
    */
-  arch_cpu_init(cpu);
-
   arch_activate_idle_task(cpu);
+  cpu++;
 
   /* Continue CPU initialization in new context. */
-  cpu++;
   main_smpap_routine_stage1(1);
 }
 #endif

@@ -93,7 +93,6 @@ void arch_cpu_init(cpu_id_t cpu)
   /* disable align checking */
   cpu_clean_am_flag();
 
-  kprintf( "[4]\n" );
   /* setup syscall entrypoint */
   arch_syscall_setup_cpu();
 }

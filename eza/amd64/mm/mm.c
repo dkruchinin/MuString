@@ -312,11 +312,7 @@ status_t arch_vm_map_kernel_area(task_t *task)
 
 void arch_smp_mm_init(int cpu)
 {
-    load_cr3( _k2p((uintptr_t)&kernel_pt_directory.entries[0]), 1, 1 );
-
-    if( cpu ) {
-        for(;;);
-    }
+  load_cr3( _k2p((uintptr_t)&kernel_pt_directory.entries[0]), 1, 1 );
 }
 
 /* AMD 64-specific function for zeroizing a page. */
