@@ -20,4 +20,5 @@ LIBEZA_OBJS=eza/generic_api/main.o \
 	eza/generic_api/limits.o \
 	eza/generic_api/resources/ioports.o \
 	eza/generic_api/resources/resource.o \
-	eza/generic_api/uinterrupts.o
+	eza/generic_api/uinterrupts.o \
+	eza/generic_api/def_actions.o

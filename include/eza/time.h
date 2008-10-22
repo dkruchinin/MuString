@@ -26,6 +26,7 @@
 #define __TIME_H__ 
 
 #include <eza/arch/types.h>
+#include <eza/swks.h>
 
 uint32_t delay_loop;
 
@@ -35,6 +36,8 @@ typedef struct __timeval {
   ulong_t tv_sec;   /* seconds */
   ulong_t tv_usec;  /* microseconds */
 } timeval_t;
+
+#define system_ticks  swks.system_ticks_64
 
 #endif
 

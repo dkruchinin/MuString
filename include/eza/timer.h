@@ -38,8 +38,24 @@ typedef struct __hw_timer_type {
   void (*register_callback)(irq_t irq,irq_handler_t handler);
 } hw_timer_t;
 
-void init_hw_timers(void);
 void hw_timer_register(hw_timer_t *ctrl);
+
+typedef void (*timer_handler_t)(ulong_t data);
+
+#define TF_TIMER_ACTIVE  0x1        /* Timer is active and ticking. */
+
+typedef struct __timer {
+  list_node_t l;
+  ulong_t time_x,flags,data;
+  timer_handler_t handler;
+} timer_t;
+
+void init_timers(void);
+void init_timer(timer_t *t);
+bool add_timer(timer_t *t);
+void delete_timer(timer_t *t);
+void adjust_timer(timer_t *t,long_t delta);
+void process_timers(void);
 
 #endif /*__EZA_TIMER_H__*/
 

@@ -30,14 +30,12 @@
 #include <eza/smp.h>
 #include <eza/arch/current.h>
 #include <eza/arch/apic.h>
+#include <eza/timer.h>
 
 void initialize_timer(void)
 {
+  init_timers();
   arch_timer_init();
-}
-
-static void process_timers(void)
-{
 }
 
 void timer_tick(void)
@@ -52,13 +50,12 @@ void timer_interrupt_handler(void *data)
   timer_tick();
 }
 
-
 #ifdef CONFIG_SMP
 /* SMP-specific stuff. */
 void smp_local_timer_interrupt_tick(void)
 {
     if(cpu_id() == 0) {
-        timer_tick();
+      timer_tick();
     }
     sched_timer_tick();
 }

@@ -49,6 +49,7 @@
 #include <eza/arch/atomic.h>
 #include <ipc/port.h>
 #include <eza/resource.h>
+#include <eza/arch/interrupt.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0

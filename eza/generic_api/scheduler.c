@@ -43,6 +43,8 @@
 #include <mlibc/string.h>
 #include <eza/process.h>
 #include <eza/security.h>
+#include <eza/timer.h>
+#include <eza/time.h>
 
 extern void initialize_idle_tasks(void);
 
@@ -231,7 +233,7 @@ status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg)
   }
 
   if( !security_ops->check_scheduler_control(target,cmd,arg) ) {
-    r = -EACCES;
+    r = -EPERM ;
     goto out_release;
   }
 
@@ -239,6 +241,37 @@ status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg)
 out_release:
   release_task_struct(target);
   return r;
+}
+
+static void __sleep_timer_handler(ulong_t data)
+{
+  kprintf( "SLEEP HANDLER !\n" );
+  sched_change_task_state((task_t *)data,TASK_STATE_RUNNABLE);
+}
+
+static bool __sleep_timer_lazy_routine(void *data)
+{
+  timer_t *t=(timer_t*)data;
+  return t->time_x > system_ticks;
+}
+
+status_t sleep(ulong_t ticks)
+{
+  if( ticks ) {
+    timer_t timer;
+
+    init_timer(&timer);
+    timer.handler=__sleep_timer_handler;
+    timer.data=(ulong_t)current_task();
+    timer.time_x=system_ticks+ticks;
+
+    if( !add_timer(&timer) ) {
+      return -EAGAIN;
+    }
+    sched_change_task_state_lazy(current_task(),TASK_STATE_SLEEPING,
+                                 __sleep_timer_lazy_routine,&timer);
+  }
+  return 0;
 }
 
 #ifdef CONFIG_SMP

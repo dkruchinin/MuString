@@ -321,10 +321,26 @@ status_t sys_log(ulong_t s)
     return 0;
 }
 
+static void timer_thread(void *data)
+{
+    ulong_t timeout=390;
+ 
+    kprintf( "[KERNEL THREAD] Sleeping for %d ticks.\n",timeout );
+    sleep(timeout);
+    kprintf( "[KERNEL THREAD] Got woken up !\n" );
+    for(;;);
+}
+
 void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
 
+  if( cpu_id() == 0 ) {
+      if( kernel_thread(timer_thread,NULL) != 0 ) {
+          panic( "Can't create server thread for testing port IPC functionality !\n" );
+      }
+  }
+  
 /*
   if( cpu_id() == 0 ) {
       if( kernel_thread(interrupt_thread,NULL) != 0 ) {
