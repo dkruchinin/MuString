@@ -130,8 +130,9 @@ void arch_specific_init(void)
 
 void arch_ap_specific_init(void)
 {
-    local_ap_apic_init();    
-    
+    local_ap_apic_init();
+    kprintf( "UUUUUUUUUUUUUUUUUUUUUUUUUU !!!\n" );
+    for(;;);
 }
 
 #endif
