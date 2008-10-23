@@ -355,4 +355,17 @@ status_t sys_wait_on_irq_array(ulong_t id);
  */
 status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout);
 
+/**
+ * @fn status_t sys_nanosleep(timeval_t *in,timeval_t *out)
+ *
+ * Suspends calling process for amount of time spicified by the @a in argument.
+ * Minimum time unit used is nanosecond.
+ * @return After waiting for specified amount of time this function returns zero.
+ *   The folowing errors may also be returned:
+ *     EFAULT - insufficient address was passed.
+ *     EINVAL - seconds or nanoseconds exceed 1000000000.
+ */
+
+status_t sys_nanosleep(timeval_t *in,timeval_t *out);
+
 #endif
