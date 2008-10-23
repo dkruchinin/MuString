@@ -108,6 +108,7 @@ void init_timers(void)
 {
   init_hw_timers();
   init_sw_timers();
+  initialize_deffered_actions();
 }
 
 /* NOTE: timer list must be locked prior calling this function. */
