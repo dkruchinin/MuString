@@ -41,6 +41,7 @@
 #define SC_CREATE_IRQ_ARRAY    10
 #define SC_WAIT_ON_IRQ_ARRAY   11
 #define SC_IPC_PORT_POLL       12
+#define SC_NANOSLEEP           13
 
 /**
  * @fn status_t sys_get_pid(void)
