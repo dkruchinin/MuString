@@ -6,7 +6,6 @@ LIBEZA_OBJS=eza/generic_api/main.o \
 	eza/generic_api/timer.o \
 	eza/generic_api/scheduler.o \
 	eza/generic_api/time.o \
-	eza/generic_api/init.o \
 	eza/generic_api/hardware.o \
 	eza/generic_api/swks.o \
 	eza/generic_api/kstack.o \

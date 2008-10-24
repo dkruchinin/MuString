@@ -59,7 +59,6 @@ init_t init={ /* initially created for userspace task, requered for servers load
 context_t crsc;
 
 extern void initialize_common_hardware(void);
-extern void start_init(void);
 extern void initialize_timer(void);
 
 extern spinlock_t can_proceed;
@@ -92,7 +91,6 @@ static void main_routine_stage1(void)
   initialize_ipc();
 
   /* OK, we can proceed. */
-  //start_init();
   server_run_tasks();
 
   /* Enter idle loop. */
