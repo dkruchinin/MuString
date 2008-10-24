@@ -96,6 +96,11 @@ void arch_specific_init(void)
   int err=0;
 
   kprintf("[HW] Init arch specific ... ");
+
+#ifdef NOAPIC
+  return;
+#endif
+
   if(__map_apic_page()<0) 
     err++;
   if(__map_ioapic_page()<0) 
@@ -131,8 +136,6 @@ void arch_specific_init(void)
 void arch_ap_specific_init(void)
 {
     local_ap_apic_init();
-    kprintf( "UUUUUUUUUUUUUUUUUUUUUUUUUU !!!\n" );
-    for(;;);
 }
 
 #endif
