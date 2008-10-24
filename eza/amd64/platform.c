@@ -98,7 +98,7 @@ void arch_specific_init(void)
 
   kprintf("[HW] Init arch specific ... ");
 
-#ifdef NOAPIC
+#ifndef CONFIG_APIC
   return;
 #endif
 

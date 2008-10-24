@@ -69,7 +69,7 @@ void arch_initialize_irqs(void)
   /* Initialize the PIC */
   i8259a_init();
 
-#ifndef NOAPIC
+#ifdef CONFIG_APIC
   fake_apic_init();
 #endif
 
@@ -84,7 +84,7 @@ void arch_initialize_irqs(void)
   }
 
   /* Setup all known interrupt handlers. */
-#ifdef NOAPIC
+#ifndef CONFIG_APIC
   install_generic_irq_handlers();  
 #endif
 

@@ -74,9 +74,12 @@ static void i8259a_disable_irq(uint32_t irq)
 static void i8259a_ack_irq(uint32_t irq) /*end of irq*/
 {
   if( irq >= 8 ) {
-    outb(I8259PIC1_BASE,PIC_EOI);
+      outb(I8259PIC1_BASE,0x60+(irq & 7));
+      outb(I8259PIC0_BASE,0x60+2);
+      outb(I8259PIC1_BASE,PIC_EOI);
+  } else {
+      outb(I8259PIC0_BASE,0x60+irq);
   }
-  /* Need to acknowledge the master too. */
   outb(I8259PIC0_BASE,PIC_EOI);
 }
 
@@ -120,10 +123,13 @@ static void initialize_pic(void)
 
   /*setting slave PIC*/
   outb(I8259PIC1_BASE,0x11);
+
   /*the same for PIC0, excluding offset to map next 8 irqs*/
   outb(I8259PIC1_BASE+1,0x28);
+
   /*ICW3: slave*/
   outb(I8259PIC1_BASE+1,0x02);
+
   /*ICW4 to set: 0x01 for 8086 mode*/
   outb(I8259PIC1_BASE+1,0x01);
 

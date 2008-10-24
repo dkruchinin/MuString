@@ -47,7 +47,6 @@
 void arch_smp_init(void)
 {
   ptr_16_64_t gdtr;
-  disable_all_irqs();
   int i=1,r=0;
 
   /* set BIOS area to don't make a POST on INIT signal */
@@ -65,8 +64,6 @@ void arch_smp_init(void)
     atom_usleep(1000);
     i++;
   }
-
-  enable_all_irqs();
 }
 
 void initialize_common_cpu_interrupts(void)
