@@ -40,8 +40,6 @@ extern void timer_interrupt_handler(void *data);
 
 static void install_generic_irq_handlers(void)
 {
-    kprintf( "ZZZZZZZZZZZZZZZZZZZZZZ !\n" );
-    for(;;);
   register_irq(0, timer_interrupt_handler, NULL, 0 );
 }
 

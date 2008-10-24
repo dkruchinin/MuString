@@ -88,7 +88,7 @@ static void main_routine_stage1(void)
   /* The other CPUs are running, the scheduler is ready, so we can
    * enable all interrupts.
    */
-  enable_all_irqs();  
+  //enable_all_irqs();  
 
   initialize_ipc();
 

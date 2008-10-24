@@ -40,6 +40,7 @@
 #include <eza/swks.h>
 #include <eza/arch/mm_types.h>
 #include <mm/idalloc.h>
+#include <config.h>
 
 extern volatile struct __local_apic_t *local_apic;
 
