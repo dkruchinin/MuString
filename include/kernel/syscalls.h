@@ -41,6 +41,7 @@
 #define SC_CREATE_IRQ_ARRAY    10
 #define SC_WAIT_ON_IRQ_ARRAY   11
 #define SC_IPC_PORT_POLL       12
+#define SC_NANOSLEEP           13
 
 /**
  * @fn status_t sys_get_pid(void)
@@ -354,5 +355,18 @@ status_t sys_wait_on_irq_array(ulong_t id);
  *        NOTE: Currently timeouts are not supported.
  */
 status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout);
+
+/**
+ * @fn status_t sys_nanosleep(timeval_t *in,timeval_t *out)
+ *
+ * Suspends calling process for amount of time spicified by the @a in argument.
+ * Minimum time unit used is nanosecond.
+ * @return After waiting for specified amount of time this function returns zero.
+ *   The folowing errors may also be returned:
+ *     EFAULT - insufficient address was passed.
+ *     EINVAL - seconds or nanoseconds exceed 1000000000.
+ */
+
+status_t sys_nanosleep(timeval_t *in,timeval_t *out);
 
 #endif

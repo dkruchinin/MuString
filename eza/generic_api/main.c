@@ -49,6 +49,7 @@
 #include <eza/arch/atomic.h>
 #include <ipc/port.h>
 #include <eza/resource.h>
+#include <eza/arch/interrupt.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
@@ -58,7 +59,6 @@ init_t init={ /* initially created for userspace task, requered for servers load
 context_t crsc;
 
 extern void initialize_common_hardware(void);
-extern void start_init(void);
 extern void initialize_timer(void);
 
 extern spinlock_t can_proceed;
@@ -87,14 +87,12 @@ static void main_routine_stage1(void)
   /* The other CPUs are running, the scheduler is ready, so we can
    * enable all interrupts.
    */
-  enable_all_irqs();  
 
   initialize_ipc();
 
   /* OK, we can proceed. */
-  //start_init();
   server_run_tasks();
- 
+
   /* Enter idle loop. */
 
   kprintf( "CPU #0 is entering idle loop. Current task: %p, CPU ID: %d\n",
@@ -104,27 +102,27 @@ static void main_routine_stage1(void)
 
 void main_routine(void) /* this function called from boostrap assembler code */
 {
-  kconsole_t *kcons = default_console();  
+  kconsole_t *kcons = default_console();
 
   /* After initializing memory stuff, the master CPU should perform
    * the final initializations.
    */
-    
+
   /* init memory manager stuff - stage 0 */
   arch_cpu_init(0);
   install_fault_handlers();
-  initialize_irqs();  
+  initialize_irqs();
   kcons->enable();
   print_kernel_version_info();
-  kprintf("[MB] Modules: %d\n",init.c);  
+  kprintf("[MB] Modules: %d\n",init.c);
   kprintf("[LW] Initialized CPU vectors.\n");
 
   mm_init();
   slab_allocator_init();
-  
+
   initialize_scheduler();
 
-  initialize_timer();  
+  initialize_timer();
 
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.
@@ -159,22 +157,23 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
 
 void main_smpap_routine(void)
 {
-  static cpu_id_t cpu = 1;
+  static cpu_id_t cpu=1;
 
   kprintf("CPU#%d Hello folks! I'm here\n", cpu);
 
+  /* Perform generic CPU initialization. Memory will be initialized later. */
+  arch_cpu_init(cpu);
+
   /* Ramap physical memory using page directory preparead be master CPU. */
-  kprintf( "[CPU 1]: Beeeee !\n" );
+  arch_smp_mm_init(cpu);
 
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.
    */
-  arch_cpu_init(cpu);
-
   arch_activate_idle_task(cpu);
+  cpu++;
 
   /* Continue CPU initialization in new context. */
-  cpu++;
   main_smpap_routine_stage1(1);
 }
 #endif

@@ -27,17 +27,26 @@
 #include <eza/timer.h>
 #include <eza/time.h>
 #include <mlibc/kprintf.h>
+#include <config.h>
+
+extern void i8254_resume(void);
+extern void i8254_suspend(void);
 
 void arch_timer_init(void)
 {
   int i;
 
   i8254_init();
+
   kprintf("[LW] Calibrating delay loop ... ");
   delay_loop=i8254_calibrate_delay_loop();
-/*  for(i=0;i<10;i++) {
+
+#ifdef CONFIG_APIC 
+  for(i=0;i<10;i++) {
     delay_loop=i8254_calibrate_delay_loop0();
-  }*/
+  }
+#endif
+
   kprintf("%ld\n",delay_loop);
 }
 

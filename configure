@@ -18,6 +18,8 @@ help() {
     echo "Specific hardware options:"
     echo ">>SMP options"
     echo "--with-smp     Build with SMP support (default)"
+    echo "--with-apic    Use APIC"
+    echo "--without-apic  Don't use APIC (SMP will be automatically disabled"
     echo "--without-smp  Build without SMP support"
     echo "--n-cpu=       Number of CPUs to run (default: 2)"
     echo "--max-cpus=    Max CPUs to be supported (default: 8)"
@@ -63,6 +65,7 @@ help() {
 # Core values for build
 ARCH="amd64"
 CONFIG_SMP="yes"
+CONFIG_APIC="yes"
 DEBUG="yes"
 DEBUG_MM="yes"
 # Extra build parameters
@@ -101,6 +104,12 @@ while [ $# -ne 0 ]; do
 	;;
 	--without-smp)
 	CONFIG_SMP="no"
+	;;
+	--with-apic)
+	CONFIG_APIC="yes"
+	;;
+	--without-apic)
+	CONFIG_APIC="no"
 	;;
 	--debug=*)
 	DEBUG=`echo $1 | awk -F= {'print $2'}`
@@ -230,6 +239,13 @@ sed -i s/%smp/y/g config
 else
 sed -i s/%smp/n/g config
 fi
+# CONFIG_SMP
+if [ $CONFIG_APIC = "yes" ];then
+sed -i s/%apic/y/g config
+else
+sed -i s/%apic/n/g config
+fi
+
 echo " " >> config
 echo "# end of config " >> config
 echo " " >> config

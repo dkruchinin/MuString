@@ -28,9 +28,15 @@
 
 void atom_usleep(usec_t usecs)
 {
-  disable_all_irqs();
+  bool enabled=is_interrupts_enabled();
+
+  if( enabled ) {
+    interrupts_disable();
+  }
   arch_delay_loop(delay_loop*usecs);
-  enable_all_irqs();
+  if( enabled ) {
+    interrupts_enable();
+  }
 }
 
 void usleep(usec_t usecs)

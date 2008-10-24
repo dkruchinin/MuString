@@ -511,13 +511,12 @@ static status_t def_setup_idle_task(task_t *task)
   return 0;
 }
 
-/*
- * NOTE: Upon entering this routine target task is unlocked but marked as
- * 'under control'.
+/* NOTE: Upon entering this routine target task is unlocked.
  */
 static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
 {
   eza_sched_taskdata_t *sdata = EZA_TASK_SCHED_DATA(target);
+  bool trusted=trusted_task(target);
 
   if(cmd > SCHEDULER_MAX_COMMON_IOCTL) {
     return  -EINVAL;
@@ -547,7 +546,7 @@ static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
       return -EINVAL;
     case SYS_SCHED_CTL_SET_PRIORITY:
       if(arg <= EZA_SCHED_PRIORITY_MAX) {
-        if( trusted_task(target) ) {
+        if( trusted ) {
         } else {
           return -EPERM;
         }

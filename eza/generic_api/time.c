@@ -30,14 +30,17 @@
 #include <eza/smp.h>
 #include <eza/arch/current.h>
 #include <eza/arch/apic.h>
+#include <eza/timer.h>
+#include <kernel/syscalls.h>
+#include <eza/time.h>
+#include <kernel/vm.h>
+#include <eza/arch/interrupt.h>
+#include <eza/errno.h>
 
 void initialize_timer(void)
 {
+  init_timers();
   arch_timer_init();
-}
-
-static void process_timers(void)
-{
 }
 
 void timer_tick(void)
@@ -52,13 +55,48 @@ void timer_interrupt_handler(void *data)
   timer_tick();
 }
 
+ulong_t time_to_ticks(timeval_t *tv)
+{
+  if( tv->tv_sec >= NANOSLEEP_MAX_SECS ||
+      tv->tv_nsec >= 1000000000 ) {
+    return 0;
+  }
+
+  return tv->tv_sec*HZ + tv->tv_nsec / (1000000000/HZ);
+}
+
+status_t sys_nanosleep(timeval_t *in,timeval_t *out)
+{
+  timeval_t tv;
+  ulong_t ticks;
+
+  if( !in ) {
+    return -EINVAL;
+  }
+
+  if( copy_from_user(&tv,in,sizeof(tv)) ) {
+    return 0;
+  }
+
+  if( !tv.tv_sec && !tv.tv_nsec ) {
+    return 0;
+  }
+
+  ticks=time_to_ticks(&tv);
+  if( !ticks ) {
+    /* TODO: [mt] support busy-wait cycle in 'sys_nanosleep()' */
+  } else {
+    sleep(ticks);
+  }
+  return 0;
+}
 
 #ifdef CONFIG_SMP
 /* SMP-specific stuff. */
 void smp_local_timer_interrupt_tick(void)
 {
     if(cpu_id() == 0) {
-        timer_tick();
+      timer_tick();
     }
     sched_timer_tick();
 }

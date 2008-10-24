@@ -40,6 +40,7 @@
 #include <eza/swks.h>
 #include <eza/arch/mm_types.h>
 #include <mm/idalloc.h>
+#include <config.h>
 
 extern volatile struct __local_apic_t *local_apic;
 
@@ -96,6 +97,11 @@ void arch_specific_init(void)
   int err=0;
 
   kprintf("[HW] Init arch specific ... ");
+
+#ifndef CONFIG_APIC
+  return;
+#endif
+
   if(__map_apic_page()<0) 
     err++;
   if(__map_ioapic_page()<0) 
@@ -130,8 +136,7 @@ void arch_specific_init(void)
 
 void arch_ap_specific_init(void)
 {
-    local_ap_apic_init();    
-    
+    local_ap_apic_init();
 }
 
 #endif
