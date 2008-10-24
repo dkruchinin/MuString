@@ -76,7 +76,7 @@ void io_apic_write(uint8_t addr,uint32_t v)
 void io_apic_set_ioredir(uint8_t virq,uint8_t dest,uint8_t vector,int flags)
 {
   io_apic_redir_t rd;
-  int txm=TXMODE_FIXED;
+  int txm=TXMODE_EXTINT;
 
   if(flags & LOW_PRIORITY)
     txm=TXMODE_LOWPRI;
