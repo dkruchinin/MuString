@@ -65,7 +65,7 @@ extern spinlock_t can_proceed;
 
 static void main_routine_stage1(void)
 {
-  /* Initialize PICs and setup common interrupt handlers. */
+    /* Initialize PICs and setup common interrupt handlers. */
   set_cpu_online(0,1);  /* We're online. */
   sched_add_cpu(0);
 
@@ -107,13 +107,13 @@ static void main_routine_stage1(void)
 
 void main_routine(void) /* this function called from boostrap assembler code */
 {
-  kconsole_t *kcons = default_console();  
+  kconsole_t *kcons = default_console();
 
   /* After initializing memory stuff, the master CPU should perform
    * the final initializations.
    */
     
-  /* init memory manager stuff - stage 0 */
+  /* init memory manager stuff - stage 0 */  
   arch_cpu_init(0);
   install_fault_handlers();
   initialize_irqs();  

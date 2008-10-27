@@ -8,12 +8,14 @@
 #include <eza/spinlock.h>
 #include <eza/errno.h>
 #include <eza/arch/page.h>
+#include <eza/arch/interrupt.h> /* FIXME DK: remove after debugging */
 #include <eza/arch/ptable.h>
 #include <eza/arch/types.h>
 
 #define DEFAULT_MAPDIR_FLAGS (MAP_RW | MAP_EXEC)
 
 page_frame_t *kernel_root_pagedir = NULL;
+static RW_SPINLOCK_DEFINE(tmp_lock);
 
 page_idx_t __mm_pin_virt_addr(page_frame_t *dir, uintptr_t va, pdir_level_t level)
 {
@@ -84,6 +86,7 @@ int mmap(page_frame_t *root_dir, uintptr_t va, page_idx_t first_page, int npages
 {  
   page_idx_t idx;
   mmap_info_t minfo;
+  int ret;
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
 
   idx = virt_to_pframe_id((void *)va);
@@ -91,8 +94,11 @@ int mmap(page_frame_t *root_dir, uintptr_t va, page_idx_t first_page, int npages
   minfo.va_to = va + (npages << PAGE_WIDTH);
   minfo.flags = flags;
   mm_init_pfiter_index(&minfo.pfi, &pfi_index_ctx, first_page, first_page + npages - 1);
-  
-  return mmap_pages(root_dir, &minfo);
+
+  spinlock_lock_write(&tmp_lock);
+  ret = mmap_pages(root_dir, &minfo);
+  spinlock_unlock_write(&tmp_lock);
+  return ret;
 }
 
 int __mmap_pages(page_frame_t *dir, mmap_info_t *minfo, pdir_level_t level)

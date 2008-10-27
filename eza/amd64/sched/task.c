@@ -163,10 +163,8 @@ void initialize_idle_tasks(void)
     next_frame = NULL;
     minfo.va_from = task->kernel_stack.low_address;
     minfo.va_to = minfo.va_from + (KERNEL_STACK_PAGES << PAGE_WIDTH);
-    minfo.flags = MAP_RW;
-    kprintf("before...\n");
+    minfo.flags = MAP_RW | MAP_EXEC;
     r = mmap_pages(task->page_dir, &minfo);
-    kprintf("after...\n");
     
     if( r != 0 ) {
       panic( "initialize_idle_tasks(): Can't map kernel stack for idle task !" );
