@@ -32,11 +32,6 @@ static inline bool is_kernel_addr(void *a)
           (addr < (uintptr_t)&_kernel_start));
 }
 
-/*static inline bool is_percpu_addr(void *addr)
-{
-  return ((uintptr_t)addr >= (uintptr_t)(&_percpu))
-  }*/
-
 void arch_mm_init(void);
 void arch_mm_remap_pages(void);
 void arch_mm_page_iter_init(page_frame_iterator_t *pfi, ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx);

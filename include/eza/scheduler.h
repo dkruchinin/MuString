@@ -27,7 +27,6 @@
 
 #include <eza/arch/types.h>
 #include <eza/resource.h>
-#include <mm/pt.h>
 #include <eza/kstack.h>
 #include <eza/spinlock.h>
 #include <eza/arch/current.h>

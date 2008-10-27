@@ -28,7 +28,7 @@
 #include <eza/kstack.h>
 #include <eza/arch/context.h>
 #include <mlibc/index_array.h>
-#include <mm/pt.h>
+#include <mm/page.h>
 #include <eza/limits.h>
 
 #define INVALID_PID  IA_INVALID_VALUE
@@ -74,7 +74,7 @@ typedef struct __task_struct {
   task_state_t state;
   cpu_array_t cpu_affinity;
   kernel_stack_t kernel_stack;
-  page_directory_t page_dir;
+  page_frame_t *page_dir;
   list_node_t pid_list;
   ulong_t flags;
 

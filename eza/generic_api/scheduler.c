@@ -31,7 +31,6 @@
 #include <eza/arch/types.h>
 #include <eza/arch/bits.h>
 #include <eza/task.h>
-#include <mm/pt.h>
 #include <eza/scheduler.h>
 #include <eza/swks.h>
 #include <eza/kstack.h>

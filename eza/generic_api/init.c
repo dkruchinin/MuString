@@ -34,11 +34,10 @@
 #include <eza/arch/preempt.h>
 #include <eza/process.h>
 #include <eza/scheduler.h>
-#include <ds/iterator.h>
 #include <mm/mm.h>
 #include <mm/pfalloc.h>
+#include <mm/mmap.h>
 #include <mlibc/string.h>
-#include <mm/pt.h>
 
 #define INIT_CODE_START 0x1FFFFF000000
 #define INIT_CODE_PAGES 1
@@ -92,13 +91,13 @@ static void t(void)
 
 static int create_init_mm(task_t *task)
 {
-  ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_idx_ctx;
-  page_frame_iterator_t pfi;
+  mmap_info_t minfo;  
   page_frame_t *code = alloc_pages(INIT_CODE_PAGES, AF_PGEN);
   page_frame_t *stack = alloc_pages(INIT_STACK_PAGES, AF_PGEN);
   status_t r;
   page_idx_t idx;
 
+  memset(&minfo, 0, sizeof(minfo));
   if( code == NULL ) {
     panic( "Can't allocate pages for init's code !" );
   }
@@ -113,23 +112,16 @@ static int create_init_mm(task_t *task)
   kprintf( "** INIT STACK START: %p, page idx: %x\n",
            INIT_STACK_START, stack->idx );
 
-  mm_init_pfiter_index(&pfi, &pfi_idx_ctx,
-                       pframe_number(code),
-                       pframe_number(code) );
-
-  r = mm_map_pages( &task->page_dir, &pfi,
-                    INIT_CODE_START, INIT_CODE_PAGES,
-                    MAP_ACC_MASK );
+  r = mmap(task->page_dir, INIT_CODE_START, pframe_number(code),
+           INIT_CODE_PAGES, MAP_USER | MAP_RW | MAP_EXEC);
   if( r != 0 ) {
     goto out;
   }
 
-  mm_init_pfiter_index(&pfi, &pfi_idx_ctx,
-                       pframe_number(stack),
-                       pframe_number(stack) + INIT_STACK_PAGES-1 );
-  r = mm_map_pages( &task->page_dir, &pfi,
-                    INIT_STACK_START, INIT_STACK_PAGES,
-                    MAP_ACC_MASK );
+  r = mmap(task->page_dir, INIT_STACK_START, pframe_number(stack),
+           INIT_STACK_PAGES, MAP_USER | MAP_RW);
+  if (r)
+    goto out;
 
   r = do_task_control(task,SYS_PR_CTL_SET_ENTRYPOINT,INIT_CODE_START);
   kprintf( "** Setting entrypoint: %d\n", r );
@@ -138,10 +130,10 @@ static int create_init_mm(task_t *task)
                        PAGE_SIZE*INIT_STACK_PAGES - 32);
   kprintf( "** Setting stack: %d\n", r );
 
-  idx = mm_pin_virtual_address(&task->page_dir,INIT_CODE_START);
+  idx = mm_pin_virt_addr(task->page_dir, (void *)INIT_CODE_START);
   kprintf( "** Init code page: %x\n", idx );
 
-  idx = mm_pin_virtual_address(&task->page_dir,KERNEL_BASE + 0x8000);
+  idx = mm_pin_virt_addr(task->page_dir, (void *)(KERNEL_BASE + 0x8000));
   kprintf( "** Kernel base: %p, first page: %d\n", KERNEL_BASE + 0x8000,
            idx );
 
@@ -177,7 +169,6 @@ void start_userspace_init(void)
 
 static void test_init_thread(void *data)
 {
-  int round = 0;
   uint64_t target_tick = swks.system_ticks_64 + 100;
 
   start_userspace_init();

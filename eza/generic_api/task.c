@@ -20,15 +20,14 @@
  * eza/generic_api/task.c: generic functions for dealing with task creation.
  */
 
-#include <ds/iterator.h>
 #include <ds/list.h>
 #include <eza/task.h>
-#include <mm/pt.h>
 #include <eza/smp.h>
 #include <eza/kstack.h>
 #include <eza/errno.h>
 #include <mm/mm.h>
 #include <mm/pfalloc.h>
+#include <mm/mmap.h>
 #include <eza/amd64/context.h>
 #include <mlibc/kprintf.h>
 #include <eza/arch/scheduler.h>
@@ -107,8 +106,6 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
   page_frame_t *ts_page;
   status_t r = -ENOMEM;
   page_frame_t *stack_pages;
-  page_frame_iterator_t pfi;
-  ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_idx_ctx;
   pid_t pid, ppid;
   task_limits_t *limits;
   task_ipc_t *ipc;
@@ -148,13 +145,8 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
     goto free_mm;
   }
 
-  /* Map kernel stack. */
-  mm_init_pfiter_index(&pfi, &pfi_idx_ctx,
-                       pframe_number(stack_pages),
-                       pframe_number(stack_pages) + KERNEL_STACK_PAGES - 1);
-  r = mm_map_pages( &task->page_dir, &pfi,
-                    task->kernel_stack.low_address, KERNEL_STACK_PAGES,
-                    MAP_KERNEL | MAP_RW);
+  r = mmap(task->page_dir, task->kernel_stack.low_address, pframe_number(stack_pages),
+           KERNEL_STACK_PAGES, MAP_RW);
   if( r != 0 ) {
     goto free_stack_pages;
   }
