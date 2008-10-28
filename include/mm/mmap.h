@@ -22,6 +22,7 @@ typedef uint8_t mmap_flags_t;
 #define MAP_DONTCACHE 0x10 /**< Prevent caching of mapped page */
 
 extern page_frame_t *kernel_root_pagedir;
+extern bool map_verbose;
 
 typedef struct __mmap_info {
   page_frame_iterator_t pfi;

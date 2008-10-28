@@ -436,7 +436,7 @@ static status_t __change_local_task_state(task_t *task,task_state_t new_state,
   }
 
   switch(new_state) {
-    case TASK_STATE_RUNNABLE:
+   case TASK_STATE_RUNNABLE:
       if( prev_state == TASK_STATE_JUST_BORN
 	  || prev_state == TASK_STATE_STOPPED ||
           prev_state == TASK_STATE_SLEEPING ) {
@@ -446,7 +446,7 @@ static status_t __change_local_task_state(task_t *task,task_state_t new_state,
       break;
     case TASK_STATE_STOPPED:
     case TASK_STATE_SLEEPING:
-        if( task->state == TASK_STATE_RUNNABLE
+      if( task->state == TASK_STATE_RUNNABLE
 	    || task->state == TASK_STATE_RUNNING ) {
 	  __deactivate_local_task(task,sched_data);
           r = 0;

@@ -12,7 +12,7 @@
 #include <eza/arch/ptable.h>
 #include <eza/arch/types.h>
 
-#define DEFAULT_MAPDIR_FLAGS (MAP_RW | MAP_EXEC)
+#define DEFAULT_MAPDIR_FLAGS (MAP_RW | MAP_EXEC | MAP_USER)
 
 page_frame_t *kernel_root_pagedir = NULL;
 static RW_SPINLOCK_DEFINE(tmp_lock);
@@ -67,11 +67,7 @@ int mm_map_entries(pde_t *pde_start, pde_idx_t entries,
   dir->entries += entries;
   ASSERT(dir->entries <= PTABLE_DIR_ENTRIES);
   while (entries--) {
-    if (pgt_pde_is_mapped(pde)) {
-      kprintf("here!\n");
-      return -EINVAL;
-    }
-
+    //ASSERT(!pgt_pde_is_mapped(pde));
     iter_next(pfi);
     if (!iter_isrunning(pfi)) {
       kprintf("there!\n");
@@ -93,7 +89,7 @@ int mmap(page_frame_t *root_dir, uintptr_t va, page_idx_t first_page, int npages
 
   idx = virt_to_pframe_id((void *)va);
   minfo.va_from = va;
-  minfo.va_to = va + (npages << PAGE_WIDTH);
+  minfo.va_to = va + ((npages - 1) << PAGE_WIDTH);
   minfo.flags = flags;
   mm_init_pfiter_index(&minfo.pfi, &pfi_index_ctx, first_page, first_page + npages - 1);
 
@@ -102,6 +98,9 @@ int mmap(page_frame_t *root_dir, uintptr_t va, page_idx_t first_page, int npages
   spinlock_unlock_write(&tmp_lock);
   return ret;
 }
+
+
+bool map_verbose = false;
 
 int __mmap_pages(page_frame_t *dir, mmap_info_t *minfo, pdir_level_t level)
 {
@@ -118,13 +117,17 @@ int __mmap_pages(page_frame_t *dir, mmap_info_t *minfo, pdir_level_t level)
   if (level == PTABLE_LEVEL_FIRST) {
     ret = mm_map_entries(pgt_fetch_entry(dir, idx), entries, &minfo->pfi, pgt_translate_flags(minfo->flags));
     minfo->va_from += (range - pgt_idx2vaddr(idx, level));
+    if (map_verbose)
+      kprintf("L(%d) [%p => %p]: entr: %d, idx: %d\n", level, minfo->va_from, minfo->va_to, entries, idx);
   }
   else {
     pde_flags_t _flags = pgt_translate_flags(DEFAULT_MAPDIR_FLAGS);
     
     do {
       pde_t *pde = pgt_fetch_entry(dir, idx++);
-
+      if (map_verbose)
+        kprintf("L(%d) [%p => %p]: entr: %d, idx: %d\n", level, minfo->va_from, minfo->va_to, entries, idx);
+      
       if (!pgt_pde_is_mapped(pde)) {
         ret = mm_populate_pagedir(pde, _flags);
         if (ret < 0)

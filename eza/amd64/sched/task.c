@@ -162,7 +162,7 @@ void initialize_idle_tasks(void)
 
     next_frame = NULL;
     minfo.va_from = task->kernel_stack.low_address;
-    minfo.va_to = minfo.va_from + (KERNEL_STACK_PAGES << PAGE_WIDTH);
+    minfo.va_to = minfo.va_from + ((KERNEL_STACK_PAGES - 1) << PAGE_WIDTH);
     minfo.flags = MAP_RW | MAP_EXEC;
     r = mmap_pages(task->page_dir, &minfo);
     

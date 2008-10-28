@@ -155,18 +155,22 @@ static status_t __create_task_mm(task_t *task, int num)
   /*  kprintf("elf entry -> %p\n",ehead.e_entry); */
 
   /*remap pages*/
-  r = mmap(task->page_dir, USER_START_VIRT, virt_to_pframe_id((void *)code), text_size, MAP_EXEC | MAP_READ | MAP_USER);
+  kprintf("1 [%p ==> (%d, %d)]\n", USER_START_VIRT, code >> PAGE_WIDTH, text_size);
+  map_verbose = true;
+  r = mmap(task->page_dir, USER_START_VIRT, code >> PAGE_WIDTH, text_size, MAP_USER | MAP_RW | MAP_EXEC);
 
-
-  r = mmap(task->page_dir, real_data_offset, virt_to_pframe_id((void *)data_bss), data_size, MAP_RW | MAP_USER | MAP_EXEC);
+  kprintf("2 [%p ==> (%d, %d)]\n", real_data_offset, data_bss >> PAGE_WIDTH, data_size);
+  r = mmap(task->page_dir, real_data_offset, data_bss >> PAGE_WIDTH, data_size, MAP_USER | MAP_RW | MAP_EXEC);
+  
   if (r)
     return r;
-
-  r = mmap(task->page_dir, bss_virt, pframe_number(bss), bss_size, MAP_READ | MAP_USER | MAP_EXEC);
+  kprintf("3 [%p ==> (%d, %d)]\n", bss_virt, pframe_number(bss), bss_size);
+  r = mmap(task->page_dir, bss_virt, pframe_number(bss), bss_size, MAP_USER | MAP_RW | MAP_EXEC);
   if (r)
     return r;
-
-  r = mmap(task->page_dir, USPACE_END-0x40000, pframe_number(stack), USER_STACK_SIZE, MAP_RW | MAP_USER | MAP_EXEC);
+  kprintf("4\n");
+  map_verbose  = false;
+  r = mmap(task->page_dir, USPACE_END-0x40000, pframe_number(stack), USER_STACK_SIZE, MAP_USER | MAP_RW | MAP_EXEC);
   if (r)
     return r;
 
@@ -205,6 +209,7 @@ void server_run_tasks(void)
       panic("Can't create mm of server #%d [err=%d]", i, r);
     
     r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
+    kprintf("done\n");
     if (r)
       panic("Can't schedule to server's #%d task [err=%d]", i, r);
   }

@@ -50,6 +50,8 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
   status_t e;
   task_t *task;
   int _flags = MAP_USER | MAP_EXEC;
+
+  kprintf("sys_mmap ...\n");
 #if 0
   mm_pool_t *pool;
 #endif
@@ -91,18 +93,15 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
     if(!aframe)
       return -ENOMEM; /* no free pages to allocate */
 
-    _flags=0;
     if(flags & MMAP_RW) /*map_rd map_rdonly*/
       _flags |= MAP_RW;
     else if(flags & MMAP_RDONLY)
-      _flags|= MAP_READ;
+      _flags |= MAP_READ;
 
     e=mmap(task->page_dir, addr, pframe_number(aframe), size, _flags);
     if(e!=0) return e;
   } else 
     return -ENOSYS;
-  
-
 
   return 0;
 }

@@ -308,7 +308,9 @@ general_protection_fault_handler:
 
 page_fault_fault_handler:
   cli
-  push %rax
+1:
+        jmp 1b
+  push %rax        
   movl $14,%eax
   jmp error_code_exception_path
 

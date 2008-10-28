@@ -29,7 +29,6 @@
 #include <mm/pfalloc.h>
 #include <mm/mmap.h>
 #include <eza/amd64/context.h>
-#include <mlibc/kprintf.h>
 #include <eza/arch/scheduler.h>
 #include <eza/arch/types.h>
 #include <eza/kernel.h>
