@@ -10,3 +10,4 @@ DEBUG = %debug
 
 CONFIG_SMP = %smp
 
+CONFIG_APIC = %apic

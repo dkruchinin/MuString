@@ -156,6 +156,14 @@ static inline page_frame_t *virt_to_pframe( void *addr )
   return pframe_by_number(virt_to_pframe_id(addr));
 }
 
+static inline void put_page(page_frame_t *p)
+{
+}
+
+static inline void get_page(page_frame_t *p)
+{
+}
+
 /**
  * @fn static inline void pframe_memnull(page_frame_t *start, int block_size)
  * @brief Fill block of @a block_size continuos pages with zero's

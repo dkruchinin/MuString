@@ -15,42 +15,31 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 MadTirra <tirra.newly@gmail.com>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *
- * eza/amd64/timer.c: arch specific timers init
- *                          
+ * include/ipc/poll.h: Data types, constants andprototypes for the IPC ports
+ *                     polling mechanism.
  *
  */
 
+#ifndef __IPC_POLL_H__
+#define  __IPC_POLL_H__
+
 #include <eza/arch/types.h>
-#include <eza/arch/i8254.h>
-#include <eza/timer.h>
-#include <eza/time.h>
-#include <mlibc/kprintf.h>
-#include <config.h>
 
-extern void i8254_resume(void);
-extern void i8254_suspend(void);
+#define POLLIN        0x1  /* Data may be read without blocking. */
+#define POLLRDNORM    0x2  /* Normal data may be read without blocking. */
+#define POLLOUT       0x4  /* Data may be written without blocking. */
+#define POLLWRNORM    0x8  /* Equivalent to POLLOUT. */
 
-void arch_timer_init(void)
-{
-  int i;
+#define MAX_POLL_OBJECTS  65535
 
-  i8254_init();
+typedef uint16_t poll_event_t;
 
-  kprintf("[LW] Calibrating delay loop ... ");
-  delay_loop=i8254_calibrate_delay_loop();
+typedef struct __pollfd {
+  ulong_t fd;
+  poll_event_t events;
+  poll_event_t revents;
+} pollfd_t;
 
-#ifdef CONFIG_APIC 
-  for(i=0;i<10;i++) {
-    delay_loop=i8254_calibrate_delay_loop0();
-  }
 #endif
-
-  kprintf("%ld\n",delay_loop);
-}
-
-uint64_t arch_calibrate_delay_loop(void)
-{
-  return i8254_calibrate_delay_loop();
-}

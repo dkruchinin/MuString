@@ -76,5 +76,10 @@ void register_hw_interrupt_controller(hw_interrupt_controller_t *ctrl);
 /* Arch-specific routines. */
 void arch_initialize_irqs(void);
 
+static inline bool valid_irq_number(irq_t irq)
+{
+  return irq < NUM_IRQS;
+}
+
 #endif
 

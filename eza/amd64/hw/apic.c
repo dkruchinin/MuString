@@ -217,6 +217,20 @@ void set_apic_ldr_logdest(uint32_t dest)
   local_apic->ldr.reg=ldr.reg;
 }
 
+static inline void enable_l_apic_in_msr(uintptr_t base)
+{
+  __asm__ volatile (
+		    "movq $0x1b, %%rcx\n"
+		    "rdmsr\n"
+		    "orq $(1<<11),%%rax\n"
+		    "orq %0,%%rax\n"
+		    "wrmsr\n"
+		    :
+		    : "m" (base)
+		    :"%rax","%rcx","%rdx"
+		    );
+}
+
 /*init functions makes me happy*/
 void local_bsp_apic_init(void)
 {
@@ -225,21 +239,26 @@ void local_bsp_apic_init(void)
   apic_lvt_lint_t lvt_lint;
   apic_icr1_t icr1;
 
-  /*test*/
-  kprintf("id=%p,version=%p\n",&local_apic->id,&local_apic->version);
-
   kprintf("[LW] Checking APIC is present ... ");
   if(__local_apic_check()<0) {
     kprintf("FAIL\n");
     return;
   } else
-  kprintf("OK\n");
+    kprintf("OK\n");
 
   v=get_apic_version();
   kprintf("[LW] APIC version: %d\n",v);
   /* first we're need to clear APIC to avoid magical results */
 
   __local_apic_clear();
+
+  for(i=0;i<32;i++)
+    io_apic_disable_irq(i);
+
+  for(i=1;i<24;i++)
+    io_apic_set_ioredir(i,0xff,i+32,0x0);
+
+  io_apic_bsp_init();
 
   /*manual recommends to accept all*/
   /*tpr.priority=0xffu;
@@ -253,13 +272,13 @@ void local_bsp_apic_init(void)
 	local_apic_send_eoi();
   }
 
-  /* enable APIC */
-  __enable_apic();
-
-  local_apic_timer_init(LOCAL_TIMER_CPU_IRQ_VEC);
-
   /*set spurois vector*/
   set_apic_spurious_vector(0xff);
+
+  /* enable APIC */
+  __enable_apic();
+  /* enable APIC in MSR */
+  //enable_l_apic_in_msr((uintptr_t)local_apic);
 
   /* enable wire mode*/
   //local_apic->lvt_lint0.mask |= (1 << 0);
@@ -308,19 +327,20 @@ void local_bsp_apic_init(void)
 
   /* remap irq for timer */
   //  io_apic_set_ioredir(0x00,0xff,32,0x0);
-  //  io_apic_bsp_init();
 
-  /*  for(i=0;i<16;i++)
-      io_apic_set_ioredir(i,0xff,i,0x0);*/
+  local_apic_timer_init(LOCAL_TIMER_CPU_IRQ_VEC);
 
-  __local_apic_chkerr();
+  /* enable APIC in MSR */
+  enable_l_apic_in_msr((uintptr_t)local_apic);
+
+  //  __local_apic_chkerr();
 }
 
 void local_apic_bsp_switch(void)
 {
   kprintf("[LW] Leaving PIC mode to APIC mode ... ");
   outb(0x70,0x22);
-  outb(0x71,0x23);
+  outb(0x01,0x23); /* old port - 0x71,0x23 */
 
   kprintf("OK\n");
 }
@@ -364,20 +384,29 @@ void local_apic_timer_calibrate(uint32_t hz)
 {
   uint32_t x1,x2;
 
+  local_apic_timer_disable();
+
+  kprintf("Calibrating lapic delay_loop ...");
+
   x1=local_apic->timer_ccr.count; /*get current counter*/
   local_apic->timer_icr.count=fil; /*fillful initial counter */
 
-  while(local_apic->timer_icr.count==x1) /* wait while cycle will be end */
-    ;
+  kprintf("ccr %ld\n",local_apic->timer_ccr.count);
+
+  while(local_apic->timer_icr.count==x1) /* wait while cycle will be end */ {
+        kprintf("%ld\n",local_apic->timer_icr.count);
+    
+  }
 
   x1=local_apic->timer_ccr.count; /*get current counter*/
-  atom_usleep(1000000/hz*2); /*delay*/
+  atom_usleep(1000000/hz); /*delay*/
   x2=local_apic->timer_ccr.count; /*again get current counter to see difference*/
 
-  kprintf("delay loop = %d \n",x1-x2);
   delay_loop=x1-x2;
+  kprintf(" %d \n",delay_loop);
+
   /*ok, let's write a difference to icr*/
-  local_apic->timer_icr.count=x1-x2; /* <-- this will tell us how much ticks we're really need */
+  local_apic->timer_icr.count=delay_loop; /* <-- this will tell us how much ticks we're really need */
 }
 
 void local_apic_timer_ap_calibrate(void)
@@ -403,7 +432,7 @@ void local_apic_timer_init(uint8_t vector)
   /* calibrate timer delimeter */
   __local_apic_timer_calibrate(16);
   /*calibrate to hz*/
-  local_apic_timer_calibrate(HZ);
+  local_apic_timer_calibrate(1000);
   /* setup timer vector  */
   lvt_timer.vector=vector; 
   /* set periodic mode (set bit to 1) */

@@ -34,12 +34,13 @@
 #include <eza/smp.h>
 #include <eza/arch/smp.h>
 #include <eza/idt.h>
+#include <config.h>
 
 extern void timer_interrupt_handler(void *data);
 
 static void install_generic_irq_handlers(void)
 {
-  //register_irq(0, timer_interrupt_handler, NULL, 0 );
+  register_irq(0, timer_interrupt_handler, NULL, 0 );
 }
 
 static void install_smp_irq_handlers(void)
@@ -67,7 +68,10 @@ void arch_initialize_irqs(void)
   
   /* Initialize the PIC */
   i8259a_init();
+
+#ifdef CONFIG_APIC
   fake_apic_init();
+#endif
 
   /* Initialize all possible IRQ handlers to stubs. */
   base=idt->first_available_vector();
@@ -80,7 +84,9 @@ void arch_initialize_irqs(void)
   }
 
   /* Setup all known interrupt handlers. */
+#ifndef CONFIG_APIC
   install_generic_irq_handlers();  
+#endif
 
 #ifdef CONFIG_SMP
   install_smp_irq_handlers();

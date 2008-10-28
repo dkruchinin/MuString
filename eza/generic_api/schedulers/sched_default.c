@@ -343,7 +343,7 @@ static void def_schedule(void)
   eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
   task_t *current = current_task();
   task_t *next;
-  bool need_switch;
+  bool need_switch,ints_enabled;
 
 //  kprintf( "ENTERING SCHEDULE STEP (%d).\n", cpu_id() );
 //  __READ_TIMESTAMP_COUNTER(__t1);
@@ -352,7 +352,8 @@ static void def_schedule(void)
    * finishes its job or until interrupts will be enabled in no context
    * switch is required.
    */
-  if( is_interrupts_enabled() ) {
+  ints_enabled=is_interrupts_enabled();
+  if( ints_enabled ) {
     interrupts_disable();
   }
 
@@ -390,9 +391,10 @@ static void def_schedule(void)
 
   if( need_switch ) {
     arch_activate_task(next);
-  } else {
-    /* No context switch is needed. Just enable interrupts. */
-    interrupts_enable();
+  }
+
+  if( ints_enabled ) {
+      interrupts_enable();
   }
 }
 
@@ -436,7 +438,8 @@ static status_t __change_local_task_state(task_t *task,task_state_t new_state,
   switch(new_state) {
     case TASK_STATE_RUNNABLE:
       if( prev_state == TASK_STATE_JUST_BORN
-	  || prev_state == TASK_STATE_STOPPED) {
+	  || prev_state == TASK_STATE_STOPPED ||
+          prev_state == TASK_STATE_SLEEPING ) {
 	__activate_local_task(task,sched_data);
         r = 0;
       }
@@ -471,10 +474,11 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
 
   if( task->cpu == cpu_id() ) {
     r=__change_local_task_state(task,new_state,h,data);
+    interrupts_enable();
   } else {
+    interrupts_enable();
     r=__change_remote_task_state(task,new_state);
   }
-  interrupts_enable();
 //  kprintf( "]]]]] AFTER CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d\n",
 //           in_atomic(), current_task_needs_resched() );
   cond_reschedule();
@@ -507,13 +511,12 @@ static status_t def_setup_idle_task(task_t *task)
   return 0;
 }
 
-/*
- * NOTE: Upon entering this routine target task is unlocked but marked as
- * 'under control'.
+/* NOTE: Upon entering this routine target task is unlocked.
  */
 static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
 {
   eza_sched_taskdata_t *sdata = EZA_TASK_SCHED_DATA(target);
+  bool trusted=trusted_task(target);
 
   if(cmd > SCHEDULER_MAX_COMMON_IOCTL) {
     return  -EINVAL;
@@ -543,7 +546,7 @@ static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
       return -EINVAL;
     case SYS_SCHED_CTL_SET_PRIORITY:
       if(arg <= EZA_SCHED_PRIORITY_MAX) {
-        if( trusted_task(target) ) {
+        if( trusted ) {
         } else {
           return -EPERM;
         }

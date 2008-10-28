@@ -109,7 +109,7 @@ static inline void discount_interrupt(void)
 
 static inline bool is_interrupts_enabled(void)
 {
-  return interrupts_read() & 0x200;
+  return (interrupts_read() & 0x200) != 0 ? 1: 0;
 }
 
 static inline void lock_local_interrupts(void)
@@ -117,8 +117,6 @@ static inline void lock_local_interrupts(void)
   interrupts_disable();
   if( online_cpus != 0 ) {
     inc_css_field(irq_lock_count);
-  } else {
-    interrupts_enable();
   }
 }
 
@@ -140,6 +138,9 @@ static inline void unlock_local_interrupts(void)
         COND_RESCHED_CURRENT;
       }
     }
+  } else {
+    interrupts_enable();
+    COND_RESCHED_CURRENT;
   }
 }
 

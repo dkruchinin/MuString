@@ -33,6 +33,7 @@
 #include <eza/waitqueue.h>
 #include <eza/event.h>
 #include <ipc/buffer.h>
+#include <ipc/poll.h>
 
 struct __ipc_port_t;
 
@@ -53,7 +54,7 @@ typedef struct __ipc_port_t {
   ulong_t flags;
   spinlock_t lock;
   linked_array_t msg_array;
-  atomic_t use_count,open_count;
+  atomic_t use_count;
   ulong_t queue_size,avail_messages;
   list_head_t messages;
   ipc_port_message_t **message_ptrs;
@@ -73,6 +74,12 @@ typedef struct __port_msg_info {
 #define IPC_UNLOCK_PORT_W(p) spinlock_unlock(&p->lock)
 
 void initialize_ipc(void);
+
+void ipc_put_port(ipc_port_t *p);
+status_t ipc_get_port(task_t *task,ulong_t port,ipc_port_t **out_port);
+void ipc_port_add_poller(ipc_port_t *port,task_t *poller, wait_queue_task_t *w);
+void ipc_port_remove_poller(ipc_port_t *port,wait_queue_task_t *w);
+poll_event_t ipc_port_get_pending_events(ipc_port_t *port);
 
 status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size);
 status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,

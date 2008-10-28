@@ -26,10 +26,22 @@
 #define __TIME_H__ 
 
 #include <eza/arch/types.h>
+#include <eza/swks.h>
 
 uint32_t delay_loop;
 
 void timer_tick(void);
+
+typedef struct __timeval {
+  ulong_t tv_sec;   /* seconds */
+  ulong_t tv_nsec;  /* microseconds */
+} timeval_t;
+
+#define system_ticks  swks.system_ticks_64
+
+#define NANOSLEEP_MAX_SECS  1000000000
+
+ulong_t time_to_ticks(timeval_t *tv);
 
 #endif
 

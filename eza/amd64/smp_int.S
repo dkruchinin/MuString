@@ -20,6 +20,5 @@ lapic_int_finish:
 smp_scheduler_interrupt_handler:
 	push %rax
 	ENTER_INTERRUPT_CTX(l2,INT_STACK_EXTRA_PUSHES)
-	SAVE_ALL
 	call do_smp_scheduler_interrupt_handler
 	jmp lapic_int_finish

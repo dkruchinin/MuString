@@ -102,6 +102,11 @@
 #define spinlock_lock_bit_irqsafe(bitmap, bit)  \
   __lock_irqsafe(lock_bit, bitmap, bit)
 
+#define spinlock_lock_irqsave(s,v) do {         \
+    v=is_interrupts_enabled();                  \
+    interrupts_disable();                       \
+    spinlock_lock(s); } while(0)
+
 /* TODO DK: add trylock and islock for RW locks, irq locks */
 #define spinlock_trylock(s)                     \
   ({ bool isok; preempt_disable();              \
@@ -129,6 +134,12 @@
   __unlock_irqsafe(unlock_write, s)
 #define spinlock_unlock_bit_irqsafe(unlock, bitmap, bit)    \
   __unlock_irqsafe(unlock_bit, bitmap, bit)
+
+#define spinlock_unlock_irqrestore(s,v)  do {   \
+    spinlock_unlock(s);                         \
+    if(v) {                                     \
+       interrupts_enable();                    \
+    }} while(0)
 
 #else
 

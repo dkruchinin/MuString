@@ -160,6 +160,11 @@
 #include <eza/arch/current.h>
 #include <eza/arch/page.h>
 
+/* Since we'll always turn turn on interrupts after executing IRETQ,
+ * we should know where saved RFLAGS is located.
+ */
+#define HW_INTERRUPT_CTX_RFLAGS_OFFT  0x10
+
 #define ENTER_INTERRUPT_CTX(label,extra_pushes) \
 	cmp $KERNEL_SELECTOR(KTEXT_DES),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ;\
 	je label; \

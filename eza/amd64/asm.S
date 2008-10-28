@@ -27,6 +27,7 @@
 #include <eza/arch/page.h>
 #include <eza/arch/current.h>
 #include <eza/errno.h>
+#include <eza/arch/cpu.h>
 
 .code64
 
@@ -35,8 +36,9 @@
 
 .global arch_delay_loop
 .global arch_fake_loop
-.global return_from_common_interrupt
 
+.global return_from_common_interrupt
+.global return_from_syscall
 .global divide_by_zero_fault_handler
 .global debug_fault_handler
 .global nmi_fault_handler
@@ -151,7 +153,6 @@ return_from_common_interrupt:
 no_preemption_in_interrupt:
   RESTORE_ALL
   /* Now we can enable interrupts. */
-  sti
   cmp $KERNEL_SELECTOR(KTEXT_DES),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)
   je ret_from_int
 
@@ -162,8 +163,6 @@ no_preemption_in_interrupt:
    * in case if another interrupt has occured.
    */
 userspace_ret_from_int:
-  cli
-
   /* Restore user segment registers. */
   mov %gs:(CPU_SCHED_STAT_USER_DS_OFFT),%ds
   mov %gs:(CPU_SCHED_STAT_USER_ES_OFFT),%es
@@ -173,15 +172,30 @@ userspace_ret_from_int:
   mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
   swapgs
   mov %eax,%gs
-  popq %rax
-  iretq
 ret_from_int:
   popq %rax
+
+  /* Make sure IF is set after returning from interrupt context. 
+   */
+  orq $RFLAGS_IF,HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
   iretq
+
+return_from_syscall:
+  RESTORE_GPR
+
+  cli
+  /* Restore back user stack pointer. Interrupts will be
+   * restored after performing the SYSRET command.
+   */
+  movq %gs:CPU_SCHED_STAT_USTACK_OFFT, %rsp
+
+  swapgs
+  sysretq
 
 /* Here goes handlers for CPU-specific fault handlers ranged at [0 .. 31]
  */
 divide_by_zero_fault_handler:
+  cli
   pushq %rax
   movl $0x0,%eax
 common_exception_path:
@@ -221,91 +235,109 @@ error_code_exception_path:
   iretq
 
 debug_fault_handler:
+	cli
   push %rax
   movl $0x1,%eax
   jmp common_exception_path
 
 nmi_fault_handler:
+	cli
   push %rax
   movl $0x2,%eax
   jmp common_exception_path
 
 breakpoint_fault_handler:
+	cli
   push %rax
   movl $0x3,%eax
   jmp common_exception_path
 
 overflow_fault_handler:
+	cli
   push %rax
   movl $0x4,%eax
   jmp common_exception_path
 
 bound_range_fault_handler:
+	cli
   push %rax
   movl $0x5,%eax
   jmp common_exception_path
 
 invalid_opcode_fault_handler:
+	cli
   push %rax
   movl $0x6,%eax
   jmp common_exception_path
 
 device_not_available_fault_handler:
+	cli
   push %rax
   movl $0x7,%eax
   jmp common_exception_path
 
 doublefault_fault_handler:
+  cli
   push %rax
   movl $0x8,%eax
   jmp common_exception_path
 
 invalid_tss_fault_handler:
+	cli
   push %rax
   movl $10,%eax
   jmp common_exception_path
 
 segment_not_present_fault_handler:
+	cli
   push %rax
   movl $11,%eax
   jmp common_exception_path
 
 stack_fault_handler:
+	cli
   push %rax
   movl $12,%eax
   jmp common_exception_path
 
 general_protection_fault_handler:
+  cli
   push %rax
   movl $13,%eax
   jmp error_code_exception_path
 
 page_fault_fault_handler:
+  cli
   push %rax
   movl $14,%eax
   jmp error_code_exception_path
 
 fpu_fault_handler:
+	cli
   push %rax
   movl $16,%eax
   jmp common_exception_path
 
 alignment_check_fault_handler:
+	cli
   push %rax
   movl $17,%eax
   jmp common_exception_path
 
 machine_check_fault_handler:
+	cli
   push %rax
   movl $18,%eax
   jmp common_exception_path
 
 simd_fault_handler:
+	cli
   push %rax
   movl $19,%eax
   jmp common_exception_path
 
 security_exception_fault_handler:
+	cli
   push %rax
   movl $30,%eax
   jmp common_exception_path 

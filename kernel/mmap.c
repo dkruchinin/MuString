@@ -87,10 +87,11 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
       kprintf("free pages: %d\n", atomic_get(&pool->free_pages));
     }
 #endif
-    aframe=alloc_pages(size,AF_PGEN);
+    aframe=alloc_pages(size,AF_PGEN|AF_ZERO);
     if(!aframe)
       return -ENOMEM; /* no free pages to allocate */
 
+    _flags=0;
     if(flags & MMAP_RW) /*map_rd map_rdonly*/
       _flags |= MAP_RW;
     else if(flags & MMAP_RDONLY)

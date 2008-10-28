@@ -37,16 +37,20 @@
 #include <eza/arch/asm.h>
 #include <eza/arch/preempt.h>
 #include <kernel/syscalls.h>
+#include <eza/uinterrupt.h>
+#include <ipc/poll.h>
 
 task_t *idle_tasks[MAX_CPUS];
 
-#define STEP 200
+#define STEP 9200
 #define TICKS_TO_WAIT 300
 
 ulong_t syscall_counter = 0;
 
 task_t *server_task;
-status_t server_port;
+status_t server_port,server_port2,server_port3;
+
+static char counters[512] __attribute__((aligned(PAGE_SIZE)));
 
 #define wait_ticks(x,y)
 
@@ -59,37 +63,81 @@ static void __wait_ticks(ulong_t n, char *s)
   }
 }
 
-static void thread2(void *data)
+static void __server_process_port(ulong_t port)
 {
+  char buf[64];
   status_t r;
   char *server_reply="Yes, I am here. How can I help you ?";
   ulong_t reply_len=strlen(server_reply)+1;
   port_msg_info_t rcv_stats;
-  char buf[64];
+
+  memset(buf,0,sizeof(buf));
+  kprintf( "[Server]: Extracting a message ...\n" );
+  r=ipc_port_receive(current_task(), port, IPC_BLOCKED_ACCESS,
+                     (ulong_t)buf,sizeof(buf),&rcv_stats);
+  kprintf( "[Server]: Done ! %d\n",r );
+
+  if( !r ) {
+    kprintf( "[Server]: %s [msg id: %d]\n",buf,rcv_stats.msg_id);
+    r=ipc_port_reply(current_task(),port,rcv_stats.msg_id,
+                     (uintptr_t)server_reply,reply_len);
+    if( r<0 ) {
+      __asm__  __volatile__( "cli" );
+      panic( "[Server]: Can't reply to client ! %d\n", r );
+    }
+  } else {
+    __asm__  __volatile__( "cli" );
+      panic( "[Server]: Can't receive data from port ! %d\n", r );
+  }
+}
+
+static void thread2(void *data)
+{
+  static int NUM_PORTS=3;
+  pollfd_t pfds[NUM_PORTS];
+  ulong_t i;
+  status_t r;
 
   server_port = ipc_create_port(current_task(),IPC_BLOCKED_ACCESS,
                                 IPC_DEFAULT_PORT_MESSAGES);
+
+  server_port2 = ipc_create_port(current_task(),IPC_BLOCKED_ACCESS,
+                                 IPC_DEFAULT_PORT_MESSAGES);
+
+  server_port3 = ipc_create_port(current_task(),IPC_BLOCKED_ACCESS,
+                                 IPC_DEFAULT_PORT_MESSAGES);
+
+  if( server_port < 0 || server_port2 < 0 || server_port3 < 0 ) {
+    panic( "[SERVER]: Can't create 3 IPC ports !\n" );
+  }
+
+  kprintf( "[Server]: Ports created: %d, %d, %d\n",
+           server_port,server_port2,server_port3);
+
   server_task = current_task();
 
+  pfds[0].fd=server_port3;
+  pfds[0].events=POLLIN | POLLRDNORM;
+
+  pfds[1].fd=server_port2;
+  pfds[1].events=POLLIN | POLLRDNORM;
+
+  pfds[2].fd=server_port;
+  pfds[2].events=POLLIN | POLLRDNORM;
+
   while( 1 ) {
-    memset(buf,0,sizeof(buf));
-    kprintf( "[Server]: Extracting a message ...\n" );
-    r=ipc_port_receive(current_task(), server_port, IPC_BLOCKED_ACCESS,
-                       (ulong_t)buf,sizeof(buf),&rcv_stats);
-    kprintf( "[Server]: Done ! %d\n",r );
-    if( !r ) {
-      kprintf( "[Server]: %s [msg id: %d]\n",buf,rcv_stats.msg_id);
-      r=ipc_port_reply(current_task(),server_port,rcv_stats.msg_id,
-                       (uintptr_t)server_reply,reply_len);
-      if( r<0 ) {
-        __asm__  __volatile__( "cli" );
-        panic( "[Server]: Can't reply to client ! %d\n", r );
+    kprintf( "[Server]: Polling ports (1) ...\n" );
+    r=sys_ipc_port_poll(pfds,NUM_PORTS,NULL);
+    kprintf( "[Server]: After polling ports: %d\n",r );
+
+    for(i=0;i<NUM_PORTS;i++) {
+      if(pfds[i].revents) {
+        kprintf( "[Server]: Port %d has some pending events: 0x%X\n",
+                 pfds[i].fd,pfds[i].revents );
+        __server_process_port(pfds[i].fd);
       }
-    } else {
-      __asm__  __volatile__( "cli" );
-      panic( "[Server]: Can't receive data from port ! %d\n", r );
     }
-    __wait_ticks(300, "Server");
+    __wait_ticks(1000, "Server");
   }
 }
 
@@ -102,8 +150,8 @@ static void thread4(void *data)
 
   while(1) {
     memset(_buf,0,sizeof(_buf));
-    kprintf( "[Client %d]: Sending data to server. ATOMIC: %d\n",
-             current_task()->pid, in_atomic() );
+    kprintf( "[Client %d]: Sending data to server via %d. ATOMIC: %d\n",
+             current_task()->pid, server_port, in_atomic() );
     r = ipc_port_send(server_task,server_port,(ulong_t)test_data,
                       snd_len,(ulong_t)_buf,sizeof(_buf));
     kprintf( "[Client %d]: Data was sent: %d, ATOMIC: %d\n",
@@ -128,9 +176,9 @@ static void thread5(void *data)
 
   while(1) {
     memset(_buf,0,sizeof(_buf));
-    kprintf( "[Client %d]: Sending data to server. ATOMIC: %d\n",
-             current_task()->pid, in_atomic() );
-    r = ipc_port_send(server_task,server_port,(ulong_t)test_data,
+    kprintf( "[Client %d]: Sending data to server via %d. ATOMIC: %d\n",
+             current_task()->pid, server_port2, in_atomic() );
+    r = ipc_port_send(server_task,server_port2,(ulong_t)test_data,
                       snd_len,(ulong_t)_buf,sizeof(_buf));
     kprintf( "[Client %d]: Data was sent: %d, ATOMIC: %d\n",
              current_task()->pid, r, in_atomic() );
@@ -155,15 +203,15 @@ static void thread6(void *data)
   while(1) {
     memset(_buf,0,sizeof(_buf));
 
-    kprintf( "[Client N4]: Sending data to server...\n" );
-    r = ipc_port_send(server_task,server_port,(ulong_t)test_data,
+    kprintf( "[Client NA]: Sending data to server via %d...\n",server_port2 );
+    r = ipc_port_send(server_task,server_port2,(ulong_t)test_data,
                       snd_len,(ulong_t)_buf,sizeof(_buf));
-    kprintf( "[Client N4]: Data was sent: %d\n", r );
+    kprintf( "[Client NA]: Data was sent: %d\n", r );
     if( r >=0 ) {
-      kprintf( "[Client N4]: %s\n", _buf );
+      kprintf( "[Client NA]: %s\n", _buf );
     } else {
       __asm__  __volatile__( "cli" );
-      panic( "[Client N4]: Can't receive response from server ! %d\n", r );      
+      panic( "[Client NA]: Can't receive response from server ! %d\n", r );      
     }
     wait_ticks(TICKS_TO_WAIT, "4");
   }
@@ -188,9 +236,6 @@ static void thread3(void *data)
     panic( "Can't create client thread N3 for testing port IPC functionality !\n" );
   }
 
-  sched_change_task_state(current_task(), TASK_STATE_STOPPED);
-  for(;;);
-  
   kprintf( "Creating client N4 ...\n" );
   if( kernel_thread(thread6,NULL) != 0 ) {
     panic( "Can't create client thread N4 for testing port IPC functionality !\n" );
@@ -198,8 +243,9 @@ static void thread3(void *data)
 
   while(1) {
     memset(_buf,0,sizeof(_buf));
-    kprintf( "[Client N1]: Sending data to server...\n" );
-    r = ipc_port_send(server_task,server_port,(ulong_t)test_data,
+    kprintf( "[Client N1]: Sending data to server via %d...\n",
+             server_port3);
+    r = ipc_port_send(server_task,server_port3,(ulong_t)test_data,
                       snd_len,(ulong_t)_buf,sizeof(_buf));
     kprintf( "[Client N1]: Data was sent: %d\n", r );
     if( r >=0 ) {
@@ -225,15 +271,93 @@ static void ioport_thread(void *data)
     for(;;);
 }
 
+status_t sys_wait_on_irq_array(ulong_t id);
+status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
+                                      ulong_t addr,ulong_t flags);
+
+typedef struct __irq_arrray {
+  irq_event_mask_t ev_mask;
+  irq_counter_t irq_counters[];
+} irq_array_t;
+
+static irq_array_t __irq_array __attribute__((aligned(PAGE_SIZE)));
+
+void interrupt_thread(void *data)
+{
+    ulong_t irqs[]={10,6,1,4};
+    static int num_irqs=4;
+    status_t id=sys_create_irq_counter_array(irqs,num_irqs,
+                                             &__irq_array,0);
+    kprintf( "IRQ buffer id: %d\n",id );
+
+    if( id >= 0 ) {
+        int i=0;
+        status_t r;
+        char code;
+
+        code=inb(0x60);
+        while( i < 5000000 ) {
+            kprintf( "Waiting for irqs to arrive ...\n" );
+            r=sys_wait_on_irq_array(id);
+            if( !r ) {
+                ulong_t mask=__irq_array.ev_mask;
+                __irq_array.ev_mask=0;
+                code=inb(0x60);
+                kprintf( "CNT: %d, KEY: %d, EVENT MASK: %X\n",
+                         __irq_array.irq_counters[2],
+                         (int)code,
+                         mask);
+            }
+            i++;
+        }
+    }
+
+    for(;;);
+}
+
+status_t sys_log(ulong_t s)
+{
+    kprintf( "LOG: %d\n",s );
+    return 0;
+}
+
+static void timer_thread(void *data)
+{
+    ulong_t timeout=390;
+    timeval_t tv;
+
+//    kprintf( "[KERNEL THREAD] Sleeping for %d ticks.\n",timeout );
+    tv.tv_sec=0;
+    tv.tv_nsec=80850000;
+//    sleep(timeout);
+    sys_nanosleep(&tv,NULL);
+    kprintf( "[KERNEL THREAD] Got woken up !\n" );
+    for(;;);
+}
+
 void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
 
+  /*
+  if( cpu_id() == 0 ) {
+      if( kernel_thread(timer_thread,NULL) != 0 ) {
+          panic( "Can't create server thread for testing port IPC functionality !\n" );
+      }
+      }
+  */
 /*
   if( cpu_id() == 0 ) {
-    if( kernel_thread(ioport_thread,NULL) != 0 ) {
+      if( kernel_thread(interrupt_thread,NULL) != 0 ) {
+          panic( "Can't create server thread for testing port IPC functionality !\n" );
+      }
+  }
+*/
+  /*
+  if( cpu_id() == 0 ) {
+          if( kernel_thread(ioport_thread,NULL) != 0 ) {
       panic( "Can't create server thread for testing port IPC functionality !\n" );
-    }
+      }
 
     if( kernel_thread(thread2,NULL) != 0 ) {
       panic( "Can't create server thread for testing port IPC functionality !\n" );
@@ -242,7 +366,7 @@ void idle_loop(void)
       panic( "Can't create client thread for testing port IPC functionality !\n" );
       }
   }
-*/
+  */
   for( ;; ) {
     if( swks.system_ticks_64 >= target_tick ) {
       kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d), SYSCALLS: %d\n",

@@ -23,6 +23,9 @@
 #include <eza/arch/types.h>
 #include <ipc/port.h>
 #include <eza/task.h>
+#include <ipc/port.h>
+#include <eza/time.h>
+#include <ipc/poll.h>
 
 /* Syscalls identificators. */
 #define SC_GET_PID             0
@@ -35,6 +38,10 @@
 #define SC_PORT_REPLY          7
 #define SC_ALLOCATE_IOPORTS    8
 #define SC_FREE_IOPORTS        9
+#define SC_CREATE_IRQ_ARRAY    10
+#define SC_WAIT_ON_IRQ_ARRAY   11
+#define SC_IPC_PORT_POLL       12
+#define SC_NANOSLEEP           13
 
 /**
  * @fn status_t sys_get_pid(void)
@@ -268,5 +275,98 @@ status_t sys_allocate_ioports(ulong_t first_port,ulong_t num_ports);
  *   EACCES - Target I/O ports don't belong to the calling process.
  */
 status_t sys_free_ioports(ulong_t first_port,ulong_t num_ports);
+
+/**
+ * @fn status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
+ *                                           ulong_t addr,ulong_t flags)
+ * @brief Create a shared memory object for delivering hardware interrupts
+ *        to userspace.
+ * 
+ * This function creates a so-called 'IRQ array' whcih is used for delivering
+ * hardware interrupts (IRQs) to userspace.
+ * Such arrays consist of two main parts: events bitmask and IRQ counters.
+ * a) event bitmask is used as flags to notify that one or more IRQs have
+ *    arrived. Application should than read and zeroize this mask atomically
+ *    to indocate that it has seen events.
+ * b) IRQ counters are used for counting target IRQs. Kernel-level logic only
+ *    increments these counters whereas user-space application only decrements
+ *    these counters.
+ *    For example, if case user wants to monitor two interrupts: 10 and 11,
+ *    an IRQ array containing 2 counters will be created so that 0th counter
+ *    tracks 10th IRQ and 1st counter tracks 11th IRQ.
+ *
+ * The structure of IRQ array is as follows:
+ *  struct __irq_array {
+ *     irq_event_mask_t event_mask;
+ *     irq_counter_t counters[];
+ *  };
+ *
+ * @param irq_array Array that contains all IRQ numbers to be monitored.
+ * @param irqs Number of elements in @a irq_array (i.e. number of interrupts
+ *        being watched).
+ * @param addr Page-aligned valid address in userspace for placing the array.
+ * @param flags Flags that control behavior of the array.
+ *
+ * @return In case of successful completion this function returns a non-negative
+ * identificator of the new array. Otherwise, a negation of the following errors
+ * is returned:
+ *      EINVAL  Base address, or number of irqs was zero on invalid, or address
+ *              wasn't page-aligned.
+ *      EFAULT  Address wasn't a valid user address.
+ *      EBUSY   One of interrupts being watched is already being watched by
+ *              another process.
+ *      ENOMEM  No free memory for internal kernel structures.
+ */
+status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
+                                      ulong_t addr,ulong_t flags);
+
+/**
+ * @fn status_t sys_wait_on_irq_array(ulong_t id)
+ * Wait for one of target IRQs to arrive.
+ *
+ * This function checks event mask for target IRQ array and suspends
+ * the calling process until one of interrupts being tracked arrives.
+ * After resuming calling process target IRQ array's event mask will
+ * reflect arrived IRQs and their counters will be incremented to
+ * reflect the amount of IRQs arrived.
+ *
+ * @param ID of the IRQ array being used.
+ * @return After occuring one or more IRQs, this function returns zero.
+ *         If insufficient buffer ID was used, -EINVAL is returned.
+ */
+status_t sys_wait_on_irq_array(ulong_t id);
+
+/**
+ * @fn status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
+ * Performs I/O multiplexing on a given range of IPC ports.
+ *
+ * This function checks every port in a range for one of requested events
+ * to occur and puts the calling process into sleep util one of target
+ * events occur.
+ * The following event types are used:
+ *    POLLIN - data other than high-priority data may be read without blocking.
+ *    POLLRDNORM - normal data may be read without blocking.
+ * NOTE: Since IPC ports always block on send (i.e. 'write'), it is impossible
+ * to wait for an IPC port to become available for non-blocking write.
+ *
+ * @param pfds - array of structures that specify desired ports and events.
+ * @param nfds - number of structures in the array.
+ * @param timeout - operation timeout.
+ *        NOTE: Currently timeouts are not supported.
+ */
+status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout);
+
+/**
+ * @fn status_t sys_nanosleep(timeval_t *in,timeval_t *out)
+ *
+ * Suspends calling process for amount of time spicified by the @a in argument.
+ * Minimum time unit used is nanosecond.
+ * @return After waiting for specified amount of time this function returns zero.
+ *   The folowing errors may also be returned:
+ *     EFAULT - insufficient address was passed.
+ *     EINVAL - seconds or nanoseconds exceed 1000000000.
+ */
+
+status_t sys_nanosleep(timeval_t *in,timeval_t *out);
 
 #endif

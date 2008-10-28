@@ -301,4 +301,3 @@ void arch_smp_mm_init(int cpu)
     for(;;);
   }
 }
-
