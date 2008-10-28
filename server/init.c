@@ -31,6 +31,7 @@
 #include <mm/mmap.h>
 #include <eza/arch/elf.h>
 #include <eza/kconsole.h>
+#include <eza/errno.h>
 #include <kernel/elf.h>
 #include <kernel/vm.h>
 #include <mlibc/kprintf.h>
@@ -59,7 +60,7 @@ static status_t __create_task_mm(task_t *task, int num)
   memset(&minfo, 0, sizeof(minfo));
   stack=alloc_pages(USER_STACK_SIZE,AF_PGEN|AF_ZERO);
   if(!stack)
-    return -1;
+    return -ENOMEM;
 
   code_size=init.server[num].size>>PAGE_WIDTH; /*it's a code size in pages */
   code_size++;
@@ -147,29 +148,34 @@ static status_t __create_task_mm(task_t *task, int num)
 
   /* alloc memory for bss */
   bss=alloc_pages(bss_size,AF_PGEN|AF_ZERO);
-  if(!bss)    return -1;
+  if(!bss)
+    return -ENOMEM;
 
 
   /*  kprintf("elf entry -> %p\n",ehead.e_entry); */
 
   /*remap pages*/
   r = mmap(task->page_dir, USER_START_VIRT, virt_to_pframe_id((void *)code), text_size, MAP_EXEC | MAP_READ | MAP_USER);
-  if(r!=0)    return -1;
+
 
   r = mmap(task->page_dir, real_data_offset, virt_to_pframe_id((void *)data_bss), data_size, MAP_RW | MAP_USER | MAP_EXEC);
-  if(r!=0)    return -1;
+  if (r)
+    return r;
 
   r = mmap(task->page_dir, bss_virt, pframe_number(bss), bss_size, MAP_READ | MAP_USER | MAP_EXEC);
-  if(r!=0)    return -1;
+  if (r)
+    return r;
 
   r = mmap(task->page_dir, USPACE_END-0x40000, pframe_number(stack), USER_STACK_SIZE, MAP_RW | MAP_USER | MAP_EXEC);
-  if(r!=0)    return -1;
+  if (r)
+    return r;
 
   r=do_task_control(task,SYS_PR_CTL_SET_ENTRYPOINT,ehead.e_entry);
   r|=do_task_control(task,SYS_PR_CTL_SET_STACK,USPACE_END-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH));
 
 
-  if(r!=0)    return -1;
+  if (r)
+    return r;
 
   /*  kprintf("Grub module: %p\n size: %ld\n",init.server[num].addr,init.server[num].size);*/
 
@@ -187,15 +193,20 @@ void server_run_tasks(void)
     return;
 
   kprintf("[SRV] Starting servers: %d ... \n",i);
-  kconsole->disable(); /* shut off console */
+  //kconsole->disable(); /* shut off console */
 
   for(a=0;a<i;a++) {
     r=create_task(current_task(),0,TPL_USER,&server);
-    if(r)      continue;
+    if (r)
+      panic("Can't create new task for server #%d [err=%d]", i, r);
+
     r=__create_task_mm(server,a);
-    if(r)      continue;
+    if (r)
+      panic("Can't create mm of server #%d [err=%d]", i, r);
+    
     r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
-    if(r)      continue;
+    if (r)
+      panic("Can't schedule to server's #%d task [err=%d]", i, r);
   }
 
   return;

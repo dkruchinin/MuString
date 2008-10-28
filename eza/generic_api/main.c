@@ -47,6 +47,7 @@
 #include <eza/arch/smp.h>
 #include <eza/arch/apic.h>
 #include <eza/arch/atomic.h>
+#include <eza/arch/mm.h>
 #include <ipc/port.h>
 #include <eza/resource.h>
 #include <eza/arch/interrupt.h>

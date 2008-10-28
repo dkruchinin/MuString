@@ -11,6 +11,7 @@
 #include <eza/vm.h>
 #include <mm/pfalloc.h>
 #include <mm/mm.h>
+#include <mm/mmap.h>
 #include <eza/scheduler.h>
 
 static SPINLOCK_DEFINE(descrs_lock);
@@ -178,8 +179,8 @@ status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   caller=current_task();
 
   LOCK_TASK_VM(caller);
-  idx=mm_pin_virtual_address(&caller->page_dir,addr);
-  if( idx != INVALID_PAGE_IDX ) {
+  idx=mm_pin_virt_addr(caller->page_dir,addr);
+  if(idx >= 0) {
     pframe=pframe_by_number(idx);
     get_page(pframe);
     kaddr=pframe_to_virt(pframe);
