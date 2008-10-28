@@ -88,9 +88,7 @@ static inline void arch_activate_task(task_t *to)
 
   /* Let's jump ! */  
   kprintf( "******* ACTIVATING TASK: %d (CPU: %d)\n", to->pid, to->cpu );
-  kprintf("STACK: (H:%p)=>(L:%p)\n", to->kernel_stack.low_address, to->kernel_stack.high_address);
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
-  kprintf("2\n");
 }
 
 #endif

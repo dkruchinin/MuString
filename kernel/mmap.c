@@ -51,7 +51,6 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
   task_t *task;
   int _flags = MAP_USER | MAP_EXEC;
 
-  kprintf("sys_mmap ...\n");
 #if 0
   mm_pool_t *pool;
 #endif
@@ -76,7 +75,8 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
 #if 0
       kprintf("mmap() yummie fuck\n");
 #endif
-      e=mmap(task->page_dir, addr, virt_to_pframe_id((void *)offset), size, MAP_USER | MAP_RW | MAP_EXEC | MMAP_NONCACHABLE);
+      e=mmap(task->page_dir, addr, offset >> PAGE_WIDTH, size,
+             MAP_USER | MAP_RW | MAP_EXEC | MMAP_NONCACHABLE);
       if(e!=0) return e;
 #if 0
       kprintf("mmap() OK\n");

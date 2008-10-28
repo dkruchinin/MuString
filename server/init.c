@@ -55,9 +55,7 @@ static status_t __create_task_mm(task_t *task, int num)
   size_t last_offset,last_sect_size,last_data_offset;
   status_t r;
   int i;
-  mmap_info_t minfo;
 
-  memset(&minfo, 0, sizeof(minfo));
   stack=alloc_pages(USER_STACK_SIZE,AF_PGEN|AF_ZERO);
   if(!stack)
     return -ENOMEM;
@@ -156,7 +154,6 @@ static status_t __create_task_mm(task_t *task, int num)
 
   /*remap pages*/
   kprintf("1 [%p ==> (%d, %d)]\n", USER_START_VIRT, code >> PAGE_WIDTH, text_size);
-  map_verbose = true;
   r = mmap(task->page_dir, USER_START_VIRT, code >> PAGE_WIDTH, text_size, MAP_USER | MAP_RW | MAP_EXEC);
 
   kprintf("2 [%p ==> (%d, %d)]\n", real_data_offset, data_bss >> PAGE_WIDTH, data_size);
@@ -168,8 +165,7 @@ static status_t __create_task_mm(task_t *task, int num)
   r = mmap(task->page_dir, bss_virt, pframe_number(bss), bss_size, MAP_USER | MAP_RW | MAP_EXEC);
   if (r)
     return r;
-  kprintf("4\n");
-  map_verbose  = false;
+  kprintf("4 [%p ==> (%d, %d)]\n", USPACE_END-0x40000, pframe_number(stack), USER_STACK_SIZE);
   r = mmap(task->page_dir, USPACE_END-0x40000, pframe_number(stack), USER_STACK_SIZE, MAP_USER | MAP_RW | MAP_EXEC);
   if (r)
     return r;
@@ -197,7 +193,7 @@ void server_run_tasks(void)
     return;
 
   kprintf("[SRV] Starting servers: %d ... \n",i);
-  //kconsole->disable(); /* shut off console */
+  kconsole->disable(); /* shut off console */
 
   for(a=0;a<i;a++) {
     r=create_task(current_task(),0,TPL_USER,&server);

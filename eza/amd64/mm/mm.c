@@ -72,7 +72,7 @@ static void verify_mapping(const char *descr, uintptr_t start_addr,
   }
 
   if (ok) {
-    kprintf(" %*s\n", 14 - strlen(descr), "[OK]");
+    kprintf(" %*s\n", strlen(descr) + 14, "[OK]");
     return;
   }
   
@@ -265,7 +265,7 @@ void arch_mm_remap_pages(void)
    */
   direct_mapping_area.phys_addr=0x1000;
   direct_mapping_area.virt_addr=0x1000;
-  direct_mapping_area.num_pages=4095;
+  direct_mapping_area.num_pages=IDENT_MAP_PAGES - 1;
   direct_mapping_area.map_flags= MAP_USER | MAP_RW | MAP_EXEC;
   vm_register_user_mandatory_area(&direct_mapping_area);
 
@@ -296,8 +296,4 @@ status_t arch_vm_map_kernel_area(task_t *task)
 void arch_smp_mm_init(int cpu)
 {
   load_cr3(_k2p((uintptr_t)pframe_to_virt(kernel_root_pagedir)), 1, 1);
-
-  if( cpu ) {
-    for(;;);
-  }
 }
