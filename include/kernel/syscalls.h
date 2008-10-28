@@ -42,6 +42,7 @@
 #define SC_WAIT_ON_IRQ_ARRAY   11
 #define SC_IPC_PORT_POLL       12
 #define SC_NANOSLEEP           13
+#define SC_SCHED_CONTROL       14
 
 /**
  * @fn status_t sys_get_pid(void)
@@ -74,7 +75,7 @@ status_t sys_get_pid(void);
  *         Otherwise, negation of the following error codes is returned:
  *         ENOMEM   No memory was available.
  */
-status_t sys_create_task(task_creation_flags_t flags);
+status_t sys_create_task(ulong_t flags);
 
 
 /**

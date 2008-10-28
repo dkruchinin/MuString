@@ -53,6 +53,7 @@ void timer_tick(void)
 void timer_interrupt_handler(void *data)
 {
   timer_tick();
+  sched_timer_tick();
 }
 
 ulong_t time_to_ticks(timeval_t *tv)

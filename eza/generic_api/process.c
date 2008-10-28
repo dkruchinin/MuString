@@ -38,6 +38,7 @@
 #include <eza/spinlock.h>
 #include <kernel/syscalls.h>
 #include <kernel/vm.h>
+#include <eza/kconsole.h>
 
 typedef uint32_t hash_level_t;
 
@@ -165,11 +166,11 @@ out_release:
   return r;
 }
 
-status_t sys_create_task(task_creation_flags_t flags)
+status_t sys_create_task(ulong_t flags)
 {
   task_t *task;
   status_t r;
-  
+
   if( !security_ops->check_create_process(flags) ) {
     return -EPERM;
   }

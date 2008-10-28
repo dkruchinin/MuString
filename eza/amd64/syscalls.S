@@ -48,6 +48,7 @@ syscall_table:
 	.quad   sys_wait_on_irq_array
         .quad   sys_ipc_port_poll
 	.quad   sys_nanosleep
+	.quad   sys_scheduler_control
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \
