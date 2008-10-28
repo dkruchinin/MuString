@@ -152,13 +152,13 @@ static status_t __create_task_mm(task_t *task, int num)
   r = mmap(task->page_dir, USER_START_VIRT, virt_to_pframe_id((void *)code), text_size, MAP_EXEC | MAP_READ | MAP_USER);
   if(r!=0)    return -1;
 
-  r = mmap(task->page_dir, real_data_offset, virt_to_pframe_id((void *)data_bss), data_size, MAP_RW | MAP_USER);
+  r = mmap(task->page_dir, real_data_offset, virt_to_pframe_id((void *)data_bss), data_size, MAP_RW | MAP_USER | MAP_EXEC);
   if(r!=0)    return -1;
 
-  r = mmap(task->page_dir, bss_virt, pframe_number(bss), bss_size, MAP_READ | MAP_USER);
+  r = mmap(task->page_dir, bss_virt, pframe_number(bss), bss_size, MAP_READ | MAP_USER | MAP_EXEC);
   if(r!=0)    return -1;
 
-  r = mmap(task->page_dir, USPACE_END-0x40000, pframe_number(stack), USER_STACK_SIZE, MAP_RW | MAP_USER);
+  r = mmap(task->page_dir, USPACE_END-0x40000, pframe_number(stack), USER_STACK_SIZE, MAP_RW | MAP_USER | MAP_EXEC);
   if(r!=0)    return -1;
 
   r=do_task_control(task,SYS_PR_CTL_SET_ENTRYPOINT,ehead.e_entry);

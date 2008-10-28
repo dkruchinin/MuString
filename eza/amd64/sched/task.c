@@ -231,7 +231,6 @@ static uint64_t __setup_kernel_task_context(task_t *task)
 static uint64_t __setup_user_task_context(task_t *task)
 {
   regs_t *regs = (regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
-
   /* Prepare a fake CPU-saved context */
   memset( regs, 0, sizeof(regs_t) );
 
@@ -273,7 +272,6 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   fsave -= delta;
 
   memset( (char *)fsave, 0, 512 );
-
   /* Save size of this context for further use in RESTORE_ALL. */
   fsave -= 8;
   *((uint64_t *)fsave) = delta;
