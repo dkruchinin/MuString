@@ -43,7 +43,7 @@
 task_t *idle_tasks[MAX_CPUS];
 
 #define STEP 9200
-#define TICKS_TO_WAIT 300
+#define TICKS_TO_WAIT 19300
 
 ulong_t syscall_counter = 0;
 
@@ -129,7 +129,6 @@ static void thread2(void *data)
     kprintf( "[Server]: Polling ports (1) ...\n" );
     r=sys_ipc_port_poll(pfds,NUM_PORTS,NULL);
     kprintf( "[Server]: After polling ports: %d\n",r );
-
     for(i=0;i<NUM_PORTS;i++) {
       if(pfds[i].revents) {
         kprintf( "[Server]: Port %d has some pending events: 0x%X\n",
@@ -137,7 +136,7 @@ static void thread2(void *data)
         __server_process_port(pfds[i].fd);
       }
     }
-    __wait_ticks(1000, "Server");
+    __wait_ticks(TICKS_TO_WAIT, "Server");
   }
 }
 
@@ -353,7 +352,7 @@ void idle_loop(void)
       }
   }
 */
-  /*
+/*  
   if( cpu_id() == 0 ) {
           if( kernel_thread(ioport_thread,NULL) != 0 ) {
       panic( "Can't create server thread for testing port IPC functionality !\n" );
@@ -366,7 +365,7 @@ void idle_loop(void)
       panic( "Can't create client thread for testing port IPC functionality !\n" );
       }
   }
-  */
+*/
   for( ;; ) {
     if( swks.system_ticks_64 >= target_tick ) {
       kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d), SYSCALLS: %d\n",

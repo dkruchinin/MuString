@@ -233,6 +233,6 @@ void do_irq(irq_t irq)
     }
   }
   interrupts_enable();
-  kprintf( "** Spurious interrupt detected: %d\n", irq );
+  //kprintf( "** Spurious interrupt detected: %d\n", irq );
 }
 
