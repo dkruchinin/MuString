@@ -59,6 +59,7 @@ typedef uint64_t index_t;
 typedef uint64_t uintptr_t;
 typedef uint16_t pid_t;
 typedef uint16_t uid_t;
+typedef ulong_t tid_t;
 typedef uint32_t usec_t;
 typedef int32_t status_t;
 typedef uint32_t shm_id_t;

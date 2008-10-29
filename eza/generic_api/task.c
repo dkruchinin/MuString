@@ -193,7 +193,11 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
   task->ppid = ppid; 
 
   list_init_node(&task->pid_list);
+  list_init_node(&task->child_list);
+  list_init_head(&task->children);
+  list_init_head(&task->threads);
   spinlock_initialize(&task->lock, "Task lock");
+  spinlock_initialize(&task->child_lock, "Task child lock");
 
   /* Setup task's initial state. */
   task->state = TASK_STATE_JUST_BORN;

@@ -40,9 +40,20 @@
 #define PID_HASH_LEVELS  (1 << PID_HASH_LEVEL_SHIFT)
 #define PID_HASH_LEVEL_MASK  (PID_HASH_LEVELS-1)
 
+/* TID-related macros. */
+#define TID_SHIFT  16
+#define MAX_THREADS_PER_PROCESS  (1<<TID_SHIFT)
+#define GENERATE_TID(pid,tid) (((pid)<<TID_SHIFT) | tid)
+#define TID_TO_PIDBASE(tid)  ((tid)>>TID_SHIFT)
+#define TID(tid) ((tid) & ~(MAX_THREADS_PER_PROCESS-1))
+
 /* Macros for locking task structure. */
 #define LOCK_TASK_STRUCT(t) spinlock_lock(&t->lock)
 #define UNLOCK_TASK_STRUCT(t) spinlock_unlock(&t->lock)
+
+/*   */
+#define LOCK_TASK_CHILDS(t) spinlock_lock(&t->child_lock)
+#define UNLOCK_TASK_CHILDS(t) spinlock_unlock(&t->child_lock)
 
 typedef uint32_t time_slice_t;
 
@@ -81,6 +92,12 @@ typedef struct __task_struct {
   ulong_t flags;
 
   spinlock_t lock;
+
+  /* Children/threads - related stuff. */
+  spinlock_t child_lock;
+  list_head_t children,threads; 
+  list_node_t child_list;
+  struct __task_struct *group_leader;
 
   /* Scheduler-related stuff. */
   struct __scheduler *scheduler;
