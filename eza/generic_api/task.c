@@ -135,7 +135,7 @@ static status_t __alloc_pid_and_tid(task_t *parent,
     if( pid == INVALID_PID ) {
       return -ENOMEM;
     }
-    tid=0;
+    tid=pid;
   }
 
   *ppid=pid;
@@ -196,7 +196,6 @@ static task_t *__allocate_task_struct(void)
 status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privelege_t priv, task_t **t)
 {
   task_t *task;
-  page_frame_t *ts_page;
   status_t r = -ENOMEM;
   page_frame_t *stack_pages;
   page_frame_iterator_t pfi;
@@ -213,12 +212,11 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
     goto task_create_fault;
   }
 
-  ts_page = alloc_page(AF_PGEN);
-  if( ts_page == NULL ) {
+  task=__allocate_task_struct();
+  if( !task ) {
     goto free_pid;
   }
 
-  task = pframe_to_virt(ts_page);
   task->pid=pid;
   task->tid=tid;
 
@@ -274,15 +272,6 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
   if( !task->uspace_events ) {
     goto free_ipc;
   }
-
-  task->group_leader=task;
-
-  list_init_node(&task->pid_list);
-  list_init_node(&task->child_list);
-  list_init_head(&task->children);
-  list_init_head(&task->threads);
-  spinlock_initialize(&task->lock, "Task lock");
-  spinlock_initialize(&task->child_lock, "Task child lock");
 
   /* Setup task's initial state. */
   task->state = TASK_STATE_JUST_BORN;
