@@ -49,6 +49,7 @@ syscall_table:
         .quad   sys_ipc_port_poll
 	.quad   sys_nanosleep
 	.quad   sys_scheduler_control
+	.quad   sys_get_tid                     /* 15  */
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

@@ -83,6 +83,7 @@ struct __userspace_events_data;
 /* Abstract object for scheduling. */
 typedef struct __task_struct {
   pid_t pid, ppid;
+  tid_t tid;
   cpu_id_t cpu;
   task_state_t state;
   cpu_array_t cpu_affinity;
@@ -94,10 +95,10 @@ typedef struct __task_struct {
   spinlock_t lock;
 
   /* Children/threads - related stuff. */
+  struct __task_struct *group_leader;
   spinlock_t child_lock;
   list_head_t children,threads; 
   list_node_t child_list;
-  struct __task_struct *group_leader;
 
   /* Scheduler-related stuff. */
   struct __scheduler *scheduler;
@@ -198,6 +199,11 @@ status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t
  *       It doesn't free any resources (like memory space and other).
  */
 void free_task_struct(task_t *task);
+
+static inline bool is_thread( task_t *task )
+{
+  return (task->group_leader && task->group_leader != task);
+}
 
 #endif
 

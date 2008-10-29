@@ -102,6 +102,12 @@ static page_frame_t *alloc_stack_pages(void)
   return p;  
 }
 
+static tid_t __allocate_tid(task_t *group_leader)
+{
+  static tid_t tid=1;
+  return tid++;
+}
+
 status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privelege_t priv, task_t **t)
 {
   task_t *task;
@@ -118,9 +124,17 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
   /* goto task_create_fault; */  
 
   /* First, try to allocate a PID. */
-  pid = allocate_pid();
-  if( pid == INVALID_PID ) {
-    goto task_create_fault;
+  if( flags & CLONE_MM ) {
+      if( !parent ) {
+          r=-EINVAL;
+          goto task_create_fault;
+      }
+      pid=parent->pid;
+  } else {
+      pid = allocate_pid();
+      if( pid == INVALID_PID ) {
+          goto task_create_fault;
+      }
   }
 
   ts_page = alloc_page(AF_PGEN);
@@ -191,6 +205,7 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
 
   task->pid = pid;
   task->ppid = ppid; 
+  task->group_leader=task;
 
   list_init_node(&task->pid_list);
   list_init_node(&task->child_list);
@@ -207,6 +222,23 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
   task->scheduler = NULL;
   task->sched_data = NULL;
   task->flags = 0;
+
+  if( parent && parent->pid ) {
+      if( flags & CLONE_MM ) {
+          task->group_leader=parent->group_leader;
+          LOCK_TASK_CHILDS(task->group_leader);
+            list_add2tail(&parent->group_leader->threads,
+                        &task->child_list);
+            UNLOCK_TASK_CHILDS(task->group_leader);
+          task->tid=GENERATE_TID(pid,__allocate_tid(task->group_leader));
+      } else {
+          LOCK_TASK_CHILDS(parent);
+          list_add2tail(&parent->children,
+                        &task->child_list);
+          UNLOCK_TASK_CHILDS(parent);
+          task->tid=0;
+      }
+  }
 
   *t = task;
   return 0;
