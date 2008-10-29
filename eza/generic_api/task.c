@@ -42,19 +42,27 @@
 #include <eza/limits.h>
 #include <ipc/ipc.h>
 #include <eza/uinterrupt.h>
+#include <mm/slab.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
 static spinlock_t pid_array_lock;
+static memcache_t *task_cache;
 
 /* Macros for dealing with PID array locks. */
 #define LOCK_PID_ARRAY spinlock_lock(&pid_array_lock)
 #define UNLOCK_PID_ARRAY spinlock_unlock(&pid_array_lock)
 
-static pid_t allocate_pid(void);
-static void free_pid(pid_t pid);
-
 void initialize_process_subsystem(void);
+
+static pid_t __allocate_pid(void)
+{
+  LOCK_PID_ARRAY;
+  pid_t pid = index_array_alloc_value(&pid_array);
+  UNLOCK_PID_ARRAY;
+
+  return pid;
+}
 
 void initialize_task_subsystem(void)
 {
@@ -69,25 +77,22 @@ void initialize_task_subsystem(void)
   /* Sanity check: allocate PID 0 for idle tasks, so the next available PID
    * will be 1 (init).
    */
-  idle = allocate_pid();
+  idle = __allocate_pid();
   if(idle != 0) {
     panic( "initialize_task_subsystem(): Can't allocate PID for idle tasks ! (%d returned)",
            idle );
   }
 
+  task_cache = create_memcache( "Task struct memcache", sizeof(task_t),
+                                2, SMCF_PGEN);
+  if( !task_cache ) {
+    panic( "initialize_task_subsystem(): Can't create the task struct memcache !" );
+  }
+
   initialize_process_subsystem();
 }
 
-static pid_t allocate_pid(void)
-{
-  LOCK_PID_ARRAY;
-  pid_t pid = index_array_alloc_value(&pid_array);
-  UNLOCK_PID_ARRAY;
-
-  return pid;
-}
-
-static void free_pid(pid_t pid)
+static void __free_pid(pid_t pid)
 {
   LOCK_PID_ARRAY;
   index_array_free_value(&pid_array,pid);
@@ -99,13 +104,93 @@ static page_frame_t *alloc_stack_pages(void)
   page_frame_t *p;
 
   p = alloc_pages(KERNEL_STACK_PAGES, AF_PGEN);
-  return p;  
+  return p;
 }
 
 static tid_t __allocate_tid(task_t *group_leader)
 {
   static tid_t tid=1;
   return tid++;
+}
+
+static void __free_tid(tid_t tid,task_t *group_leader)
+{
+}
+
+static status_t __alloc_pid_and_tid(task_t *parent,
+                                    task_creation_flags_t flags,
+                                    pid_t *ppid, tid_t *ptid)
+{
+  pid_t pid;
+  tid_t tid;
+
+  if( flags & CLONE_MM ) {
+    if( !parent ) {
+      return -EINVAL;
+    }
+    pid=parent->pid;
+    tid=GENERATE_TID(pid,__allocate_tid(parent->group_leader));
+  } else {
+    pid = __allocate_pid();
+    if( pid == INVALID_PID ) {
+      return -ENOMEM;
+    }
+    tid=0;
+  }
+
+  *ppid=pid;
+  *ptid=tid;
+  return 0;
+}
+
+static void __free_pid_and_tid(task_t *parent,
+                               task_creation_flags_t flags,
+                               pid_t pid, tid_t tid)
+{
+  __free_pid(pid);
+  __free_tid(tid,parent->group_leader);
+}
+
+static void __add_to_parent(task_t *task,task_t *parent,
+                            task_creation_flags_t flags)
+{
+  if( parent && parent->pid ) {
+    task->ppid = parent->pid;
+
+    if( flags & CLONE_MM ) {
+      LOCK_TASK_CHILDS(task->group_leader);
+      list_add2tail(&parent->group_leader->threads,
+                    &task->child_list);
+      UNLOCK_TASK_CHILDS(task->group_leader);
+
+      task->group_leader=parent->group_leader;
+    } else {
+      LOCK_TASK_CHILDS(parent);
+      list_add2tail(&parent->children,
+                    &task->child_list);
+      UNLOCK_TASK_CHILDS(parent);
+    }
+  } else {
+    task->ppid=0;
+  }
+}
+
+static task_t *__allocate_task_struct(void)
+{
+  task_t *task=alloc_from_memcache(task_cache);
+  
+  if( task ) {
+    list_init_node(&task->pid_list);
+    list_init_node(&task->child_list);
+
+    list_init_head(&task->children);
+    list_init_head(&task->threads);
+    spinlock_initialize(&task->lock, "Task lock");
+    spinlock_initialize(&task->child_lock, "Task child lock");
+    task->flags = 0;
+    task->group_leader=task;
+  }
+  return task;  
 }
 
 status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privelege_t priv, task_t **t)
@@ -116,25 +201,16 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
   page_frame_t *stack_pages;
   page_frame_iterator_t pfi;
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_idx_ctx;
-  pid_t pid, ppid;
+  pid_t pid;
+  tid_t tid;
   task_limits_t *limits;
   task_ipc_t *ipc;
 
   /* TODO: [mt] Add memory limit check. */
   /* goto task_create_fault; */  
-
-  /* First, try to allocate a PID. */
-  if( flags & CLONE_MM ) {
-      if( !parent ) {
-          r=-EINVAL;
-          goto task_create_fault;
-      }
-      pid=parent->pid;
-  } else {
-      pid = allocate_pid();
-      if( pid == INVALID_PID ) {
-          goto task_create_fault;
-      }
+  r=__alloc_pid_and_tid(parent,flags,&pid,&tid);
+  if( r ) {
+    goto task_create_fault;
   }
 
   ts_page = alloc_page(AF_PGEN);
@@ -143,9 +219,11 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
   }
 
   task = pframe_to_virt(ts_page);
+  task->pid=pid;
+  task->tid=tid;
 
   /* Create kernel stack for the new task. */
-  r = allocate_kernel_stack(&task->kernel_stack) != 0;
+  r = allocate_kernel_stack(&task->kernel_stack);
   if( r != 0 ) {
     goto free_task;
   }
@@ -197,14 +275,6 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
     goto free_ipc;
   }
 
-  if(parent != NULL) {
-    ppid = parent->pid;
-  } else {
-    ppid = 0;
-  }
-
-  task->pid = pid;
-  task->ppid = ppid; 
   task->group_leader=task;
 
   list_init_node(&task->pid_list);
@@ -223,22 +293,7 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
   task->sched_data = NULL;
   task->flags = 0;
 
-  if( parent && parent->pid ) {
-      if( flags & CLONE_MM ) {
-          task->group_leader=parent->group_leader;
-          LOCK_TASK_CHILDS(task->group_leader);
-            list_add2tail(&parent->group_leader->threads,
-                        &task->child_list);
-            UNLOCK_TASK_CHILDS(task->group_leader);
-          task->tid=GENERATE_TID(pid,__allocate_tid(task->group_leader));
-      } else {
-          LOCK_TASK_CHILDS(parent);
-          list_add2tail(&parent->children,
-                        &task->child_list);
-          UNLOCK_TASK_CHILDS(parent);
-          task->tid=0;
-      }
-  }
+  __add_to_parent(task,parent,flags);
 
   *t = task;
   return 0;
@@ -255,7 +310,7 @@ free_stack:
 free_task:
   /* TODO: Free task struct page here. [mt] */
 free_pid:
-  free_pid(pid);
+  __free_pid_and_tid(parent,flags,pid,tid);
 task_create_fault:
   *t = NULL;
   return r;

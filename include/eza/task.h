@@ -109,7 +109,7 @@ typedef struct __task_struct {
 
   struct __userspace_events_data *uspace_events;
   /* Arch-dependent context is located here */
-  uint8_t arch_context[];
+  uint8_t arch_context[256];
 } task_t;
 
 /**
