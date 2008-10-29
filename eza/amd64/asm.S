@@ -222,7 +222,7 @@ error_code_exception_path:
    * %r10 contains the value of %rsp before aligning for saving XMM data.
    */
   mov %r10, %rdi;
-  add $SAVED_GPR_SIZE + 8, %rdi 
+  add $SAVED_GPR_SIZE + 8, %rdi
 
   /* Now we call call the handler. */
   call *hi_level_fault_handlers(,%rax,8)
@@ -308,8 +308,6 @@ general_protection_fault_handler:
 
 page_fault_fault_handler:
   cli
-1:
-        jmp 1b
   push %rax        
   movl $14,%eax
   jmp error_code_exception_path

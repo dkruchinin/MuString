@@ -61,7 +61,7 @@ static void verify_mapping(const char *descr, uintptr_t start_addr,
 
   kprintf(" Verifying %s...", descr);
   for( i = 0; i < num_pages; i++ ) {
-    t = mm_pin_virt_addr(kernel_root_pagedir, ptr);
+    t = mm_pin_virt_addr(kernel_root_pagedir, (uintptr_t)ptr);
     if(t != start_idx) {
       ok = false;
       break;
@@ -244,7 +244,7 @@ void arch_mm_remap_pages(void)
   int ret;
 
   /* Create identity mapping */
-  ret = mmap_kern(0x1000, 1, IDENT_MAP_PAGES - 1, MAP_RW | MAP_EXEC);
+  ret = mmap_kern(0x1000, 1, IDENT_MAP_PAGES - 1, MAP_RW);
   if (ret) {
     panic("arch_mm_remap_pages(): Can't create identity mapping (%p -> %p)! [errcode=%d]",
           0x1000, IDENT_MAP_PAGES << PAGE_WIDTH, ret);
@@ -266,7 +266,7 @@ void arch_mm_remap_pages(void)
   direct_mapping_area.phys_addr=0x1000;
   direct_mapping_area.virt_addr=0x1000;
   direct_mapping_area.num_pages=IDENT_MAP_PAGES - 1;
-  direct_mapping_area.map_flags= MAP_USER | MAP_RW | MAP_EXEC;
+  direct_mapping_area.map_flags= MAP_USER | MAP_RW;
   vm_register_user_mandatory_area(&direct_mapping_area);
 
   /* TODO: [mt] redesign 'kernel_min_vaddr'. */
@@ -275,7 +275,7 @@ void arch_mm_remap_pages(void)
   /* All CPUs must initially reload their CR3 registers with already
    * initialized Level-4 page directory.
    */
-  arch_smp_mm_init(0);
+  arch_smp_mm_init(0);  
 }
 
 /* FIXME DK: move this fucking stuff to another(better) place... */
@@ -294,6 +294,6 @@ status_t arch_vm_map_kernel_area(task_t *task)
 }
 
 void arch_smp_mm_init(int cpu)
-{
+{  
   load_cr3(_k2p((uintptr_t)pframe_to_virt(kernel_root_pagedir)), 1, 1);
 }

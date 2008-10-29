@@ -48,8 +48,7 @@ static status_t __create_task_mm(task_t *task, int num)
   elf_head_t ehead;
   elf_pr_t epr;
   elf_sh_t esh;
-  page_idx_t idx;
-  uintptr_t text,data_bss,bss_virt;
+  uintptr_t data_bss,bss_virt;
   size_t real_code_size=0,real_data_size=0;
   size_t last_data_size,real_data_offset=0;
   size_t last_offset,last_sect_size,last_data_offset;
@@ -153,20 +152,19 @@ static status_t __create_task_mm(task_t *task, int num)
   /*  kprintf("elf entry -> %p\n",ehead.e_entry); */
 
   /*remap pages*/
-  kprintf("1 [%p ==> (%d, %d)]\n", USER_START_VIRT, code >> PAGE_WIDTH, text_size);
-  r = mmap(task->page_dir, USER_START_VIRT, code >> PAGE_WIDTH, text_size, MAP_USER | MAP_RW | MAP_EXEC);
+  r = mmap(task->page_dir, USER_START_VIRT, code >> PAGE_WIDTH, text_size, MAP_USER | MAP_READ | MAP_EXEC);
+  if (r)
+    return r;
 
-  kprintf("2 [%p ==> (%d, %d)]\n", real_data_offset, data_bss >> PAGE_WIDTH, data_size);
-  r = mmap(task->page_dir, real_data_offset, data_bss >> PAGE_WIDTH, data_size, MAP_USER | MAP_RW | MAP_EXEC);
-  
+  r = mmap(task->page_dir, real_data_offset, data_bss >> PAGE_WIDTH, data_size, MAP_USER | MAP_RW);  
   if (r)
     return r;
-  kprintf("3 [%p ==> (%d, %d)]\n", bss_virt, pframe_number(bss), bss_size);
-  r = mmap(task->page_dir, bss_virt, pframe_number(bss), bss_size, MAP_USER | MAP_RW | MAP_EXEC);
+
+  r = mmap(task->page_dir, bss_virt, pframe_number(bss), bss_size, MAP_USER | MAP_RW);
   if (r)
     return r;
-  kprintf("4 [%p ==> (%d, %d)]\n", USPACE_END-0x40000, pframe_number(stack), USER_STACK_SIZE);
-  r = mmap(task->page_dir, USPACE_END-0x40000, pframe_number(stack), USER_STACK_SIZE, MAP_USER | MAP_RW | MAP_EXEC);
+
+  r = mmap(task->page_dir, USPACE_END-0x40000, pframe_number(stack), USER_STACK_SIZE, MAP_USER | MAP_RW);
   if (r)
     return r;
 
