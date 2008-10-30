@@ -120,7 +120,7 @@ task_t *pid_to_task(pid_t pid)
   return task;
 }
 
-status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t priv,
+status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
                      task_t **newtask)
 {
   task_t *new_task;

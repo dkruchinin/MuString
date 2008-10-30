@@ -53,6 +53,8 @@ typedef struct __task_ipc {
 } task_ipc_t;
 
 task_ipc_t *allocate_task_ipc(void);
+void get_task_ipc(task_t *task);
+void release_task_ipc(task_t *task);
 
 #define LOCK_IPC(ipc) semaphore_down(&ipc->sem)
 #define UNLOCK_IPC(ipc) semaphore_up(&ipc->sem)

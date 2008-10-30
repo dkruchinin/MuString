@@ -59,6 +59,7 @@ typedef uint32_t time_slice_t;
 
 typedef enum __task_creation_flag_t {
   CLONE_MM = 0x1,
+  CLONE_IPC = 0x2,  
 } task_creation_flags_t;
 
 #define TASK_FLAG_UNDER_STATE_CHANGE  0x1
@@ -173,7 +174,7 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t flags,
 status_t arch_process_context_control(task_t *task,ulong_t cmd,ulong_t arg);
 
 
-status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t priv,
+status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
                      task_t **new_task);
 
 /**
@@ -186,7 +187,7 @@ status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t
  * doesn't register new task in the scheduler.
  * See 'create_task()' for details.
  */
- status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privelege_t priv,
+ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv,
                          task_t **t );
 
 /**

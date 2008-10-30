@@ -117,17 +117,13 @@ static void __free_tid(tid_t tid,task_t *group_leader)
 {
 }
 
-static status_t __alloc_pid_and_tid(task_t *parent,
-                                    task_creation_flags_t flags,
+static status_t __alloc_pid_and_tid(task_t *parent,ulong_t flags,
                                     pid_t *ppid, tid_t *ptid)
 {
   pid_t pid;
   tid_t tid;
 
   if( flags & CLONE_MM ) {
-    if( !parent ) {
-      return -EINVAL;
-    }
     pid=parent->pid;
     tid=GENERATE_TID(pid,__allocate_tid(parent->group_leader));
   } else {
@@ -143,16 +139,13 @@ static status_t __alloc_pid_and_tid(task_t *parent,
   return 0;
 }
 
-static void __free_pid_and_tid(task_t *parent,
-                               task_creation_flags_t flags,
-                               pid_t pid, tid_t tid)
+static void __free_pid_and_tid(task_t *parent,pid_t pid, tid_t tid)
 {
   __free_pid(pid);
   __free_tid(tid,parent->group_leader);
 }
 
-static void __add_to_parent(task_t *task,task_t *parent,
-                            task_creation_flags_t flags)
+static void __add_to_parent(task_t *task,task_t *parent,ulong_t flags)
 {
   if( parent && parent->pid ) {
     task->ppid = parent->pid;
@@ -180,6 +173,8 @@ static task_t *__allocate_task_struct(void)
   task_t *task=alloc_from_memcache(task_cache);
   
   if( task ) {
+    memset(task,0,sizeof(*task));
+
     list_init_node(&task->pid_list);
     list_init_node(&task->child_list);
 
@@ -193,7 +188,27 @@ static task_t *__allocate_task_struct(void)
   return task;  
 }
 
-status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privelege_t priv, task_t **t)
+static status_t __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
+{
+  if( flags & CLONE_IPC ) {
+    if( !parent->ipc ) {
+      return -EINVAL;
+    }
+    get_task_ipc(parent);
+    task->ipc=parent->ipc;
+  } else {
+    task_ipc_t *ipc=allocate_task_ipc();
+
+    if( !ipc ) {
+      return -ENOMEM;
+    } else {
+      task->ipc=ipc;
+    }
+  }
+  return 0;
+}
+
+status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t)
 {
   task_t *task;
   status_t r = -ENOMEM;
@@ -203,7 +218,10 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
   pid_t pid;
   tid_t tid;
   task_limits_t *limits;
-  task_ipc_t *ipc;
+
+  if( flags && !parent ) {
+    return -EINVAL;
+  }
 
   /* TODO: [mt] Add memory limit check. */
   /* goto task_create_fault; */  
@@ -260,16 +278,14 @@ status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privele
     task->limits = limits;
   }
 
-  /* Setup IPC stuff. */
-  ipc = allocate_task_ipc();
-  if(ipc==NULL) {
+  r=__setup_task_ipc(task,parent,flags);
+  if( r ) {
     goto free_limits;
-  } else {
-    task->ipc = ipc;
   }
 
   task->uspace_events=allocate_task_uspace_events_data();
   if( !task->uspace_events ) {
+    r=-ENOMEM;
     goto free_ipc;
   }
 
@@ -299,7 +315,7 @@ free_stack:
 free_task:
   /* TODO: Free task struct page here. [mt] */
 free_pid:
-  __free_pid_and_tid(parent,flags,pid,tid);
+  __free_pid_and_tid(parent,pid,tid);
 task_create_fault:
   *t = NULL;
   return r;

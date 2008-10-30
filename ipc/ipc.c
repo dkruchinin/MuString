@@ -37,3 +37,17 @@ task_ipc_t *allocate_task_ipc(void)
   return NULL;
   /* TODO: [mt] allocate task_ipc_t via slabs ! */
 }
+
+void get_task_ipc(task_t *t)
+{
+  if( t && t->ipc ) {
+    atomic_inc(&t->ipc->use_count);
+  }
+}
+
+void release_task_ipc(task_t *t)
+{
+  if( t && t->ipc ) {
+    atomic_dec(&t->ipc->use_count);
+  }
+}
