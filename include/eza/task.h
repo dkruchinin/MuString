@@ -80,6 +80,7 @@ typedef uint32_t cpu_array_t;
 struct __scheduler;
 struct __task_ipc;
 struct __userspace_events_data;
+struct __task_ipc_priv;
 
 /* Abstract object for scheduling. */
 typedef struct __task_struct {
@@ -106,6 +107,7 @@ typedef struct __task_struct {
   void *sched_data;
 
   struct __task_ipc *ipc;
+  struct __task_ipc_priv *ipc_priv;
   task_limits_t *limits;
 
   struct __userspace_events_data *uspace_events;

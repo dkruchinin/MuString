@@ -196,16 +196,11 @@ static status_t __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
     }
     get_task_ipc(parent);
     task->ipc=parent->ipc;
+    return setup_task_ipc(task);
   } else {
-    task_ipc_t *ipc=allocate_task_ipc();
-
-    if( !ipc ) {
-      return -ENOMEM;
-    } else {
-      task->ipc=ipc;
-    }
+    task->ipc=NULL;
+    return setup_task_ipc(task);
   }
-  return 0;
 }
 
 status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t)

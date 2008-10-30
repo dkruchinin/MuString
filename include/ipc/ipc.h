@@ -46,13 +46,15 @@ typedef struct __task_ipc {
   ipc_user_buffer_t **user_buffers;
   linked_array_t buffers_array;
   ulong_t num_buffers;
-
-  /* Cached singletones for synchronous operations. */
-  ipc_cached_data_t cached_data;
-  ipc_pstats_t *pstats;
 } task_ipc_t;
 
-task_ipc_t *allocate_task_ipc(void);
+typedef struct __task_ipc_priv {
+  /* Cached singletones for synchronous operations. */
+  ipc_cached_data_t cached_data;
+  ipc_pstats_t pstats;
+} task_ipc_priv_t;
+
+status_t setup_task_ipc(task_t *task);
 void get_task_ipc(task_t *task);
 void release_task_ipc(task_t *task);
 
@@ -65,7 +67,7 @@ void release_task_ipc(task_t *task);
 #define IPC_LOCK_BUFFERS(ipc) spinlock_lock(&ipc->buffer_lock);
 #define IPC_UNLOCK_BUFFERS(ipc) spinlock_unlock(&ipc->buffer_lock);
 
-#define IPC_TASK_ACCT_OPERATION(t) atomic_inc(&t->ipc->pstats->active_queues)
-#define IPC_TASK_UNACCT_OPERATION(t) atomic_dec(&t->ipc->pstats->active_queues)
+#define IPC_TASK_ACCT_OPERATION(t) atomic_inc(&t->ipc_priv->pstats.active_queues)
+#define IPC_TASK_UNACCT_OPERATION(t) atomic_dec(&t->ipc_priv->pstats.active_queues)
 
 #endif
