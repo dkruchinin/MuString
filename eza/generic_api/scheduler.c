@@ -44,6 +44,8 @@
 #include <eza/security.h>
 #include <eza/timer.h>
 #include <eza/time.h>
+#include <kernel/syscalls.h>
+#include <eza/kconsole.h>
 
 extern void initialize_idle_tasks(void);
 

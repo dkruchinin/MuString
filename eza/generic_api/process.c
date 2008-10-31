@@ -38,6 +38,7 @@
 #include <eza/spinlock.h>
 #include <kernel/syscalls.h>
 #include <kernel/vm.h>
+#include <eza/kconsole.h>
 
 typedef uint32_t hash_level_t;
 
@@ -70,26 +71,56 @@ static hash_level_t pid_to_hash_level(pid_t pid)
 
 task_t *pid_to_task(pid_t pid)
 {
+  tid_t tid;
+  bool thread;
+  task_t *task=NULL;
+  list_node_t *n;
+
+  if( pid > NUM_PIDS ) {
+    tid=pid;
+    pid=TID_TO_PIDBASE(pid);
+    thread=true;
+  } else {
+    thread=false;
+  }
+
   if( pid < NUM_PIDS ) {
     hash_level_t l = pid_to_hash_level(pid);
-    list_node_t *n;
 
     LOCK_PID_HASH_LEVEL_R(l);
     list_for_each(&pid_to_struct_hash[l],n) {
       task_t *t = container_of(n,task_t,pid_list);
       if(t->pid == pid) {
         grab_task_struct(t);
-        UNLOCK_PID_HASH_LEVEL_R(l);
-        return t;
+        task=t;
+        break;
       }
     }
     UNLOCK_PID_HASH_LEVEL_R(l);
   }
 
-  return NULL;
+  if( task && thread ) {
+    task_t *target=NULL;
+
+    LOCK_TASK_CHILDS(task);
+    list_for_each(&task->threads,n) {
+      task_t *t = container_of(n,task_t,child_list);
+      if(t->tid == tid) {
+        grab_task_struct(t);
+        target=t;
+        break;
+      }
+    }
+    UNLOCK_TASK_CHILDS(task);
+
+    release_task_struct(task);
+    task=target;
+  }
+
+  return task;
 }
 
-status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t priv,
+status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
                      task_t **newtask)
 {
   task_t *new_task;
@@ -102,11 +133,13 @@ status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t
       /* Tell the scheduler layer to take care of this task. */
       r = sched_add_task(new_task);
       if( r == 0 ) {
-        /* Now we can add this task to the hash. */
-        hash_level_t l = pid_to_hash_level(new_task->pid);
-        LOCK_PID_HASH_LEVEL_W(l);
-        list_add2tail(&pid_to_struct_hash[l],&new_task->pid_list);
-        UNLOCK_PID_HASH_LEVEL_W(l);
+        /* If it is not a thread, we can add this task to the hash. */
+        if( !is_thread( new_task ) ) {
+          hash_level_t l = pid_to_hash_level(new_task->pid);
+          LOCK_PID_HASH_LEVEL_W(l);
+          list_add2tail(&pid_to_struct_hash[l],&new_task->pid_list);
+          UNLOCK_PID_HASH_LEVEL_W(l);
+        }
       }
     } else {
       /* TODO: [mt] deallocate task struct properly. */
@@ -148,7 +181,7 @@ status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
 status_t sys_task_control(pid_t pid, ulong_t cmd, ulong_t arg)
 {
   status_t r;
-  task_t *task = pid_to_task(pid);
+  task_t *task=pid_to_task(pid);
 
   if( task == NULL ) {
     return -ESRCH;
@@ -165,18 +198,22 @@ out_release:
   return r;
 }
 
-status_t sys_create_task(task_creation_flags_t flags)
+status_t sys_create_task(ulong_t flags)
 {
   task_t *task;
   status_t r;
-  
+
   if( !security_ops->check_create_process(flags) ) {
     return -EPERM;
   }
 
   r = create_task(current_task(), flags, TPL_USER, &task);
-  if( r == 0 ) {
-    r = task->pid;
+  if( !r ) {
+    if( is_thread(task) ) {
+      r=task->tid;
+    } else {
+      r=task->pid;
+    }
   }
   return r;
 }
@@ -185,8 +222,10 @@ extern ulong_t syscall_counter;
 
 status_t sys_get_pid(void)
 {
-//  kprintf( "sys_get_pid(): Process %d (CPU #%d) wants to know its PID.\n",
-//           current_task()->pid, cpu_id() );
-  syscall_counter++;
   return current_task()->pid;
+}
+
+status_t sys_get_tid(void)
+{
+  return current_task()->tid;
 }

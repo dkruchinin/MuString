@@ -28,7 +28,7 @@
 #include <eza/swks.h>
 #include <eza/arch/page.h>
 
-#define USER_END_VIRT  0x100000000000   /* 16 Terabytes */
+#define USER_END_VIRT 0x10000000000   /* 16 Terabytes */
 #define USER_START_VIRT  0x1001000
 #define USER_VA_SIZE  (USER_END_VIRT-USER_START_VIRT)
 

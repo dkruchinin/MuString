@@ -40,14 +40,26 @@
 #define PID_HASH_LEVELS  (1 << PID_HASH_LEVEL_SHIFT)
 #define PID_HASH_LEVEL_MASK  (PID_HASH_LEVELS-1)
 
+/* TID-related macros. */
+#define TID_SHIFT  16
+#define MAX_THREADS_PER_PROCESS  (1<<TID_SHIFT)
+#define GENERATE_TID(pid,tid) (((pid)<<TID_SHIFT) | tid)
+#define TID_TO_PIDBASE(tid)  ((tid)>>TID_SHIFT)
+#define TID(tid) ((tid) & ~(MAX_THREADS_PER_PROCESS-1))
+
 /* Macros for locking task structure. */
 #define LOCK_TASK_STRUCT(t) spinlock_lock(&t->lock)
 #define UNLOCK_TASK_STRUCT(t) spinlock_unlock(&t->lock)
+
+/*   */
+#define LOCK_TASK_CHILDS(t) spinlock_lock(&t->child_lock)
+#define UNLOCK_TASK_CHILDS(t) spinlock_unlock(&t->child_lock)
 
 typedef uint32_t time_slice_t;
 
 typedef enum __task_creation_flag_t {
   CLONE_MM = 0x1,
+  CLONE_IPC = 0x2,  
 } task_creation_flags_t;
 
 #define TASK_FLAG_UNDER_STATE_CHANGE  0x1
@@ -68,10 +80,12 @@ typedef uint32_t cpu_array_t;
 struct __scheduler;
 struct __task_ipc;
 struct __userspace_events_data;
+struct __task_ipc_priv;
 
 /* Abstract object for scheduling. */
 typedef struct __task_struct {
   pid_t pid, ppid;
+  tid_t tid;
   cpu_id_t cpu;
   task_state_t state;
   cpu_array_t cpu_affinity;
@@ -82,16 +96,23 @@ typedef struct __task_struct {
 
   spinlock_t lock;
 
+  /* Children/threads - related stuff. */
+  struct __task_struct *group_leader;
+  spinlock_t child_lock;
+  list_head_t children,threads; 
+  list_node_t child_list;
+
   /* Scheduler-related stuff. */
   struct __scheduler *scheduler;
   void *sched_data;
 
   struct __task_ipc *ipc;
+  struct __task_ipc_priv *ipc_priv;
   task_limits_t *limits;
 
   struct __userspace_events_data *uspace_events;
   /* Arch-dependent context is located here */
-  uint8_t arch_context[];
+  uint8_t arch_context[256];
 } task_t;
 
 /**
@@ -155,7 +176,7 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t flags,
 status_t arch_process_context_control(task_t *task,ulong_t cmd,ulong_t arg);
 
 
-status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t priv,
+status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
                      task_t **new_task);
 
 /**
@@ -168,7 +189,7 @@ status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t
  * doesn't register new task in the scheduler.
  * See 'create_task()' for details.
  */
- status_t create_new_task(task_t *parent,task_creation_flags_t flags,task_privelege_t priv,
+ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv,
                          task_t **t );
 
 /**
@@ -181,6 +202,11 @@ status_t create_task(task_t *parent,task_creation_flags_t flags,task_privelege_t
  *       It doesn't free any resources (like memory space and other).
  */
 void free_task_struct(task_t *task);
+
+static inline bool is_thread( task_t *task )
+{
+  return (task->group_leader && task->group_leader != task);
+}
 
 #endif
 

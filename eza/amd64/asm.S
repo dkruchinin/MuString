@@ -302,13 +302,15 @@ stack_fault_handler:
 
 general_protection_fault_handler:
   cli
+  jmp general_protection_fault_handler
   push %rax
   movl $13,%eax
   jmp error_code_exception_path
 
 page_fault_fault_handler:
   cli
-  push %rax        
+  jmp page_fault_fault_handler
+  push %rax
   movl $14,%eax
   jmp error_code_exception_path
 

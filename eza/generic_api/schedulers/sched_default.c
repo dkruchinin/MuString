@@ -42,6 +42,7 @@
 #include <eza/arch/profile.h>
 #include <eza/arch/preempt.h>
 #include <eza/arch/asm.h>
+#include <eza/kconsole.h>
 
 /* Our own scheduler. */
 static struct __scheduler eza_default_scheduler;
@@ -67,7 +68,7 @@ static spinlock_t cpu_data_lock;
 #define EZA_TASK_PRIORITY(t) ((eza_sched_taskdata_t *)t->sched_data)->priority
 #define EZA_TASK_SCHED_DATA(t) ((eza_sched_taskdata_t *)t->sched_data)
 
-#define PRIO_TO_TIMESLICE(p) (p*5*1)
+#define PRIO_TO_TIMESLICE(p) (p*3*1)
 
 #define LOCK_EZA_SCHED_DATA(t) \
   spinlock_lock(&t->sched_lock)

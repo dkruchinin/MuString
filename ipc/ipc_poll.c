@@ -52,7 +52,7 @@ struct __plazy_data {
 static bool poll_lazy_sched_handler(void *data)
 {
   struct __plazy_data *p=(struct __plazy_data*)data;
-  return atomic_get(&p->task->ipc->pstats->active_queues)==p->nqueues;
+  return atomic_get(&p->task->ipc_priv->pstats.active_queues)==p->nqueues;
 }
 
 status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)

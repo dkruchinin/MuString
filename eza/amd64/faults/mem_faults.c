@@ -31,6 +31,7 @@
 #include <mlibc/kprintf.h>
 #include <eza/arch/mm.h>
 #include <eza/smp.h>
+#include <eza/kconsole.h>
 
 #define get_fault_address(x) \
     __asm__ __volatile__( "movq %%cr2, %0" : "=r"(x) )
@@ -52,6 +53,7 @@ void segment_not_present_fault_handler_impl(interrupt_stack_frame_err_t *stack_f
 
 void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
+  default_console()->enable();
   if( kernel_fault(stack_frame) ) {
     kprintf( "#GPF in kernel mode: RIP = 0x%X\n", stack_frame->rip );    
   }
@@ -74,12 +76,12 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
   uint64_t invalid_address,fixup;
   char *sp=(char *)stack_frame-sizeof(regs_t);
-
   get_fault_address(invalid_address);
   if( kernel_fault(stack_frame) ) {
     goto kernel_fault;
   }
 
+  default_console()->enable();
   kprintf( "[!!!] Unhandled user PF exception ! Stopping (CODE: %d, See page 225). Address: %p\nrip=%p\n",
            stack_frame->error_code, invalid_address,stack_frame->rip);
    __dump_regs(sp);

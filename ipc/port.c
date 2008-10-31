@@ -73,7 +73,7 @@ out_unlock:
 
 static ipc_port_message_t *__task_port_message(task_t *task,ipc_port_t *port)
 {
-  ipc_port_message_t *m = &task->ipc->cached_data.cached_port_message;
+  ipc_port_message_t *m = &task->ipc_priv->cached_data.cached_port_message;
   list_init_node(&m->l);
   m->port = port;
 
@@ -352,16 +352,16 @@ static status_t __setup_send_message_data(task_t *task,ipc_port_message_t *msg,
                                           uintptr_t rcv_buf,ulong_t rcv_size)
 {
   status_t r=-EFAULT;
-  task_ipc_t *ipc = task->ipc;
+  task_ipc_priv_t *ipc_priv = task->ipc_priv;
 
   /* Process send buffer */
   if( snd_size < IPC_BUFFERED_PORT_LENGTH ) {
-    msg->send_buffer=ipc->cached_data.cached_page1;
+    msg->send_buffer=ipc_priv->cached_data.cached_page1;
     if( copy_from_user(msg->send_buffer,(void*)snd_buf,snd_size ) ) {
       goto out;
     }
   } else {
-    msg->snd_buf.chunks=ipc->cached_data.cached_page1;
+    msg->snd_buf.chunks=ipc_priv->cached_data.cached_page1;
     r = ipc_setup_buffer_pages(task,&msg->snd_buf,snd_buf,snd_size);
     if( r ) {
       goto out;
@@ -371,9 +371,9 @@ static status_t __setup_send_message_data(task_t *task,ipc_port_message_t *msg,
   /* Process receive buffer, if any. */
   if( rcv_size > 0 ) {
     if( rcv_size < IPC_BUFFERED_PORT_LENGTH ) {
-      msg->receive_buffer=ipc->cached_data.cached_page2;
+      msg->receive_buffer=ipc_priv->cached_data.cached_page2;
     } else {
-      msg->rcv_buf.chunks=ipc->cached_data.cached_page2;
+      msg->rcv_buf.chunks=ipc_priv->cached_data.cached_page2;
       r = ipc_setup_buffer_pages(task,&msg->rcv_buf,rcv_buf,rcv_size);
       if( r ) {
         goto out;
@@ -483,7 +483,7 @@ status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
 
   if( !valid_user_address((ulong_t)msg_info) ||
       !valid_user_address(recv_buf) ) {
-    return -EFAULT;
+      return -EFAULT;
   }
 
   r = ipc_get_port(owner,port,&p);
