@@ -136,7 +136,7 @@ static void initialize_cpu_sched_data(eza_sched_cpudata_t *cpudata, cpu_id_t cpu
     }
   }
 
-  spinlock_initialize(&cpudata->lock, "Eza scheduler runqueue lock");
+  spinlock_initialize(&cpudata->lock);
   cpudata->active_array = &cpudata->arrays[0];
 
   /* Initialize scheduler statistics for this CPU. */
@@ -153,7 +153,7 @@ static status_t setup_new_task(task_t *task)
   }
 
   list_init_node(&sdata->runlist);
-  spinlock_initialize(&sdata->sched_lock, "EZA task data lock");
+  spinlock_initialize(&sdata->sched_lock);
 
   LOCK_TASK_STRUCT(task);
   task->sched_data = sdata;
@@ -403,7 +403,7 @@ static void def_reset(void)
 {
   int i;
 
-  spinlock_initialize(&cpu_data_lock, "Eza def scheduler lock");
+  spinlock_initialize(&cpu_data_lock);
 
   for(i=0;i<EZA_SCHED_CPUS;i++) {
     sched_cpu_data[i] = NULL;

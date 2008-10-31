@@ -63,7 +63,7 @@ static scheduler_t *active_scheduler = NULL;
 static void initialize_sched_internals(void)
 {
   list_init_head(&schedulers);
-  spinlock_initialize(&scheduler_lock, "Scheduler lock");
+  spinlock_initialize(&scheduler_lock);
 }
 
 void initialize_scheduler(void)

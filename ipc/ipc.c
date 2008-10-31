@@ -29,9 +29,9 @@ static task_ipc_t *__allocate_task_ipc(void)
 
     atomic_set(&ipc->use_count,1);
 
-    spinlock_initialize(&ipc->port_lock, "");
-    semaphore_initialize(&ipc->sem,1);
-    spinlock_initialize(&ipc->buffer_lock, "");
+    spinlock_initialize(&ipc->port_lock);
+    //semaphore_initialize(&ipc->sem,1); /* FIXME DK: uncomment later.. */
+    spinlock_initialize(&ipc->buffer_lock);
 
     return ipc;
   }

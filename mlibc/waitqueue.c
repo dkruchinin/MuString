@@ -32,7 +32,7 @@ void waitqueue_initialize(wait_queue_t *wq)
 {
   list_init_head(&wq->waiters);
   wq->num_waiters=0;
-  spinlock_initialize(&wq->q_lock,"");
+  spinlock_initialize(&wq->q_lock);
 }
 
 void waitqueue_add_task(wait_queue_t *wq,wait_queue_task_t *w)

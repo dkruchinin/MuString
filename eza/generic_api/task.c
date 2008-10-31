@@ -66,7 +66,7 @@ void initialize_task_subsystem(void)
 {
   pid_t idle;
 
-  spinlock_initialize(&pid_array_lock,"PID array spinlock");
+  spinlock_initialize(&pid_array_lock);
 
   if( !index_array_initialize(&pid_array, NUM_PIDS) ) {
     panic( "initialize_task_subsystem(): Can't initialize PID index array !" );
@@ -178,8 +178,8 @@ static task_t *__allocate_task_struct(void)
 
     list_init_head(&task->children);
     list_init_head(&task->threads);
-    spinlock_initialize(&task->lock, "Task lock");
-    spinlock_initialize(&task->child_lock, "Task child lock");
+    spinlock_initialize(&task->lock);
+    spinlock_initialize(&task->child_lock);
     task->flags = 0;
     task->group_leader=task;
   }

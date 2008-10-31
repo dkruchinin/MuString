@@ -104,7 +104,7 @@ struct __userspace_events_data *allocate_task_uspace_events_data(void)
     uspace_irqs_t *uirqs=&uevents->uspace_irqs;
 
     /* Initialize IRQs-related stuff. */
-    mutex_initialize(&uirqs->mutex);
+    //mutex_initialize(&uirqs->mutex); /* FIXME DK: uncomment later... (u know when :)) */
     spinlock_initialize(&uirqs->lock);
     uirqs->array=NULL;
   }

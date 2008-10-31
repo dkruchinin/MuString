@@ -199,7 +199,7 @@ static status_t __allocate_port(ipc_port_t **out_port,ulong_t flags,
   /* TODO: [mt] Support flags during IPC port creation. */
 
   atomic_set(&p->use_count,1);
-  spinlock_initialize(&p->lock, "");
+  spinlock_initialize(&p->lock);
   /* TODO: [mt] allocate memory via slabs ! */
   linked_array_initialize(&p->msg_array,
                           owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES] );

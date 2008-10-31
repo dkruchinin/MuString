@@ -33,11 +33,13 @@
 #include <mlibc/string.h>
 #include <kernel/syscalls.h>
 
+#define DEFINE_MUTEX(name) int (name)
 static DEFINE_MUTEX(ioports_lock);
 static struct rb_root ioports_root;
 
-#define LOCK_IOPORTS  semaphore_down(&ioports_lock)
-#define UNLOCK_IOPORTS  semaphore_up(&ioports_lock)
+/* FIXME DK: uncomment this data after mutex API becomes ready */
+#define LOCK_IOPORTS  //semaphore_down(&ioports_lock)
+#define UNLOCK_IOPORTS  //semaphore_up(&ioports_lock)
 
 typedef struct __ioport_range {
   struct rb_node node;

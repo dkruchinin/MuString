@@ -62,7 +62,15 @@ typedef struct __list_head {
  * @param name - name of variable
  */
 #define LIST_DEFINE(name)                                       \
-  list_head_t name = { .head = { &(name).head, &(name).head } }
+  list_head_t (name) = LIST_INITIALIZE(name)
+
+/**
+ * @def LIST_INITIALIZE
+ * @brief Initialize list head.
+ * @param name - list name
+ */
+#define LIST_INITIALIZE(name)                   \
+  { .head = { &(name).head, &(name).head } }
 
 /**
  * @fn static inline void list_init_head(list_head_t *lst)

@@ -43,7 +43,7 @@ typedef struct __irq_counter_handler {
 #define IRQ_COUNTER_REGISTERED  0x1
 
 typedef struct __uspace_irqs {
-  mutex_t mutex;
+    //mutex_t mutex; /* FIXME DK: uncomment this field after mutex API becomes ready */
   spinlock_t lock;
   irq_counter_array_t *array;
 } uspace_irqs_t;

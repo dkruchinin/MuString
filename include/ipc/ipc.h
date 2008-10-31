@@ -58,8 +58,9 @@ status_t setup_task_ipc(task_t *task);
 void get_task_ipc(task_t *task);
 void release_task_ipc(task_t *task);
 
-#define LOCK_IPC(ipc) semaphore_down(&ipc->sem)
-#define UNLOCK_IPC(ipc) semaphore_up(&ipc->sem)
+/* FIXME DK: uncomment after debugging */
+#define LOCK_IPC(ipc) //semaphore_down(&ipc->sem)
+#define UNLOCK_IPC(ipc) //semaphore_up(&ipc->sem)
 
 #define IPC_LOCK_PORTS(ipc) spinlock_lock(&ipc->port_lock)
 #define IPC_UNLOCK_PORTS(ipc) spinlock_unlock(&ipc->port_lock)

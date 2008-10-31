@@ -140,7 +140,7 @@ void initialize_idle_tasks(void)
     idle_tasks[cpu] = task;
 
     /* Setup PIDs and default priorities. */
-    spinlock_initialize(&task->lock, "Task's spinlock");
+    spinlock_initialize(&task->lock);
     task->pid = task->ppid = 0;
     task->cpu = cpu;
 
