@@ -12,6 +12,7 @@
 #include <mm/pfalloc.h>
 #include <mm/mm.h>
 #include <eza/scheduler.h>
+#include <eza/kconsole.h>
 
 static SPINLOCK_DEFINE(descrs_lock);
 static uintr_descr_t descriptors[NUM_IRQS];
@@ -131,12 +132,6 @@ static irq_counter_array_t *__allocate_irq_counter_array(task_t *task,ulong_t nc
 
     array->map_addr=NULL;
     array->event_mask=0;
-
-    array->base_addr=alloc_pages_addr(1,AF_ZERO);
-    if( !array->base_addr ) {
-      memfree(array);
-      array=NULL;
-    }
   }
   return array;
 }
@@ -281,6 +276,7 @@ static irq_counter_array_t *__get_irq_array(task_t *task,ulong_t id)
 status_t sys_wait_on_irq_array(ulong_t id)
 {
   irq_counter_array_t *array=__get_irq_array(current_task(),id);
+
   if( !array ) {
     return -EINVAL;
   }
