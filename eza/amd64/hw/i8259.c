@@ -140,6 +140,8 @@ static void initialize_pic(void)
 void i8259a_init(void)
 {
   initialize_pic();
+#ifndef CONFIG_APIC
   register_hw_interrupt_controller( &i8259A_pic );
+#endif
 }
 
