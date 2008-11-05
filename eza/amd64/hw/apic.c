@@ -248,42 +248,33 @@ void local_bsp_apic_init(void)
   } else
     kprintf("OK\n");
 
+  enable_l_apic_in_msr(); 
+
+  io_apic_disable_all(); 
+
   v=get_apic_version();
   kprintf("[LW] APIC version: %d\n",v);
+
   /* first we're need to clear APIC to avoid magical results */
-
   __local_apic_clear();
+  __disable_apic();
 
-  for(i=0;i<32;i++)
-    io_apic_disable_irq(i);
+  set_apic_dfr_mode(0xf); 
+  set_apic_ldr_logdest(0x1); 
 
-  for(i=1;i<24;i++)
-    io_apic_set_ioredir(i,0xff,i+32,0x0);
-
-  io_apic_bsp_init();
-
-  /*manual recommends to accept all*/
-  /*tpr.priority=0xffu;
-    local_apic->tpr.reg=tpr.reg;*/
+  /* set 0 task priority, i. e. handle all interrupts */ 
+  local_apic->tpr.reg = 0; 
 
   /* clear bits for interrupts - can be filled up to other os */
   for(i=7;i>=0;i--){
     v=local_apic->isr[i].bits;
     for(l=31;l>=0;l--)
       if(v & (1 << l))
-	local_apic_send_eoi();
+    local_apic_send_eoi();
   }
 
-  /*set spurois vector*/
-  set_apic_spurious_vector(0xff);
-
-  /* enable APIC */
-  __enable_apic();
-  /* enable APIC in MSR */
-  //enable_l_apic_in_msr((uintptr_t)local_apic);
-
-  /* enable wire mode*/
-  //local_apic->lvt_lint0.mask |= (1 << 0);
+  set_apic_spurious_vector(0xff); 
+  __enable_apic();  
 
   /* set nil vectors */
   __set_lvt_lint_vector(0,0x34);
@@ -291,23 +282,20 @@ void local_bsp_apic_init(void)
   /*set mode#7 extINT for lint0*/
   lvt_lint=local_apic->lvt_lint0;
   lvt_lint.tx_mode=0x7;
-  lvt_lint.mask=0x1;
+  lvt_lint.mask=1;
+  lvt_lint.tx_status = 0x0;
+  lvt_lint.polarity = 0x0; 
+  lvt_lint.trigger = 0;
   local_apic->lvt_lint0.reg=lvt_lint.reg;
   /*set mode#4 NMI for lint1*/
   lvt_lint=local_apic->lvt_lint1;
   lvt_lint.tx_mode=0x4;
-  lvt_lint.mask=0x1;
+  lvt_lint.mask=1;
+  lvt_lint.tx_status = 0x0;
+  lvt_lint.polarity = 0x0; 
+  lvt_lint.trigger = 0;
   local_apic->lvt_lint1.reg=lvt_lint.reg;
 
-  /*tx_mode & polarity set to 0 on both lintx*/
-  lvt_lint=local_apic->lvt_lint0;
-  lvt_lint.tx_status = 0x0;
-  lvt_lint.polarity = 0x0;
-  local_apic->lvt_lint0.reg=lvt_lint.reg;
-  lvt_lint=local_apic->lvt_lint1;
-  lvt_lint.tx_status = 0x0;
-  lvt_lint.polarity = 0x0;
-  local_apic->lvt_lint1.reg=lvt_lint.reg;
   /* ok, now we're need to set esr vector to 0xfe */
   local_apic->lvt_error.vector = 0xfe;
 
@@ -318,31 +306,31 @@ void local_bsp_apic_init(void)
   /* set icr1 registers*/
   icr1=local_apic->icr1;
   icr1.tx_mode=TXMODE_INIT;
-  icr1.rx_mode=DMODE_PHY;
+  icr1.rx_mode=DMODE_LOGIC;
   icr1.level=0x0;
   icr1.shorthand=0x2;
   icr1.trigger=0x1;
   local_apic->icr1.reg=icr1.reg;
 
-  set_apic_ldr_logdest(0x0);
-  set_apic_dfr_mode(0xf);
-
-  /* remap irq for timer */
-  //  io_apic_set_ioredir(0x00,0xff,32,0x0);
+  // set internal apic error interrupt vector
+  *(uint32_t*)((uint64_t)local_apic + 0x370) = 200;
 
   local_apic_timer_init(LOCAL_TIMER_CPU_IRQ_VEC);
 
-  /* enable APIC in MSR */
-  enable_l_apic_in_msr((uintptr_t)local_apic);
+  __local_apic_chkerr();
 
-  //  __local_apic_chkerr();
+  io_apic_bsp_init();
+
+  lvt_lint = local_apic->lvt_lint0;
+  lvt_lint.mask = 0;
+  local_apic->lvt_lint0.reg = lvt_lint.reg; 
 }
 
 void local_apic_bsp_switch(void)
 {
   kprintf("[LW] Leaving PIC mode to APIC mode ... ");
-  outb(0x70,0x22);
-  outb(0x01,0x23); /* old port - 0x71,0x23 */
+  outb(0x22,0x70);
+  outb(0x23,0x01); /* old port - 0x71,0x23 */
 
   kprintf("OK\n");
 }
