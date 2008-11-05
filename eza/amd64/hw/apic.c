@@ -219,7 +219,7 @@ void set_apic_ldr_logdest(uint32_t dest)
   local_apic->ldr.reg=ldr.reg;
 }
 
-static inline void enable_l_apic_in_msr(uintptr_t base)
+static inline void enable_l_apic_in_msr()
 {
   __asm__ volatile (
 		    "movq $0x1b, %%rcx\n"
@@ -228,7 +228,7 @@ static inline void enable_l_apic_in_msr(uintptr_t base)
 		    "orq %0,%%rax\n"
 		    "wrmsr\n"
 		    :
-		    : "m" (base)
+		    :
 		    :"%rax","%rcx","%rdx"
 		    );
 }
