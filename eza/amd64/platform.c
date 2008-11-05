@@ -117,12 +117,8 @@ void arch_specific_init(void)
   local_bsp_apic_init();
 
 #ifdef CONFIG_SMP
-
-  //arch_smp_init();
-  //atom_usleep(50000);
-
+  arch_smp_init();
 #endif
-  //local_apic_timer_init();
 }
 
 #ifdef CONFIG_SMP
