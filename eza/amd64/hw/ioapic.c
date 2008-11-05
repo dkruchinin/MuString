@@ -125,7 +125,7 @@ static bool io_apic_handles_irq(uint32_t irq)
   return ( irq < 16 );
 }
 
-static void io_apic_disable_all(void)
+/*static*/ void io_apic_disable_all(void)
 {
   int i;
 
