@@ -157,7 +157,7 @@ void io_apic_bsp_init(void)
 {
   int i;
   io_apic_id_t ioapic_id;
-  io_apic_version_t ioapic_ver;
+  io_apic_version_t ioapic_ver; 
 
   /* read version info */
   ioapic_ver.value=io_apic_read(IOAPIC_VERREG);
@@ -170,9 +170,11 @@ void io_apic_bsp_init(void)
   io_apic_write(IOAPIC_IDREG,ioapic_id.value);
 
   /* ok, let's make a redir table */
-    for(i=0;i<io_apic_pins;i++) {
-      io_apic_set_ioredir(i,0x0,0x10+i,0x0);
-    }
+  for(i=0;i<io_apic_pins;i++) {
+    io_apic_set_ioredir(i,0x01,IRQ_BASE+i,0x0);
+  }
+
+  io_apic_enable_all(); 
 }
 
 void io_apic_init(void)
