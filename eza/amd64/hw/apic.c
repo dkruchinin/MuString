@@ -225,13 +225,15 @@ static inline void enable_l_apic_in_msr()
 		    "movq $0x1b, %%rcx\n"
 		    "rdmsr\n"
 		    "orq $(1<<11),%%rax\n"
-		    "orq %0,%%rax\n"
 		    "wrmsr\n"
 		    :
 		    :
 		    :"%rax","%rcx","%rdx"
 		    );
 }
+
+
+extern void io_apic_disable_all(void);
 
 /*init functions makes me happy*/
 void local_bsp_apic_init(void)
