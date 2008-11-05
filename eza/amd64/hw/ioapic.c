@@ -76,7 +76,7 @@ void io_apic_write(uint8_t addr,uint32_t v)
 void io_apic_set_ioredir(uint8_t virq,uint8_t dest,uint8_t vector,int flags)
 {
   io_apic_redir_t rd;
-  int txm=TXMODE_EXTINT;
+  int txm=TXMODE_FIXED;
 
   if(flags & LOW_PRIORITY)
     txm=TXMODE_LOWPRI;
@@ -91,8 +91,8 @@ void io_apic_set_ioredir(uint8_t virq,uint8_t dest,uint8_t vector,int flags)
   rd.txmod=txm; /* set delivery mode (TX) */
   rd.vector=vector; /* set destination vector */
 
+  io_apic_write((uint8_t) (IOAPICRED + virq*2),rd.low); /* write low bytes from redirection table for this virq */ 
   io_apic_write((uint8_t) (IOAPICRED + virq*2 +1),rd.high); /* write high bytes from redirection table for this virq */
-  io_apic_write((uint8_t) (IOAPICRED + virq*2),rd.low); /* write low bytes from redirection table for this virq */
 }
 
 /* mask interrupt on io apic, disable interrupt */
