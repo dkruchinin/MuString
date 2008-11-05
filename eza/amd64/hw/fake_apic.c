@@ -62,7 +62,7 @@ static void fake_apic_disable_irq(uint32_t irq)
 
 static bool fake_apic_handles_irq(uint32_t irq)
 {
-  return ( irq < 255 && irq > 16 );
+  return ( irq < (NUM_IRQS - RESERVED_IRQS) );
 }
 
 static void local_apic_send_eoi_s(uint32_t v)
