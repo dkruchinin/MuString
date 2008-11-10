@@ -76,6 +76,13 @@ static spinlock_t cpu_data_lock;
 #define UNLOCK_EZA_SCHED_DATA(t) \
   spinlock_unlock(&t->sched_lock)
 
+#define __ENTER_USER_ATOMIC()                 \
+    interrupts_disable()
+
+#define __LEAVE_USER_ATOMIC()                   \
+    interrupts_enable();                        \
+    cond_reschedule()
+
 static eza_sched_taskdata_t *allocate_task_sched_data(void)
 {
   /* TODO: [mt] Allocate memory via slabs !!!  */
@@ -289,6 +296,10 @@ static void def_scheduler_tick(void)
   }
 
   tdata = EZA_TASK_SCHED_DATA(current);
+  if( !tdata ) {
+    return;
+  }
+
   discipl = tdata->sched_discipline;
 
   if( discipl == SCHED_RR ) {
@@ -303,6 +314,45 @@ static void def_scheduler_tick(void)
   } else if( discipl == SCHED_FIFO ) {
   } else {
   }
+}
+
+/* NOTE: Currently works only for current task ! */
+static status_t def_del_task(task_t *task)
+{
+  status_t r;
+  eza_sched_taskdata_t *sdata;
+
+  if( task != current_task() ) {
+    return -EINVAL;
+  }
+
+  __ENTER_USER_ATOMIC();
+  LOCK_TASK_STRUCT(task);
+
+  if( task->scheduler != &eza_default_scheduler || !task->sched_data ) {
+    r=-EINVAL;
+  } else {
+    eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
+    sdata=EZA_TASK_SCHED_DATA(task);  
+
+    __remove_task_from_array(sdata->array,task);
+    sdata=task->sched_data;
+    task->sched_data=NULL;
+    task->scheduler=NULL;
+    sched_data->stats->active_tasks--;
+
+    sched_set_current_need_resched(); /* Now way to return. */
+    r=0;
+  }
+  UNLOCK_TASK_STRUCT(task);
+  __LEAVE_USER_ATOMIC();
+
+  /* TODO: Free structures via LRU !!! */
+  if( !r ) {
+    free_task_sched_data(sdata);
+  }
+
+  return r;
 }
 
 static status_t def_add_task(task_t *task)
@@ -381,7 +431,9 @@ static void def_schedule(void)
     need_switch = false;
   }
 
-  next->state = TASK_STATE_RUNNING;
+  if( next->state == TASK_STATE_RUNNABLE ) {
+    next->state = TASK_STATE_RUNNING;
+  }
 
   UNLOCK_CPU_SCHED_DATA(sched_data);
   UNLOCK_TASK_STRUCT(current);
@@ -633,6 +685,7 @@ static struct __scheduler eza_default_scheduler = {
   .add_cpu = def_add_cpu,
   .scheduler_tick = def_scheduler_tick,
   .add_task = def_add_task,
+  .del_task = def_del_task,
   .schedule = def_schedule,
   .reset = def_reset,
   .change_task_state = def_change_task_state,

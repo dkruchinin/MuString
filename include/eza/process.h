@@ -51,4 +51,6 @@ task_t *pid_to_task(pid_t pid);
  */
 status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg);
 
+void zombify_task(task_t *target);
+
 #endif

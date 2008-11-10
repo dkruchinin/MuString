@@ -194,6 +194,14 @@ void update_idle_tick_statistics(scheduler_cpu_stats_t *stats)
   stats->idle_ticks++;
 }
 
+status_t sched_del_task(task_t *task)
+{
+  if( active_scheduler != NULL ) {
+    return active_scheduler->del_task(task);
+  }
+  return -ENOTTY;
+}
+
 void schedule(void)
 {
   if(active_scheduler != NULL) {

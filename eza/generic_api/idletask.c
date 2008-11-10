@@ -42,8 +42,8 @@
 
 task_t *idle_tasks[MAX_CPUS];
 
-#define STEP 9200
-#define TICKS_TO_WAIT 19300
+#define STEP 300
+#define TICKS_TO_WAIT 300
 
 ulong_t syscall_counter = 0;
 
@@ -300,7 +300,7 @@ void interrupt_thread_isr(void *data)
         if( r !=0 ) {
             for(;;);
         }
-        
+
         code=inb(0x60);
         while( i < 5000000 ) {
             kprintf( "[ISR Thread] Waiting for irqs to arrive ...\n" );
@@ -318,7 +318,17 @@ void interrupt_thread_isr(void *data)
         }
     }
 
-    for(;;);
+    {
+        uint64_t target_tick = swks.system_ticks_64 + 100;
+
+        while(1) {
+            if( swks.system_ticks_64 >= target_tick ) {
+                kprintf( " + [ISR Thread] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
+                         cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
+                target_tick += STEP;
+            }
+        }
+    }
 }
 
 void interrupt_thread(void *data) {
@@ -330,6 +340,9 @@ void interrupt_thread(void *data) {
 
    kprintf( " + [Interrupt thread] Starting ... Ticks: %d, Target tick: %d\n",
             swks.system_ticks_64, target_tick);
+
+   sys_exit(0);
+
    while(1) {
        if( swks.system_ticks_64 >= target_tick ) {
            kprintf( " + [Interrupt thread] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
@@ -370,13 +383,13 @@ void idle_loop(void)
       }
       }
   */
-/*
+
   if( cpu_id() == 0 ) {
       if( kernel_thread(interrupt_thread,NULL) != 0 ) {
           panic( "Can't create server thread for testing interrupt events !\n" );
       }
   }
-*/
+
 /*  
   if( cpu_id() == 0 ) {
           if( kernel_thread(ioport_thread,NULL) != 0 ) {

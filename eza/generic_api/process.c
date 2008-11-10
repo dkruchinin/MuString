@@ -69,6 +69,13 @@ static hash_level_t pid_to_hash_level(pid_t pid)
   return (pid & PID_HASH_LEVEL_MASK);
 }
 
+void zombify_task(task_t *target)
+{
+  LOCK_TASK_STRUCT(target);
+  target->state=TASK_STATE_ZOMBIE;
+  UNLOCK_TASK_STRUCT(target);
+}
+
 task_t *pid_to_task(pid_t pid)
 {
   tid_t tid;

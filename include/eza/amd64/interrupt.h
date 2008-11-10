@@ -27,7 +27,6 @@
 #include <eza/arch/asm.h>
 #include <eza/arch/types.h>
 #include <eza/arch/current.h>
-#include <eza/arch/preempt.h>
 
 #define HZ  1000 /* Timer frequency. */
 #define IRQ_BASE 32 /* First vector in IDT for IRQ #0. */
@@ -110,46 +109,6 @@ static inline void discount_interrupt(void)
 static inline bool is_interrupts_enabled(void)
 {
   return (interrupts_read() & 0x200) != 0 ? 1: 0;
-}
-
-static inline void lock_local_interrupts(void)
-{
-  interrupts_disable();
-  if( online_cpus != 0 ) {
-    inc_css_field(irq_lock_count);
-  }
-}
-
-static inline void unlock_local_interrupts(void)
-{
-  if( online_cpus != 0 ) {
-    curtype_t v;
-
-    /* We don't have to read current irq lock count atomically
-     * since we assume that interrupts we disabled and, therefore,
-     * we're in atomic.
-     */
-    read_css_field(irq_lock_count,v);
-    if( v > 0 ) {
-      dec_css_field(irq_lock_count);
-      if( v == 1 ) {
-        /* The last lock was removed. */
-        interrupts_enable();
-        COND_RESCHED_CURRENT;
-      }
-    }
-  } else {
-    interrupts_enable();
-    COND_RESCHED_CURRENT;
-  }
-}
-
-static inline bool local_interrupts_locked(void)
-{
-  curtype_t v;
-  
-  read_css_field(irq_lock_count,v);
-  return v > 0;
 }
 
 #endif
