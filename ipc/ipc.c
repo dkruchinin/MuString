@@ -121,8 +121,30 @@ task_ipc_t *get_task_ipc(task_t *t)
   return t->ipc;
 }
 
-static void __deinitialize_task_ipc(task_ipc_t *ipc)
+void __deinitialize_task_ipc(task_ipc_t *ipc)
 {
+  uint32_t i;
+
+  LOCK_IPC(ipc);
+
+  /* Close all open ports. */
+  for(i=0;i<ipc->num_ports && ipc->ports;i++) {
+    ipc_port_t *port;
+
+    IPC_LOCK_PORTS(ipc);
+    port=ipc->ports[i];
+    ipc->ports[i]=NULL;
+    IPC_UNLOCK_PORTS(ipc);
+
+    if( port ) {
+      ipc_shutdown_port(port);
+      ipc_put_port(port);
+    }
+  }
+
+  /* Close all buffers */
+
+  UNLOCK_IPC(ipc);
 }
 
 void release_task_ipc(task_ipc_t *ipc)
@@ -132,6 +154,8 @@ void release_task_ipc(task_ipc_t *ipc)
     /* Last reference, so clean it all up. */
       default_console()->enable();
       kprintf( "** Releasing IPC struct !\n" );
-    __deinitialize_task_ipc(ipc);
+      __deinitialize_task_ipc(ipc);
+      __free_task_ipc(ipc);
+      kprintf( "** Done !\n" );
   }
 }

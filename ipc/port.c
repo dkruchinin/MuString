@@ -44,30 +44,52 @@
 void ipc_put_port(ipc_port_t *p)
 {
   UNREF_PORT(p);
-  /* TODO: [mt] Free port memory upon deletion. */
+
+  if( !atomic_get(&p->use_count) ) {
+    linked_array_deinitialize(&p->msg_array);
+    free_pages_addr(p->message_ptrs);
+    free_pages_addr(p);
+  }
+}
+
+void ipc_shutdown_port(ipc_port_t *port)
+{
+  IPC_LOCK_PORT_W(port);
+  if( !(port->flags & IPC_PORT_SHUTDOWN ) ) {
+    port->flags |= IPC_PORT_SHUTDOWN;
+  } else {
+    port=NULL;
+  }
+  IPC_UNLOCK_PORT_W(port);
+
+  if( port ) {
+  }
 }
 
 status_t ipc_get_port(task_t *task,ulong_t port,ipc_port_t **out_port)
 {
-  ipc_port_t *p;
-  status_t r;
-  task_ipc_t *ipc = task->ipc;
+  ipc_port_t *p=NULL;
+  status_t r=-EINVAL;
+  task_ipc_t *ipc;
 
-  IPC_LOCK_PORTS(ipc);
-  if(port >= task->limits->limits[LIMIT_IPC_MAX_PORTS] ||
-     ipc->ports[port] == NULL) {
-    r=-EINVAL;
-    goto out_unlock;
+  LOCK_TASK_MEMBERS(task);
+  ipc=task->ipc;
+
+  if( ipc ) {
+    IPC_LOCK_PORTS(ipc);
+    if(port < task->limits->limits[LIMIT_IPC_MAX_PORTS] &&
+       ipc->ports[port] != NULL) {
+      p = ipc->ports[port];
+      if( !(p->flags & IPC_PORT_SHUTDOWN) ) {
+        REF_PORT(p);
+        r=0;
+      }
+    }
+    IPC_UNLOCK_PORTS(ipc);
   }
-  p = ipc->ports[port];
 
-  REF_PORT(p);
-  IPC_UNLOCK_PORTS(ipc);
+  UNLOCK_TASK_MEMBERS(task);
   *out_port = p;
-  return 0;
-out_unlock:
-  IPC_UNLOCK_PORTS(ipc);
-  *out_port = NULL;
   return r;
 }
 
@@ -398,7 +420,6 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
   ipc_port_message_t *msg;
   ulong_t id;
   task_t *sender = current_task();
-  task_ipc_t *ipc;
 
   /* TODO: [mt] Now only max ~64 vbytes can be sent vis ports. */
   if( !snd_size || snd_size > MAX_PORT_MSG_LENGTH ||
@@ -410,16 +431,10 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
     return -EDEADLOCK;
   }
 
-  ipc=get_task_ipc(receiver);
-  if( !ipc ) {
-    return -EINVAL;
-  }
-
   /* First, locate target port. */
   r = ipc_get_port(receiver,port,&p);
   if( r ) {
-    r -EINVAL;
-    goto out_put_ipc; 
+    return -EINVAL;
   }
 
   /* First check without locking the port. */
@@ -469,8 +484,6 @@ free_message_id:
   __free_port_message_id(p,id);
 out_put_port:
   ipc_put_port(p);
-out_put_ipc:
-  release_task_ipc(ipc);
   return r;
 }
 
