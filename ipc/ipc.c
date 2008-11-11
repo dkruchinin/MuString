@@ -6,6 +6,7 @@
 #include <mlibc/string.h>
 #include <mm/slab.h>
 #include <eza/errno.h>
+#include <eza/kconsole.h>
 
 static memcache_t *ipc_priv_data_cache;
 
@@ -109,16 +110,28 @@ free_ipc:
   return -ENOMEM;
 }
 
-void get_task_ipc(task_t *t)
+task_ipc_t *get_task_ipc(task_t *t)
 {
-  if( t && t->ipc ) {
+  LOCK_TASK_MEMBERS(t);
+  if( t->ipc ) {
     atomic_inc(&t->ipc->use_count);
   }
+  UNLOCK_TASK_MEMBERS(t);
+
+  return t->ipc;
 }
 
-void release_task_ipc(task_t *t)
+static void __deinitialize_task_ipc(task_ipc_t *ipc)
 {
-  if( t && t->ipc ) {
-    atomic_dec(&t->ipc->use_count);
+}
+
+void release_task_ipc(task_ipc_t *ipc)
+{
+  atomic_dec(&ipc->use_count);
+  if( !atomic_get(&ipc->use_count) ) {
+    /* Last reference, so clean it all up. */
+      default_console()->enable();
+      kprintf( "** Releasing IPC struct !\n" );
+    __deinitialize_task_ipc(ipc);
   }
 }

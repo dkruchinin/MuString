@@ -398,14 +398,7 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
   ipc_port_message_t *msg;
   ulong_t id;
   task_t *sender = current_task();
-
-  if( !receiver->ipc ) {
-    return -EINVAL;
-  }
-
-  if( receiver == sender ) {
-    return -EDEADLOCK;
-  }
+  task_ipc_t *ipc;
 
   /* TODO: [mt] Now only max ~64 vbytes can be sent vis ports. */
   if( !snd_size || snd_size > MAX_PORT_MSG_LENGTH ||
@@ -413,10 +406,20 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
     return -EINVAL;
   }
 
+  if( receiver == sender ) {
+    return -EDEADLOCK;
+  }
+
+  ipc=get_task_ipc(receiver);
+  if( !ipc ) {
+    return -EINVAL;
+  }
+
   /* First, locate target port. */
   r = ipc_get_port(receiver,port,&p);
   if( r ) {
-    return -EINVAL;
+    r -EINVAL;
+    goto out_put_ipc; 
   }
 
   /* First check without locking the port. */
@@ -452,7 +455,7 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
   IPC_TASK_ACCT_OPERATION(sender);
   event_yield( &msg->event );
   IPC_TASK_UNACCT_OPERATION(sender);
-  
+
   /* Copy reply data to our buffers. */
   r=__transfer_reply_data(msg,rcv_buf,rcv_size,false);
   if( !r ) {
@@ -466,6 +469,8 @@ free_message_id:
   __free_port_message_id(p,id);
 out_put_port:
   ipc_put_port(p);
+out_put_ipc:
+  release_task_ipc(ipc);
   return r;
 }
 
@@ -477,7 +482,7 @@ status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
   ipc_port_t *p;
   ipc_port_message_t *msg;
 
-  if( !recv_buf || !msg_info || !recv_len ) {
+  if( !recv_buf || !msg_info || !recv_len || !owner->ipc ) {
     return -EINVAL;
   }
 
@@ -541,7 +546,8 @@ status_t ipc_port_reply(task_t *owner, ulong_t port, ulong_t msg_id,
   ipc_port_t *p;
   ipc_port_message_t *msg;
 
-  if( !reply_buf || reply_len > MAX_PORT_MSG_LENGTH ) {
+  if( !reply_buf || reply_len > MAX_PORT_MSG_LENGTH ||
+      !owner->ipc ) {
     return -EINVAL;
   }
 

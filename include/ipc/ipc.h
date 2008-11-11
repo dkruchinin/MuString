@@ -55,8 +55,8 @@ typedef struct __task_ipc_priv {
 } task_ipc_priv_t;
 
 status_t setup_task_ipc(task_t *task);
-void get_task_ipc(task_t *task);
-void release_task_ipc(task_t *task);
+task_ipc_t *get_task_ipc(task_t *task);
+void release_task_ipc(task_ipc_t *ipc);
 
 #define LOCK_IPC(ipc) semaphore_down(&ipc->sem)
 #define UNLOCK_IPC(ipc) semaphore_up(&ipc->sem)

@@ -27,8 +27,19 @@
 #include <eza/process.h>
 #include <eza/kernel.h>
 #include <eza/task.h>
+#include <ipc/ipc.h>
 
 static void __exit_ipc(task_t *exiter) {
+  task_ipc_t *ipc;
+
+  LOCK_TASK_MEMBERS(exiter);
+  ipc=exiter->ipc;
+  exiter->ipc=NULL;
+  UNLOCK_TASK_MEMBERS(exiter);
+
+  if( ipc ) {
+    release_task_ipc(ipc);
+  }
 }
 
 static void __exit_scheduler(task_t *exiter)

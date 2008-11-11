@@ -334,13 +334,14 @@ void interrupt_thread_isr(void *data)
 void interrupt_thread(void *data) {
    uint64_t target_tick = swks.system_ticks_64 + 100;
 
-   if( kernel_thread(interrupt_thread_isr,NULL) != 0 ) {
-       panic( "Can't create ISR thread for testing interrupt events !\n" );
-   }
+//   if( kernel_thread(interrupt_thread_isr,NULL) != 0 ) {
+//       panic( "Can't create ISR thread for testing interrupt events !\n" );
+//   }
 
    kprintf( " + [Interrupt thread] Starting ... Ticks: %d, Target tick: %d\n",
             swks.system_ticks_64, target_tick);
 
+   kprintf( " + [Interrupt thread] Exiting ...\n" );
    sys_exit(0);
 
    while(1) {

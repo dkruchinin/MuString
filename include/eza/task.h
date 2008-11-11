@@ -55,6 +55,9 @@
 #define LOCK_TASK_CHILDS(t) spinlock_lock(&t->child_lock)
 #define UNLOCK_TASK_CHILDS(t) spinlock_unlock(&t->child_lock)
 
+#define LOCK_TASK_MEMBERS(t) spinlock_lock(&t->member_lock)
+#define UNLOCK_TASK_MEMBERS(t) spinlock_unlock(&t->member_lock)
+
 typedef uint32_t time_slice_t;
 
 typedef enum __task_creation_flag_t {
@@ -106,9 +109,17 @@ typedef struct __task_struct {
   struct __scheduler *scheduler;
   void *sched_data;
 
+  /* IPC-related stuff */
   struct __task_ipc *ipc;
   struct __task_ipc_priv *ipc_priv;
+
+  /* Limits-related stuff. */
   task_limits_t *limits;
+
+  /* Lock for protecting changing and outer access the following fields:
+   *   ipc,ipc_priv,limits
+   */
+  spinlock_t member_lock;
 
   struct __userspace_events_data *uspace_events;
   /* Arch-dependent context is located here */
