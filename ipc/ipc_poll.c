@@ -27,7 +27,7 @@
 #include <ipc/ipc.h>
 #include <eza/task.h>
 #include <eza/smp.h>
-#include <eza/waitqueue.h>
+#include <mlibc/waitqueue.h>
 #include <ipc/poll.h>
 #include <eza/time.h>
 #include <mm/slab.h>

@@ -33,6 +33,7 @@
 #include <eza/container.h>
 #include <ipc/buffer.h>
 #include <mlibc/stddef.h>
+#include <mlibc/waitqueue.h>
 #include <kernel/vm.h>
 #include <eza/arch/preempt.h>
 
@@ -100,7 +101,7 @@ static ulong_t __allocate_port_message_id(ipc_port_t *port)
 
 static void __notify_message_arrived(ipc_port_t *port)
 {
-  waitqueue_wake_one_task(&port->waitqueue);
+  waitqueue_pop(&port->waitqueue);
 }
 
 static void __add_message_to_port_queue( ipc_port_t *port,
@@ -151,17 +152,16 @@ poll_event_t ipc_port_get_pending_events(ipc_port_t *port)
 
 void ipc_port_add_poller(ipc_port_t *port,task_t *poller, wait_queue_task_t *w)
 {
-  w->task=poller;
-
+  waitqueue_prepare_task(w, poller);
   IPC_LOCK_PORT_W(port);
-  waitqueue_add_task(&port->waitqueue,w);
+  waitqueue_insert(&port->waitqueue, w, WQ_INSERT_SIMPLE);
   IPC_UNLOCK_PORT_W(port);
 }
 
 void ipc_port_remove_poller(ipc_port_t *port,wait_queue_task_t *w)
 {
   IPC_LOCK_PORT_W(port);
-  waitqueue_remove_task(&port->waitqueue,w);
+  waitqueue_delete(&port->waitqueue, w, WQ_DELETE_SIMPLE);
   IPC_UNLOCK_PORT_W(port);
 }
 
@@ -170,14 +170,12 @@ static void __put_receiver_into_sleep(task_t *receiver,ipc_port_t *port)
 {
   wait_queue_task_t w;
 
-  w.task=receiver;
-  waitqueue_add_task(&port->waitqueue,&w);
-
+  waitqueue_prepare_task(&w, receiver);  
   /* Now we can unlock the port. */
   IPC_UNLOCK_PORT_W(port);
 
   IPC_TASK_ACCT_OPERATION(receiver);
-  waitqueue_yield(&w);
+  waitqueue_push(&port->waitqueue, &w);
   IPC_TASK_UNACCT_OPERATION(receiver);
 //  kprintf( "> Waking up server: %d\n", receiver->pid );
 }

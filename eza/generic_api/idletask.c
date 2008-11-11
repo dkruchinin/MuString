@@ -334,10 +334,27 @@ static void timer_thread(void *data)
     for(;;);
 }
 
+static void fn(void *data)
+{  
+  kprintf("Hi, I'm %d\n", (int)data);
+}
+
+static void fn_god(void *data)
+{
+  int d = 20;
+  kprintf("Hi, I'm god! I'm going to create %d threads\n", d);
+  while (d--) {
+    kernel_thread(fn, (void *)d);
+  }
+}
+
 void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
 
+  if (!cpu_id()) {
+    kernel_thread(fn_god, NULL);
+  }
   /*
   if( cpu_id() == 0 ) {
       if( kernel_thread(timer_thread,NULL) != 0 ) {

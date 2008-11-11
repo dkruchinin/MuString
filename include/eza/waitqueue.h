@@ -16,47 +16,71 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
  * include/eza/waitqueue.h: prototypes for waitqueues.
  */
 
 #ifndef __WAITQUEUE_H__
-#define  __WAITQUEUE_H__
+#define __WAITQUEUE_H__
 
+#include <ds/list.h>
 #include <eza/task.h>
 #include <eza/spinlock.h>
-#include <ds/list.h>
 #include <eza/arch/types.h>
 
 typedef struct __wait_queue {
   list_head_t waiters;
-  ulong_t num_waiters;
+  uint32_t num_waiters;
   spinlock_t q_lock;
 } wait_queue_t;
 
+typedef uint8_t wqueue_flags_t;
+
 typedef struct __wait_queue_task {
-  list_node_t l;
+  list_head_t head;
+  list_node_t node;
   task_t *task;
-  ulong_t flags;
-  wait_queue_t *q;  
+  wait_queue_t *q;
+  uint32_t priority;
 } wait_queue_task_t;
 
-#define WQ_EVENT_OCCURED  0x1
+typedef enum __wqueue_insop {
+  WQ_INSERT_SIMPLE = 0,
+  WQ_INSERT_SLEEP,
+} wqueue_insop_t;
 
-#define LOCK_WAITQUEUE(w)                       \
-    interrupts_disable();                       \
-    spinlock_lock(&w->q_lock)
+typedef enum __wqeue_delop {
+  WQ_DELETE_SIMPLE = 0,
+  WQ_DELETE_WAKEUP,
+} wqueue_delop_t;
 
-#define UNLOCK_WAITQUEUE(w)                     \
-    spinlock_unlock(&w->q_lock);                \
-    interrupts_enable();                          
+#define waitqueue_push(wq, task)                \
+  waitqueue_insert(wq, task, WQ_INSERT_SLEEP)
 
-void waitqueue_initialize(wait_queue_t *wq);
-void waitqueue_add_task(wait_queue_t *wq,wait_queue_task_t *w);
-void waitqueue_remove_task(wait_queue_t *wq,wait_queue_task_t *w);
-bool waitqueue_is_empty(wait_queue_t *wq);
-ulong_t waitqueue_get_tasks_number(wait_queue_t *wq);
-void waitqueue_wake_one_task(wait_queue_t *wq);
-void waitqueue_yield(wait_queue_task_t *w);
+static inline status_t waitqueue_push(wait_queue_t *wq, wait_queue_task_t *wq_task)
+{
+  return waitqueue_insert(wq, wq_task, WQ_INSERT_SLEEP);
+}
 
-#endif
+static inline status_t waitqueue_pop(wait_queue_t *wq)
+{
+  if (waitqueue_is_empty(wq))
+    return -EINVAL;
+
+  return waitqueue_delete(wq,
+                          list_entry(list_node_first(&wq->head), wait_queue_task_t, node),
+                          WQ_DELETE_WAKEUP);
+}
+
+static inline bool waitqueue_is_empty(wait_queue_t *wq)
+{
+  return !!(wq->num_waiters);
+}
+
+status_t waitqueue_initialize(wait_queue_t *wq);
+status_t waitqueue_prepare_task(wait_queue_task_t *wq_task, task_t *task);
+void waitqueue_insert(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_insop_t iop);
+void waitqueue_delete(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_delop_t dop);
+
+#endif /* __WAITQUEUE_H__ */
