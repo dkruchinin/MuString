@@ -170,10 +170,23 @@ static void __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
   }
 }
 
+static void __free_task_struct(task_t *task)
+{
+  memfree(task);
+}
+
+void cleanup_thread_data(void *t)
+{
+  task_t *task=(task_t*)t;
+
+  free_kernel_stack(task->kernel_stack.id);
+  __free_task_struct(task);
+}
+
 static task_t *__allocate_task_struct(void)
 {
   task_t *task=alloc_from_memcache(task_cache);
-  
+
   if( task ) {
     memset(task,0,sizeof(*task));
 

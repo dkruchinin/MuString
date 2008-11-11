@@ -219,5 +219,7 @@ static inline bool is_thread( task_t *task )
   return (task->group_leader && task->group_leader != task);
 }
 
+void cleanup_thread_data(void *t);
+
 #endif
 

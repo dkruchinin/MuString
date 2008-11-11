@@ -70,6 +70,9 @@ static void main_routine_stage1(void)
   set_cpu_online(0,1);  /* We're online. */
   sched_add_cpu(0);
 
+  initialize_ipc();
+  initialize_gc();
+
   arch_initialize_irqs();
   arch_specific_init();
 
@@ -85,14 +88,8 @@ static void main_routine_stage1(void)
   initialize_swks();
   swks_add_version_info();
 
-  /* The other CPUs are running, the scheduler is ready, so we can
-   * enable all interrupts.
-   */
-
-  initialize_ipc();
-
   /* OK, we can proceed. */
-  //spawn_percpu_threads();
+  spawn_percpu_threads();
   server_run_tasks();
 
   /* Enter idle loop. */
@@ -149,7 +146,7 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
   sched_add_cpu(cpu);
 
   interrupts_enable();
-  spawn_percpu_threads();
+  //spawn_percpu_threads();
 
   /* Entering idle loop. */
   kprintf( "CPU #%d is entering idle loop. Current task: %p, CPU: %d, ATOM: %d\n",

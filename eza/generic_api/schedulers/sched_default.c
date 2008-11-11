@@ -43,6 +43,7 @@
 #include <eza/arch/preempt.h>
 #include <eza/arch/asm.h>
 #include <eza/kconsole.h>
+#include <eza/gc.h>
 
 /* Our own scheduler. */
 static struct __scheduler eza_default_scheduler;
@@ -326,14 +327,31 @@ static status_t def_del_task(task_t *task)
     return -EINVAL;
   }
 
-  __ENTER_USER_ATOMIC();
+  interrupts_disable();
   LOCK_TASK_STRUCT(task);
 
   if( task->scheduler != &eza_default_scheduler || !task->sched_data ) {
     r=-EINVAL;
+    UNLOCK_TASK_STRUCT(task);
+    interrupts_enable();
   } else {
+    gc_action_t *action;
     eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
-    sdata=EZA_TASK_SCHED_DATA(task);  
+    sdata=EZA_TASK_SCHED_DATA(task);
+
+    task->sched_data=NULL;
+    UNLOCK_TASK_STRUCT(task);
+    interrupts_enable();
+
+    /* Phase 1: Free scheduler private data. */
+    if( sdata ) {
+      free_task_sched_data(sdata);
+    }
+
+    /* Phase 2: Prepare deffered free actions. */
+    action=gc_allocate_action(cleanup_thread_data,task);
+
+    LOCK_TASK_STRUCT(task);
 
     __remove_task_from_array(sdata->array,task);
     sdata=task->sched_data;
@@ -343,13 +361,12 @@ static status_t def_del_task(task_t *task)
 
     sched_set_current_need_resched(); /* Now way to return. */
     r=0;
-  }
-  UNLOCK_TASK_STRUCT(task);
-  __LEAVE_USER_ATOMIC();
 
-  /* TODO: Free structures via LRU !!! */
-  if( !r ) {
-    free_task_sched_data(sdata);
+    if( action ) {
+      gc_schedule_action(action);
+    }
+
+    UNLOCK_TASK_STRUCT(task);
   }
 
   return r;
