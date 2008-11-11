@@ -35,6 +35,7 @@
 #include <mlibc/stddef.h>
 #include <kernel/vm.h>
 #include <eza/arch/preempt.h>
+#include <eza/kconsole.h>
 
 #define MAX_PORT_MSG_LENGTH  MB(2)
 
@@ -87,7 +88,7 @@ status_t ipc_get_port(task_t *task,ulong_t port,ipc_port_t **out_port)
   LOCK_TASK_MEMBERS(task);
   ipc=task->ipc;
 
-  if( ipc ) {
+  if( ipc && ipc->ports ) {
     IPC_LOCK_PORTS(ipc);
     if(port < task->limits->limits[LIMIT_IPC_MAX_PORTS] &&
        ipc->ports[port] != NULL) {
