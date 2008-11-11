@@ -31,14 +31,20 @@
 
 static void __exit_ipc(task_t *exiter) {
   task_ipc_t *ipc;
+  task_ipc_priv_t *p;  
 
   LOCK_TASK_MEMBERS(exiter);
   ipc=exiter->ipc;
+  p=exiter->ipc_priv;
   exiter->ipc=NULL;
+  exiter->ipc_priv=NULL;
   UNLOCK_TASK_MEMBERS(exiter);
 
   if( ipc ) {
     release_task_ipc(ipc);
+  }
+  if( p ) {
+    release_task_ipc_priv(p);
   }
 }
 

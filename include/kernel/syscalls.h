@@ -375,4 +375,6 @@ status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
 
 status_t sys_get_tid(void);
 
+void sys_exit(ulong_t code);
+
 #endif

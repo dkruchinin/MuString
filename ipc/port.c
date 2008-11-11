@@ -63,6 +63,18 @@ void ipc_shutdown_port(ipc_port_t *port)
   IPC_UNLOCK_PORT_W(port);
 
   if( port ) {
+    list_node_t *n;
+
+    /* First, wake up all receivers. */
+    /* TODO: [mt] wake up all receivers on port closing. */
+
+    /* Next, wake up all senders.  */
+    list_for_each(&port->messages,n) {
+      ipc_port_message_t *msg=container_of(n,ipc_port_message_t,l);
+
+      msg->replied_size=-EPIPE;
+      event_raise(&msg->event);
+    }
   }
 }
 
@@ -125,16 +137,24 @@ static void __notify_message_arrived(ipc_port_t *port)
   waitqueue_wake_one_task(&port->waitqueue);
 }
 
-static void __add_message_to_port_queue( ipc_port_t *port,
-                                         ipc_port_message_t *msg,
-                                         ulong_t id)
+static status_t __add_message_to_port_queue( ipc_port_t *port,
+                                             ipc_port_message_t *msg,
+                                             ulong_t id)
 {
+  status_t r;
+
   IPC_LOCK_PORT_W(port);
-  list_add2tail(&port->messages,&msg->l);
-  port->message_ptrs[id] = msg;
-  port->avail_messages++;
-  msg->id = id;
+  if( !(port->flags & IPC_PORT_SHUTDOWN ) ) {
+    list_add2tail(&port->messages,&msg->l);
+    port->message_ptrs[id] = msg;
+    port->avail_messages++;
+    msg->id = id;
+    r=0;
+  } else {
+    r=-EPIPE;
+  }
   IPC_UNLOCK_PORT_W(port);
+  return r;
 }
 
 static void __free_port_message_id(ipc_port_t *port,ulong_t id)
@@ -352,8 +372,12 @@ static status_t __transfer_reply_data(ipc_port_message_t *msg,
       }
     } else {
       /* Long message - process it via buffer. */
-      r=ipc_transfer_buffer_data(&msg->rcv_buf,0,reply_len,
-                               (void *)reply_buf,from_server);
+      if( from_server ) {
+        r=ipc_transfer_buffer_data(&msg->rcv_buf,0,reply_len,
+                                   (void *)reply_buf,from_server);
+      } else {
+        r=0;
+      }
     }
   }
 
@@ -463,7 +487,11 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
   }
 
   /* OK, new message is ready for sending. */
-  __add_message_to_port_queue(p,msg,id);
+  r=__add_message_to_port_queue(p,msg,id);
+  if( r ) { /* Port was accidently shutdown ? */
+    goto free_message_id;
+  }
+
   __notify_message_arrived(p);
 
   /* Sender should wait for the reply, so put it into sleep here. */
@@ -472,9 +500,12 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
   IPC_TASK_UNACCT_OPERATION(sender);
 
   /* Copy reply data to our buffers. */
-  r=__transfer_reply_data(msg,rcv_buf,rcv_size,false);
-  if( !r ) {
-    r=msg->replied_size;
+  r=msg->replied_size;
+  if( r >= 0 ) {
+    r=__transfer_reply_data(msg,rcv_buf,rcv_size,false);
+    if( !r ) {
+      r=msg->replied_size;
+    }
   }
 
   /* Release the port. */

@@ -42,8 +42,8 @@
 
 task_t *idle_tasks[MAX_CPUS];
 
-#define STEP 300
-#define TICKS_TO_WAIT 300
+#define STEP 800
+#define TICKS_TO_WAIT 1300
 
 ulong_t syscall_counter = 0;
 
@@ -129,6 +129,10 @@ static void thread2(void *data)
     kprintf( "[Server]: Polling ports (1) ...\n" );
     r=sys_ipc_port_poll(pfds,NUM_PORTS,NULL);
     kprintf( "[Server]: After polling ports: %d\n",r );
+
+    kprintf( "[Server]: Exiting ...\n" );
+    sys_exit(0);
+
     for(i=0;i<NUM_PORTS;i++) {
       if(pfds[i].revents) {
         kprintf( "[Server]: Port %d has some pending events: 0x%X\n",
@@ -158,11 +162,13 @@ static void thread4(void *data)
     if( r >=0 ) {
         kprintf( "[Client %d]: %s\n", current_task()->pid, _buf );
     } else {
-      __asm__  __volatile__( "cli" );
-      panic( "[Client N2]: Can't receive response from server ! %d\n", r );      
+//      __asm__  __volatile__( "cli" );
+        kprintf( "[Client N2]: Can't receive response from server ! %d\n", r );
+        break;
     }
     wait_ticks(TICKS_TO_WAIT, "2");
   }
+  sys_exit(0);
   for(;;);
 }
 
@@ -185,10 +191,12 @@ static void thread5(void *data)
       kprintf( "[Client %d]: %s\n", current_task()->pid,_buf );
     } else {
       __asm__  __volatile__( "cli" );
-      panic( "[Client N3]: Can't receive response from server ! %d\n", r );      
+      kprintf( "[Client N3]: Can't receive response from server ! %d\n", r );
+      break;
     }
     wait_ticks(TICKS_TO_WAIT, "3");
   }
+  sys_exit(0);
   for(;;);
 }
 
@@ -210,13 +218,14 @@ static void thread6(void *data)
       kprintf( "[Client NA]: %s\n", _buf );
     } else {
       __asm__  __volatile__( "cli" );
-      panic( "[Client NA]: Can't receive response from server ! %d\n", r );      
+      kprintf( "[Client NA]: Can't receive response from server ! %d\n", r );
+      break;
     }
     wait_ticks(TICKS_TO_WAIT, "4");
   }
+  sys_exit(0);
   for(;;);
 }
-
 
 static void thread3(void *data)
 {
@@ -239,6 +248,9 @@ static void thread3(void *data)
   if( kernel_thread(thread6,NULL) != 0 ) {
     panic( "Can't create client thread N4 for testing port IPC functionality !\n" );
   }
+
+  sys_exit(0);
+  for(;;);
 
   while(1) {
     memset(_buf,0,sizeof(_buf));
@@ -384,13 +396,23 @@ void idle_loop(void)
       }
       }
   */
-
+/*
   if( cpu_id() == 0 ) {
       if( kernel_thread(interrupt_thread,NULL) != 0 ) {
           panic( "Can't create server thread for testing interrupt events !\n" );
       }
   }
-
+*/
+/*
+  if( cpu_id() == 0 ) {
+    if( kernel_thread(thread2,NULL) != 0 ) {
+      panic( "Can't create server thread for testing port IPC functionality !\n" );
+    }
+    if( kernel_thread(thread3,NULL) != 0 ) {
+      panic( "Can't create client thread for testing port IPC functionality !\n" );
+    }
+  }
+*/
 /*  
   if( cpu_id() == 0 ) {
           if( kernel_thread(ioport_thread,NULL) != 0 ) {

@@ -58,6 +58,12 @@ static task_ipc_priv_t *__allocate_ipc_private_data(void)
 
 static void __free_ipc_private_data(task_ipc_priv_t *p)
 {
+  if( p->cached_data.cached_page1 ) {
+    free_pages_addr(p->cached_data.cached_page1);
+  }
+  if( p->cached_data.cached_page2 ) {
+    free_pages_addr(p->cached_data.cached_page2);
+  }
   memfree(p);
 }
 
@@ -152,10 +158,12 @@ void release_task_ipc(task_ipc_t *ipc)
   atomic_dec(&ipc->use_count);
   if( !atomic_get(&ipc->use_count) ) {
     /* Last reference, so clean it all up. */
-      default_console()->enable();
-      kprintf( "** Releasing IPC struct !\n" );
-      __deinitialize_task_ipc(ipc);
-      __free_task_ipc(ipc);
-      kprintf( "** Done !\n" );
+    __deinitialize_task_ipc(ipc);
+    __free_task_ipc(ipc);
   }
+}
+
+void release_task_ipc_priv(task_ipc_priv_t *priv)
+{
+  __free_ipc_private_data(priv);
 }

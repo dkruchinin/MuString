@@ -42,7 +42,8 @@ struct __ipc_port_t;
 #define IPC_PORT_SHUTDOWN  0x800
 
 typedef struct __ipc_port_messsage_t {
-  ulong_t data_size,reply_size,id,replied_size;
+  ulong_t data_size,reply_size,id;
+  long replied_size;
   void *send_buffer,*receive_buffer;
   list_node_t l;
   event_t event;
