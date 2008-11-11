@@ -211,7 +211,7 @@ static inline status_t __activate_local_task(task_t *task, eza_sched_cpudata_t *
 
 //  kprintf( "++ ACTIVATING LOCAL TASK: %d NEW PRIO: %d, CURRENT: %p, CRRENT PRIO: %d\n",
 //           task->pid, EZA_TASK_PRIORITY(task), current_task()->pid, cdata->priority );
-  if( EZA_TASK_PRIORITY(task) < cdata->priority ) {
+  if( !cdata || EZA_TASK_PRIORITY(task) < cdata->priority ) {
     sched_set_current_need_resched();
   }
 
@@ -337,8 +337,9 @@ static status_t def_del_task(task_t *task)
   } else {
     gc_action_t *action;
     eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
-    sdata=EZA_TASK_SCHED_DATA(task);
 
+    sdata=EZA_TASK_SCHED_DATA(task);
+    __remove_task_from_array(sdata->array,task);
     task->sched_data=NULL;
     UNLOCK_TASK_STRUCT(task);
     interrupts_enable();
@@ -348,25 +349,27 @@ static status_t def_del_task(task_t *task)
       free_task_sched_data(sdata);
     }
 
-    /* Phase 2: Prepare deffered free actions. */
+    /* Phase 2: Prepare deffered actions. */
     action=gc_allocate_action(cleanup_thread_data,task);
 
+    /* Now we can schedule deffered resource freeing. */
+    preempt_disable();
+    interrupts_disable();
     LOCK_TASK_STRUCT(task);
 
-    __remove_task_from_array(sdata->array,task);
     sdata=task->sched_data;
-    task->sched_data=NULL;
     task->scheduler=NULL;
     sched_data->stats->active_tasks--;
+    sched_set_current_need_resched();
 
-    sched_set_current_need_resched(); /* Now way to return. */
-    r=0;
+    UNLOCK_TASK_STRUCT(task);
+    interrupts_enable();
 
     if( action ) {
       gc_schedule_action(action);
     }
-
-    UNLOCK_TASK_STRUCT(task);
+    /* No way to return - we're leaving the CPU forever ... */
+    preempt_enable();
   }
 
   return r;

@@ -42,7 +42,7 @@
 
 task_t *idle_tasks[MAX_CPUS];
 
-#define STEP 800
+#define STEP 600
 #define TICKS_TO_WAIT 1300
 
 ulong_t syscall_counter = 0;
@@ -396,13 +396,13 @@ void idle_loop(void)
       }
       }
   */
-/*
+
   if( cpu_id() == 0 ) {
       if( kernel_thread(interrupt_thread,NULL) != 0 ) {
           panic( "Can't create server thread for testing interrupt events !\n" );
       }
   }
-*/
+
 /*
   if( cpu_id() == 0 ) {
     if( kernel_thread(thread2,NULL) != 0 ) {

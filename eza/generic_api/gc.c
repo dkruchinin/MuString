@@ -35,8 +35,6 @@ void initialize_gc(void)
 
   for( i=0;i<NR_CPUS;i++ ) {
     list_init_head(&gc_tasklists[i]);
-    kprintf( " -- Initing head: %p\n",
-             &gc_tasklists[i]);
   }
 
   gc_actions_cache = create_memcache( "GC action memcache", sizeof(gc_action_t),
@@ -46,27 +44,24 @@ void initialize_gc(void)
   }
 
   spinlock_initialize(&tasklist_lock,"GC tasklist lock");
-  kprintf( "  -- Spinlock: %p\n", &tasklist_lock );
 }
 
 static void __gc_thread_logic(void *arg)
 {
   gc_threads[cpu_id()]=current_task();
 
-  kprintf( "* STARTING ...\n" );
   while(1) {
     list_head_t *alist=get_gc_tasklist();
     list_head_t private;
     list_node_t *n;
 
-    kprintf( "* LOCKING ... spinlock=%d\n",
-             *(int *)&tasklist_lock);
     list_init_head(&private);
-    
-    spinlock_lock(&tasklist_lock);
-    list_move2head(alist,&private);
-    spinlock_unlock(&tasklist_lock);
-    kprintf( "* LOCKED !\n" );
+
+    LOCK_TASKLIST();
+    if( !list_is_empty(alist) ) {
+      list_move2head(&private,alist);
+    }
+    UNLOCK_TASKLIST();
 
     list_for_each(&private,n) {
       struct __gc_action *action=container_of(n,struct __gc_action,l);
@@ -75,9 +70,7 @@ static void __gc_thread_logic(void *arg)
       action->dtor(action);
     }
 
-    kprintf( "** SLEEPING ...\n" );
     sched_change_task_state(current_task(),TASK_STATE_SLEEPING);
-    kprintf( "** GOT WOKEN UP ...\n" );
   }
 }
 
@@ -96,6 +89,7 @@ gc_action_t *gc_allocate_action(gc_actor_t actor, void *data)
     action->data=data;
     action->dtor=__free_gc_action;
     list_init_node(&action->l);
+    action->type=0;
   }
   return action;
 }

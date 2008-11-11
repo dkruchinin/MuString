@@ -10,6 +10,7 @@ typedef void (*gc_action_dtor_t)(struct __gc_action *action);
 typedef void (*gc_actor_t)(void *data);
 
 typedef struct __gc_action {
+  ulong_t type;
   gc_action_dtor_t dtor;
   gc_actor_t action;
   void *data;
