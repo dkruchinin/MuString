@@ -40,7 +40,7 @@ static void __insert_task(wait_queue_t *wq, wait_queue_task_t *wq_task)
         next = list_head(&t->head);
         break;
       }
-      if (t->priority < wq_task->priority) {
+      if (t->priority > wq_task->priority) {
         next = &t->node;
         break;
       }
@@ -84,6 +84,7 @@ status_t waitqueue_prepare_task(wait_queue_task_t *wq_task, task_t *task)
   wq_task->task = task;
   wq_task->q = NULL;
   ret = sys_scheduler_control(task->pid, SYS_SCHED_CTL_GET_PRIORITY, 0);
+  kprintf("PRIO: %d\n", ret);
   if (ret < 0)
     return ret;
 
@@ -94,16 +95,13 @@ status_t waitqueue_prepare_task(wait_queue_task_t *wq_task, task_t *task)
 status_t waitqueue_insert(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_insop_t iop)
 {
   status_t ret = 0;
-  int irq;
-  
-  //spinlock_lock_irqsave(&wq->q_lock, irq);
-  spinlock_lock_irqsafe(&wq->q_lock);
+
+  spinlock_lock(&wq->q_lock);
   __insert_task(wq, wq_task);
   if (iop == WQ_INSERT_SLEEP)
     ret = sched_change_task_state(wq_task->task, TASK_STATE_SLEEPING);
 
-  spinlock_unlock_irqsafe(&wq->q_lock);
-  //spinlock_unlock_irqrestore(&wq->q_lock, irq);
+  spinlock_unlock(&wq->q_lock);
   return ret;
 }
 
@@ -112,14 +110,39 @@ status_t waitqueue_delete(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_d
   status_t ret = 0;
   int irq;
   
-  //spinlock_lock_irqsave(&wq->q_lock, irq);
-  spinlock_lock_irqsafe(&wq->q_lock);
-  __delete_task(wq, wq_task);    
+  spinlock_lock_irqsave(&wq->q_lock, irq);
+  __delete_task(wq, wq_task);
   if (dop == WQ_DELETE_WAKEUP)
     ret = sched_change_task_state(wq_task->task, TASK_STATE_RUNNABLE);
 
-  spinlock_unlock_irqsafe(&wq->q_lock);
-  //spinlock_unlock_irqrestore(&wq->q_lock, irq);
+  spinlock_unlock_irqrestore(&wq->q_lock, irq);
   return ret;
 }
 
+#ifdef DEBUG_WAITQUEUE
+void waitqueue_dump(wait_queue_t *wq)
+{
+  kprintf("==> %d\n", waitqueue_is_empty(wq));
+  if (waitqueue_is_empty(wq)) {
+    kprintf("[WQ empty]\n");
+    return;
+  }
+  else {
+    wait_queue_task_t *t;
+
+    spinlock_lock(&wq->q_lock);
+    kprintf("[WQ dump (%d waiters)]:\n", wq->num_waiters);
+    list_for_each_entry(&wq->waiters, t, node) {
+      wait_queue_task_t *subt;
+      
+      kprintf(" [%d]=> %d", t->priority, t->task->pid);
+      list_for_each_entry(&t->head, subt, node)
+        kprintf("->%d", subt->task->pid);
+
+      kprintf("\n");
+    }
+    
+    spinlock_unlock(&wq->q_lock);
+  }
+}
+#endif /* DEBUG_WAITQUEUE */

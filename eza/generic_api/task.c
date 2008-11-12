@@ -116,12 +116,12 @@ static void __free_tid(tid_t tid,task_t *group_leader)
 }
 
 static status_t __alloc_pid_and_tid(task_t *parent,ulong_t flags,
-                                    pid_t *ppid, tid_t *ptid)
+                                    pid_t *ppid, tid_t *ptid, bool tmp)
 {
   pid_t pid;
   tid_t tid;
 
-  if( flags & CLONE_MM ) {
+  if( (flags & CLONE_MM) && !tmp ) {
     pid=parent->pid;
     tid=GENERATE_TID(pid,__allocate_tid(parent->group_leader));
   } else {
@@ -216,7 +216,7 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
 
   /* TODO: [mt] Add memory limit check. */
   /* goto task_create_fault; */  
-  r=__alloc_pid_and_tid(parent,flags,&pid,&tid);
+  r=__alloc_pid_and_tid(parent,flags,&pid,&tid, priv == TPL_KERNEL);
   if( r ) {
     goto task_create_fault;
   }

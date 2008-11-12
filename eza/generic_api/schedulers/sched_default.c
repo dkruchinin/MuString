@@ -296,8 +296,8 @@ static void def_scheduler_tick(void)
       __remove_task_from_array(cpudata->active_array,current);
       __recalculate_timeslice_and_priority(current);
       __add_task_to_array(cpudata->active_array,current);
-      //kprintf( "** CPU %d: TIMESLICE IS OVER ! NEXT TIMESLICE: %d\n",
-            //   cpu_id(), tdata->time_slice );
+      kprintf( "** CPU %d: TIMESLICE IS OVER ! NEXT TIMESLICE: %d\n",
+               cpu_id(), tdata->time_slice );
       sched_set_current_need_resched();
     }
   } else if( discipl == SCHED_FIFO ) {
@@ -386,9 +386,9 @@ static void def_schedule(void)
   UNLOCK_CPU_SCHED_DATA(sched_data);
   UNLOCK_TASK_STRUCT(current);
 
-//  kprintf( "** [%d] RESCHED TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , TS: %d **\n",
-//           cpu_id(), current_task()->pid, need_switch,
-//           next->pid, EZA_TASK_SCHED_DATA(next)->time_slice );
+  /*kprintf( "** [%d] RESCHED TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , TS: %d **\n",
+           cpu_id(), current_task()->pid, need_switch,
+           next->pid, EZA_TASK_SCHED_DATA(next)->time_slice );*/
 
   if( need_switch ) {
     arch_activate_task(next);
@@ -468,8 +468,8 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
 {
   status_t r;
 
-//  kprintf( "]]]]] BEFORE CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d\n",
-//           in_atomic(), current_task_needs_resched() );
+  /*kprintf( "]]]]] BEFORE CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d\n",
+    in_atomic(), current_task_needs_resched() );*/
   interrupts_disable();
   LOCK_TASK_STRUCT(task);
 
@@ -480,8 +480,8 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
     interrupts_enable();
     r=__change_remote_task_state(task,new_state);
   }
-//  kprintf( "]]]]] AFTER CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d\n",
-//           in_atomic(), current_task_needs_resched() );
+  /*kprintf( "]]]]] AFTER CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d\n",
+    in_atomic(), current_task_needs_resched() );*/
   cond_reschedule();
   return r;
 }

@@ -22,6 +22,7 @@
 
 #include <eza/kernel.h>
 #include <mlibc/kprintf.h>
+#include <mlibc/waitqueue.h>
 #include <eza/smp.h>
 #include <eza/arch/scheduler.h>
 #include <eza/arch/types.h>
@@ -334,9 +335,22 @@ static void timer_thread(void *data)
     for(;;);
 }
 
+static wait_queue_t __wq;
+
 static void fn(void *data)
-{  
-  kprintf("Hi, I'm %d\n", (int)data);
+{
+  int i = 0;
+
+  wait_queue_task_t t;
+  waitqueue_prepare_task(&t, current_task());
+  sys_scheduler_control(current_task()->pid, SYS_SCHED_CTL_SET_PRIORITY, (int)data);
+  for (;;) {
+    if (++i > 5) {      
+      waitqueue_push(&__wq, &t);
+    }
+      
+    kprintf("Hi, I'm %d\n", (int)data);
+  }
 }
 
 static void fn_god(void *data)
@@ -344,14 +358,19 @@ static void fn_god(void *data)
   int d = 20;
   kprintf("Hi, I'm god! I'm going to create %d threads\n", d);
   while (d--) {
-    kernel_thread(fn, (void *)d);
+    kernel_thread(fn, (void *)(d + 1));
   }
+
+  waitqueue_dump(&__wq);
+  interrupts_disable();
+  for (;;);  
 }
 
 void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
 
+  waitqueue_initialize(&__wq);
   if (!cpu_id()) {
     kernel_thread(fn_god, NULL);
   }

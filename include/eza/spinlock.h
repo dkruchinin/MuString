@@ -89,8 +89,9 @@
 #define __unlock_irqrestore(type, v, s...)      \
   do {                                          \
     arch_spinlock_##type(s);                    \
-    if (v)                                      \
+    if (v) {                                    \
       interrupts_enable();                      \
+    }                                           \
   } while (0)
 
 /* TODO DK: add trylock and islock for RW locks, irq locks */
