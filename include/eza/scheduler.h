@@ -90,6 +90,8 @@ status_t sched_add_cpu(cpu_id_t cpu);
 status_t sched_move_task_to_cpu(task_t *task,cpu_id_t cpu);
 void update_idle_tick_statistics(scheduler_cpu_stats_t *stats);
 
+void schedule_migration(task_t *task,cpu_id_t cpu);
+
 extern scheduler_t *get_default_scheduler(void);
 
 void schedule(void);

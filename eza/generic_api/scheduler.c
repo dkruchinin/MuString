@@ -60,6 +60,8 @@ static scheduler_t *active_scheduler = NULL;
 #define LOCK_SCHEDULER_LIST spinlock_lock(&scheduler_lock)
 #define UNLOCK_SCHEDULER_LIST spinlock_unlock(&scheduler_lock)
 
+static list_head_t migration_lists[NR_CPUS];
+static spinlock_t migration_locks[NR_CPUS];
 
 static void initialize_sched_internals(void)
 {
@@ -69,6 +71,8 @@ static void initialize_sched_internals(void)
 
 void initialize_scheduler(void)
 {
+  int i;
+
   initialize_sched_internals();
   initialize_kernel_stack_allocator();
   initialize_task_subsystem();
@@ -80,6 +84,11 @@ void initialize_scheduler(void)
   }
 
   initialize_idle_tasks();
+
+  for(i=0;i<NR_CPUS;i++) {
+    spinlock_initialize(&migration_locks[i]);
+    list_init_head(&migration_lists[i]);
+  }
 }
 
 scheduler_t *sched_get_scheduler(const char *name)
@@ -292,10 +301,52 @@ status_t sleep(ulong_t ticks)
   return 0;
 }
 
+void schedule_migration(task_t *task,cpu_id_t cpu)
+{
+  if( cpu < NR_CPUS ) {
+    long state;
+
+    spinlock_lock_irqsave(&migration_locks[cpu],state);
+    list_add2tail(&migration_lists[cpu], &task->migration_list);
+    spinlock_unlock_irqrestore(&migration_locks[cpu],state);
+    apic_broadcast_ipi_vector(SCHEDULER_IPI_IRQ_VEC);
+  }
+}
+
+extern int sched_verbose;
+
 #ifdef CONFIG_SMP
 /* SMP-specific stuff. */
 void do_smp_scheduler_interrupt_handler(void)
 {
+  list_head_t private, *mytasks;
+  cpu_id_t cpu=cpu_id();
+
+  list_init_head(&private);
+
+  mytasks=&migration_lists[cpu];
+  spinlock_lock(&migration_locks[cpu]);
+
+  if( !list_is_empty(mytasks) ) {
+    list_node_t *n, *ns;
+
+    list_move2head(&private,mytasks);
+    spinlock_unlock(&migration_locks[cpu]);
+
+    list_for_each_safe(&private,n,ns) {
+      task_t *task=container_of(n,task_t,migration_list);
+
+      if( task->cpu != cpu ) {
+        panic( "Tasks's CPUs differ after migration ! %d:%d\n",
+               cpu,task->cpu);
+      }
+
+      list_del(n);
+      sched_change_task_state(task,TASK_STATE_RUNNABLE);
+    }
+  } else {
+    spinlock_unlock(&migration_locks[cpu]);
+  }
 }
 
 #endif

@@ -43,8 +43,8 @@
 
 task_t *idle_tasks[MAX_CPUS];
 
-#define STEP 600
-#define TICKS_TO_WAIT 1300
+#define STEP 2600
+#define TICKS_TO_WAIT 2300
 
 ulong_t syscall_counter = 0;
 
@@ -386,6 +386,49 @@ static void timer_thread(void *data)
     for(;;);
 }
 
+static void traveller_thread(void *d)
+{
+  uint64_t target_tick = swks.system_ticks_64 + 100;
+
+  kprintf( "[TRAVELLER]: Starting on CPU %d\n", cpu_id() );
+
+  for( ;; ) {
+    if( swks.system_ticks_64 >= target_tick ) {
+      kprintf( " + [TRAVELLER #%d] Ticks: %d, PID: %d, ATOM: %d\n",
+               cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
+      target_tick += STEP;
+    }
+  }
+}
+
+static void migration_thread(void *t)
+{
+  uint64_t target_tick = swks.system_ticks_64 + 100;
+  task_t *traveller;
+  int target_cpu=0;
+
+  kprintf( "[MIGRATOR]: Starting on CPU %d\n", cpu_id() );
+  if( kernel_thread(traveller_thread,NULL,&traveller) ) {
+    panic( "Can't create the Traveller !" );
+  }
+
+  kprintf( "[MIGRATOR]: Traveller's CPU: %d, PID: %d\n",
+           traveller->cpu, traveller->pid);
+
+  if( sched_move_task_to_cpu(traveller,target_cpu) ) {
+    kprintf( "[MIGRATOR]: Can't move Traveller to CPU %d !",
+             target_cpu);
+  }
+
+  for( ;; ) {
+    if( swks.system_ticks_64 >= target_tick ) {
+      kprintf( " + [MIGRATOR #%d] Ticks: %d, PID: %d, ATOM: %d\n",
+               cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
+      target_tick += STEP;
+    }
+  }
+}
+
 static void ta(void *d)
 {
   kprintf( ">>> ACTION !\n" );
@@ -401,6 +444,12 @@ void idle_loop(void)
     spawn_percpu_threads();
   }
 */
+
+  if( cpu_id() ) {
+    if( kernel_thread( migration_thread,NULL,NULL) ) {
+      panic( "Can't create Migration thread !" );
+    }
+  }
 
   /*
   if( cpu_id() == 0 ) {

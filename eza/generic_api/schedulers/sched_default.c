@@ -72,7 +72,7 @@ static spinlock_t cpu_data_lock;
 
 #define PRIO_TO_TIMESLICE(p) (p*3*1)
 
-#define LOCK_EZA_SCHED_DATA(t) \
+#define LOCK_EZA_SCHED_DATA(t)                  \
   spinlock_lock(&t->sched_lock)
 
 #define UNLOCK_EZA_SCHED_DATA(t) \
@@ -91,6 +91,8 @@ static eza_sched_taskdata_t *allocate_task_sched_data(void)
   page_frame_t *page = alloc_page(AF_PGEN);
   return (eza_sched_taskdata_t *)pframe_to_virt(page);
 }
+
+int sched_verbose=0;
 
 static void free_task_sched_data(eza_sched_taskdata_t *data)
 {
@@ -418,7 +420,9 @@ static void def_schedule(void)
   task_t *next;
   bool need_switch,ints_enabled;
 
-//  kprintf( "ENTERING SCHEDULE STEP (%d).\n", cpu_id() );
+  if( sched_verbose ) {
+    kprintf( "ENTERING SCHEDULE STEP (%d).\n", cpu_id() );
+  }
 //  __READ_TIMESTAMP_COUNTER(__t1);
 
   /* From this moment we are in atomic context until 'arch_activate_task()'
@@ -459,9 +463,11 @@ static void def_schedule(void)
 
   UNLOCK_TASK_STRUCT(current);
 
-//  kprintf( "** [%d] RESCHED TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , TS: %d **\n",
-//           cpu_id(), current_task()->pid, need_switch,
-//           next->pid, EZA_TASK_SCHED_DATA(next)->time_slice );
+  if( sched_verbose ) {
+    kprintf( "** [%d] RESCHED TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , TS: %d **\n",
+             cpu_id(), current_task()->pid, need_switch,
+             next->pid, EZA_TASK_SCHED_DATA(next)->time_slice );
+  }
 
   if( need_switch ) {
     arch_activate_task(next);
@@ -509,6 +515,11 @@ static status_t __change_local_task_state(task_t *task,task_state_t new_state,
     goto out_unlock;
   }
 
+  if( sched_verbose ) {
+    kprintf( "__change_local_task_state: STATE: %d, NEW STATE: %d\n",
+             prev_state,new_state);
+  }
+
   switch(new_state) {
     case TASK_STATE_RUNNABLE:
       if( prev_state == TASK_STATE_JUST_BORN
@@ -540,21 +551,35 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
                                     lazy_sched_handler_t h,void *data)
 {
   status_t r;
+  bool ion;
+  
+  if( sched_verbose ) {
+    kprintf( "[%d] BEFORE CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d\n",
+             cpu_id(),in_atomic(), current_task_needs_resched() );
+  }
 
-//  kprintf( "]]]]] BEFORE CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d\n",
-//           in_atomic(), current_task_needs_resched() );
+  ion=is_interrupts_enabled();
   interrupts_disable();
   LOCK_TASK_STRUCT(task);
 
   if( task->cpu == cpu_id() ) {
     r=__change_local_task_state(task,new_state,h,data);
-    interrupts_enable();
+    if( ion ) {
+      interrupts_enable();
+    }
   } else {
-    interrupts_enable();
+    if( ion ) {
+      interrupts_enable();
+    }
     r=__change_remote_task_state(task,new_state);
   }
-//  kprintf( "]]]]] AFTER CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d\n",
-//           in_atomic(), current_task_needs_resched() );
+
+  if( sched_verbose ) {
+    kprintf( "[%d] AFTER CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d, ion: %d, INTS: %d\n",
+             cpu_id(),in_atomic(), current_task_needs_resched(), ion,
+             is_interrupts_enabled() );
+  }
+
   cond_reschedule();
   return r;
 }
@@ -721,6 +746,8 @@ static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
     r=-EINVAL;
   } else {
     if( cpu != mycpu ) {
+      task->cpu=cpu;
+
       if( active ) {
         LOCK_CPU_SCHED_DATA(sched_data);
         sched_data->stats->active_tasks--;
@@ -731,11 +758,12 @@ static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
           sched_set_current_need_resched();
         }
 
-        kprintf( "* Broadcasting IPI ...\n" );
-        apic_broadcast_ipi_vector(SCHEDULER_IPI_IRQ_VEC);
-        kprintf( "* Done !\n" );
+        task->state=TASK_STATE_STOPPED;
+        schedule_migration(task,cpu);
       } else {
-        task->cpu=cpu;
+        LOCK_CPU_SCHED_DATA(sched_data);
+        sched_data->stats->sleeping_tasks--;
+        UNLOCK_CPU_SCHED_DATA(sched_data);
       }
     }
     r=0;
