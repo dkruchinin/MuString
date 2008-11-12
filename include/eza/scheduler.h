@@ -50,6 +50,7 @@ typedef struct __scheduler {
   void (*scheduler_tick)(void);
   status_t (*add_task)(task_t *task);
   status_t (*del_task)(task_t *task);
+  status_t (*move_task_to_cpu)(task_t *task,cpu_id_t cpu);
   void (*schedule)(void);
   void (*reset)(void);
   status_t (*change_task_state)(task_t *task,task_state_t state);
@@ -86,6 +87,7 @@ status_t sched_add_task(task_t *task);
 status_t sched_del_task(task_t *task);
 status_t sched_setup_idle_task(task_t *task);
 status_t sched_add_cpu(cpu_id_t cpu);
+status_t sched_move_task_to_cpu(task_t *task,cpu_id_t cpu);
 void update_idle_tick_statistics(scheduler_cpu_stats_t *stats);
 
 extern scheduler_t *get_default_scheduler(void);

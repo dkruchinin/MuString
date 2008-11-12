@@ -149,9 +149,11 @@ void initialize_task_subsystem(void);
  *
  * @param fn - entrypoint of a new thread.
  * @param arg - argument to be passed to a new thread.
+ * @param out_task - where to put the task descriptor of new task.
+ *                   May be NULL if no descriptor required et all.
  * @return Return codes are identical to the 'create_task()' function.
  */
-status_t kernel_thread(void (*fn)(void *), void *data);
+status_t kernel_thread(void (*fn)(void *), void *data, task_t **out_task);
 
 /**
  * @fn status_t arch_setup_task_context(task_t *newtask,

@@ -50,7 +50,8 @@
 #include <ipc/port.h>
 #include <eza/resource.h>
 #include <eza/arch/interrupt.h>
-#include <eza/process.h>
+#include <eza/gc.h>
+#include <eza/arch/mm.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
@@ -61,8 +62,6 @@ context_t crsc;
 
 extern void initialize_common_hardware(void);
 extern void initialize_timer(void);
-
-extern spinlock_t can_proceed;
 
 static void main_routine_stage1(void)
 {
@@ -89,7 +88,6 @@ static void main_routine_stage1(void)
   swks_add_version_info();
 
   /* OK, we can proceed. */
-  spawn_percpu_threads();
   server_run_tasks();
 
   /* Enter idle loop. */
@@ -147,7 +145,6 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
   sched_add_cpu(cpu);
 
   interrupts_enable();
-  spawn_percpu_threads();
 
   /* Entering idle loop. */
   kprintf( "CPU #%d is entering idle loop. Current task: %p, CPU: %d, ATOM: %d\n",

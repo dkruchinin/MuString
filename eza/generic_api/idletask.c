@@ -235,17 +235,17 @@ static void thread3(void *data)
   ulong_t snd_len=strlen(test_data)+1;
 
   kprintf( "Creating client N2 ...\n" );
-  if( kernel_thread(thread4,NULL) != 0 ) {
+  if( kernel_thread(thread4,NULL, NULL) != 0 ) {
     panic( "Can't create client thread N2 for testing port IPC functionality !\n" );
   }
 
   kprintf( "Creating client N3 ...\n" );
-  if( kernel_thread(thread5,NULL) != 0 ) {
+  if( kernel_thread(thread5,NULL, NULL) != 0 ) {
     panic( "Can't create client thread N3 for testing port IPC functionality !\n" );
   }
 
   kprintf( "Creating client N4 ...\n" );
-  if( kernel_thread(thread6,NULL) != 0 ) {
+  if( kernel_thread(thread6,NULL,NULL) != 0 ) {
     panic( "Can't create client thread N4 for testing port IPC functionality !\n" );
   }
 
@@ -346,7 +346,7 @@ void interrupt_thread_isr(void *data)
 void interrupt_thread(void *data) {
    uint64_t target_tick = swks.system_ticks_64 + 100;
 
-//   if( kernel_thread(interrupt_thread_isr,NULL) != 0 ) {
+//   if( kernel_thread(interrupt_thread_isr,NULL,NULL) != 0 ) {
 //       panic( "Can't create ISR thread for testing interrupt events !\n" );
 //   }
 
@@ -391,24 +391,24 @@ void idle_loop(void)
 
   /*
   if( cpu_id() == 0 ) {
-      if( kernel_thread(timer_thread,NULL) != 0 ) {
+      if( kernel_thread(timer_thread,NULL,NULL) != 0 ) {
           panic( "Can't create server thread for testing port IPC functionality !\n" );
       }
       }
   */
-
+/*
   if( cpu_id() == 0 ) {
-      if( kernel_thread(interrupt_thread,NULL) != 0 ) {
+      if( kernel_thread(interrupt_thread,NULL,NULL) != 0 ) {
           panic( "Can't create server thread for testing interrupt events !\n" );
       }
   }
-
+*/
 /*
   if( cpu_id() == 0 ) {
-    if( kernel_thread(thread2,NULL) != 0 ) {
+    if( kernel_thread(thread2,NULL,NULL) != 0 ) {
       panic( "Can't create server thread for testing port IPC functionality !\n" );
     }
-    if( kernel_thread(thread3,NULL) != 0 ) {
+    if( kernel_thread(thread3,NULL,NULL) != 0 ) {
       panic( "Can't create client thread for testing port IPC functionality !\n" );
     }
   }

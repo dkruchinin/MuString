@@ -338,6 +338,7 @@ static status_t def_del_task(task_t *task)
     gc_action_t *action;
     eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
 
+    /* First, remove this task from all arrays. */
     sdata=EZA_TASK_SCHED_DATA(task);
     __remove_task_from_array(sdata->array,task);
     task->sched_data=NULL;
@@ -699,6 +700,10 @@ static status_t def_change_task_state_lazy(task_t *task, task_state_t state,
   return __change_task_state(task,state,handler,data);
 }
 
+static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
+  return 0;
+}
+
 static struct __scheduler eza_default_scheduler = {
   .id = "Eza default scheduler",
   .cpus_supported = def_cpus_supported,
@@ -706,6 +711,7 @@ static struct __scheduler eza_default_scheduler = {
   .scheduler_tick = def_scheduler_tick,
   .add_task = def_add_task,
   .del_task = def_del_task,
+  .move_task_to_cpu = def_move_task_to_cpu,
   .schedule = def_schedule,
   .reset = def_reset,
   .change_task_state = def_change_task_state,

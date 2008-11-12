@@ -202,6 +202,14 @@ status_t sched_del_task(task_t *task)
   return -ENOTTY;
 }
 
+status_t sched_move_task_to_cpu(task_t *task,cpu_id_t cpu)
+{
+  if( active_scheduler != NULL && active_scheduler->move_task_to_cpu ) {
+      return active_scheduler->move_task_to_cpu(task,cpu);
+  }
+  return -ENOTTY;
+}
+
 void schedule(void)
 {
   if(active_scheduler != NULL) {

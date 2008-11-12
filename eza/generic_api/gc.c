@@ -74,10 +74,34 @@ static void __gc_thread_logic(void *arg)
   }
 }
 
+#define NUM_PERCPU_THREADS  1
+
+static gc_actor_t __percpu_threads[NUM_PERCPU_THREADS] = {
+  __gc_thread_logic,  
+};
+
 void spawn_percpu_threads(void)
 {
-  if( kernel_thread(__gc_thread_logic,NULL) ) {
-    panic( "Can't create a GC thread for CPU %d !\n", cpu_id() );
+  int i,j;
+  task_t *ts[NUM_PERCPU_THREADS];
+
+  for(i=0;i<NR_CPUS;i++) {
+    /* First, create a set of threads on this CPU. */
+    for(j=0;j<NUM_PERCPU_THREADS;j++) {
+      if( kernel_thread(__percpu_threads[j],NULL, &ts[j]) || !ts[j] ) {
+        panic( "Can't create a GC thread for CPU %d !\n", cpu_id() );
+      }
+    }
+
+    /* Move threads to their domestic CPU. */
+    if( i != cpu_id() ) {
+      for(j=0;j<NUM_PERCPU_THREADS;j++) {
+        if( sched_move_task_to_cpu(ts[j],i) ) {
+          panic( "Can't move GC thread N %d to CPU %d !\n",
+                 i,cpu_id() );
+        }
+      }
+    }
   }
 }
 
