@@ -192,6 +192,7 @@ static task_t *__allocate_task_struct(void)
 
     list_init_node(&task->pid_list);
     list_init_node(&task->child_list);
+    list_init_node(&task->migration_list);
 
     list_init_head(&task->children);
     list_init_head(&task->threads);

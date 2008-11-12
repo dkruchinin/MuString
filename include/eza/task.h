@@ -108,6 +108,7 @@ typedef struct __task_struct {
   /* Scheduler-related stuff. */
   struct __scheduler *scheduler;
   void *sched_data;
+  list_node_t migration_list;
 
   /* IPC-related stuff */
   struct __task_ipc *ipc;

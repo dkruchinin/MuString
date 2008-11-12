@@ -39,6 +39,7 @@
 #include <kernel/syscalls.h>
 #include <eza/uinterrupt.h>
 #include <ipc/poll.h>
+#include <eza/gc.h>
 
 task_t *idle_tasks[MAX_CPUS];
 
@@ -385,9 +386,21 @@ static void timer_thread(void *data)
     for(;;);
 }
 
+static void ta(void *d)
+{
+  kprintf( ">>> ACTION !\n" );
+}
+
 void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
+  bool flag=false;
+
+/*
+  if( !cpu_id() ) {
+    spawn_percpu_threads();
+  }
+*/
 
   /*
   if( cpu_id() == 0 ) {
@@ -434,5 +447,14 @@ void idle_loop(void)
                syscall_counter );
       target_tick += STEP;
     }
+
+    /*
+    if( cpu_id() && swks.system_ticks_64 > 400 && !flag ) {
+      gc_action_t *a=gc_allocate_action(ta,NULL);
+
+      kprintf( "++ Activating action ...\n" );
+      gc_schedule_action(a);
+      flag=true;
+      }*/
   }
 }

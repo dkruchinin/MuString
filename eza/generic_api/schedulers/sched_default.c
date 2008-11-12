@@ -44,6 +44,7 @@
 #include <eza/arch/asm.h>
 #include <eza/kconsole.h>
 #include <eza/gc.h>
+#include <eza/arch/apic.h>
 
 /* Our own scheduler. */
 static struct __scheduler eza_default_scheduler;
@@ -430,9 +431,8 @@ static void def_schedule(void)
   }
 
   LOCK_TASK_STRUCT(current);
-  LOCK_CPU_SCHED_DATA(sched_data);
-
   sched_reset_current_need_resched();
+  LOCK_CPU_SCHED_DATA(sched_data);
 
   next = __get_most_prioritized_task(sched_data);
   if( next == NULL ) { /* Schedule idle task. */
@@ -440,6 +440,7 @@ static void def_schedule(void)
     sched_data->stats->idle_switches++;
   }
   sched_data->stats->task_switches++;
+  UNLOCK_CPU_SCHED_DATA(sched_data);
 
   if(current->state == TASK_STATE_RUNNING) {
     current->state = TASK_STATE_RUNNABLE;
@@ -456,7 +457,6 @@ static void def_schedule(void)
     next->state = TASK_STATE_RUNNING;
   }
 
-  UNLOCK_CPU_SCHED_DATA(sched_data);
   UNLOCK_TASK_STRUCT(current);
 
 //  kprintf( "** [%d] RESCHED TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , TS: %d **\n",
@@ -701,7 +701,49 @@ static status_t def_change_task_state_lazy(task_t *task, task_state_t state,
 }
 
 static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
-  return 0;
+  eza_sched_taskdata_t *sdata = EZA_TASK_SCHED_DATA(task);
+  status_t r;
+  cpu_id_t mycpu=cpu_id();
+  eza_sched_cpudata_t *sched_data=CPU_SCHED_DATA();
+  bool active;
+
+  if(cpu >= EZA_SCHED_CPUS || !sched_cpu_data[cpu]) {
+    return -EINVAL;
+  }
+
+  __ENTER_USER_ATOMIC();
+  LOCK_TASK_STRUCT(task);
+
+  active=task->state == TASK_STATE_RUNNABLE || task->state==TASK_STATE_RUNNING;
+
+  if( task->cpu != mycpu || !sdata || task->scheduler != &eza_default_scheduler ||
+      list_node_is_bound(&task->migration_list) ) {
+    r=-EINVAL;
+  } else {
+    if( cpu != mycpu ) {
+      if( active ) {
+        LOCK_CPU_SCHED_DATA(sched_data);
+        sched_data->stats->active_tasks--;
+        __remove_task_from_array(sdata->array,task);
+        UNLOCK_CPU_SCHED_DATA(sched_data);
+
+        if( task == current_task() ) {
+          sched_set_current_need_resched();
+        }
+
+        kprintf( "* Broadcasting IPI ...\n" );
+        apic_broadcast_ipi_vector(SCHEDULER_IPI_IRQ_VEC);
+        kprintf( "* Done !\n" );
+      } else {
+        task->cpu=cpu;
+      }
+    }
+    r=0;
+  }
+  UNLOCK_TASK_STRUCT(task);
+  __LEAVE_USER_ATOMIC();
+
+  return r;
 }
 
 static struct __scheduler eza_default_scheduler = {
