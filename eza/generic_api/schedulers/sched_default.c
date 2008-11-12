@@ -309,7 +309,7 @@ static status_t def_add_task(task_t *task)
 {
   cpu_id_t cpu = cpu_id();
   eza_sched_taskdata_t *sdata;
-  
+
   if( sched_cpu_data[cpu] == NULL || task->state != TASK_STATE_JUST_BORN ) {
     return -EINVAL;
   }
@@ -512,6 +512,44 @@ static status_t def_setup_idle_task(task_t *task)
   return 0;
 }
 
+static void __shuffle_remote_task(task_t *target)
+{
+}
+
+/* NOTE: target task must be locked ! */
+static void __shuffle_task(task_t *target,eza_sched_taskdata_t *sdata)
+{
+  /* Ignore sleepers. */
+  if( target->state != TASK_STATE_RUNNING &&
+      target->state != TASK_STATE_RUNNABLE ) {
+    return;
+  }
+
+  if( target->cpu == cpu_id() ) {
+    eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
+    task_t *mpt;
+
+    LOCK_CPU_SCHED_DATA(sched_data);
+    __remove_task_from_array(sched_data->active_array,target);
+    __add_task_to_array(sched_data->active_array,target);
+
+    mpt=__get_most_prioritized_task(sched_data);
+    if( mpt != NULL ) {
+      if( mpt != target ) {
+        eza_sched_taskdata_t *pdata = EZA_TASK_SCHED_DATA(mpt);
+        if( pdata->priority < sdata->priority ) {
+          sched_set_current_need_resched();
+        }
+      }
+    } else {
+      panic( "__shuffle_task(): No runnable tasks after adding a task !" );
+    }
+    UNLOCK_CPU_SCHED_DATA(sched_data);
+  } else {
+    __shuffle_remote_task(target);
+  }
+}
+
 /* NOTE: Upon entering this routine target task is unlocked.
  */
 static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
@@ -548,6 +586,17 @@ static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
     case SYS_SCHED_CTL_SET_PRIORITY:
       if(arg <= EZA_SCHED_PRIORITY_MAX) {
         if( trusted ) {
+          interrupts_disable();
+          LOCK_TASK_STRUCT(target);
+
+          sdata->static_priority=arg;
+          sdata->priority=arg;
+          __shuffle_task(target,sdata);
+
+          UNLOCK_TASK_STRUCT(target);
+          interrupts_enable();
+          cond_reschedule();
+          return 0;
         } else {
           return -EPERM;
         }

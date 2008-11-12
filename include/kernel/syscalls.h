@@ -371,6 +371,8 @@ status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout);
 
 status_t sys_nanosleep(timeval_t *in,timeval_t *out);
 
+status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
+
 status_t sys_get_tid(void);
 
 #endif

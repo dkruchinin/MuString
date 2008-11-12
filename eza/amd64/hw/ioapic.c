@@ -76,7 +76,7 @@ void io_apic_write(uint8_t addr,uint32_t v)
 void io_apic_set_ioredir(uint8_t virq,uint8_t dest,uint8_t vector,int flags)
 {
   io_apic_redir_t rd;
-  int txm=TXMODE_EXTINT;
+  int txm=TXMODE_FIXED;
 
   if(flags & LOW_PRIORITY)
     txm=TXMODE_LOWPRI;
@@ -91,8 +91,8 @@ void io_apic_set_ioredir(uint8_t virq,uint8_t dest,uint8_t vector,int flags)
   rd.txmod=txm; /* set delivery mode (TX) */
   rd.vector=vector; /* set destination vector */
 
+  io_apic_write((uint8_t) (IOAPICRED + virq*2),rd.low); /* write low bytes from redirection table for this virq */ 
   io_apic_write((uint8_t) (IOAPICRED + virq*2 +1),rd.high); /* write high bytes from redirection table for this virq */
-  io_apic_write((uint8_t) (IOAPICRED + virq*2),rd.low); /* write low bytes from redirection table for this virq */
 }
 
 /* mask interrupt on io apic, disable interrupt */
@@ -125,7 +125,7 @@ static bool io_apic_handles_irq(uint32_t irq)
   return ( irq < 16 );
 }
 
-static void io_apic_disable_all(void)
+/*static*/ void io_apic_disable_all(void)
 {
   int i;
 
@@ -157,7 +157,7 @@ void io_apic_bsp_init(void)
 {
   int i;
   io_apic_id_t ioapic_id;
-  io_apic_version_t ioapic_ver;
+  io_apic_version_t ioapic_ver; 
 
   /* read version info */
   ioapic_ver.value=io_apic_read(IOAPIC_VERREG);
@@ -170,9 +170,11 @@ void io_apic_bsp_init(void)
   io_apic_write(IOAPIC_IDREG,ioapic_id.value);
 
   /* ok, let's make a redir table */
-    for(i=0;i<io_apic_pins;i++) {
-      io_apic_set_ioredir(i,0x0,0x10+i,0x0);
-    }
+  for(i=0;i<io_apic_pins;i++) {
+    io_apic_set_ioredir(i,0x01,IRQ_BASE+i,0x0);
+  }
+
+  io_apic_enable_all(); 
 }
 
 void io_apic_init(void)

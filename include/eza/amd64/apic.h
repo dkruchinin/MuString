@@ -96,8 +96,8 @@ typedef union {
 typedef union {
   uint32_t reg;
   struct {
-    uint32_t __reserved0 : 28,
-      log_dest : 4;
+    uint32_t __reserved0 : 24,
+      log_dest : 8;
   } __attribute__ ((packed));
 } apic_ldr_t; /*logical destination register*/
 

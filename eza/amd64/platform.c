@@ -96,23 +96,12 @@ void arch_specific_init(void)
   } else
     kprintf("OK\n");
 
-  //io_apic_bsp_init();
-
+  local_apic_bsp_switch(); 
   local_bsp_apic_init();
 
-  //local_apic_timer_init();
-
-  local_apic_bsp_switch();
-
-  //  local_apic_timer_init();
-
 #ifdef CONFIG_SMP
-
   arch_smp_init();
-  //atom_usleep(50000);
-
 #endif
-  //local_apic_timer_init();
 }
 
 #ifdef CONFIG_SMP

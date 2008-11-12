@@ -282,28 +282,35 @@ typedef struct __irq_arrray {
 
 static irq_array_t __irq_array __attribute__((aligned(PAGE_SIZE)));
 
-void interrupt_thread(void *data)
+void interrupt_thread_isr(void *data)
 {
     ulong_t irqs[]={10,6,1,4};
     static int num_irqs=4;
     status_t id=sys_create_irq_counter_array(irqs,num_irqs,
                                              &__irq_array,0);
-    kprintf( "IRQ buffer id: %d\n",id );
+    kprintf( "[ISR Thread]: IRQ buffer id: %d\n",id );
 
     if( id >= 0 ) {
         int i=0;
         status_t r;
         char code;
+        int pid=current_task()->pid;
 
+        r= sys_scheduler_control(pid,SYS_SCHED_CTL_SET_PRIORITY,32);
+        kprintf( "SCHED_CTRL FOR %d: %d\n",pid,r );
+        if( r !=0 ) {
+            for(;;);
+        }
+        
         code=inb(0x60);
         while( i < 5000000 ) {
-            kprintf( "Waiting for irqs to arrive ...\n" );
+            kprintf( "[ISR Thread] Waiting for irqs to arrive ...\n" );
             r=sys_wait_on_irq_array(id);
             if( !r ) {
                 ulong_t mask=__irq_array.ev_mask;
                 __irq_array.ev_mask=0;
                 code=inb(0x60);
-                kprintf( "CNT: %d, KEY: %d, EVENT MASK: %X\n",
+                kprintf( "[ISR Thread] CNT: %d, KEY: %d, EVENT MASK: %X\n",
                          __irq_array.irq_counters[2],
                          (int)code,
                          mask);
@@ -313,6 +320,24 @@ void interrupt_thread(void *data)
     }
 
     for(;;);
+}
+
+void interrupt_thread(void *data) {
+   uint64_t target_tick = swks.system_ticks_64 + 100;
+
+   if( kernel_thread(interrupt_thread_isr,NULL) != 0 ) {
+       panic( "Can't create ISR thread for testing interrupt events !\n" );
+   }
+
+   kprintf( " + [Interrupt thread] Starting ... Ticks: %d, Target tick: %d\n",
+            swks.system_ticks_64, target_tick);
+   while(1) {
+       if( swks.system_ticks_64 >= target_tick ) {
+           kprintf( " + [Interrupt thread] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
+                    cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
+           target_tick += STEP;
+       }
+   }
 }
 
 status_t sys_log(ulong_t s)
@@ -384,7 +409,7 @@ void idle_loop(void)
 /*
   if( cpu_id() == 0 ) {
       if( kernel_thread(interrupt_thread,NULL) != 0 ) {
-          panic( "Can't create server thread for testing port IPC functionality !\n" );
+          panic( "Can't create server thread for testing interrupt events !\n" );
       }
   }
 */
@@ -411,4 +436,3 @@ void idle_loop(void)
     }
   }
 }
-
