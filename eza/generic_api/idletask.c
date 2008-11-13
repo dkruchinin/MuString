@@ -445,12 +445,13 @@ void idle_loop(void)
   }
 */
 
+  /*
   if( cpu_id() ) {
     if( kernel_thread( migration_thread,NULL,NULL) ) {
       panic( "Can't create Migration thread !" );
     }
   }
-
+  */
   /*
   if( cpu_id() == 0 ) {
       if( kernel_thread(timer_thread,NULL,NULL) != 0 ) {

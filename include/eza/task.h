@@ -91,7 +91,7 @@ typedef struct __task_struct {
   tid_t tid;
   cpu_id_t cpu;
   task_state_t state;
-  cpu_array_t cpu_affinity;
+  cpu_array_t cpu_affinity_mask;
   kernel_stack_t kernel_stack;
   page_directory_t page_dir;
   list_node_t pid_list;

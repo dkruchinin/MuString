@@ -551,32 +551,32 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
                                     lazy_sched_handler_t h,void *data)
 {
   status_t r;
-  bool ion;
-  
+  long is;
+
   if( sched_verbose ) {
     kprintf( "[%d] BEFORE CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d\n",
              cpu_id(),in_atomic(), current_task_needs_resched() );
   }
 
-  ion=is_interrupts_enabled();
-  interrupts_disable();
+  interrupts_save_and_disable(is);
   LOCK_TASK_STRUCT(task);
 
-  if( task->cpu == cpu_id() ) {
-    r=__change_local_task_state(task,new_state,h,data);
-    if( ion ) {
-      interrupts_enable();
-    }
+  /* To increase performance in case target task belongs to another CPU
+   * but it is being woken from the CPU that is running its idle task,
+   * we run target task on this CPU (of course, if target task can host it.)
+   */
+  if( task->cpu == cpu_id() ||
+      (!current_task()->pid && cpu_affinity_ok(task,cpu_id())) ) {
+        r=__change_local_task_state(task,new_state,h,data);
+        interrupts_restore(is);
   } else {
-    if( ion ) {
-      interrupts_enable();
-    }
+    interrupts_restore(is);
     r=__change_remote_task_state(task,new_state);
   }
 
   if( sched_verbose ) {
     kprintf( "[%d] AFTER CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d, ion: %d, INTS: %d\n",
-             cpu_id(),in_atomic(), current_task_needs_resched(), ion,
+             cpu_id(),in_atomic(), current_task_needs_resched(), is,
              is_interrupts_enabled() );
   }
 
@@ -666,7 +666,7 @@ static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
     case SYS_SCHED_CTL_GET_PRIORITY:
       return sdata->static_priority;
     case SYS_SCHED_CTL_GET_AFFINITY_MASK:
-      return target->cpu_affinity;
+      return target->cpu_affinity_mask;
     case SYS_SCHED_CTL_GET_MAX_TIMISLICE:
       return sdata->max_timeslice;
     case SYS_SCHED_CTL_GET_STATE:

@@ -64,5 +64,7 @@ static bool is_cpu_online(cpu_id_t cpu);
 #define for_each_cpu(c)           \
   for(c = 0; c < NR_CPUS; c++ )   \
 
+#define ONLINE_CPUS_MASK  (online_cpus & ((1<<NR_CPUS)-1) )
+
 #endif /* __SMP_H__ */
 

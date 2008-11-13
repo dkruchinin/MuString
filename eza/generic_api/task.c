@@ -199,8 +199,10 @@ static task_t *__allocate_task_struct(void)
     spinlock_initialize(&task->lock, "Task lock");
     spinlock_initialize(&task->child_lock, "Task child lock");
     spinlock_initialize(&task->member_lock, "Task member lock" );
+
     task->flags = 0;
     task->group_leader=task;
+    task->cpu_affinity_mask=ONLINE_CPUS_MASK;
   }
   return task;  
 }

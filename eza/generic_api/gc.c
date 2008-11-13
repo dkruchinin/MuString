@@ -93,8 +93,7 @@ void spawn_percpu_threads(void)
       if( kernel_thread(__percpu_threads[j],NULL, &ts[j]) || !ts[j] ) {
         panic( "Can't create a GC thread for CPU %d !\n", cpu_id() );
       }
-      kprintf( "*** T: %p\n",ts[j] );
-    }
+     }
 
     /* Move threads to their domestic CPU. */
     if( i != cpu_id() ) {

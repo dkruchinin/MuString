@@ -130,5 +130,7 @@ static inline void release_task_struct(task_t *t)
 {
 }
 
+#define cpu_affinity_ok(task,c) (task->cpu & (1<<c))
+
 #endif
 
