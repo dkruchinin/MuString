@@ -76,7 +76,7 @@ void zombify_task(task_t *target)
   UNLOCK_TASK_STRUCT(target);
 }
 
-task_t *pid_to_task(pid_t pid)
+task_t *lookup_task(pid_t pid, ulong_t flags)
 {
   tid_t tid;
   bool thread;
@@ -98,9 +98,12 @@ task_t *pid_to_task(pid_t pid)
     list_for_each(&pid_to_struct_hash[l],n) {
       task_t *t = container_of(n,task_t,pid_list);
       if(t->pid == pid) {
-        grab_task_struct(t);
-        task=t;
-        break;
+        if( t->state != TASK_STATE_ZOMBIE ||
+            (t->state == TASK_STATE_ZOMBIE && (flags & LOOKUP_ZOMBIES) ) ) {
+          grab_task_struct(t);
+          task=t;
+          break;
+        }
       }
     }
     UNLOCK_PID_HASH_LEVEL_R(l);

@@ -217,12 +217,10 @@ status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
  */
 void free_task_struct(task_t *task);
 
-static inline bool is_thread( task_t *task )
-{
-  return (task->group_leader && task->group_leader != task);
-}
+#define is_thread(task)  ((task)->group_leader && (task)->group_leader != (task))
 
 void cleanup_thread_data(void *t);
 
-#endif
 
+
+#endif

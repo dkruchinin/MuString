@@ -33,7 +33,12 @@
 #define SYS_PR_CTL_GET_ENTRYPOINT 0x2
 #define SYS_PR_CTL_GET_STACK 0x3
 
-task_t *pid_to_task(pid_t pid);
+#define LOOKUP_ZOMBIES  0x1
+
+task_t *lookup_task(pid_t pid,ulong_t flags);
+
+/* Default lookup for non-zombie tasks. */
+#define pid_to_task(p)  lookup_task(p,0)
 
 /**
  * @fn status_t do_process_control(task_t *target,ulong_t cmd, ulong_t arg)

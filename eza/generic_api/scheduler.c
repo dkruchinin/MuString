@@ -272,7 +272,6 @@ out_release:
 
 static void __sleep_timer_handler(ulong_t data)
 {
-  kprintf( "SLEEP HANDLER !\n" );
   sched_change_task_state((task_t *)data,TASK_STATE_RUNNABLE);
 }
 

@@ -26,6 +26,8 @@
 #include <mlibc/stdarg.h>
 #include <mlibc/kprintf.h>
 #include <eza/kernel.h>
+#include <eza/kconsole.h>
+#include <eza/interrupt.h>
 
 #define PANIC_BUF_SIZE 1024
 
@@ -33,6 +35,9 @@ void panic(const char *fmt, ...)
 {
   va_list ap;
   char panic_buf[PANIC_BUF_SIZE];
+
+  interrupts_disable();
+  default_console()->enable();
 
   va_start(ap, fmt);
   vsnprintf(panic_buf, sizeof(panic_buf), fmt, ap);

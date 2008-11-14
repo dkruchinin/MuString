@@ -17,8 +17,7 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *
- * include/eza/amd64/scheduler.h: AMD-specific functions for dealing with
- *                                scheduler-related information.
+ * eza/generic_api/exit.c: Task exit functionality.
  */
 
 #include <eza/arch/types.h>
@@ -28,6 +27,7 @@
 #include <eza/kernel.h>
 #include <eza/task.h>
 #include <ipc/ipc.h>
+#include <eza/security.h>
 
 static void __exit_ipc(task_t *exiter) {
   task_ipc_t *ipc;
@@ -61,7 +61,7 @@ static void __exit_resources(task_t *exiter)
 {
 }
 
-void do_exit(ulong_t code)
+void do_exit(int code)
 {
   task_t *exiter=current_task();
 
@@ -70,27 +70,34 @@ void do_exit(ulong_t code)
            cpu_id() );
   }
 
+  if( exiter->pid == 1 && exiter->tid == 1 ) {
+    panic( "do_exit(): Exiting form the Name Server on CPU N%d !\n",
+           cpu_id() );
+  }
+
   if( in_interrupt() ) {
     panic( "do_exit(): Exiting in interrupt context on CPU N%d !\n",
            cpu_id() );
   }
 
+  /* It's good to be undead ! */
   zombify_task(exiter);
 
-  /* Cleanup all resources this task owns. */
   __exit_ipc(exiter);
   __exit_limits(exiter);
   __exit_resources(exiter);
 
-  /* Yield the CPU forever. */
+  if( !is_thread(exiter) ) {
+    /* TODO: [mt] terminate all threads of this process. */
+  }
+
   __exit_scheduler(exiter);
 
-  /* TODO: [mt] release task struct internals (kernel stack) via RCU */
-
-  panic( "do_exit(): zombie task is still running !\n" );
+  panic( "do_exit(): zombie task <%d:%d> is still running !\n",
+         exiter->pid, exiter->tid);
 }
 
-void sys_exit(ulong_t code)
+void sys_exit(int code)
 {
   do_exit(code);
 }
