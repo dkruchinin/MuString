@@ -89,9 +89,13 @@ struct __task_ipc_priv;
 typedef struct __task_struct {
   pid_t pid, ppid;
   tid_t tid;
+
+  /* Scheduler-related stuff. */
   cpu_id_t cpu;
   task_state_t state;
   cpu_array_t cpu_affinity_mask;
+  priority_t static_priority, priority;
+
   kernel_stack_t kernel_stack;
   page_directory_t page_dir;
   list_node_t pid_list;

@@ -67,7 +67,6 @@ static spinlock_t cpu_data_lock;
 
 #define CPU_SCHED_DATA() sched_cpu_data[cpu_id()]
 
-#define EZA_TASK_PRIORITY(t) ((eza_sched_taskdata_t *)t->sched_data)->priority
 #define EZA_TASK_SCHED_DATA(t) ((eza_sched_taskdata_t *)t->sched_data)
 
 #define PRIO_TO_TIMESLICE(p) (p*3*1)
@@ -181,7 +180,7 @@ static inline void __recalculate_timeslice_and_priority(task_t *task)
   eza_sched_taskdata_t *tdata = EZA_TASK_SCHED_DATA(task);
   
   /* Recalculate priority. */
-  tdata->priority = tdata->static_priority;
+  task->priority = task->static_priority;
 
   switch(task->state) {
     case TASK_STATE_SLEEPING:
@@ -191,7 +190,7 @@ static inline void __recalculate_timeslice_and_priority(task_t *task)
   }
   
   /* Recalculate timeslice. */
-  tdata->time_slice = PRIO_TO_TIMESLICE(tdata->priority);
+  tdata->time_slice = PRIO_TO_TIMESLICE(task->priority);
 
   /* Are we jailed ? */
   if( tdata->max_timeslice != 0 ) {
@@ -205,8 +204,6 @@ static inline void __recalculate_timeslice_and_priority(task_t *task)
  */
 static inline status_t __activate_local_task(task_t *task, eza_sched_cpudata_t *sched_data)
 {
-  eza_sched_taskdata_t *cdata = (eza_sched_taskdata_t *)current_task()->sched_data;
-
   __recalculate_timeslice_and_priority(task);
   task->state = TASK_STATE_RUNNABLE;
   __add_task_to_array(sched_data->active_array,task);
@@ -214,7 +211,7 @@ static inline status_t __activate_local_task(task_t *task, eza_sched_cpudata_t *
 
 //  kprintf( "++ ACTIVATING LOCAL TASK: %d NEW PRIO: %d, CURRENT: %p, CRRENT PRIO: %d\n",
 //           task->pid, EZA_TASK_PRIORITY(task), current_task()->pid, cdata->priority );
-  if( !cdata || EZA_TASK_PRIORITY(task) < cdata->priority ) {
+  if( task->priority < current_task()->priority ) {
     sched_set_current_need_resched();
   }
 
@@ -400,8 +397,8 @@ static status_t def_add_task(task_t *task)
   LOCK_TASK_STRUCT(task);
 
   sdata = (eza_sched_taskdata_t *)task->sched_data;
-  sdata->static_priority = EZA_SCHED_INITIAL_TASK_PRIORITY;
-  sdata->priority = EZA_SCHED_INITIAL_TASK_PRIORITY;
+  task->static_priority = EZA_SCHED_INITIAL_TASK_PRIORITY;
+  task->priority = EZA_SCHED_INITIAL_TASK_PRIORITY;
   task->cpu = cpu;
   sdata->sched_discipline = SCHED_RR; /* TODO: [mt] must be SCHED_ADAPTIVE */
   sdata->max_timeslice = 0;
@@ -598,7 +595,7 @@ static status_t def_setup_idle_task(task_t *task)
   }
 
   sdata = (eza_sched_taskdata_t *)task->sched_data;
-  sdata->priority = sdata->static_priority = EZA_SCHED_IDLE_TASK_PRIO;
+  task->priority = task->static_priority = EZA_SCHED_IDLE_TASK_PRIO;
   sdata->time_slice = 0;
 
   LOCK_TASK_STRUCT(task);
@@ -633,11 +630,8 @@ static void __shuffle_task(task_t *target,eza_sched_taskdata_t *sdata)
 
     mpt=__get_most_prioritized_task(sched_data);
     if( mpt != NULL ) {
-      if( mpt != target ) {
-        eza_sched_taskdata_t *pdata = EZA_TASK_SCHED_DATA(mpt);
-        if( pdata->priority < sdata->priority ) {
-          sched_set_current_need_resched();
-        }
+      if( mpt->priority < current_task()->priority ) {
+        sched_set_current_need_resched();
       }
     } else {
       panic( "__shuffle_task(): No runnable tasks after adding a task !" );
@@ -655,22 +649,12 @@ static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
   eza_sched_taskdata_t *sdata = EZA_TASK_SCHED_DATA(target);
   bool trusted=trusted_task(target);
 
-  if(cmd > SCHEDULER_MAX_COMMON_IOCTL) {
-    return  -EINVAL;
-  }
-
   switch(cmd) {
     /* Getters. */
-    case SYS_SCHED_CTL_GET_POLICY:
-      return sdata->sched_discipline;
-    case SYS_SCHED_CTL_GET_PRIORITY:
-      return sdata->static_priority;
-    case SYS_SCHED_CTL_GET_AFFINITY_MASK:
-      return target->cpu_affinity_mask;
     case SYS_SCHED_CTL_GET_MAX_TIMISLICE:
       return sdata->max_timeslice;
-    case SYS_SCHED_CTL_GET_STATE:
-      return target->state;
+    case SYS_SCHED_CTL_GET_POLICY:
+      return sdata->sched_discipline;
 
     /* Setters.  */
     case SYS_SCHED_CTL_SET_POLICY:
@@ -687,8 +671,8 @@ static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
           interrupts_disable();
           LOCK_TASK_STRUCT(target);
 
-          sdata->static_priority=arg;
-          sdata->priority=arg;
+          target->static_priority=arg;
+          target->priority=arg;
           __shuffle_task(target,sdata);
 
           UNLOCK_TASK_STRUCT(target);
@@ -699,10 +683,6 @@ static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
           return -EPERM;
         }
       }
-      return -EINVAL;
-    case SYS_SCHED_CTL_MONOPOLIZE_CPU:
-    case SYS_SCHED_CTL_DEMONOPOLIZE_CPU:
-    case SYS_SCHED_CTL_SET_AFFINITY_MASK:
       return -EINVAL;
     case SYS_SCHED_CTL_SET_MAX_TIMISLICE:
       if(arg < HZ) {

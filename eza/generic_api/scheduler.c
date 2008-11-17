@@ -242,14 +242,34 @@ status_t sys_yield(void)
 
 status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
 {
-  return task->scheduler->scheduler_control(task,cmd,arg);
+  switch( cmd ) {
+    case SYS_SCHED_CTL_GET_AFFINITY_MASK:
+      return task->cpu_affinity_mask;
+    case SYS_SCHED_CTL_GET_PRIORITY:
+      return task->static_priority;
+    case SYS_SCHED_CTL_GET_STATE:
+      return task->state;
+      
+    case SYS_SCHED_CTL_MONOPOLIZE_CPU:
+    case SYS_SCHED_CTL_DEMONOPOLIZE_CPU:
+    case SYS_SCHED_CTL_SET_AFFINITY_MASK:
+      return -EINVAL;
+  
+    default:
+      return task->scheduler->scheduler_control(task,cmd,arg);
+  }
 }
 
 status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg)
 {
-  task_t *target = pid_to_task(pid);
+  task_t *target;
   status_t r;
 
+  if(cmd > SCHEDULER_MAX_COMMON_IOCTL) {
+    return  -EINVAL;
+  }
+
+  target = pid_to_task(pid);
   if( target == NULL ) {
     return -ESRCH;
   }

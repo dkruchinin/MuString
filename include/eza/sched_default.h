@@ -72,8 +72,6 @@
 #define FIND_FIRST_BITMAP_BIT(array) \
   find_first_bit_mem_64(&array->bitmap[0],EZA_SCHED_TOTAL_WIDTH)
 
-typedef uint32_t priority_t;
-
 typedef enum __sched_discipline {
   SCHED_RR = 0,  /* Round-robin discipline. */
   SCHED_FIFO = 1, /* FIFO discipline. */
@@ -87,7 +85,6 @@ typedef struct __eza_sched_prio_array {
 
 typedef struct __eze_sched_taskdata {
   spinlock_t sched_lock;
-  priority_t static_priority, priority;
   time_slice_t time_slice;
   list_node_t runlist;
   sched_discipline_t sched_discipline;
@@ -117,7 +114,7 @@ static void initialize_cpu_sched_data(eza_sched_cpudata_t *queue, cpu_id_t cpu);
 static inline void __add_task_to_array(eza_sched_prio_array_t *array,task_t *task)
 {
   eza_sched_taskdata_t *sched_data = (eza_sched_taskdata_t *)task->sched_data;
-  priority_t prio = sched_data->priority;
+  priority_t prio = task->priority;
 
   sched_data->array = array;
   SET_BITMAP_BIT(array,prio);
@@ -129,7 +126,7 @@ static inline void __add_task_to_array(eza_sched_prio_array_t *array,task_t *tas
 static inline void __remove_task_from_array(eza_sched_prio_array_t *array,task_t *task)
 {
   eza_sched_taskdata_t *sched_data = (eza_sched_taskdata_t *)task->sched_data;
-  priority_t prio = sched_data->priority;
+  priority_t prio = task->priority;
 
   list_del(&sched_data->runlist);
   sched_data->array = NULL;
