@@ -10,19 +10,15 @@
 #include <eza/task.h>
 #include <eza/scheduler.h>
 
-#define NUM_PERCPU_THREADS  1
-
 static memcache_t *gc_actions_cache;
 static list_head_t gc_tasklists[NR_CPUS];
 static spinlock_t tasklist_lock;
-static task_t *gc_threads[NR_CPUS][NUM_PERCPU_THREADS];
+task_t *gc_threads[NR_CPUS][NUM_PERCPU_THREADS];
 
 #define get_gc_tasklist() &gc_tasklists[cpu_id()]
 
 #define LOCK_TASKLIST() spinlock_lock(&tasklist_lock)
 #define UNLOCK_TASKLIST() spinlock_unlock(&tasklist_lock)
-
-#define GC_THREAD_ID  0
 
 static gc_action_t *__alloc_gc_action(void) {
   return alloc_from_memcache(gc_actions_cache);
@@ -78,6 +74,9 @@ static void __gc_thread_logic(void *arg)
 
 static gc_actor_t __percpu_threads[NUM_PERCPU_THREADS] = {
   __gc_thread_logic,
+#ifdef CONFIG_SMP
+  migration_thread,
+#endif
 };
 
 void spawn_percpu_threads(void)
@@ -85,6 +84,7 @@ void spawn_percpu_threads(void)
   int i,j;
   task_t **ts;
 
+  kprintf( "++++++++ NUM_PERCPU_THREADS: %d\n", NUM_PERCPU_THREADS );
   for(i=0;i<NR_CPUS;i++) {
     /* First, create a set of threads on this CPU. */
     ts=&gc_threads[i][0];
@@ -93,8 +93,9 @@ void spawn_percpu_threads(void)
       if( kernel_thread(__percpu_threads[j],NULL, &ts[j]) || !ts[j] ) {
         panic( "Can't create a GC thread for CPU %d !\n", cpu_id() );
       }
-     }
+    }
 
+  #ifdef CONFIG_SMP
     /* Move threads to their domestic CPU. */
     if( i != cpu_id() ) {
       for(j=0;j<NUM_PERCPU_THREADS;j++) {
@@ -104,6 +105,7 @@ void spawn_percpu_threads(void)
         }
       }
     }
+  #endif
   }
 }
 
@@ -128,5 +130,5 @@ void gc_schedule_action(gc_action_t *action)
   list_add2tail(alist,&action->l);
   UNLOCK_TASKLIST();
 
-  sched_change_task_state(gc_threads[cpu_id()][GC_THREAD_ID], TASK_STATE_RUNNABLE);
+  sched_change_task_state(gc_threads[cpu_id()][GC_THREAD_IDX], TASK_STATE_RUNNABLE);
 }

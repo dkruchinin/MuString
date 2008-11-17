@@ -47,6 +47,8 @@
 #include <eza/time.h>
 #include <kernel/syscalls.h>
 #include <eza/kconsole.h>
+#include <eza/gc.h>
+#include <eza/time.h>
 
 extern void initialize_idle_tasks(void);
 
@@ -242,6 +244,8 @@ status_t sys_yield(void)
 
 status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
 {
+  status_t r;
+
   switch( cmd ) {
     case SYS_SCHED_CTL_GET_AFFINITY_MASK:
       return task->cpu_affinity_mask;
@@ -249,12 +253,26 @@ status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
       return task->static_priority;
     case SYS_SCHED_CTL_GET_STATE:
       return task->state;
-      
+
     case SYS_SCHED_CTL_MONOPOLIZE_CPU:
     case SYS_SCHED_CTL_DEMONOPOLIZE_CPU:
-    case SYS_SCHED_CTL_SET_AFFINITY_MASK:
       return -EINVAL;
-  
+
+    case SYS_SCHED_CTL_SET_AFFINITY_MASK:
+      if( !arg || (arg & ~ONLINE_CPUS_MASK) ) {
+        return -EINVAL;
+      }
+
+      LOCK_TASK_STRUCT(task);
+      if( task->cpu_affinity_mask != arg ) {
+        if( !(task->cpu_affinity_mask & (1 << cpu_id())) ) {
+          /* Schedule immediate migration. */
+          
+        }
+      }
+      UNLOCK_TASK_STRUCT(task);
+
+      return 0;
     default:
       return task->scheduler->scheduler_control(task,cmd,arg);
   }
@@ -290,6 +308,8 @@ out_release:
   return r;
 }
 
+extern int sched_verbose;
+
 static void __sleep_timer_handler(ulong_t data)
 {
   sched_change_task_state((task_t *)data,TASK_STATE_RUNNABLE);
@@ -316,9 +336,13 @@ status_t sleep(ulong_t ticks)
     }
     sched_change_task_state_lazy(current_task(),TASK_STATE_SLEEPING,
                                  __sleep_timer_lazy_routine,&timer);
+
+    delete_timer(&timer);
   }
   return 0;
 }
+
+#ifdef CONFIG_SMP
 
 void schedule_migration(task_t *task,cpu_id_t cpu)
 {
@@ -332,39 +356,53 @@ void schedule_migration(task_t *task,cpu_id_t cpu)
   }
 }
 
-extern int sched_verbose;
-
-#ifdef CONFIG_SMP
-/* SMP-specific stuff. */
 void do_smp_scheduler_interrupt_handler(void)
 {
-  list_head_t private, *mytasks;
-  cpu_id_t cpu=cpu_id();
+  if( !gc_threads[cpu_id()][MIGRATION_THREAD_IDX] ) {
+    panic( "Thread migration IPI: Can't launch migration thread for CPU #%d!\n",
+           cpu_id());
+  }
+  sched_change_task_state(gc_threads[cpu_id()][MIGRATION_THREAD_IDX],
+                          TASK_STATE_RUNNABLE);
+}
 
-  list_init_head(&private);
+void migration_thread(void *data)
+{
+  while(true) {
+    list_head_t private, *mytasks;
+    cpu_id_t cpu=cpu_id();
 
-  mytasks=&migration_lists[cpu];
-  spinlock_lock(&migration_locks[cpu]);
+    list_init_head(&private);
 
-  if( !list_is_empty(mytasks) ) {
-    list_node_t *n, *ns;
+    mytasks=&migration_lists[cpu];
+    spinlock_lock(&migration_locks[cpu]);
 
-    list_move2head(&private,mytasks);
-    spinlock_unlock(&migration_locks[cpu]);
+    /* First, process all threads that were forced to migrate to this CPU. */
+    if( !list_is_empty(mytasks) ) {
+      list_node_t *n, *ns;
 
-    list_for_each_safe(&private,n,ns) {
-      task_t *task=container_of(n,task_t,migration_list);
+      list_move2head(&private,mytasks);
+      spinlock_unlock(&migration_locks[cpu]);
 
-      if( task->cpu != cpu ) {
-        panic( "Tasks's CPUs differ after migration ! %d:%d\n",
-               cpu,task->cpu);
+      list_for_each_safe(&private,n,ns) {
+        task_t *task=container_of(n,task_t,migration_list);
+
+        if( task->cpu != cpu ) {
+          panic( "Tasks's CPUs differ after migration ! %d:%d\n",
+                 cpu,task->cpu);
+        }
+
+        list_del(n);
+        sched_change_task_state(task,TASK_STATE_RUNNABLE);
       }
-
-      list_del(n);
-      sched_change_task_state(task,TASK_STATE_RUNNABLE);
+    } else {
+      spinlock_unlock(&migration_locks[cpu]);
     }
-  } else {
-    spinlock_unlock(&migration_locks[cpu]);
+
+    kprintf( "* Migration thread [%d]: Sleeping ...\n", cpu );
+    sched_change_task_state(current_task(),TASK_STATE_SLEEPING);
+    kprintf( "* Migration thread [%d]: Got woken up (%d)!\n", cpu_id(),
+             current_task()->cpu);
   }
 }
 

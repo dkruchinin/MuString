@@ -401,11 +401,11 @@ static void traveller_thread(void *d)
   }
 }
 
-static void migration_thread(void *t)
+static void __migration_thread(void *t)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
   task_t *traveller;
-  int target_cpu=0;
+  int target_cpu=1;
 
   kprintf( "[MIGRATOR]: Starting on CPU %d\n", cpu_id() );
   if( kernel_thread(traveller_thread,NULL,&traveller) ) {
@@ -444,10 +444,9 @@ void idle_loop(void)
     spawn_percpu_threads();
   }
 */
-
   /*
-  if( cpu_id() ) {
-    if( kernel_thread( migration_thread,NULL,NULL) ) {
+  if( !cpu_id() ) {
+    if( kernel_thread( __migration_thread,NULL,NULL) ) {
       panic( "Can't create Migration thread !" );
     }
   }

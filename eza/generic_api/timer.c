@@ -177,27 +177,29 @@ void process_timers(void)
   first=last=NULL;
 
   GRAB_SW_TIMER_LOCK(l);
-  list_for_each(&active_sw_timers,n) {
-    timer_t *t=container_of(n,timer_t,l);
+  if( !list_is_empty(&active_sw_timers)  ) {
+    list_for_each(&active_sw_timers,n) {
+      timer_t *t=container_of(n,timer_t,l);
 
-    if( t->time_x<=system_ticks ) {
-      if( first==NULL ) {
-        first=&t->l;
+      if( t->time_x<=system_ticks ) {
+        if( first==NULL ) {
+          first=&t->l;
+        }
+        last=&t->l;
       }
-      last=&t->l;
     }
-  }
 
-  /* Cut all pending timers. */
-  if( first != NULL ) {
-    list_cut_sublist(first,last);
+    /* Cut all pending timers. */
+    if( first != NULL ) {
+      list_cut_sublist(first,last);
 
-    /* Let these timers be processed by the timer deferred task. */
-    if( list_is_empty(&pending_sw_timers) ) {
-      list_set_head(&pending_sw_timers,first);
-    } else {
-      list_add_range(first,last,list_node_last(&pending_sw_timers)->prev,
-                     list_node_last(&pending_sw_timers));
+      /* Let these timers be processed by the timer deferred task. */
+      if( list_is_empty(&pending_sw_timers) ) {
+        list_set_head(&pending_sw_timers,first);
+      } else {
+        list_add_range(first,last,list_node_last(&pending_sw_timers)->prev,
+                       list_node_last(&pending_sw_timers));
+      }
     }
   }
   RELEASE_SW_TIMER_LOCK(l);

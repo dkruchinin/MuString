@@ -194,8 +194,10 @@ void server_run_tasks(void)
   status_t r;
   kconsole_t *kconsole=default_console();
 
-  if(i<=0)
+  if( i<=0 ) {
+    spawn_percpu_threads();
     return;
+  }
 
   kprintf("[SRV] Starting servers: %d ... \n",i);
   kconsole->disable(); /* shut off console */

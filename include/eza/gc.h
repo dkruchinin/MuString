@@ -3,6 +3,21 @@
 
 #include <eza/arch/types.h>
 #include <ds/list.h>
+#include <eza/task.h>
+#include <eza/smp.h>
+
+#define NUM_MASTER_PERCPU_THREADS 1
+
+#ifdef CONFIG_SMP
+  #define NUM_SMP_PERCPU_THREADS  1
+  #define NUM_PERCPU_THREADS  (NUM_MASTER_PERCPU_THREADS+ \
+                               NUM_SMP_PERCPU_THREADS)
+#else
+  #define NUM_PERCPU_THREADS  NUM_MASTER_PERCPU_THREADS
+#endif
+
+
+task_t *gc_threads[NR_CPUS][NUM_PERCPU_THREADS];
 
 struct __gc_action;
 
@@ -20,5 +35,8 @@ typedef struct __gc_action {
 void initialize_gc(void);
 gc_action_t *gc_allocate_action(gc_actor_t actor, void *data);
 void gc_schedule_action(gc_action_t *action);
+
+#define GC_THREAD_IDX  0
+#define MIGRATION_THREAD_IDX  1
 
 #endif

@@ -551,8 +551,9 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
   long is;
 
   if( sched_verbose ) {
-    kprintf( "[%d] BEFORE CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d\n",
-             cpu_id(),in_atomic(), current_task_needs_resched() );
+    kprintf( "[%d] BEFORE CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d, PID: %d, TASK CPU: %d\n",
+             cpu_id(),in_atomic(), current_task_needs_resched(),
+             task->pid,task->cpu);
   }
 
   interrupts_save_and_disable(is);

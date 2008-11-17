@@ -90,8 +90,6 @@ status_t sched_add_cpu(cpu_id_t cpu);
 status_t sched_move_task_to_cpu(task_t *task,cpu_id_t cpu);
 void update_idle_tick_statistics(scheduler_cpu_stats_t *stats);
 
-void schedule_migration(task_t *task,cpu_id_t cpu);
-
 extern scheduler_t *get_default_scheduler(void);
 
 void schedule(void);
@@ -122,6 +120,14 @@ status_t sys_yield(void);
 status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
 status_t sleep(ulong_t ticks);
 
+#ifdef CONFIG_SMP
+
+#define CPU_TASK_REBALANCE_DELAY  HZ
+void migration_thread(void *data);
+void schedule_migration(task_t *task,cpu_id_t cpu);
+
+#endif
+
 static inline void grab_task_struct(task_t *t)
 {
 }
@@ -131,6 +137,8 @@ static inline void release_task_struct(task_t *t)
 }
 
 #define cpu_affinity_ok(task,c) (task->cpu & (1<<c))
+
+
 
 #endif
 
