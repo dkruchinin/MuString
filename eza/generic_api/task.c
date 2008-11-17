@@ -170,22 +170,39 @@ static void __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
   }
 }
 
+static void __free_task_struct(task_t *task)
+{
+  memfree(task);
+}
+
+void cleanup_thread_data(void *t)
+{
+  task_t *task=(task_t*)t;
+
+  free_kernel_stack(task->kernel_stack.id);
+  __free_task_struct(task);
+}
+
 static task_t *__allocate_task_struct(void)
 {
   task_t *task=alloc_from_memcache(task_cache);
-  
+
   if( task ) {
     memset(task,0,sizeof(*task));
 
     list_init_node(&task->pid_list);
     list_init_node(&task->child_list);
+    list_init_node(&task->migration_list);
 
     list_init_head(&task->children);
     list_init_head(&task->threads);
     spinlock_initialize(&task->lock, "Task lock");
     spinlock_initialize(&task->child_lock, "Task child lock");
+    spinlock_initialize(&task->member_lock, "Task member lock" );
+
     task->flags = 0;
     task->group_leader=task;
+    task->cpu_affinity_mask=ONLINE_CPUS_MASK;
   }
   return task;  
 }

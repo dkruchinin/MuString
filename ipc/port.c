@@ -35,6 +35,7 @@
 #include <mlibc/stddef.h>
 #include <kernel/vm.h>
 #include <eza/arch/preempt.h>
+#include <eza/kconsole.h>
 
 #define MAX_PORT_MSG_LENGTH  MB(2)
 
@@ -44,30 +45,64 @@
 void ipc_put_port(ipc_port_t *p)
 {
   UNREF_PORT(p);
-  /* TODO: [mt] Free port memory upon deletion. */
+
+  if( !atomic_get(&p->use_count) ) {
+    linked_array_deinitialize(&p->msg_array);
+    free_pages_addr(p->message_ptrs);
+    free_pages_addr(p);
+  }
+}
+
+void ipc_shutdown_port(ipc_port_t *port)
+{
+  IPC_LOCK_PORT_W(port);
+  if( !(port->flags & IPC_PORT_SHUTDOWN ) ) {
+    port->flags |= IPC_PORT_SHUTDOWN;
+  } else {
+    port=NULL;
+  }
+  IPC_UNLOCK_PORT_W(port);
+
+  if( port ) {
+    list_node_t *n;
+
+    /* First, wake up all receivers. */
+    /* TODO: [mt] wake up all receivers on port closing. */
+
+    /* Next, wake up all senders.  */
+    list_for_each(&port->messages,n) {
+      ipc_port_message_t *msg=container_of(n,ipc_port_message_t,l);
+
+      msg->replied_size=-EPIPE;
+      event_raise(&msg->event);
+    }
+  }
 }
 
 status_t ipc_get_port(task_t *task,ulong_t port,ipc_port_t **out_port)
 {
-  ipc_port_t *p;
-  status_t r;
-  task_ipc_t *ipc = task->ipc;
+  ipc_port_t *p=NULL;
+  status_t r=-EINVAL;
+  task_ipc_t *ipc;
 
-  IPC_LOCK_PORTS(ipc);
-  if(port >= task->limits->limits[LIMIT_IPC_MAX_PORTS] ||
-     ipc->ports[port] == NULL) {
-    r=-EINVAL;
-    goto out_unlock;
+  LOCK_TASK_MEMBERS(task);
+  ipc=task->ipc;
+
+  if( ipc && ipc->ports ) {
+    IPC_LOCK_PORTS(ipc);
+    if(port < task->limits->limits[LIMIT_IPC_MAX_PORTS] &&
+       ipc->ports[port] != NULL) {
+      p = ipc->ports[port];
+      if( !(p->flags & IPC_PORT_SHUTDOWN) ) {
+        REF_PORT(p);
+        r=0;
+      }
+    }
+    IPC_UNLOCK_PORTS(ipc);
   }
-  p = ipc->ports[port];
 
-  REF_PORT(p);
-  IPC_UNLOCK_PORTS(ipc);
+  UNLOCK_TASK_MEMBERS(task);
   *out_port = p;
-  return 0;
-out_unlock:
-  IPC_UNLOCK_PORTS(ipc);
-  *out_port = NULL;
   return r;
 }
 
@@ -103,16 +138,24 @@ static void __notify_message_arrived(ipc_port_t *port)
   waitqueue_wake_one_task(&port->waitqueue);
 }
 
-static void __add_message_to_port_queue( ipc_port_t *port,
-                                         ipc_port_message_t *msg,
-                                         ulong_t id)
+static status_t __add_message_to_port_queue( ipc_port_t *port,
+                                             ipc_port_message_t *msg,
+                                             ulong_t id)
 {
+  status_t r;
+
   IPC_LOCK_PORT_W(port);
-  list_add2tail(&port->messages,&msg->l);
-  port->message_ptrs[id] = msg;
-  port->avail_messages++;
-  msg->id = id;
+  if( !(port->flags & IPC_PORT_SHUTDOWN ) ) {
+    list_add2tail(&port->messages,&msg->l);
+    port->message_ptrs[id] = msg;
+    port->avail_messages++;
+    msg->id = id;
+    r=0;
+  } else {
+    r=-EPIPE;
+  }
   IPC_UNLOCK_PORT_W(port);
+  return r;
 }
 
 static void __free_port_message_id(ipc_port_t *port,ulong_t id)
@@ -330,8 +373,12 @@ static status_t __transfer_reply_data(ipc_port_message_t *msg,
       }
     } else {
       /* Long message - process it via buffer. */
-      r=ipc_transfer_buffer_data(&msg->rcv_buf,0,reply_len,
-                               (void *)reply_buf,from_server);
+      if( from_server ) {
+        r=ipc_transfer_buffer_data(&msg->rcv_buf,0,reply_len,
+                                   (void *)reply_buf,from_server);
+      } else {
+        r=0;
+      }
     }
   }
 
@@ -399,18 +446,14 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
   ulong_t id;
   task_t *sender = current_task();
 
-  if( !receiver->ipc ) {
+  /* TODO: [mt] Now only max ~64 vbytes can be sent vis ports. */
+  if( !snd_size || snd_size > MAX_PORT_MSG_LENGTH ||
+      rcv_size > MAX_PORT_MSG_LENGTH ) {
     return -EINVAL;
   }
 
   if( receiver == sender ) {
     return -EDEADLOCK;
-  }
-
-  /* TODO: [mt] Now only max ~64 vbytes can be sent vis ports. */
-  if( !snd_size || snd_size > MAX_PORT_MSG_LENGTH ||
-      rcv_size > MAX_PORT_MSG_LENGTH ) {
-    return -EINVAL;
   }
 
   /* First, locate target port. */
@@ -445,18 +488,25 @@ status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
   }
 
   /* OK, new message is ready for sending. */
-  __add_message_to_port_queue(p,msg,id);
+  r=__add_message_to_port_queue(p,msg,id);
+  if( r ) { /* Port was accidently shutdown ? */
+    goto free_message_id;
+  }
+
   __notify_message_arrived(p);
 
   /* Sender should wait for the reply, so put it into sleep here. */
   IPC_TASK_ACCT_OPERATION(sender);
   event_yield( &msg->event );
   IPC_TASK_UNACCT_OPERATION(sender);
-  
+
   /* Copy reply data to our buffers. */
-  r=__transfer_reply_data(msg,rcv_buf,rcv_size,false);
-  if( !r ) {
-    r=msg->replied_size;
+  r=msg->replied_size;
+  if( r >= 0 ) {
+    r=__transfer_reply_data(msg,rcv_buf,rcv_size,false);
+    if( !r ) {
+      r=msg->replied_size;
+    }
   }
 
   /* Release the port. */
@@ -477,7 +527,7 @@ status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
   ipc_port_t *p;
   ipc_port_message_t *msg;
 
-  if( !recv_buf || !msg_info || !recv_len ) {
+  if( !recv_buf || !msg_info || !recv_len || !owner->ipc ) {
     return -EINVAL;
   }
 
@@ -541,7 +591,8 @@ status_t ipc_port_reply(task_t *owner, ulong_t port, ulong_t msg_id,
   ipc_port_t *p;
   ipc_port_message_t *msg;
 
-  if( !reply_buf || reply_len > MAX_PORT_MSG_LENGTH ) {
+  if( !reply_buf || reply_len > MAX_PORT_MSG_LENGTH ||
+      !owner->ipc ) {
     return -EINVAL;
   }
 

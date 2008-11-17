@@ -50,6 +50,7 @@ syscall_table:
 	.quad   sys_nanosleep
 	.quad   sys_scheduler_control
 	.quad   sys_get_tid                     /* 15  */
+	.quad   sys_exit
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

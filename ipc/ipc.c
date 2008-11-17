@@ -6,6 +6,7 @@
 #include <mlibc/string.h>
 #include <mm/slab.h>
 #include <eza/errno.h>
+#include <eza/kconsole.h>
 
 static memcache_t *ipc_priv_data_cache;
 
@@ -57,6 +58,12 @@ static task_ipc_priv_t *__allocate_ipc_private_data(void)
 
 static void __free_ipc_private_data(task_ipc_priv_t *p)
 {
+  if( p->cached_data.cached_page1 ) {
+    free_pages_addr(p->cached_data.cached_page1);
+  }
+  if( p->cached_data.cached_page2 ) {
+    free_pages_addr(p->cached_data.cached_page2);
+  }
   memfree(p);
 }
 
@@ -109,16 +116,54 @@ free_ipc:
   return -ENOMEM;
 }
 
-void get_task_ipc(task_t *t)
+task_ipc_t *get_task_ipc(task_t *t)
 {
-  if( t && t->ipc ) {
+  LOCK_TASK_MEMBERS(t);
+  if( t->ipc ) {
     atomic_inc(&t->ipc->use_count);
+  }
+  UNLOCK_TASK_MEMBERS(t);
+
+  return t->ipc;
+}
+
+void __deinitialize_task_ipc(task_ipc_t *ipc)
+{
+  uint32_t i;
+
+  LOCK_IPC(ipc);
+
+  /* Close all open ports. */
+  for(i=0;i<ipc->num_ports && ipc->ports;i++) {
+    ipc_port_t *port;
+
+    IPC_LOCK_PORTS(ipc);
+    port=ipc->ports[i];
+    ipc->ports[i]=NULL;
+    IPC_UNLOCK_PORTS(ipc);
+
+    if( port ) {
+      ipc_shutdown_port(port);
+      ipc_put_port(port);
+    }
+  }
+
+  /* Close all buffers */
+
+  UNLOCK_IPC(ipc);
+}
+
+void release_task_ipc(task_ipc_t *ipc)
+{
+  atomic_dec(&ipc->use_count);
+  if( !atomic_get(&ipc->use_count) ) {
+    /* Last reference, so clean it all up. */
+    __deinitialize_task_ipc(ipc);
+    __free_task_ipc(ipc);
   }
 }
 
-void release_task_ipc(task_t *t)
+void release_task_ipc_priv(task_ipc_priv_t *priv)
 {
-  if( t && t->ipc ) {
-    atomic_dec(&t->ipc->use_count);
-  }
+  __free_ipc_private_data(priv);
 }

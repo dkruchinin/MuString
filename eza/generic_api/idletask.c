@@ -39,11 +39,12 @@
 #include <kernel/syscalls.h>
 #include <eza/uinterrupt.h>
 #include <ipc/poll.h>
+#include <eza/gc.h>
 
 task_t *idle_tasks[MAX_CPUS];
 
-#define STEP 9200
-#define TICKS_TO_WAIT 19300
+#define STEP 2600
+#define TICKS_TO_WAIT 2300
 
 ulong_t syscall_counter = 0;
 
@@ -129,6 +130,10 @@ static void thread2(void *data)
     kprintf( "[Server]: Polling ports (1) ...\n" );
     r=sys_ipc_port_poll(pfds,NUM_PORTS,NULL);
     kprintf( "[Server]: After polling ports: %d\n",r );
+
+    kprintf( "[Server]: Exiting ...\n" );
+    sys_exit(0);
+
     for(i=0;i<NUM_PORTS;i++) {
       if(pfds[i].revents) {
         kprintf( "[Server]: Port %d has some pending events: 0x%X\n",
@@ -158,11 +163,13 @@ static void thread4(void *data)
     if( r >=0 ) {
         kprintf( "[Client %d]: %s\n", current_task()->pid, _buf );
     } else {
-      __asm__  __volatile__( "cli" );
-      panic( "[Client N2]: Can't receive response from server ! %d\n", r );      
+//      __asm__  __volatile__( "cli" );
+        kprintf( "[Client N2]: Can't receive response from server ! %d\n", r );
+        break;
     }
     wait_ticks(TICKS_TO_WAIT, "2");
   }
+  sys_exit(0);
   for(;;);
 }
 
@@ -185,10 +192,12 @@ static void thread5(void *data)
       kprintf( "[Client %d]: %s\n", current_task()->pid,_buf );
     } else {
       __asm__  __volatile__( "cli" );
-      panic( "[Client N3]: Can't receive response from server ! %d\n", r );      
+      kprintf( "[Client N3]: Can't receive response from server ! %d\n", r );
+      break;
     }
     wait_ticks(TICKS_TO_WAIT, "3");
   }
+  sys_exit(0);
   for(;;);
 }
 
@@ -210,13 +219,14 @@ static void thread6(void *data)
       kprintf( "[Client NA]: %s\n", _buf );
     } else {
       __asm__  __volatile__( "cli" );
-      panic( "[Client NA]: Can't receive response from server ! %d\n", r );      
+      kprintf( "[Client NA]: Can't receive response from server ! %d\n", r );
+      break;
     }
     wait_ticks(TICKS_TO_WAIT, "4");
   }
+  sys_exit(0);
   for(;;);
 }
-
 
 static void thread3(void *data)
 {
@@ -226,19 +236,22 @@ static void thread3(void *data)
   ulong_t snd_len=strlen(test_data)+1;
 
   kprintf( "Creating client N2 ...\n" );
-  if( kernel_thread(thread4,NULL) != 0 ) {
+  if( kernel_thread(thread4,NULL, NULL) != 0 ) {
     panic( "Can't create client thread N2 for testing port IPC functionality !\n" );
   }
 
   kprintf( "Creating client N3 ...\n" );
-  if( kernel_thread(thread5,NULL) != 0 ) {
+  if( kernel_thread(thread5,NULL, NULL) != 0 ) {
     panic( "Can't create client thread N3 for testing port IPC functionality !\n" );
   }
 
   kprintf( "Creating client N4 ...\n" );
-  if( kernel_thread(thread6,NULL) != 0 ) {
+  if( kernel_thread(thread6,NULL,NULL) != 0 ) {
     panic( "Can't create client thread N4 for testing port IPC functionality !\n" );
   }
+
+  sys_exit(0);
+  for(;;);
 
   while(1) {
     memset(_buf,0,sizeof(_buf));
@@ -300,7 +313,7 @@ void interrupt_thread_isr(void *data)
         if( r !=0 ) {
             for(;;);
         }
-        
+
         code=inb(0x60);
         while( i < 5000000 ) {
             kprintf( "[ISR Thread] Waiting for irqs to arrive ...\n" );
@@ -318,18 +331,32 @@ void interrupt_thread_isr(void *data)
         }
     }
 
-    for(;;);
+    {
+        uint64_t target_tick = swks.system_ticks_64 + 100;
+
+        while(1) {
+            if( swks.system_ticks_64 >= target_tick ) {
+                kprintf( " + [ISR Thread] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
+                         cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
+                target_tick += STEP;
+            }
+        }
+    }
 }
 
 void interrupt_thread(void *data) {
    uint64_t target_tick = swks.system_ticks_64 + 100;
 
-   if( kernel_thread(interrupt_thread_isr,NULL) != 0 ) {
-       panic( "Can't create ISR thread for testing interrupt events !\n" );
-   }
+//   if( kernel_thread(interrupt_thread_isr,NULL,NULL) != 0 ) {
+//       panic( "Can't create ISR thread for testing interrupt events !\n" );
+//   }
 
    kprintf( " + [Interrupt thread] Starting ... Ticks: %d, Target tick: %d\n",
             swks.system_ticks_64, target_tick);
+
+   kprintf( " + [Interrupt thread] Exiting ...\n" );
+   sys_exit(0);
+
    while(1) {
        if( swks.system_ticks_64 >= target_tick ) {
            kprintf( " + [Interrupt thread] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
@@ -359,22 +386,94 @@ static void timer_thread(void *data)
     for(;;);
 }
 
-void idle_loop(void)
+static void traveller_thread(void *d)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
 
+  kprintf( "[TRAVELLER]: Starting on CPU %d\n", cpu_id() );
+
+  for( ;; ) {
+    if( swks.system_ticks_64 >= target_tick ) {
+      kprintf( " + [TRAVELLER #%d] Ticks: %d, PID: %d, ATOM: %d\n",
+               cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
+      target_tick += STEP;
+    }
+  }
+}
+
+static void migration_thread(void *t)
+{
+  uint64_t target_tick = swks.system_ticks_64 + 100;
+  task_t *traveller;
+  int target_cpu=0;
+
+  kprintf( "[MIGRATOR]: Starting on CPU %d\n", cpu_id() );
+  if( kernel_thread(traveller_thread,NULL,&traveller) ) {
+    panic( "Can't create the Traveller !" );
+  }
+
+  kprintf( "[MIGRATOR]: Traveller's CPU: %d, PID: %d\n",
+           traveller->cpu, traveller->pid);
+
+  if( sched_move_task_to_cpu(traveller,target_cpu) ) {
+    kprintf( "[MIGRATOR]: Can't move Traveller to CPU %d !",
+             target_cpu);
+  }
+
+  for( ;; ) {
+    if( swks.system_ticks_64 >= target_tick ) {
+      kprintf( " + [MIGRATOR #%d] Ticks: %d, PID: %d, ATOM: %d\n",
+               cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
+      target_tick += STEP;
+    }
+  }
+}
+
+static void ta(void *d)
+{
+  kprintf( ">>> ACTION !\n" );
+}
+
+void idle_loop(void)
+{
+  uint64_t target_tick = swks.system_ticks_64 + 100;
+  bool flag=false;
+
+/*
+  if( !cpu_id() ) {
+    spawn_percpu_threads();
+  }
+*/
+
+  /*
+  if( cpu_id() ) {
+    if( kernel_thread( migration_thread,NULL,NULL) ) {
+      panic( "Can't create Migration thread !" );
+    }
+  }
+  */
   /*
   if( cpu_id() == 0 ) {
-      if( kernel_thread(timer_thread,NULL) != 0 ) {
+      if( kernel_thread(timer_thread,NULL,NULL) != 0 ) {
           panic( "Can't create server thread for testing port IPC functionality !\n" );
       }
       }
   */
 /*
   if( cpu_id() == 0 ) {
-      if( kernel_thread(interrupt_thread,NULL) != 0 ) {
+      if( kernel_thread(interrupt_thread,NULL,NULL) != 0 ) {
           panic( "Can't create server thread for testing interrupt events !\n" );
       }
+  }
+*/
+/*
+  if( cpu_id() == 0 ) {
+    if( kernel_thread(thread2,NULL,NULL) != 0 ) {
+      panic( "Can't create server thread for testing port IPC functionality !\n" );
+    }
+    if( kernel_thread(thread3,NULL,NULL) != 0 ) {
+      panic( "Can't create client thread for testing port IPC functionality !\n" );
+    }
   }
 */
 /*  
@@ -398,5 +497,14 @@ void idle_loop(void)
                syscall_counter );
       target_tick += STEP;
     }
+
+    /*
+    if( cpu_id() && swks.system_ticks_64 > 400 && !flag ) {
+      gc_action_t *a=gc_allocate_action(ta,NULL);
+
+      kprintf( "++ Activating action ...\n" );
+      gc_schedule_action(a);
+      flag=true;
+      }*/
   }
 }

@@ -50,6 +50,8 @@
 #include <ipc/port.h>
 #include <eza/resource.h>
 #include <eza/arch/interrupt.h>
+#include <eza/gc.h>
+#include <eza/arch/mm.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
@@ -61,13 +63,14 @@ context_t crsc;
 extern void initialize_common_hardware(void);
 extern void initialize_timer(void);
 
-extern spinlock_t can_proceed;
-
 static void main_routine_stage1(void)
 {
   /* Initialize PICs and setup common interrupt handlers. */
   set_cpu_online(0,1);  /* We're online. */
   sched_add_cpu(0);
+
+  initialize_ipc();
+  initialize_gc();
 
   arch_initialize_irqs();
   arch_specific_init();
@@ -84,12 +87,6 @@ static void main_routine_stage1(void)
   initialize_swks();
   swks_add_version_info();
 
-  /* The other CPUs are running, the scheduler is ready, so we can
-   * enable all interrupts.
-   */
-
-  initialize_ipc();
-
   /* OK, we can proceed. */
   server_run_tasks();
 
@@ -97,6 +94,7 @@ static void main_routine_stage1(void)
 
   kprintf( "CPU #0 is entering idle loop. Current task: %p, CPU ID: %d\n",
            current_task(), cpu_id() );
+
   idle_loop();
 }
 

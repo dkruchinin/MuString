@@ -95,6 +95,9 @@ static inline bool list_node_prev_isbound(list_node_t *node)
   return (node->prev != MLST_LIST_PREV);
 }
 
+#define list_node_is_bound(node)                \
+    (list_node_next_isbound(node) && list_node_prev_isbound(node))
+
 /**
  * @def list_entry(lst, nptr)
  * @brief Get item that holds @a nptr node

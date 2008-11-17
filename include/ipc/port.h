@@ -39,8 +39,11 @@ struct __ipc_port_t;
 
 #define IPC_BUFFERED_PORT_LENGTH  1024
 
+#define IPC_PORT_SHUTDOWN  0x800
+
 typedef struct __ipc_port_messsage_t {
-  ulong_t data_size,reply_size,id,replied_size;
+  ulong_t data_size,reply_size,id;
+  long replied_size;
   void *send_buffer,*receive_buffer;
   list_node_t l;
   event_t event;
@@ -75,6 +78,7 @@ typedef struct __port_msg_info {
 
 void initialize_ipc(void);
 
+void ipc_shutdown_port(ipc_port_t *port);
 void ipc_put_port(ipc_port_t *p);
 status_t ipc_get_port(task_t *task,ulong_t port,ipc_port_t **out_port);
 void ipc_port_add_poller(ipc_port_t *port,task_t *poller, wait_queue_task_t *w);

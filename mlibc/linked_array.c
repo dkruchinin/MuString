@@ -159,6 +159,8 @@ void linked_array_deinitialize(linked_array_t *arr)
 {
   arr->head = arr->items;
   arr->item_size = INVALID_ITEM_IDX;
+  free_pages_addr(arr->array);
+  arr->array=NULL;
 }
 
 bool linked_array_is_initialized(linked_array_t *arr)

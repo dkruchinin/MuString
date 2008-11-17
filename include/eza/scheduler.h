@@ -49,6 +49,8 @@ typedef struct __scheduler {
   status_t (*add_cpu)(cpu_id_t cpu);
   void (*scheduler_tick)(void);
   status_t (*add_task)(task_t *task);
+  status_t (*del_task)(task_t *task);
+  status_t (*move_task_to_cpu)(task_t *task,cpu_id_t cpu);
   void (*schedule)(void);
   void (*reset)(void);
   status_t (*change_task_state)(task_t *task,task_state_t state);
@@ -82,9 +84,13 @@ status_t sched_change_task_state(task_t *task,task_state_t state);
 status_t sched_change_task_state_lazy(task_t *task,task_state_t state,
                                       lazy_sched_handler_t handler,void *data);
 status_t sched_add_task(task_t *task);
+status_t sched_del_task(task_t *task);
 status_t sched_setup_idle_task(task_t *task);
 status_t sched_add_cpu(cpu_id_t cpu);
+status_t sched_move_task_to_cpu(task_t *task,cpu_id_t cpu);
 void update_idle_tick_statistics(scheduler_cpu_stats_t *stats);
+
+void schedule_migration(task_t *task,cpu_id_t cpu);
 
 extern scheduler_t *get_default_scheduler(void);
 
@@ -123,6 +129,8 @@ static inline void grab_task_struct(task_t *t)
 static inline void release_task_struct(task_t *t)
 {
 }
+
+#define cpu_affinity_ok(task,c) (task->cpu & (1<<c))
 
 #endif
 

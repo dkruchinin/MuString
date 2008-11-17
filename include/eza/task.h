@@ -55,6 +55,9 @@
 #define LOCK_TASK_CHILDS(t) spinlock_lock(&t->child_lock)
 #define UNLOCK_TASK_CHILDS(t) spinlock_unlock(&t->child_lock)
 
+#define LOCK_TASK_MEMBERS(t) spinlock_lock(&t->member_lock)
+#define UNLOCK_TASK_MEMBERS(t) spinlock_unlock(&t->member_lock)
+
 typedef uint32_t time_slice_t;
 
 typedef enum __task_creation_flag_t {
@@ -88,7 +91,7 @@ typedef struct __task_struct {
   tid_t tid;
   cpu_id_t cpu;
   task_state_t state;
-  cpu_array_t cpu_affinity;
+  cpu_array_t cpu_affinity_mask;
   kernel_stack_t kernel_stack;
   page_directory_t page_dir;
   list_node_t pid_list;
@@ -105,10 +108,19 @@ typedef struct __task_struct {
   /* Scheduler-related stuff. */
   struct __scheduler *scheduler;
   void *sched_data;
+  list_node_t migration_list;
 
+  /* IPC-related stuff */
   struct __task_ipc *ipc;
   struct __task_ipc_priv *ipc_priv;
+
+  /* Limits-related stuff. */
   task_limits_t *limits;
+
+  /* Lock for protecting changing and outer access the following fields:
+   *   ipc,ipc_priv,limits
+   */
+  spinlock_t member_lock;
 
   struct __userspace_events_data *uspace_events;
   /* Arch-dependent context is located here */
@@ -138,9 +150,11 @@ void initialize_task_subsystem(void);
  *
  * @param fn - entrypoint of a new thread.
  * @param arg - argument to be passed to a new thread.
+ * @param out_task - where to put the task descriptor of new task.
+ *                   May be NULL if no descriptor required et all.
  * @return Return codes are identical to the 'create_task()' function.
  */
-status_t kernel_thread(void (*fn)(void *), void *data);
+status_t kernel_thread(void (*fn)(void *), void *data, task_t **out_task);
 
 /**
  * @fn status_t arch_setup_task_context(task_t *newtask,
@@ -203,10 +217,10 @@ status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
  */
 void free_task_struct(task_t *task);
 
-static inline bool is_thread( task_t *task )
-{
-  return (task->group_leader && task->group_leader != task);
-}
+#define is_thread(task)  ((task)->group_leader && (task)->group_leader != (task))
+
+void cleanup_thread_data(void *t);
+
+
 
 #endif
-

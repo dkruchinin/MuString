@@ -38,6 +38,7 @@
 #include <mlibc/kprintf.h>
 #include <server.h>
 #include <mlibc/unistd.h>
+#include <eza/process.h>
 
 static status_t __create_task_mm(task_t *task, int num)
 {
@@ -51,7 +52,7 @@ static status_t __create_task_mm(task_t *task, int num)
   elf_pr_t epr;
   elf_sh_t esh;
   page_idx_t idx;
-  uintptr_t text,data_bss,bss_virt;
+  uintptr_t data_bss,bss_virt;
   size_t real_code_size=0,real_data_size=0;
   size_t last_data_size,real_data_offset=0;
   size_t last_offset,last_sect_size,last_data_offset;
@@ -201,14 +202,35 @@ void server_run_tasks(void)
 
   for(a=0;a<i;a++) {
     r=create_task(current_task(),0,TPL_USER,&server);
-    if(r)      continue;
+    if( r ) {
+      panic( "server_run_tasks(): Can't create task N %d !\n",
+             a+1);
+    }
+
+    /* Sanity check for NameServer's PID. */
+    if( !a ) {
+      if( server->pid != 1 ) {
+        panic( "server_run_tasks(): NameServer has improper PID: %d !\n",
+               server->pid );
+      }
+    }
+
     r=__create_task_mm(server,a);
-    if(r)      continue;
+    if( r ) {
+      panic( "server_run_tasks(): Can't create memory space for task N %d\n",
+             a+1);
+    }
+
+    /* After creating the NameServer we should spawn all per-cpu threads. */
+    if( !a ) {
+      spawn_percpu_threads();
+    }
+
     r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
-    if(r)      continue;
+    if( r ) {
+      panic( "server_run_tasks(): Can't launch task N%d !\n",a+1);
+    }
   }
 
   return;
 }
-
-

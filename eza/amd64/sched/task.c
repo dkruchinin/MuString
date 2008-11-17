@@ -182,11 +182,11 @@ void initialize_idle_tasks(void)
   }
 }
 
-status_t kernel_thread(void (*fn)(void *), void *data)
+status_t kernel_thread(void (*fn)(void *), void *data, task_t **out_task)
 {
   task_t *newtask;
   status_t r;
- 
+
   r = create_task(current_task(),KERNEL_THREAD_FLAGS,TPL_KERNEL,&newtask);
 
   if(r >= 0) {
@@ -201,6 +201,15 @@ status_t kernel_thread(void (*fn)(void *), void *data)
      /* Start this task. */
      sched_change_task_state(newtask,TASK_STATE_RUNNABLE);
   }
+
+  if( out_task ) {
+    if( r >= 0 ) {
+      *out_task=newtask;
+    } else {
+      *out_task=NULL;
+    }
+  }
+
   return r;
 }
 
