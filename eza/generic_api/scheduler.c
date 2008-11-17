@@ -64,6 +64,7 @@ static scheduler_t *active_scheduler = NULL;
 
 static list_head_t migration_lists[NR_CPUS];
 static spinlock_t migration_locks[NR_CPUS];
+static list_head_t migration_actions[NR_CPUS];
 
 static void initialize_sched_internals(void)
 {
@@ -90,6 +91,7 @@ void initialize_scheduler(void)
   for(i=0;i<NR_CPUS;i++) {
     spinlock_initialize(&migration_locks[i]);
     list_init_head(&migration_lists[i]);
+    list_init_head(&migration_actions[i]);
   }
 }
 
@@ -308,10 +310,11 @@ out_release:
   return r;
 }
 
-extern int sched_verbose;
+extern int sched_verbose1;
 
 static void __sleep_timer_handler(ulong_t data)
 {
+  sched_verbose1=0;
   sched_change_task_state((task_t *)data,TASK_STATE_RUNNABLE);
 }
 
@@ -344,14 +347,72 @@ status_t sleep(ulong_t ticks)
 
 #ifdef CONFIG_SMP
 
+static void __remote_task_state_change_action(void *data,ulong_t data_arg)
+{
+  task_t *task=(task_t*)data;
+
+  /* First, remove the task from the list. */
+  interrupts_disable();
+  LOCK_TASK_STRUCT(task);
+  if( list_node_is_bound( &task->migration_list ) ) {
+    list_del(&task->migration_list);
+  }
+  UNLOCK_TASK_STRUCT(task);
+  interrupts_enable();
+
+  sched_change_task_state(task,data_arg);
+}
+
+status_t schedule_remote_task_state_change(task_t *task,ulong_t state)
+{
+  long is;
+  gc_action_t *action=gc_allocate_action(__remote_task_state_change_action,
+                                        task,state);
+  bool go=false;
+  status_t r;
+
+  if( !action ) {
+    return -ENOMEM;
+  }
+
+  interrupts_save_and_disable(is);
+  LOCK_TASK_STRUCT(task);
+
+  if( task->cpu != cpu_id() ) {
+    if( !list_node_is_bound(&task->migration_list) ) {
+      ulong_t cpu=task->cpu;
+
+      spinlock_lock(&migration_locks[cpu]);
+      list_add2tail(&migration_actions[cpu], &action->l);
+      list_add2tail(&action->data_list_head, &task->migration_list);
+      spinlock_unlock(&migration_locks[cpu]);
+      kprintf( "*** go !\n" );
+      go=true;
+    } else {
+      r=-EBUSY;
+    }
+  } else {
+    r=-EAGAIN;
+  }
+
+  UNLOCK_TASK_STRUCT(task);
+  interrupts_restore(is);
+
+  if( go ) {
+    apic_broadcast_ipi_vector(SCHEDULER_IPI_IRQ_VEC);
+    r=0;
+  } else {
+    gc_free_action(action);
+  }
+  return r;
+}
+
 void schedule_migration(task_t *task,cpu_id_t cpu)
 {
   if( cpu < NR_CPUS ) {
-    long state;
-
-    spinlock_lock_irqsave(&migration_locks[cpu],state);
+    spinlock_lock(&migration_locks[cpu]);
     list_add2tail(&migration_lists[cpu], &task->migration_list);
-    spinlock_unlock_irqrestore(&migration_locks[cpu],state);
+    spinlock_unlock(&migration_locks[cpu]);
     apic_broadcast_ipi_vector(SCHEDULER_IPI_IRQ_VEC);
   }
 }
@@ -371,16 +432,14 @@ void migration_thread(void *data)
   while(true) {
     list_head_t private, *mytasks;
     cpu_id_t cpu=cpu_id();
+    list_node_t *n, *ns;
 
     list_init_head(&private);
-
     mytasks=&migration_lists[cpu];
     spinlock_lock(&migration_locks[cpu]);
 
     /* First, process all threads that were forced to migrate to this CPU. */
     if( !list_is_empty(mytasks) ) {
-      list_node_t *n, *ns;
-
       list_move2head(&private,mytasks);
       spinlock_unlock(&migration_locks[cpu]);
 
@@ -399,8 +458,35 @@ void migration_thread(void *data)
       spinlock_unlock(&migration_locks[cpu]);
     }
 
-    kprintf( "* Migration thread [%d]: Sleeping ...\n", cpu );
-    sched_change_task_state(current_task(),TASK_STATE_SLEEPING);
+    /* Next, process asynchronous task-repated requests (like
+     *  state change, priority change, etc ...
+     */
+    mytasks=&migration_actions[cpu];
+    list_init_head(&private);
+    spinlock_lock(&migration_locks[cpu]);
+
+    if( !list_is_empty(mytasks) ) {
+      kprintf( "* Got some async actions !\n" );
+      list_move2head(&private,mytasks);
+      spinlock_unlock(&migration_locks[cpu]);
+
+      list_for_each_safe(&private,n,ns) {
+        gc_action_t *action=container_of(n,gc_action_t,l);
+
+        list_del(n);
+        action->action(action->data,action->data_arg);
+        action->dtor(action);
+      }
+    } else {
+      spinlock_unlock(&migration_locks[cpu]);
+    }
+    kprintf( "* Migration thread [%d]: Sleeping PID: %d ...\n", cpu,current_task()->pid );
+      sched_change_task_state(current_task(),TASK_STATE_SLEEPING);
+//    if( current_task()->pid == 4 ) {
+      sleep( 1000 );
+//    } else {
+//      sleep(100000);
+//    }
     kprintf( "* Migration thread [%d]: Got woken up (%d)!\n", cpu_id(),
              current_task()->cpu);
   }

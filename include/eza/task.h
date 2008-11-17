@@ -223,7 +223,7 @@ void free_task_struct(task_t *task);
 
 #define is_thread(task)  ((task)->group_leader && (task)->group_leader != (task))
 
-void cleanup_thread_data(void *t);
+void cleanup_thread_data(void *t,ulong_t arg);
 
 
 

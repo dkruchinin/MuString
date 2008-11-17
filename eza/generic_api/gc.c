@@ -64,7 +64,7 @@ static void __gc_thread_logic(void *arg)
     list_for_each(&private,n) {
       struct __gc_action *action=container_of(n,struct __gc_action,l);
 
-      action->action(action->data);
+      action->action(action->data,action->data_arg);
       action->dtor(action);
     }
 
@@ -109,7 +109,8 @@ void spawn_percpu_threads(void)
   }
 }
 
-gc_action_t *gc_allocate_action(gc_actor_t actor, void *data)
+gc_action_t *gc_allocate_action(gc_actor_t actor, void *data,
+                                ulong_t data_arg)
 {
   gc_action_t *action=__alloc_gc_action();
   if( action ) {
@@ -117,9 +118,18 @@ gc_action_t *gc_allocate_action(gc_actor_t actor, void *data)
     action->data=data;
     action->dtor=__free_gc_action;
     list_init_node(&action->l);
+    list_init_head(&action->data_list_head);
     action->type=0;
+    action->data_arg=data_arg;
   }
   return action;
+}
+
+void gc_free_action(gc_action_t *action)
+{
+  if( action->dtor == __free_gc_action ) {
+    __free_gc_action(action);
+  }
 }
 
 void gc_schedule_action(gc_action_t *action)

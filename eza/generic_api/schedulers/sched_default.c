@@ -351,7 +351,7 @@ static status_t def_del_task(task_t *task)
     }
 
     /* Phase 2: Prepare deffered actions. */
-    action=gc_allocate_action(cleanup_thread_data,task);
+    action=gc_allocate_action(cleanup_thread_data,task,0);
 
     /* Now we can schedule deffered resource freeing. */
     preempt_disable();
@@ -487,15 +487,6 @@ static void def_reset(void)
 }
 
 /* NOTE: task must be locked before calling this function ! */
-static status_t __change_remote_task_state(task_t *task,task_state_t new_state)
-{
-  task->flags &= ~TASK_FLAG_UNDER_STATE_CHANGE;
-  UNLOCK_TASK_STRUCT(task);
-  kprintf( KO_WARNING "Changing state for remote tasks is not possible !\n" );
-  return -EINVAL;
-}
-
-/* NOTE: task must be locked before calling this function ! */
 static status_t __change_local_task_state(task_t *task,task_state_t new_state,
                                           lazy_sched_handler_t handler,void *data)
 {
@@ -544,18 +535,21 @@ out_unlock:
   return r;
 }
 
+int sched_verbose1;
+
 static status_t __change_task_state(task_t *task,task_state_t new_state,
                                     lazy_sched_handler_t h,void *data)
 {
   status_t r;
   long is;
 
-  if( sched_verbose ) {
+  if( sched_verbose1 && !cpu_id() ) {
     kprintf( "[%d] BEFORE CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d, PID: %d, TASK CPU: %d\n",
              cpu_id(),in_atomic(), current_task_needs_resched(),
              task->pid,task->cpu);
   }
 
+change_task_state:
   interrupts_save_and_disable(is);
   LOCK_TASK_STRUCT(task);
 
@@ -568,11 +562,23 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
         r=__change_local_task_state(task,new_state,h,data);
         interrupts_restore(is);
   } else {
+    UNLOCK_TASK_STRUCT(task);
     interrupts_restore(is);
-    r=__change_remote_task_state(task,new_state);
+
+    kprintf( "[%d] BEFORE CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d, PID: %d, TASK CPU: %d\n",
+             cpu_id(),in_atomic(), current_task_needs_resched(),
+             task->pid,task->cpu);
+
+    r=schedule_remote_task_state_change(task,new_state);
+    if( r == -EAGAIN ) {
+      /* Task has changed its CPU one more time while performing our
+       * request. So perform the operation yet again.
+       */
+      goto change_task_state;
+    }
   }
 
-  if( sched_verbose ) {
+  if( sched_verbose1 && !cpu_id() ) {
     kprintf( "[%d] AFTER CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d, ion: %d, INTS: %d\n",
              cpu_id(),in_atomic(), current_task_needs_resched(), is,
              is_interrupts_enabled() );

@@ -175,7 +175,7 @@ static void __free_task_struct(task_t *task)
   memfree(task);
 }
 
-void cleanup_thread_data(void *t)
+void cleanup_thread_data(void *t,ulong_t arg)
 {
   task_t *task=(task_t*)t;
 
