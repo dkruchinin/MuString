@@ -40,6 +40,7 @@
 #include <eza/uinterrupt.h>
 #include <ipc/poll.h>
 #include <eza/gc.h>
+#include <ipc/gen_port.h>
 
 task_t *idle_tasks[MAX_CPUS];
 
@@ -460,6 +461,20 @@ static void ta(void *d)
   kprintf( ">>> ACTION !\n" );
 }
 
+static void __new_port_logic_thread(void *t)
+{
+  status_t r;
+
+  kprintf( "[NEW PORT THREAD]: Starting ...\n" );
+
+  kprintf( "[NEW PORT THREAD]: Creating a port: " );
+  r=__ipc_create_port(current_task(),IPC_BLOCKED_ACCESS);
+  kprintf( "%d\n", r );
+
+  kprintf( "[NEW POR THREAD]: Done !\n" );
+  for(;;);
+}
+
 void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
@@ -470,6 +485,13 @@ void idle_loop(void)
     spawn_percpu_threads();
   }
 */
+
+  if( !cpu_id() ) {
+    if( kernel_thread( __new_port_logic_thread,NULL,NULL) ) {
+      panic( "Can't create Migration thread !" );
+    }
+  }
+
 /*
   if( !cpu_id() ) {
     if( kernel_thread( __migration_thread,NULL,NULL) ) {
