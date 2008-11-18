@@ -43,8 +43,8 @@
 
 task_t *idle_tasks[MAX_CPUS];
 
-#define STEP 22600
-#define TICKS_TO_WAIT 22300
+#define STEP 600
+#define TICKS_TO_WAIT 300
 
 ulong_t syscall_counter = 0;
 
@@ -344,12 +344,27 @@ void interrupt_thread_isr(void *data)
     }
 }
 
+static void __ticker(void *data)
+{
+  uint64_t target_tick = swks.system_ticks_64 + 100;
+
+  kprintf( " + [Ticker] Starting ... Ticks: %d, Target tick: %d\n",
+              swks.system_ticks_64, target_tick);
+  while(1) {
+    if( swks.system_ticks_64 >= target_tick ) {
+      kprintf( " + [Ticker] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
+               cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
+      target_tick += STEP;
+    }
+   }  
+}
+
 void interrupt_thread(void *data) {
    uint64_t target_tick = swks.system_ticks_64 + 100;
 
-//   if( kernel_thread(interrupt_thread_isr,NULL,NULL) != 0 ) {
-//       panic( "Can't create ISR thread for testing interrupt events !\n" );
-//   }
+   if( kernel_thread(__ticker,NULL,NULL) != 0 ) {
+       panic( "Can't create ISR thread for testing interrupt events !\n" );
+   }
 
    kprintf( " + [Interrupt thread] Starting ... Ticks: %d, Target tick: %d\n",
             swks.system_ticks_64, target_tick);
@@ -407,6 +422,7 @@ static void __migration_thread(void *t)
   task_t *traveller;
   int target_cpu=1;
   status_t r;
+  bool stopped=false;
 
   kprintf( "[MIGRATOR]: Starting on CPU %d\n", cpu_id() );
   if( kernel_thread(traveller_thread,NULL,&traveller) ) {
@@ -429,6 +445,11 @@ static void __migration_thread(void *t)
     if( swks.system_ticks_64 >= target_tick ) {
       kprintf( " + [MIGRATOR #%d] Ticks: %d, PID: %d, ATOM: %d\n",
                cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
+      if( swks.system_ticks_64 >= 1000 && !stopped ) {
+        kprintf( " + [MIGRATOR]: Deactivating the Traveller ... : %d\n",
+                 sched_change_task_state(traveller,TASK_STATE_SLEEPING) );
+        stopped=true;
+      }
       target_tick += STEP;
     }
   }
@@ -449,13 +470,13 @@ void idle_loop(void)
     spawn_percpu_threads();
   }
 */
-
+/*
   if( !cpu_id() ) {
     if( kernel_thread( __migration_thread,NULL,NULL) ) {
       panic( "Can't create Migration thread !" );
     }
   }
-
+*/
   /*
   if( cpu_id() == 0 ) {
       if( kernel_thread(timer_thread,NULL,NULL) != 0 ) {
@@ -463,13 +484,13 @@ void idle_loop(void)
       }
       }
   */
-/*
+  /*
   if( cpu_id() == 0 ) {
       if( kernel_thread(interrupt_thread,NULL,NULL) != 0 ) {
           panic( "Can't create server thread for testing interrupt events !\n" );
       }
   }
-*/
+  */
 /*
   if( cpu_id() == 0 ) {
     if( kernel_thread(thread2,NULL,NULL) != 0 ) {

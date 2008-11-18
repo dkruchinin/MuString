@@ -125,7 +125,7 @@ status_t sleep(ulong_t ticks);
 
 #define CPU_TASK_REBALANCE_DELAY  HZ
 void migration_thread(void *data);
-void schedule_migration(task_t *task,cpu_id_t cpu);
+status_t schedule_migration(task_t *task,cpu_id_t cpu);
 status_t schedule_remote_task_state_change(task_t *task,ulong_t state);
 
 #endif

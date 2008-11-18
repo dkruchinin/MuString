@@ -553,14 +553,9 @@ change_task_state:
   interrupts_save_and_disable(is);
   LOCK_TASK_STRUCT(task);
 
-  /* To increase performance in case target task belongs to another CPU
-   * but it is being woken from the CPU that is running its idle task,
-   * we run target task on this CPU (of course, if target task can host it.)
-   */
-  if( task->cpu == cpu_id() ||
-      (!current_task()->pid && cpu_affinity_ok(task,cpu_id())) ) {
-        r=__change_local_task_state(task,new_state,h,data);
-        interrupts_restore(is);
+  if( task->cpu == cpu_id() ) {
+    r=__change_local_task_state(task,new_state,h,data);
+    interrupts_restore(is);
   } else {
     UNLOCK_TASK_STRUCT(task);
     interrupts_restore(is);
@@ -732,6 +727,7 @@ static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
       list_node_is_bound(&task->migration_list) ) {
     r=-EINVAL;
   } else {
+    r=0;
     if( cpu != mycpu ) {
       task->cpu=cpu;
 
@@ -746,14 +742,13 @@ static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
         }
 
         task->state=TASK_STATE_STOPPED;
-        schedule_migration(task,cpu);
+        r=schedule_migration(task,cpu);
       } else {
         LOCK_CPU_SCHED_DATA(sched_data);
         sched_data->stats->sleeping_tasks--;
         UNLOCK_CPU_SCHED_DATA(sched_data);
       }
     }
-    r=0;
   }
   UNLOCK_TASK_STRUCT(task);
   __LEAVE_USER_ATOMIC();

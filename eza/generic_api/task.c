@@ -179,8 +179,10 @@ void cleanup_thread_data(void *t,ulong_t arg)
 {
   task_t *task=(task_t*)t;
 
+  /* NOTE: Don't free task structure directly since it will
+   * be probably processed via 'waitpid()' functionality
+   */
   free_kernel_stack(task->kernel_stack.id);
-  __free_task_struct(task);
 }
 
 static task_t *__allocate_task_struct(void)
