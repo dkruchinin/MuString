@@ -38,6 +38,7 @@
 #include <eza/kconsole.h>
 #include <mm/slab.h>
 #include <ipc/gen_port.h>
+#include <eza/event.h>
 
 ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf,
                                                  ulong_t snd_size)
@@ -46,7 +47,7 @@ ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf
     ipc_port_message_t *msg=memalloc(sizeof(*msg)+snd_size);
     if( msg ) {
       memset(msg,0,sizeof(*msg));
-      IPC_RESET_MESSAGE(msg,owner);
+      event_initialize(&msg->event);
       msg->send_buffer=(void *)((char *)msg+sizeof(*msg));
       msg->data_size=snd_size;
       msg->reply_size=0;
@@ -93,13 +94,14 @@ static status_t __transfer_reply_data(ipc_port_message_t *msg,
     }
   }
 
+  if( r ) {
+    r=-EFAULT;
+    reply_len=0;
+  }
+
   /* If we're replying to the message, setup size properly. */
   if( from_server ) {
     msg->replied_size=reply_len;
-  }
-
-  if( r ) {
-    r=-EFAULT;
   }
 
   return r;
@@ -140,7 +142,7 @@ status_t __ipc_port_send(struct __ipc_gen_port *port,
     kprintf( "  * Got a reply: %d\n",msg->replied_size );
 
     r=msg->replied_size;
-    if( r >= 0 ) {
+    if( r > 0 ) {
       r=__transfer_reply_data(msg,rcv_buf,rcv_size,false);
       if( !r ) {
         r=msg->replied_size;
@@ -161,6 +163,8 @@ static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
     return -ENOMEM;
   }
 
+  memset(p,0,sizeof(*p));
+
   /* TODO: [mt] Support flags during IPC port creation. */
   if( flags & IPC_BLOCKED_ACCESS ) {
     if( flags & IPC_PRIORITIZED_PORT_QUEUE ) {
@@ -178,8 +182,9 @@ static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
 
   atomic_set(&p->use_count,1);
   spinlock_initialize(&p->lock, "");
-  p->avail_messages = 0;
+  p->avail_messages = p->total_messages=0;
   p->flags = flags;
+  list_init_head(&p->channels);
   waitqueue_initialize(&p->waitqueue);
   *out_port = p;
   return 0;
@@ -305,12 +310,7 @@ status_t __ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
   if( !recv_buf || !msg_info || !recv_len || !owner->ipc ) {
     return -EINVAL;
   }
-/*
-  if( !valid_user_address((ulong_t)msg_info) ||
-      !valid_user_address(recv_buf) ) {
-      return -EFAULT;
-  }
-*/
+
   /* Main 'Receive' cycle. */
 recv_cycle:
   msg=NULL;
@@ -335,11 +335,6 @@ recv_cycle:
   }
   IPC_UNLOCK_PORT_W(port);
 
-  /* We provide a reliable message delivery mechanism, which means
-   * that if it was impossible to copy data from a message to the receiver's
-   * buffer, we insert the message back to the queue to allow it be processed
-   * later.
-   */
   if( msg != NULL ) {
     r=__transfer_message_data_to_receiver(msg,recv_buf,recv_len,msg_info);
     if(r) {
@@ -390,4 +385,61 @@ status_t __ipc_get_port(task_t *task,ulong_t port,ipc_gen_port_t **out_port)
   UNLOCK_TASK_MEMBERS(task);
   *out_port = p;
   return r;
+}
+
+void __ipc_put_port(ipc_gen_port_t *p)
+{
+  UNREF_PORT(p);
+
+  if( !atomic_get(&p->use_count) ) {
+    p->msg_ops->free_data_storage(p);
+    memfree(p);
+  }
+}
+
+status_t __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
+                          ulong_t reply_buf,ulong_t reply_len)
+{
+  ipc_port_message_t *msg;
+  status_t r;
+
+  if( !reply_buf || reply_len > MAX_PORT_MSG_LENGTH ) {
+    return -EINVAL;
+  }
+
+  if( !port->msg_ops->remove_message ) {
+    return -EINVAL;
+  }
+
+  msg=NULL;
+  IPC_LOCK_PORT_W(port);
+  if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
+    msg=port->msg_ops->remove_message(port,msg_id);
+    if( !msg ) {
+      r=-EINVAL;
+    }
+  } else {
+    r=-EPIPE;
+  }
+  IPC_UNLOCK_PORT_W(port);
+
+  if( msg ) {
+    r=__transfer_reply_data(msg,reply_buf,reply_len,true);
+    if( event_is_active(&msg->event) ) {
+      event_raise(&msg->event);
+    }
+  }
+
+  return r;
+}
+
+status_t __ipc_open_channel(pid_t pid,ulong_t port)
+{
+  status_t r;
+  return r;
+}
+
+status_t __ipc_close_channel(ulong_t ch_id)
+{
+  return 0;
 }

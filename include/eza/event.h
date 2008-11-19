@@ -26,6 +26,8 @@ typedef struct __event_t {
   event_checker_t ev_checker;
 } event_t;
 
+#define event_is_active(e)  ((e)->task != NULL)
+
 static inline void event_initialize(event_t *event)
 {
   spinlock_initialize( &event->__lock, "" );

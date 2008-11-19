@@ -543,13 +543,13 @@ void idle_loop(void)
     spawn_percpu_threads();
   }
 */
-
+/*
   if( !cpu_id() ) {
     if( kernel_thread( __new_port_logic_thread,NULL,NULL) ) {
       panic( "Can't create Migration thread !" );
     }
   }
-
+*/
 /*
   if( !cpu_id() ) {
     if( kernel_thread( __migration_thread,NULL,NULL) ) {

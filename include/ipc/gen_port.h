@@ -39,6 +39,8 @@
 /****************************************************************************/
 #define IPC_PRIORITIZED_PORT_QUEUE   0x20000
 
+#define MAX_PORT_MSG_LENGTH  MB(2)
+
 #define REF_PORT(p)  atomic_inc(&p->use_count)
 #define UNREF_PORT(p)  atomic_dec(&p->use_count)
 
@@ -48,21 +50,25 @@ typedef struct __ipc_port_msg_ops {
   status_t (*init_data_storage)(struct __ipc_gen_port *port,task_t *owner);
   status_t (*insert_message)(struct __ipc_gen_port *port,
                              ipc_port_message_t *msg,ulong_t flags);
-  ipc_port_message_t *(*extract_message)(struct __ipc_gen_port *port,ulong_t flags);
+  ipc_port_message_t *(*extract_message)(struct __ipc_gen_port *port,
+                                         ulong_t flags);
   void (*free_data_storage)(struct __ipc_gen_port *port);
   void (*requeue_message)(struct __ipc_gen_port *port,ipc_port_message_t *msg);
   void (*post_receive_logic)(struct __ipc_gen_port *port,ipc_port_message_t *msg);
+  ipc_port_message_t *(*remove_message)(struct __ipc_gen_port *port,ulong_t msg_id);
+  ipc_port_message_t *(*remove_head_message)(struct __ipc_gen_port *port);
 } ipc_port_msg_ops_t;
 
 typedef struct __ipc_gen_port {
   ulong_t flags;
   spinlock_t lock;
   atomic_t use_count;
-  ulong_t avail_messages;
+  ulong_t avail_messages,total_messages;
   wait_queue_t waitqueue;
 
   ipc_port_msg_ops_t *msg_ops;
   void *data_storage;
+  list_head_t channels;
 } ipc_gen_port_t;
 
 status_t __ipc_port_send(ipc_gen_port_t *port,
@@ -73,6 +79,7 @@ status_t __ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
                             ulong_t recv_buf,ulong_t recv_len,
                             port_msg_info_t *msg_info);
 status_t __ipc_get_port(task_t *task,ulong_t port,ipc_gen_port_t **out_port);
+void __ipc_put_port(ipc_gen_port_t *p);
 
 extern ipc_port_msg_ops_t nonblock_port_msg_ops;
 extern ipc_port_msg_ops_t def_port_msg_ops;

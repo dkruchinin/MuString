@@ -15,6 +15,9 @@
 #include <eza/kconsole.h>
 #include <mm/slab.h>
 #include <ipc/gen_port.h>
+#include <eza/arch/asm.h>
+
+#define DEF_PORT_QUEUE_SIZE  ((PAGE_SIZE)/sizeof(long))
 
 typedef struct __def_port_data_storage {
   list_head_t messages;
@@ -69,6 +72,7 @@ static status_t def_insert_message(struct __ipc_gen_port *port,
     list_add2tail(&ds->messages,&msg->l);
     ds->message_ptrs[id]=msg;
     port->avail_messages++;
+    port->total_messages++;
     return 0;
   }
   return -ENOMEM;  
@@ -79,10 +83,9 @@ static ipc_port_message_t *def_extract_message(ipc_gen_port_t *p,ulong_t flags)
 {
   ipc_port_message_t *msg;
   def_port_data_storage_t *ds=(def_port_data_storage_t*)p->data_storage;
-  list_node_t *lm = list_node_first(&ds->messages);
 
   msg = container_of(list_node_first(&ds->messages),ipc_port_message_t,l);
-  list_del(lm);
+  list_del(&msg->l);
   p->avail_messages--;
   return msg;
 }
@@ -100,10 +103,46 @@ static void def_requeue_message(struct __ipc_gen_port *port,ipc_port_message_t *
   port->avail_messages++;
 }
 
+static ipc_port_message_t *def_remove_message(struct __ipc_gen_port *port,
+                                              ulong_t msg_id)
+{
+  if( msg_id < DEF_PORT_QUEUE_SIZE ) {
+    def_port_data_storage_t *ds=(def_port_data_storage_t *)port->data_storage;
+    ipc_port_message_t *msg=ds->message_ptrs[msg_id];
+
+    if( msg != NULL ) {
+      ds->message_ptrs[msg_id]=NULL;
+      list_del(&msg->l);
+      port->total_messages--;
+      return msg;
+    }
+  }
+  return NULL;
+}
+
+static ipc_port_message_t *def_remove_head_message(struct __ipc_gen_port *port)
+{
+  def_port_data_storage_t *ds=(def_port_data_storage_t *)port->data_storage;
+
+  if( !list_is_empty(&ds->messages) ) {
+    ipc_port_message_t *msg;
+
+    msg = container_of(list_node_first(&ds->messages),ipc_port_message_t,l);
+    list_del(&msg->l);
+    ds->message_ptrs[msg->id]=NULL;
+    port->total_messages--;
+    return msg;
+  }
+
+  return NULL;
+}
+
 ipc_port_msg_ops_t def_port_msg_ops = {
   .init_data_storage=def_init_data_storage,
   .insert_message=def_insert_message,
   .free_data_storage=def_free_data_storage,
   .extract_message=def_extract_message,
   .requeue_message=def_requeue_message,
+  .remove_message=def_remove_message,
+  .remove_head_message=def_remove_head_message,
 };
