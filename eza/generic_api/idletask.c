@@ -464,14 +464,31 @@ static void ta(void *d)
 static void __new_port_logic_thread(void *t)
 {
   status_t r;
-
+  int i,port_num;
+  char buf[64];
+  port_msg_info_t msg_info;
+  ipc_gen_port_t *port;
+  
   kprintf( "[NEW PORT THREAD]: Starting ...\n" );
 
-  kprintf( "[NEW PORT THREAD]: Creating a port: " );
-  r=__ipc_create_port(current_task(),IPC_BLOCKED_ACCESS);
-  kprintf( "%d\n", r );
+  for(i=0;i<6;i++) {
+    kprintf( "[NEW PORT THREAD]: Creating a port: " );
+    r=__ipc_create_port(current_task(),IPC_BLOCKED_ACCESS);
+    kprintf( "%d\n", r );
+  }
 
-  kprintf( "[NEW POR THREAD]: Done !\n" );
+  port_num=4;
+  r=__ipc_get_port(current_task(),port_num,&port);
+  if( !r ) {
+    kprintf( "[NEW PORT THREAD]: Listening on port %d ...\n", port_num );  
+    r=__ipc_port_receive(port,IPC_BLOCKED_ACCESS,buf,sizeof(buf),
+                         &msg_info);
+    kprintf( "[NEW PORT THREAD]: r=%d\n", r );
+  } else {
+    kprintf( "[NEW PORT THREAD]: Can't resolve port %d ! r=%d\n",
+             port_num,r );
+  }
+  kprintf( "[NEW PORT THREAD]: Done !\n" );
   for(;;);
 }
 
