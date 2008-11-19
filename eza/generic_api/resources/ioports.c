@@ -36,7 +36,6 @@
 static MUTEX_DEFINE(ioports_lock);
 static struct rb_root ioports_root;
 
-/* FIXME DK: uncomment this data after mutex API becomes ready */
 #define LOCK_IOPORTS  mutex_lock(&ioports_lock)
 #define UNLOCK_IOPORTS  mutex_unlock(&ioports_lock)
 

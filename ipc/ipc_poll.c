@@ -70,9 +70,9 @@ status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
     return -EINVAL;
   }
 
-  if( !valid_user_address_range((uintptr_t)pfds,nfds*sizeof(pollfd_t)) ) {
+  /*if( !valid_user_address_range((uintptr_t)pfds,nfds*sizeof(pollfd_t)) ) {
     return -EFAULT;
-  }
+    }*/
 
   /* TODO: [mt] Add process memory limit check. [R] */
   if( use_slab ) {

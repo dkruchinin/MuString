@@ -44,7 +44,7 @@
 task_t *idle_tasks[MAX_CPUS];
 
 #define STEP 9200
-#define TICKS_TO_WAIT 19300
+#define TICKS_TO_WAIT 700
 
 ulong_t syscall_counter = 0;
 
@@ -335,6 +335,20 @@ static void timer_thread(void *data)
     for(;;);
 }
 
+/*static void creator(void *data)
+{
+  if( kernel_thread(ioport_thread,NULL) != 0 ) {
+    panic( "Can't create server thread for testing port IPC functionality !\n" );
+    }
+  
+  if( kernel_thread(thread2,NULL) != 0 ) {
+    panic( "Can't create server thread for testing port IPC functionality !\n" );
+  }
+  if( kernel_thread(thread3,NULL) != 0 ) {
+    panic( "Can't create client thread for testing port IPC functionality !\n" );
+  }
+}*/
+
 /*static wait_queue_t __wq;
 
 static void fn(void *data)
@@ -430,20 +444,11 @@ void idle_loop(void)
       }
   }
 */
-/*  
-  if( cpu_id() == 0 ) {
-          if( kernel_thread(ioport_thread,NULL) != 0 ) {
-      panic( "Can't create server thread for testing port IPC functionality !\n" );
-      }
+  
+  /*if( cpu_id() == 0 ) {
+      kernel_thread(creator, NULL);
+      }*/
 
-    if( kernel_thread(thread2,NULL) != 0 ) {
-      panic( "Can't create server thread for testing port IPC functionality !\n" );
-    }
-    if( kernel_thread(thread3,NULL) != 0 ) {
-      panic( "Can't create client thread for testing port IPC functionality !\n" );
-      }
-  }
-*/
   for( ;; ) {
     if( swks.system_ticks_64 >= target_tick ) {
       kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d), SYSCALLS: %d\n",

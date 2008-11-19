@@ -153,7 +153,7 @@ poll_event_t ipc_port_get_pending_events(ipc_port_t *port)
 void ipc_port_add_poller(ipc_port_t *port,task_t *poller, wait_queue_task_t *w)
 {
   waitqueue_prepare_task(w, poller);
-  IPC_LOCK_PORT_W(port);
+  IPC_LOCK_PORT_W(port);  
   waitqueue_insert(&port->waitqueue, w, WQ_INSERT_SIMPLE);
   IPC_UNLOCK_PORT_W(port);
 }
@@ -479,10 +479,10 @@ status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
     return -EINVAL;
   }
 
-  if( !valid_user_address((ulong_t)msg_info) ||
+  /*if( !valid_user_address((ulong_t)msg_info) ||
       !valid_user_address(recv_buf) ) {
       return -EFAULT;
-  }
+      }*/
 
   r = ipc_get_port(owner,port,&p);
   if( r )  {

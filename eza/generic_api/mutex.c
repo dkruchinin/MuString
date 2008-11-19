@@ -40,18 +40,24 @@ void mutex_initialize(mutex_t *mutex)
 
 void mutex_lock(mutex_t *mutex)
 {
+  spinlock_lock(&mutex->lock);
   if (!mutex_is_locked(mutex)) {
-    spinlock_lock(&mutex->lock);
     mutex->executer.task = current_task();
     mutex->max_prio = do_scheduler_control(current_task(), SYS_SCHED_CTL_GET_PRIORITY, 0);
     mutex->executer.priority = mutex->max_prio;
     ASSERT(mutex->max_prio >= 0);
-    spinlock_unlock(&mutex->lock);    
+    spinlock_unlock(&mutex->lock);
   }
   else {
     wait_queue_task_t cur;
+    
+    if (mutex->executer.task == current_task()) {
+      kprintf(KO_WARNING, "Task %p with pid %d locks mutex %p it already owns!\n",
+              current_task(), current_task()->pid, mutex);
+      spinlock_unlock(&mutex->lock);
+      return;
+    }
 
-    spinlock_lock(&mutex->lock);
     waitqueue_prepare_task(&cur, current_task());
     if (cur.priority < mutex->max_prio) {
       status_t ret;        
@@ -66,7 +72,7 @@ void mutex_lock(mutex_t *mutex)
     waitqueue_dump(&mutex->wq);
     spinlock_unlock(&mutex->lock);
     waitqueue_push(&mutex->wq, &cur);
-  }
+  }  
 }
 
 void mutex_unlock(mutex_t *mutex)

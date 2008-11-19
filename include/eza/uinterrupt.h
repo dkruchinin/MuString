@@ -54,7 +54,7 @@ typedef struct __userspace_events_data {
 
 struct __userspace_events_data *allocate_task_uspace_events_data(void);
 
-#define LOCK_TASK_USPACE_IRQS(t)  mutex_lock(&(t)->uspace_events->uspace_irqs.mutex)
-#define UNLOCK_TASK_USPACE_IRQS(t) mutex_unlock(&(t)->uspace_events->uspace_irqs.mutex)
+#define LOCK_TASK_USPACE_IRQS(t)  ;//mutex_lock(&(t)->uspace_events->uspace_irqs.mutex)
+#define UNLOCK_TASK_USPACE_IRQS(t) ;//mutex_unlock(&(t)->uspace_events->uspace_irqs.mutex)
 
 #endif

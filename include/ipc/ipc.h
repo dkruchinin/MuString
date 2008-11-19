@@ -58,8 +58,7 @@ status_t setup_task_ipc(task_t *task);
 void get_task_ipc(task_t *task);
 void release_task_ipc(task_t *task);
 
-/* FIXME DK: uncomment after debugging */
-#define LOCK_IPC(ipc) mutex_lock(&(ipc)->mutex);
+#define LOCK_IPC(ipc)  mutex_lock(&(ipc)->mutex)
 #define UNLOCK_IPC(ipc) mutex_unlock(&(ipc)->mutex);
 
 #define IPC_LOCK_PORTS(ipc) spinlock_lock(&ipc->port_lock)
