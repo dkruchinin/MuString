@@ -91,12 +91,12 @@ static void def_free_data_storage(struct __ipc_gen_port *port)
 {
 }
 
-static void requeue_message(struct __ipc_gen_port *port,ipc_port_message_t *msg)
+static void def_requeue_message(struct __ipc_gen_port *port,ipc_port_message_t *msg)
 {
-  def_port_data_storage_t *ds=(def_port_data_storage_t*)p->data_storage;
+  def_port_data_storage_t *ds=(def_port_data_storage_t*)port->data_storage;
 
   list_add2head(&ds->messages,&msg->l);
-  ds->message_ptrs[id]=msg;
+  ds->message_ptrs[msg->id]=msg;
   port->avail_messages++;
 }
 

@@ -51,6 +51,7 @@ typedef struct __ipc_port_msg_ops {
   ipc_port_message_t *(*extract_message)(struct __ipc_gen_port *port,ulong_t flags);
   void (*free_data_storage)(struct __ipc_gen_port *port);
   void (*requeue_message)(struct __ipc_gen_port *port,ipc_port_message_t *msg);
+  void (*post_receive_logic)(struct __ipc_gen_port *port,ipc_port_message_t *msg);
 } ipc_port_msg_ops_t;
 
 typedef struct __ipc_gen_port {

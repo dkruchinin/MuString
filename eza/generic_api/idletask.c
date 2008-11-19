@@ -465,17 +465,26 @@ ipc_gen_port_t *__s_port;
 
 static void __new_port_logic_client_thread(void *t)
 {
-  ipc_port_message_t *msg;
-  char *data="Hello, server !";
-
+  ipc_port_message_t *msg1,*msg2,*msg3;
+  char *data1="Hello, server 1!";
+  char *data2="Hello, server 2!";
+  char *data3="Hello, server 3!";
+  status_t r;
+  
   kprintf( "[NEW PORT CLIENT THREAD]: Starting ...\n" );
 
-  msg=__ipc_create_nb_port_message(current_task(),data,
-                                   strlen(data)+1);
-  if( msg != NULL ) {
-    kprintf( "[NEW PORT CLIENT THREAD]: Message data: %s, Len: %d\n",
-             msg->send_buffer,msg->data_size);
-    __ipc_port_send(__s_port,msg,0,0,0);
+  msg1=__ipc_create_nb_port_message(current_task(),data1,
+                                   strlen(data1)+1);
+  msg2=__ipc_create_nb_port_message(current_task(),data2,
+                                    strlen(data2)+1);
+  msg3=__ipc_create_nb_port_message(current_task(),data3,
+                                   strlen(data3)+1);
+  if( msg1 != NULL && msg2 != NULL && msg3 != NULL ) {
+    kprintf( "[NEW PORT CLIENT THREAD]: Sending 3 messages to the Server.\n" );
+    r=__ipc_port_send(__s_port,msg1,0,0,0);
+    r |=__ipc_port_send(__s_port,msg2,0,0,0);
+    r |=__ipc_port_send(__s_port,msg3,0,0,0);
+    kprintf( "[NEW PORT CLIENT THREAD]: Message send statistics: %d\n",r );
   }
   kprintf( "[NEW PORT CLIENT THREAD]: Done !\n" );
   for(;;);
@@ -492,7 +501,7 @@ static void __new_port_logic_thread(void *t)
 
   for(i=0;i<6;i++) {
     kprintf( "[NEW PORT THREAD]: Creating a port: " );
-    r=__ipc_create_port(current_task(),IPC_BLOCKED_ACCESS);
+    r=__ipc_create_port(current_task(),0);
     kprintf( "%d\n", r );
   }
 
@@ -503,14 +512,18 @@ static void __new_port_logic_thread(void *t)
       panic( "Can't create Migration thread !" );
     }
 
-    kprintf( "[NEW PORT THREAD]: Listening on port %d ...\n", port_num );  
-    r=__ipc_port_receive(__s_port,IPC_BLOCKED_ACCESS,buf,sizeof(buf),
-                         &msg_info);
-    kprintf( "[NEW PORT THREAD]: r=%d\n", r );
-    if( !r ) {
-      kprintf( "[NEW PORT THREAD]: Msg ID: %d, Data size: %d\n",
-               msg_info.msg_id,msg_info.msg_len);
-      kprintf( "Data: %s\n",buf );
+    while( 1 ) {
+      kprintf( "[NEW PORT THREAD]: Listening on port %d ...\n", port_num );
+      r=__ipc_port_receive(__s_port,IPC_BLOCKED_ACCESS,buf,sizeof(buf),
+                           &msg_info);
+      if( !r ) {
+        kprintf( "[NEW PORT THREAD]: Msg ID: %d, Data size: %d\n",
+                 msg_info.msg_id,msg_info.msg_len);
+        kprintf( "Data: %s\n", buf );
+      } else {
+        kprintf( "[NEW PORT THREAD]: Message receive failed ! %d\n", r );
+        break;
+      }
     }
   } else {
     kprintf( "[NEW PORT THREAD]: Can't resolve port %d ! r=%d\n",

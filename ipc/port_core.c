@@ -300,7 +300,8 @@ status_t __ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
   status_t r=-EINVAL;
   ipc_port_message_t *msg;
   task_t *owner=current_task();
-
+  ipc_port_msg_ops_t *msg_ops=port->msg_ops;
+  
   if( !recv_buf || !msg_info || !recv_len || !owner->ipc ) {
     return -EINVAL;
   }
@@ -329,9 +330,7 @@ recv_cycle:
       }
     } else {
       /* Got something ! */
-      msg = port->msg_ops->extract_message(port,flags);
-      /* To avoid races between threads that handle the same port. */
-      msg->receiver = owner;
+      msg=msg_ops->extract_message(port,flags);
     }
   }
   IPC_UNLOCK_PORT_W(port);
@@ -349,11 +348,18 @@ recv_cycle:
        */
       IPC_LOCK_PORT_W(port);
       if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
-        port->msg_ops->requeue_message(port,msg);
+        msg_ops->requeue_message(port,msg);
       } else {
         r=-EPIPE;
       }
       IPC_UNLOCK_PORT_W(port);
+    } else {
+      /* Message was successfully delivered to userspace, so perform some
+       * cleanups (if any).
+       */
+      if( msg_ops->post_receive_logic ) {
+        msg_ops->post_receive_logic(port,msg);
+      }
     }
   }
   return r;
