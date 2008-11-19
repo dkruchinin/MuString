@@ -113,6 +113,7 @@ extern void arch_sched_reset_current_need_resched(void);
 
 status_t sys_yield(void);
 status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
+status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg);
 status_t sleep(ulong_t ticks);
 
 static inline void grab_task_struct(task_t *t)

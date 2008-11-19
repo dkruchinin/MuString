@@ -35,6 +35,8 @@
 /* TODO: [mt] Manage NUM_PIDS properly ! */
 #define NUM_PIDS  32768
 
+#define TASK_PRIO_INVAL ((uint32_t)~0)
+
 /* PID-to-task_t translation hash stuff */
 #define PID_HASH_LEVEL_SHIFT  9 /* Levels of PID-to-task cache. */
 #define PID_HASH_LEVELS  (1 << PID_HASH_LEVEL_SHIFT)

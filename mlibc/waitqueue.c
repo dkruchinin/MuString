@@ -22,7 +22,7 @@
  */
 
 #include <ds/list.h>
-#include <mlibc/waitqueue.h>
+#include <ds/waitqueue.h>
 #include <eza/task.h>
 #include <eza/spinlock.h>
 #include <eza/scheduler.h>
@@ -59,7 +59,10 @@ static void __delete_task(wait_queue_t *wq, wait_queue_task_t *wq_task)
   if (!list_is_empty(&wq_task->head)) {
     wait_queue_task_t *t = list_entry(list_node_first(&wq_task->head),
                                       wait_queue_task_t, node);
+    list_del(&t->node);
     list_add(&wq_task->node, &t->node);
+    if (!list_is_empty(&wq_task->head))
+      list_move(list_head(&t->head), list_head(&t->head), &wq_task->head);
   }
 
   list_del(&wq_task->node);
@@ -83,8 +86,7 @@ status_t waitqueue_prepare_task(wait_queue_task_t *wq_task, task_t *task)
   list_init_head(&wq_task->head);
   wq_task->task = task;
   wq_task->q = NULL;
-  ret = sys_scheduler_control(task->pid, SYS_SCHED_CTL_GET_PRIORITY, 0);
-  kprintf("PRIO: %d\n", ret);
+  ret = do_scheduler_control(task, SYS_SCHED_CTL_GET_PRIORITY, 0);
   if (ret < 0)
     return ret;
 
@@ -95,7 +97,7 @@ status_t waitqueue_prepare_task(wait_queue_task_t *wq_task, task_t *task)
 status_t waitqueue_insert(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_insop_t iop)
 {
   status_t ret = 0;
-
+  
   spinlock_lock(&wq->q_lock);
   __insert_task(wq, wq_task);
   if (iop == WQ_INSERT_SLEEP)
@@ -108,21 +110,41 @@ status_t waitqueue_insert(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_i
 status_t waitqueue_delete(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_delop_t dop)
 {
   status_t ret = 0;
-  int irq;
+
+  if (waitqueue_is_empty(wq)) {
+    ret = -EINVAL;
+    goto out;
+  }
   
-  spinlock_lock_irqsave(&wq->q_lock, irq);
+  spinlock_lock(&wq->q_lock);
   __delete_task(wq, wq_task);
   if (dop == WQ_DELETE_WAKEUP)
     ret = sched_change_task_state(wq_task->task, TASK_STATE_RUNNABLE);
 
-  spinlock_unlock_irqrestore(&wq->q_lock, irq);
+  spinlock_unlock(&wq->q_lock);
+
+  out:
   return ret;
 }
 
+wait_queue_task_t *waitqueue_first_task(wait_queue_t *wq)
+{
+  wait_queue_task_t *t = NULL;
+  
+  if (!waitqueue_is_empty(wq)) {
+    spinlock_lock(&wq->q_lock);
+    t = list_entry(list_node_first(&wq->waiters), wait_queue_task_t, node);
+    spinlock_unlock(&wq->q_lock);
+  }
+
+  return t;
+}
+
 #ifdef DEBUG_WAITQUEUE
+#include <mlibc/kprintf.h>
+
 void waitqueue_dump(wait_queue_t *wq)
 {
-  kprintf("==> %d\n", waitqueue_is_empty(wq));
   if (waitqueue_is_empty(wq)) {
     kprintf("[WQ empty]\n");
     return;

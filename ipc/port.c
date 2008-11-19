@@ -25,7 +25,7 @@
 #include <ipc/port.h>
 #include <eza/task.h>
 #include <eza/errno.h>
-#include <eza/semaphore.h>
+#include <eza/mutex.h>
 #include <mm/pfalloc.h>
 #include <mm/page.h>
 #include <ds/linked_array.h>
@@ -33,7 +33,7 @@
 #include <eza/container.h>
 #include <ipc/buffer.h>
 #include <mlibc/stddef.h>
-#include <mlibc/waitqueue.h>
+#include <ds/waitqueue.h>
 #include <kernel/vm.h>
 #include <eza/arch/preempt.h>
 

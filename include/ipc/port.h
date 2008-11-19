@@ -30,7 +30,7 @@
 #include <eza/arch/atomic.h>
 #include <ds/linked_array.h>
 #include <ds/list.h>
-#include <mlibc/waitqueue.h>
+#include <ds/waitqueue.h>
 #include <eza/event.h>
 #include <ipc/buffer.h>
 #include <ipc/poll.h>

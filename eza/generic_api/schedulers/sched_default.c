@@ -169,7 +169,7 @@ static inline void __recalculate_timeslice_and_priority(task_t *task)
 {
   eza_sched_taskdata_t *tdata = EZA_TASK_SCHED_DATA(task);
   
-  /* Recalculate priority. */
+  /* Recalculate priority. */  
   tdata->priority = tdata->static_priority;
 
   switch(task->state) {
@@ -296,8 +296,8 @@ static void def_scheduler_tick(void)
       __remove_task_from_array(cpudata->active_array,current);
       __recalculate_timeslice_and_priority(current);
       __add_task_to_array(cpudata->active_array,current);
-      kprintf( "** CPU %d: TIMESLICE IS OVER ! NEXT TIMESLICE: %d\n",
-               cpu_id(), tdata->time_slice );
+      /*kprintf( "** CPU %d: TIMESLICE IS OVER ! NEXT TIMESLICE: %d\n",
+        cpu_id(), tdata->time_slice );*/
       sched_set_current_need_resched();
     }
   } else if( discipl == SCHED_FIFO ) {
