@@ -23,7 +23,7 @@
 
 #include <eza/arch/types.h>
 #include <eza/resource.h>
-#include <mm/pt.h>
+#include <mm/mmap.h>
 #include <mm/pfalloc.h>
 #include <eza/kstack.h>
 #include <eza/spinlock.h>
@@ -146,7 +146,7 @@ static void initialize_cpu_sched_data(eza_sched_cpudata_t *cpudata, cpu_id_t cpu
     }
   }
 
-  spinlock_initialize(&cpudata->lock, "Eza scheduler runqueue lock");
+  spinlock_initialize(&cpudata->lock);
   cpudata->active_array = &cpudata->arrays[0];
 
   /* Initialize scheduler statistics for this CPU. */
@@ -163,7 +163,7 @@ static status_t setup_new_task(task_t *task)
   }
 
   list_init_node(&sdata->runlist);
-  spinlock_initialize(&sdata->sched_lock, "EZA task data lock");
+  spinlock_initialize(&sdata->sched_lock);
 
   LOCK_TASK_STRUCT(task);
   task->sched_data = sdata;
@@ -308,8 +308,8 @@ static void def_scheduler_tick(void)
       __remove_task_from_array(cpudata->active_array,current);
       __recalculate_timeslice_and_priority(current);
       __add_task_to_array(cpudata->active_array,current);
-      //kprintf( "** CPU %d: TIMESLICE IS OVER ! NEXT TIMESLICE: %d\n",
-            //   cpu_id(), tdata->time_slice );
+      /*kprintf( "** CPU %d: TIMESLICE IS OVER ! NEXT TIMESLICE: %d\n",
+        cpu_id(), tdata->time_slice );*/
       sched_set_current_need_resched();
     }
   } else if( discipl == SCHED_FIFO ) {
@@ -460,6 +460,7 @@ static void def_schedule(void)
 
   UNLOCK_TASK_STRUCT(current);
 
+
   if( sched_verbose ) {
     kprintf( "** [%d] RESCHED TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , TS: %d **\n",
              cpu_id(), current_task()->pid, need_switch,
@@ -479,7 +480,7 @@ static void def_reset(void)
 {
   int i;
 
-  spinlock_initialize(&cpu_data_lock, "Eza def scheduler lock");
+  spinlock_initialize(&cpu_data_lock);
 
   for(i=0;i<EZA_SCHED_CPUS;i++) {
     sched_cpu_data[i] = NULL;
@@ -509,7 +510,7 @@ static status_t __change_local_task_state(task_t *task,task_state_t new_state,
   }
 
   switch(new_state) {
-    case TASK_STATE_RUNNABLE:
+   case TASK_STATE_RUNNABLE:
       if( prev_state == TASK_STATE_JUST_BORN
 	  || prev_state == TASK_STATE_STOPPED ||
           prev_state == TASK_STATE_SLEEPING ) {
@@ -519,7 +520,7 @@ static status_t __change_local_task_state(task_t *task,task_state_t new_state,
       break;
     case TASK_STATE_STOPPED:
     case TASK_STATE_SLEEPING:
-        if( task->state == TASK_STATE_RUNNABLE
+      if( task->state == TASK_STATE_RUNNABLE
 	    || task->state == TASK_STATE_RUNNING ) {
 	  __deactivate_local_task(task,sched_data);
           r = 0;
@@ -578,7 +579,6 @@ change_task_state:
              cpu_id(),in_atomic(), current_task_needs_resched(), is,
              is_interrupts_enabled() );
   }
-
   cond_reschedule();
   return r;
 }

@@ -1,11 +1,6 @@
 #!/usr/bin/env python
 #
-# (c) Copyright MString core development team <http://mstring.berlios.de>
-# (c) Copyright Tirra <tirra.newly@gmail.com> 
-#
-# gmap.py: generates binary map for linking muikernel
-# it's idea was in my brains - but I don't know 
-# it's my own idea or not ... 
+# Taken from HelenOS
 #
 
 import sys

@@ -37,8 +37,8 @@
 #include <eza/def_actions.h>
 
 /*spinlock*/
-static spinlock_declare(timer_lock);
-static spinlock_declare(sw_timers_lock);
+static SPINLOCK_DEFINE(timer_lock);
+static SPINLOCK_DEFINE(sw_timers_lock);
 
 /*list of the timers*/
 static LIST_DEFINE(known_hw_timers);

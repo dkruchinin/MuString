@@ -21,7 +21,7 @@
  */
 
 #include <eza/task.h>
-#include <mm/pt.h>
+#include <mm/mmap.h>
 #include <eza/smp.h>
 #include <eza/kstack.h>
 #include <eza/errno.h>
@@ -59,7 +59,7 @@ void initialize_process_subsystem(void)
 
   /* Now initialize PID-hash arrays. */
   for( i=0; i<PID_HASH_LEVELS; i++ ) {
-    rw_spinlock_initialize(&pid_to_struct_locks[i], "PID-to-task lock");
+    rw_spinlock_initialize(&pid_to_struct_locks[i]);
     list_init_head(&pid_to_struct_hash[i]);
   }
 }

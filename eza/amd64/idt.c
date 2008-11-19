@@ -77,7 +77,7 @@ static void __initialize(void)
   amd64_idt_entry_t *e;
   irq_t avail;
 
-  spinlock_initialize(&amd64_idt_lock, "AMD64 IDT table lock");
+  spinlock_initialize(&amd64_idt_lock);
 
   avail = 0;
   for(i=0,e=amd64_idt_table.idt_entries;i<AMD64_IDT_ENTRIES;i++,e++) {

@@ -31,14 +31,13 @@
 #include <mm/mm.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
-#include <mm/pt.h>
+#include <mm/mmap.h>
 #include <mm/pfalloc.h>
 #include <eza/arch/page.h>
 #include <eza/arch/smp.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 #include <eza/swks.h>
-#include <eza/arch/mm_types.h>
 #include <mm/idalloc.h>
 #include <config.h>
 
@@ -46,8 +45,6 @@ extern volatile struct __local_apic_t *local_apic;
 
 static int __map_apic_page(void)
 {
-  page_frame_iterator_t pfi;
-  ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
   int32_t res;
   uintptr_t apic_vaddr;
 
@@ -56,13 +53,7 @@ static int __map_apic_page(void)
     panic( "[MM] Can't allocate memory range for mapping APIC !\n" );
   }
 
-  mm_init_pfiter_index(&pfi, &pfi_index_ctx,
-                       APIC_BASE >> PAGE_WIDTH,
-                       APIC_BASE >> PAGE_WIDTH);
-
-  res=__mm_map_pages(&pfi,apic_vaddr,1,
-                     MAP_KERNEL | MAP_RW | MAP_DONTCACHE);
-
+  res = mmap_kern(apic_vaddr, APIC_BASE >> PAGE_WIDTH, 1, MAP_RW | MAP_DONTCACHE | MAP_EXEC);
   if(res<0) {
     panic("[MM] Cannot map IO page for APIC.\n");
   }
@@ -73,17 +64,9 @@ static int __map_apic_page(void)
 
 static int __map_ioapic_page(void)
 {
-  page_frame_iterator_t pfi;
-  ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
   uint32_t res;
 
-  mm_init_pfiter_index(&pfi, &pfi_index_ctx,
-                       IOAPIC_BASE >> PAGE_WIDTH,
-                       IOAPIC_BASE >> PAGE_WIDTH);
-
-  res=__mm_map_pages(&pfi,IOAPIC_BASE,1,
-                     MAP_KERNEL | MAP_RW | MAP_DONTCACHE);
-
+  res = mmap_kern(IOAPIC_BASE, IOAPIC_BASE >> PAGE_WIDTH, 1, MAP_RW | MAP_DONTCACHE);
   if(res<0) {
     kprintf("[MM] Cannot map IO page for IO APIC.\n");
     return -1;

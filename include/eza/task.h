@@ -28,12 +28,14 @@
 #include <eza/kstack.h>
 #include <eza/arch/context.h>
 #include <mlibc/index_array.h>
-#include <mm/pt.h>
+#include <mm/page.h>
 #include <eza/limits.h>
 
 #define INVALID_PID  ((pid_t)~0) 
 /* TODO: [mt] Manage NUM_PIDS properly ! */
 #define NUM_PIDS  32768
+
+#define TASK_PRIO_INVAL ((uint32_t)~0)
 
 /* PID-to-task_t translation hash stuff */
 #define PID_HASH_LEVEL_SHIFT  9 /* Levels of PID-to-task cache. */
@@ -97,7 +99,7 @@ typedef struct __task_struct {
   priority_t static_priority, priority;
 
   kernel_stack_t kernel_stack;
-  page_directory_t page_dir;
+  page_frame_t *page_dir;
   list_node_t pid_list;
   ulong_t flags;
 

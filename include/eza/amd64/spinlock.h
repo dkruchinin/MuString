@@ -16,9 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
- * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>:
- *       add: bit locks, *_is_locked and *_trylock functions family
- *       simple redisign: replace macros to inlines.
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
  * include/eza/amd64/spinlock.h: spinlock and atomic amd64 specific and 
  *                               extended functions
@@ -33,10 +31,10 @@
 #include <eza/arch/bitwise.h>
 #include <eza/arch/asm.h>
 
-#ifdef CONFIG_SMP
 #define __SPINLOCK_LOCKED_V   1
 #define __SPINLOCK_UNLOCKED_V 0
 
+#ifdef CONFIG_SMP
 typedef struct __spinlock_type {
     long_t __spin_val;
 } spinlock_t;
@@ -147,8 +145,8 @@ static always_inline void arch_spinlock_unlock_write(rw_spinlock_t *lock)
 
 /* TODO DK: implement trylock and is_locked form RW spinlocks */
 #else /* !CONFIG_SMP */
-typedef long spinlock_t;
-typedef long rw_spinlock_t;
+typedef int spinlock_t;
+typedef int rw_spinlock_t;
 #endif /* CONFIG_SMP */
 
 #endif /* __AMD64_SPINLOCK_H__ */

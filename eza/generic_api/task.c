@@ -20,17 +20,15 @@
  * eza/generic_api/task.c: generic functions for dealing with task creation.
  */
 
-#include <ds/iterator.h>
 #include <ds/list.h>
 #include <eza/task.h>
-#include <mm/pt.h>
 #include <eza/smp.h>
 #include <eza/kstack.h>
 #include <eza/errno.h>
 #include <mm/mm.h>
 #include <mm/pfalloc.h>
+#include <mm/mmap.h>
 #include <eza/amd64/context.h>
-#include <mlibc/kprintf.h>
 #include <eza/arch/scheduler.h>
 #include <eza/arch/types.h>
 #include <eza/kernel.h>
@@ -68,7 +66,7 @@ void initialize_task_subsystem(void)
 {
   pid_t idle;
 
-  spinlock_initialize(&pid_array_lock,"PID array spinlock");
+  spinlock_initialize(&pid_array_lock);
 
   if( !index_array_initialize(&pid_array, NUM_PIDS) ) {
     panic( "initialize_task_subsystem(): Can't initialize PID index array !" );
@@ -198,9 +196,10 @@ static task_t *__allocate_task_struct(void)
 
     list_init_head(&task->children);
     list_init_head(&task->threads);
-    spinlock_initialize(&task->lock, "Task lock");
-    spinlock_initialize(&task->child_lock, "Task child lock");
-    spinlock_initialize(&task->member_lock, "Task member lock" );
+
+    spinlock_initialize(&task->lock);
+    spinlock_initialize(&task->child_lock);
+    spinlock_initialize(&task->member_lock);
 
     task->flags = 0;
     task->group_leader=task;
@@ -229,8 +228,6 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
   task_t *task;
   status_t r = -ENOMEM;
   page_frame_t *stack_pages;
-  page_frame_iterator_t pfi;
-  ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_idx_ctx;
   pid_t pid;
   tid_t tid;
   task_limits_t *limits;
@@ -273,13 +270,8 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
     goto free_mm;
   }
 
-  /* Map kernel stack. */
-  mm_init_pfiter_index(&pfi, &pfi_idx_ctx,
-                       pframe_number(stack_pages),
-                       pframe_number(stack_pages) + KERNEL_STACK_PAGES - 1);
-  r = mm_map_pages( &task->page_dir, &pfi,
-                    task->kernel_stack.low_address, KERNEL_STACK_PAGES,
-                    MAP_KERNEL | MAP_RW);
+  r = mmap(task->page_dir, task->kernel_stack.low_address, pframe_number(stack_pages),
+           KERNEL_STACK_PAGES, MAP_RW);
   if( r != 0 ) {
     goto free_stack_pages;
   }

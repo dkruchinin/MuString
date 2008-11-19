@@ -22,6 +22,7 @@
 
 #include <eza/kernel.h>
 #include <mlibc/kprintf.h>
+#include <ds/waitqueue.h>
 #include <eza/smp.h>
 #include <eza/arch/scheduler.h>
 #include <eza/arch/types.h>
@@ -42,6 +43,7 @@
 #include <eza/gc.h>
 
 task_t *idle_tasks[MAX_CPUS];
+
 
 #define STEP 600
 #define TICKS_TO_WAIT 300
@@ -294,35 +296,28 @@ typedef struct __irq_arrray {
 
 static irq_array_t __irq_array __attribute__((aligned(PAGE_SIZE)));
 
-void interrupt_thread_isr(void *data)
+void interrupt_thread(void *data)
 {
     ulong_t irqs[]={10,6,1,4};
     static int num_irqs=4;
     status_t id=sys_create_irq_counter_array(irqs,num_irqs,
                                              &__irq_array,0);
-    kprintf( "[ISR Thread]: IRQ buffer id: %d\n",id );
+    kprintf( "IRQ buffer id: %d\n",id );
 
     if( id >= 0 ) {
         int i=0;
         status_t r;
         char code;
-        int pid=current_task()->pid;
-
-        r= sys_scheduler_control(pid,SYS_SCHED_CTL_SET_PRIORITY,32);
-        kprintf( "SCHED_CTRL FOR %d: %d\n",pid,r );
-        if( r !=0 ) {
-            for(;;);
-        }
 
         code=inb(0x60);
         while( i < 5000000 ) {
-            kprintf( "[ISR Thread] Waiting for irqs to arrive ...\n" );
+            kprintf( "Waiting for irqs to arrive ...\n" );
             r=sys_wait_on_irq_array(id);
             if( !r ) {
                 ulong_t mask=__irq_array.ev_mask;
                 __irq_array.ev_mask=0;
                 code=inb(0x60);
-                kprintf( "[ISR Thread] CNT: %d, KEY: %d, EVENT MASK: %X\n",
+                kprintf( "CNT: %d, KEY: %d, EVENT MASK: %X\n",
                          __irq_array.irq_counters[2],
                          (int)code,
                          mask);
@@ -359,6 +354,7 @@ static void __ticker(void *data)
    }  
 }
 
+
 void interrupt_thread(void *data) {
    uint64_t target_tick = swks.system_ticks_64 + 100;
 
@@ -381,6 +377,8 @@ void interrupt_thread(void *data) {
    }
 }
 
+=======
+>>>>>>> .merge_file_yqwo6J
 status_t sys_log(ulong_t s)
 {
     kprintf( "LOG: %d\n",s );
@@ -400,6 +398,7 @@ static void timer_thread(void *data)
     kprintf( "[KERNEL THREAD] Got woken up !\n" );
     for(;;);
 }
+
 
 static void traveller_thread(void *d)
 {
@@ -460,6 +459,92 @@ static void ta(void *d)
   kprintf( ">>> ACTION !\n" );
 }
 
+/*static void creator(void *data)
+{
+  if( kernel_thread(ioport_thread,NULL) != 0 ) {
+    panic( "Can't create server thread for testing port IPC functionality !\n" );
+    }
+  
+  if( kernel_thread(thread2,NULL) != 0 ) {
+    panic( "Can't create server thread for testing port IPC functionality !\n" );
+  }
+  if( kernel_thread(thread3,NULL) != 0 ) {
+    panic( "Can't create client thread for testing port IPC functionality !\n" );
+  }
+}*/
+
+/*static wait_queue_t __wq;
+
+static void fn(void *data)
+{
+  int i = 0, j;
+
+  wait_queue_task_t t;  
+  sys_scheduler_control(current_task()->pid, SYS_SCHED_CTL_SET_PRIORITY, (int)data);
+  waitqueue_prepare_task(&t, current_task());
+  for (j = 0; j < 20; j++) {    
+    kprintf("Hi, I'm %d\n", (int)data);
+    if (!i) {                                   \
+      i++;
+      waitqueue_push(&__wq, &t);      
+    }
+  }
+
+  sleep(100000);
+  }
+
+static void fn_god(void *data)
+{
+  int d = 10;
+  kprintf("Hi, I'm god! I'm going to create %d threads\n", d);
+  while (d--) {
+    kernel_thread(fn, (void *)(d + 5));
+  }
+  while (++d < 8) {
+    kernel_thread(fn, (void *)(d + 5));
+  }
+
+  kernel_thread(fn, (void *)4);
+  while (__wq.num_waiters != 19);
+  waitqueue_dump(&__wq);
+  while (!waitqueue_is_empty(&__wq)) {
+    kprintf("Pop one guy... ... %d\n", __wq.num_waiters);
+    waitqueue_pop(&__wq);
+    waitqueue_dump(&__wq);
+  }
+  
+  sleep(100000);
+  }*/
+
+/*#include <eza/mutex.h>
+static MUTEX_DEFINE(__mutex);
+
+static void thread_mutex_locker(void *data)
+{
+  int i, limit = 25;
+  int prio = (int)data;
+  if (prio < 14)
+    prio = 14;
+  sys_scheduler_control(current_task()->pid, SYS_SCHED_CTL_SET_PRIORITY, (int)prio);
+  kprintf("I am %d, p = %d\n", current_task()->pid, prio);
+  mutex_lock(&__mutex);
+  kprintf("I locked the mutex\n");  
+  for (i = 0; i < limit; i++) {
+    kprintf("My priority is %d (i=%d)\n", sys_scheduler_control(current_task()->pid, SYS_SCHED_CTL_GET_PRIORITY, 0), i);
+    sleep(100);
+  }
+
+  mutex_unlock(&__mutex);
+  sleep(10000000);
+  }
+
+static void runner(void *data)
+{
+  int i;
+  for (i = 10; i > 0; i--)
+    kernel_thread(thread_mutex_locker, (void *)(i + 10));
+    }*/
+
 void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
@@ -477,6 +562,10 @@ void idle_loop(void)
     }
   }
 */
+  /*waitqueue_initialize(&__wq);
+  if (!cpu_id()) {
+    kernel_thread(fn_god, NULL);
+    }*/
   /*
   if( cpu_id() == 0 ) {
       if( kernel_thread(timer_thread,NULL,NULL) != 0 ) {
@@ -486,8 +575,8 @@ void idle_loop(void)
   */
   /*
   if( cpu_id() == 0 ) {
-      if( kernel_thread(interrupt_thread,NULL,NULL) != 0 ) {
-          panic( "Can't create server thread for testing interrupt events !\n" );
+      if( kernel_thread(interrupt_thread,NULL) != 0 ) {
+          panic( "Can't create server thread for testing port IPC functionality !\n" );
       }
   }
   */
@@ -501,20 +590,11 @@ void idle_loop(void)
     }
   }
 */
-/*  
-  if( cpu_id() == 0 ) {
-          if( kernel_thread(ioport_thread,NULL) != 0 ) {
-      panic( "Can't create server thread for testing port IPC functionality !\n" );
-      }
+  
+  /*if( cpu_id() == 0 ) {
+      kernel_thread(creator, NULL);
+      }*/
 
-    if( kernel_thread(thread2,NULL) != 0 ) {
-      panic( "Can't create server thread for testing port IPC functionality !\n" );
-    }
-    if( kernel_thread(thread3,NULL) != 0 ) {
-      panic( "Can't create client thread for testing port IPC functionality !\n" );
-      }
-  }
-*/
   for( ;; ) {
     if( swks.system_ticks_64 >= target_tick ) {
       kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d), SYSCALLS: %d\n",
@@ -533,3 +613,4 @@ void idle_loop(void)
       }*/
   }
 }
+

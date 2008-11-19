@@ -182,7 +182,7 @@ void initialize_irqs( void )
     irqs[i].flags = 0;
   }
 
-  spinlock_initialize( &irq_lock, "irq_lock" );
+  spinlock_initialize( &irq_lock );
 }
 
 void disable_all_irqs(void)

@@ -33,7 +33,7 @@
 #include <mm/mm.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
-#include <mm/pt.h>
+#include <mm/mmap.h>
 #include <mlibc/kprintf.h>
 #include <server.h>
 #include <kernel/vm.h> 
@@ -47,11 +47,10 @@
 status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_t offset)
 {
   page_frame_t *aframe;
-  page_frame_iterator_t pfi;
-  ITERATOR_CTX(page_frame,PF_ITER_INDEX) pfi_idx_ctx;
   status_t e;
   task_t *task;
-  int _flags;
+  int _flags = MAP_USER | MAP_EXEC;
+
 #if 0
   mm_pool_t *pool;
 #endif
@@ -76,8 +75,8 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
 #if 0
       kprintf("mmap() yummie fuck\n");
 #endif
-      mm_init_pfiter_index(&pfi,&pfi_idx_ctx,offset>>PAGE_WIDTH,(offset>>PAGE_WIDTH) + size - 1);
-      e=mm_map_pages(&task->page_dir,&pfi,addr,size,MAP_RW|MMAP_NONCACHABLE); /* TODO: ak, valid mapping */
+      e=mmap(task->page_dir, addr, offset >> PAGE_WIDTH, size,
+             MAP_USER | MAP_RW | MAP_EXEC | MMAP_NONCACHABLE);
       if(e!=0) return e;
 #if 0
       kprintf("mmap() OK\n");
@@ -94,19 +93,15 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
     if(!aframe)
       return -ENOMEM; /* no free pages to allocate */
 
-    _flags=0;
     if(flags & MMAP_RW) /*map_rd map_rdonly*/
       _flags |= MAP_RW;
-    if(flags & MMAP_RDONLY)
-      _flags|= MAP_RDONLY;
+    else if(flags & MMAP_RDONLY)
+      _flags |= MAP_READ;
 
-    mm_init_pfiter_index(&pfi,&pfi_idx_ctx,pframe_number(aframe),pframe_number(aframe)+size);
-    e=mm_map_pages(&task->page_dir,&pfi,addr,size,_flags); /* TODO: ak, valid mapping */
+    e=mmap(task->page_dir, addr, pframe_number(aframe), size, _flags);
     if(e!=0) return e;
   } else 
     return -ENOSYS;
-  
-
 
   return 0;
 }

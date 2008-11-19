@@ -31,7 +31,6 @@
 #include <eza/arch/types.h>
 #include <eza/arch/bits.h>
 #include <eza/task.h>
-#include <mm/pt.h>
 #include <eza/scheduler.h>
 #include <eza/swks.h>
 #include <eza/kstack.h>
@@ -69,7 +68,7 @@ static list_head_t migration_actions[NR_CPUS];
 static void initialize_sched_internals(void)
 {
   list_init_head(&schedulers);
-  spinlock_initialize(&scheduler_lock, "Scheduler lock");
+  spinlock_initialize(&scheduler_lock);
 }
 
 void initialize_scheduler(void)

@@ -14,8 +14,11 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2005,2008 Tirra <tirra.newly@gmail.com>
+ * Originaly based on amd64/boot/boot.S from HelenOS written by:
+ *  Copyright (C) 2005 Ondrej Palkovsky
+ *  Copyright (C) 2006 Martin Decky
+ * Modified by:
+ *  (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
  *
  * /eza/amd64/boot.S: boostrap for amd64 with base init and long mode 
  *                    switching

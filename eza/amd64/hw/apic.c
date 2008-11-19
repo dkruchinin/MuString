@@ -36,9 +36,7 @@
 #include <mlibc/unistd.h>
 #include <mlibc/string.h>
 #include <eza/arch/interrupt.h>
-#ifdef CONFIG_SMP
 #include <eza/arch/smp.h>
-#endif
 
 /*
  * Black mages from intel and amd wrote that
