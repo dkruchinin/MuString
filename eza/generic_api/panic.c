@@ -36,8 +36,8 @@ void panic(const char *fmt, ...)
   va_list ap;
   char panic_buf[PANIC_BUF_SIZE];
 
-//  interrupts_disable();
-//  default_console()->enable();
+  interrupts_disable();
+  default_console()->enable();
 
   va_start(ap, fmt);
   vsnprintf(panic_buf, sizeof(panic_buf), fmt, ap);

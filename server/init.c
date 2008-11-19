@@ -219,9 +219,13 @@ void server_run_tasks(void)
     }
 
     /* After creating the NameServer we should spawn all per-cpu threads. */
-    if( !a ) {
+    /*
+     * FIXME [MT]: spawn_run_tasks panics if it can not move task from one CPU to another.
+     * This occurs if spawn_run_tasks runs *before* the second CPU was enabled.
+     */
+    /*if( !a ) {
       spawn_percpu_threads();
-    }
+      }*/
 
     r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
     if( r ) {

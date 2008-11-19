@@ -355,30 +355,6 @@ static void __ticker(void *data)
 }
 
 
-void interrupt_thread(void *data) {
-   uint64_t target_tick = swks.system_ticks_64 + 100;
-
-   if( kernel_thread(__ticker,NULL,NULL) != 0 ) {
-       panic( "Can't create ISR thread for testing interrupt events !\n" );
-   }
-
-   kprintf( " + [Interrupt thread] Starting ... Ticks: %d, Target tick: %d\n",
-            swks.system_ticks_64, target_tick);
-
-   kprintf( " + [Interrupt thread] Exiting ...\n" );
-   sys_exit(0);
-
-   while(1) {
-       if( swks.system_ticks_64 >= target_tick ) {
-           kprintf( " + [Interrupt thread] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
-                    cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
-           target_tick += STEP;
-       }
-   }
-}
-
-=======
->>>>>>> .merge_file_yqwo6J
 status_t sys_log(ulong_t s)
 {
     kprintf( "LOG: %d\n",s );
