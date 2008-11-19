@@ -64,9 +64,9 @@ typedef struct __ipc_gen_port {
   void *data_storage;
 } ipc_gen_port_t;
 
-status_t __ipc_port_send_message(ipc_gen_port_t *port,
-                                 ipc_port_message_t *msg,ulong_t flags,
-                                 uintptr_t rcv_buf,ulong_t rcv_size);
+status_t __ipc_port_send(ipc_gen_port_t *port,
+                         ipc_port_message_t *msg,ulong_t flags,
+                         uintptr_t rcv_buf,ulong_t rcv_size);
 status_t __ipc_create_port(task_t *owner,ulong_t flags);
 status_t __ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
                             ulong_t recv_buf,ulong_t recv_len,
@@ -76,5 +76,15 @@ status_t __ipc_get_port(task_t *task,ulong_t port,ipc_gen_port_t **out_port);
 extern ipc_port_msg_ops_t nonblock_port_msg_ops;
 extern ipc_port_msg_ops_t def_port_msg_ops;
 /****************************************************************************/
+
+ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf,
+                                                 ulong_t snd_size);
+
+#define IPC_NB_MESSAGE_MAXLEN  (512-sizeof(ipc_port_message_t))
+
+#define IPC_RESET_MESSAGE(m,t)   do {           \
+    event_initialize(&m->event);                \
+    event_set_task(&m->event,t);                \
+  } while(0)
 
 #endif

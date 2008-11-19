@@ -48,6 +48,8 @@ static status_t def_init_data_storage(struct __ipc_gen_port *port,
     goto free_messages;
   }
 
+  list_init_head(&ds->messages);
+  port->data_storage=ds;
   return 0;
 free_messages:
   free_pages_addr(ds->message_ptrs);
@@ -59,7 +61,17 @@ free_ds:
 static status_t def_insert_message(struct __ipc_gen_port *port,
                                    ipc_port_message_t *msg,ulong_t flags)
 {
-  return 0;
+  def_port_data_storage_t *ds=(def_port_data_storage_t *)port->data_storage;
+  ulong_t id=linked_array_alloc_item(&ds->msg_array);
+
+  if( id != INVALID_ITEM_IDX ) {
+    msg->id=id;
+    list_add2tail(&ds->messages,&msg->l);
+    ds->message_ptrs[id]=msg;
+    port->avail_messages++;
+    return 0;
+  }
+  return -ENOMEM;  
 }
 
 /* NOTE: port must be locked before calling this function ! */
@@ -79,9 +91,19 @@ static void def_free_data_storage(struct __ipc_gen_port *port)
 {
 }
 
+static void requeue_message(struct __ipc_gen_port *port,ipc_port_message_t *msg)
+{
+  def_port_data_storage_t *ds=(def_port_data_storage_t*)p->data_storage;
+
+  list_add2head(&ds->messages,&msg->l);
+  ds->message_ptrs[id]=msg;
+  port->avail_messages++;
+}
+
 ipc_port_msg_ops_t def_port_msg_ops = {
-  .init_data_storage = def_init_data_storage,
-  .insert_message = def_insert_message,
-  .free_data_storage = def_free_data_storage,
-  .extract_message = def_extract_message,
+  .init_data_storage=def_init_data_storage,
+  .insert_message=def_insert_message,
+  .free_data_storage=def_free_data_storage,
+  .extract_message=def_extract_message,
+  .requeue_message=def_requeue_message,
 };

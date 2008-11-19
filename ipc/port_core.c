@@ -39,6 +39,29 @@
 #include <mm/slab.h>
 #include <ipc/gen_port.h>
 
+ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf,
+                                                 ulong_t snd_size)
+{
+  if( snd_size <= IPC_NB_MESSAGE_MAXLEN && snd_size ) {
+    ipc_port_message_t *msg=memalloc(sizeof(*msg)+snd_size);
+    if( msg ) {
+      memset(msg,0,sizeof(*msg));
+      IPC_RESET_MESSAGE(msg,owner);
+      msg->send_buffer=(void *)((char *)msg+sizeof(*msg));
+      msg->data_size=snd_size;
+      msg->reply_size=0;
+      msg->sender=owner;
+
+      if( !copy_from_user(msg->send_buffer,snd_buf,snd_size) ) {
+        return msg;
+      } else {
+        memfree(msg);
+      }
+    }
+  }
+  return NULL;
+}
+
 static void __notify_message_arrived(ipc_gen_port_t *port)
 {
   waitqueue_wake_one_task(&port->waitqueue);
@@ -82,15 +105,26 @@ static status_t __transfer_reply_data(ipc_port_message_t *msg,
   return r;
 }
 
-status_t __ipc_port_send_message(struct __ipc_gen_port *port,
-                                 ipc_port_message_t *msg,ulong_t flags,
-                                 uintptr_t rcv_buf,ulong_t rcv_size)
+status_t __ipc_port_send(struct __ipc_gen_port *port,
+                         ipc_port_message_t *msg,ulong_t flags,
+                         uintptr_t rcv_buf,ulong_t rcv_size)
 {
   ipc_port_msg_ops_t *msg_ops=port->msg_ops;
   status_t r;
   task_t *sender=current_task();
 
-  r=msg_ops->insert_message(port,msg,flags);
+  if( !msg_ops->insert_message ) {
+    return -EINVAL;
+  }
+
+  IPC_LOCK_PORT_W(port);
+  if( !(port->flags & IPC_PORT_SHUTDOWN ) ) {
+    r=msg_ops->insert_message(port,msg,flags);
+  } else {
+    r=-EPIPE;
+  }
+  IPC_UNLOCK_PORT_W(port);
+
   if( r ) {
     return r;
   }
@@ -99,9 +133,11 @@ status_t __ipc_port_send_message(struct __ipc_gen_port *port,
 
   /* Sender should wait for the reply, so put it into sleep here. */
   if( flags & IPC_BLOCKED_ACCESS ) {
+    kprintf( "  * Waiting for reply.\n" );
     IPC_TASK_ACCT_OPERATION(sender);
     event_yield( &msg->event );
     IPC_TASK_UNACCT_OPERATION(sender);
+    kprintf( "  * Got a reply: %d\n",msg->replied_size );
 
     r=msg->replied_size;
     if( r >= 0 ) {
@@ -249,7 +285,6 @@ static status_t __transfer_message_data_to_receiver(ipc_port_message_t *msg,
       info.sender_pid=msg->sender->pid;
       info.msg_id=msg->id;
       info.msg_len=recv_len;
-
       if( copy_to_user(stats,&info,sizeof(info)) ) {
         r=-EFAULT;
       }
@@ -287,9 +322,7 @@ recv_cycle:
        * since in will be unlocked after putting the receiver in the
        * port's waitqueue.
        */
-        kprintf( " * Sleeping ...\n" );
         __put_receiver_into_sleep(owner,port);
-        kprintf( " * Got woken up !\n" );
         goto recv_cycle;
       } else {
         r = -EWOULDBLOCK;
