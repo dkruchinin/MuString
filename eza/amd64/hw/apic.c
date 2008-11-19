@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
+ * (c) Copyright 2008 Dmitry Gromada <gromada82@gmail.com>
  *
  * eza/amd64/apic.c: implements local APIC support driver.
  *
@@ -35,6 +36,7 @@
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 #include <mlibc/string.h>
+#include <mlibc/bitwise.h>
 #include <eza/arch/interrupt.h>
 #ifdef CONFIG_SMP
 #include <eza/arch/smp.h>
@@ -48,7 +50,14 @@
  * abstraction not being implemented.
  */
 
-volatile struct __local_apic_t *local_apic;
+volatile struct __local_apic_t *local_apic; 
+static int apics_number;
+
+#if (NR_CPUS > 8)
+	uint8_t dest_mode = DMODE_PHY;
+#else
+	uint8_t dest_mode = DMODE_LOGIC;
+#endif
 
 /*
  * default functions to access APIC (local APIC)
@@ -232,13 +241,9 @@ static inline void enable_l_apic_in_msr()
 		    );
 }
 
-
-extern void io_apic_disable_all(void);
-
-/*init functions makes me happy*/
-void local_bsp_apic_init(void)
+static int __local_apic_init(void)
 {
-  uint32_t v;
+	uint32_t v;
   int i=0,l;
   apic_lvt_lint_t lvt_lint;
   apic_icr1_t icr1;
@@ -246,13 +251,11 @@ void local_bsp_apic_init(void)
   kprintf("[LW] Checking APIC is present ... ");
   if(__local_apic_check()<0) {
     kprintf("FAIL\n");
-    return;
+    return -1;
   } else
     kprintf("OK\n");
 
   enable_l_apic_in_msr(); 
-
-  io_apic_disable_all(); 
 
   v=get_apic_version();
   kprintf("[LW] APIC version: %d\n",v);
@@ -262,7 +265,8 @@ void local_bsp_apic_init(void)
   __disable_apic();
 
   set_apic_dfr_mode(0xf); 
-  set_apic_ldr_logdest(0x1); 
+  set_apic_ldr_logdest(1 << apics_number);
+	apics_number++;
 
   /* set 0 task priority, i. e. handle all interrupts */ 
   local_apic->tpr.reg = 0; 
@@ -317,15 +321,34 @@ void local_bsp_apic_init(void)
   // set internal apic error interrupt vector
   *(uint32_t*)((uint64_t)local_apic + 0x370) = 200;
 
-  local_apic_timer_init(LOCAL_TIMER_CPU_IRQ_VEC);
+	return 0;
+}
 
-  __local_apic_chkerr();
 
-  io_apic_bsp_init();
+static void __unmask_extint(void)
+{
+	apic_lvt_lint_t lvt_lint;	
 
-  lvt_lint = local_apic->lvt_lint0;
-  lvt_lint.mask = 0;
-  local_apic->lvt_lint0.reg = lvt_lint.reg; 
+	lvt_lint = local_apic->lvt_lint0;
+	lvt_lint.mask = 0;
+	local_apic->lvt_lint0.reg = lvt_lint.reg;
+
+	lvt_lint = local_apic->lvt_lint1;
+	lvt_lint.mask = 0;
+	local_apic->lvt_lint1.reg = lvt_lint.reg;
+	__local_apic_chkerr();
+}
+
+/*init functions makes me happy*/
+int local_bsp_apic_init(void)
+{
+	if (__local_apic_init())
+		 return -1;
+
+	local_apic_timer_init(LOCAL_TIMER_CPU_IRQ_VEC);
+	__unmask_extint();
+
+  return 0;
 }
 
 void local_apic_bsp_switch(void)
@@ -528,76 +551,15 @@ int apic_broadcast_ipi_vector(uint8_t vector)
   return __local_apic_chkerr();
 }
 
-void local_ap_apic_init(void)
+int local_ap_apic_init(void)
 {
-  uint32_t v;
-  int i=0,l;
-  apic_lvt_lint_t lvt_lint;
-  apic_icr1_t icr1;
+	if (__local_apic_init())
+		return -1;
 
-  kprintf("[AP] Checking APIC is present ... ");
-  if(__local_apic_check()<0) {
-    kprintf("FAIL\n");
-    return;
-  } else
-    kprintf("(%d)OK\n",get_local_apic_id());
+	local_apic_timer_ap_init(LOCAL_TIMER_CPU_IRQ_VEC);
+	__unmask_extint();
 
-  /* first we're need to clear APIC to avoid magical results */
-  __local_apic_clear();
-
-  /* clear bits for interrupts - can be filled up to other os */
-  for(i=7;i>=0;i--){
-    v=local_apic->isr[i].bits;
-    for(l=31;l>=0;l--)
-      if(v & (1 << l))
-	local_apic_send_eoi();
-  }
-
-  /* enable APIC */
-  __enable_apic();
-
-  local_apic_timer_ap_init(LOCAL_TIMER_CPU_IRQ_VEC);
-
-  /* set nil vectors */
-  __set_lvt_lint_vector(0,0x34+get_local_apic_id());
-  __set_lvt_lint_vector(1,0x35+get_local_apic_id());
-  /*set mode#7 extINT for lint0*/
-  lvt_lint=local_apic->lvt_lint0;
-  lvt_lint.tx_mode=0x7;
-  lvt_lint.mask=0x1;
-  local_apic->lvt_lint0.reg=lvt_lint.reg;
-  /*set mode#4 NMI for lint1*/
-  lvt_lint=local_apic->lvt_lint1;
-  lvt_lint.tx_mode=0x4;
-  lvt_lint.mask=0x1;
-  local_apic->lvt_lint1.reg=lvt_lint.reg;
-
-  /*tx_mode & polarity set to 0 on both lintx*/
-  lvt_lint=local_apic->lvt_lint0;
-  lvt_lint.tx_status = 0x0;
-  lvt_lint.polarity = 0x0;
-  local_apic->lvt_lint0.reg=lvt_lint.reg;
-  lvt_lint=local_apic->lvt_lint1;
-  lvt_lint.tx_status = 0x0;
-  lvt_lint.polarity = 0x0;
-  local_apic->lvt_lint1.reg=lvt_lint.reg;
-  /* ok, now we're need to set esr vector to 0xfe */
-  local_apic->lvt_error.vector = 0xfe;
-
-  /*enable to receive errors*/
-  if(__get_maxlvt()>3)
-    local_apic->esr.tx_cs_err = 0x0;
-
-  /* set icr1 registers*/
-  icr1=local_apic->icr1;
-  icr1.tx_mode=TXMODE_INIT;
-  icr1.rx_mode=DMODE_PHY;
-  icr1.level=TRIG_EDGE;
-  icr1.shorthand=SHORTHAND_SELF;
-  icr1.trigger=TRIG_LEVEL;
-  local_apic->icr1.reg=icr1.reg;
-
-  __local_apic_chkerr();
+	return 0;
 }
 
 #endif /* CONFIG_SMP */

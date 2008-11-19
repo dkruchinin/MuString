@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
+ * (c) Copyright 2008 Dmitry Gromada <gromada82@gmail.com>
  *
  * include/eza/amd64/apic.h: implements local APIC support driver.
  *
@@ -30,6 +31,8 @@
 #define APIC_BASE    0xfee00000
 
 #define APIC_INT_EOI  0x0
+
+#define INVALID_APIC_ID
 
 struct __local_apic_timerst_t { /* LVT timers stuff */
   uint32_t count;
@@ -205,6 +208,19 @@ typedef union {
 } apic_lvt_lint_t;
 
 typedef union {
+	uint32_t reg;
+	struct {
+		uint32_t vector : 8,
+			tx_mode : 3,
+			__res0 : 1,
+			tx_status : 1,
+			__res1 : 3,
+			mask : 1,
+			__res2 : 15;
+	} __attribute__ ((packed));
+} apic_cmci_lvt_t;
+
+typedef union {
   uint32_t reg;
   struct {
     uint32_t vector : 8,
@@ -226,23 +242,32 @@ typedef union {
 } apic_timer_dcr_t;
 
 struct __local_apic_t {
-  struct { uint32_t __reserved0[4];} __fuck01; /* 16 bytes */  /* |000->|010 */  struct { uint32_t __reserved1[4];} __34r34f;
-  apic_id_t id;   /* |020 */  struct {uint32_t __reserved[3];} __f34fff0h;
-  const apic_version_t version; /* |030 apic version register*/  struct {uint32_t __reserved[3];} __f34fff000h;
+  struct { uint32_t __reserved0[4];} __fuck01; /* 16 bytes */  /* |000->|010 */
+  struct { uint32_t __reserved1[4];} __34r34f;
+  apic_id_t id;   /* |020 */
+  struct {uint32_t __reserved[3];} __f34fff0h;
+  const apic_version_t version; /* |030 apic version register*/
+  struct {uint32_t __reserved[3];} __f34fff000h;
   struct { uint32_t __reserved2[4];} __7263er; /* 16 bytes */  /* |040->|070 */
   struct { uint32_t __reserved2[4];} __7263er345; /* 16 bytes */
   struct { uint32_t __reserved2[4];} __7263er23; /* 16 bytes */
   struct { uint32_t __reserved2[4];} __7263er870; /* 16 bytes */
-  apic_tpr_t tpr;  struct {uint32_t __reserved[3];} __f34fff00h;   /* |080 task priority register */
-  const apic_apr_t apr;  struct {uint32_t __reserved[3];} __f34fffa0h;  /* |090 */
-  apic_ppr_t ppr;  struct {uint32_t __reserved[3];} __f34fffa1h;  /* |0A0 processor priority register */
+  apic_tpr_t tpr;
+  struct {uint32_t __reserved[3];} __f34fff00h;   /* |080 task priority register */
+  const apic_apr_t apr;
+  struct {uint32_t __reserved[3];} __f34fffa0h;  /* |090 */
+  apic_ppr_t ppr;
+  struct {uint32_t __reserved[3];} __f34fffa1h;  /* |0A0 processor priority register */
   struct  { /* end of interrupt */  /* |0B0 */
     uint32_t eoi;    uint32_t __reserved[3];
   } eoi;
   struct { uint32_t __reserved6[4];} __d34dggf87er; /* 16 bytes */  /* |0C0 */
-  apic_ldr_t ldr; /* |0D0 logical destination register */ struct {uint32_t __reserved[3];} __f34fffa4h;
-  apic_dfr_t dfr; /* |0E0 destination format register */ struct {uint32_t __reserved[3];} __f34fffa2h;
-  apic_svr_t svr; /* |0F0 spurious interrupt vector register */ struct {uint32_t __reserved[3];} __f34fffa3h;
+  apic_ldr_t ldr; /* |0D0 logical destination register */
+  struct {uint32_t __reserved[3];} __f34fffa4h;
+  apic_dfr_t dfr; /* |0E0 destination format register */
+  struct {uint32_t __reserved[3];} __f34fffa2h;
+  apic_svr_t svr; /* |0F0 spurious interrupt vector register */
+  struct {uint32_t __reserved[3];} __f34fffa3h;
   struct  { /* in service register */  /* |100->|170 (8 items) */
     uint32_t bits;    uint32_t __reserved[3];
   } isr[8];
@@ -254,18 +279,31 @@ struct __local_apic_t {
   } irr[8];
   /* |280 error status register */
   apic_esr_t esr;  /* |280 error status register */ struct {uint32_t __reserved[3];} __f34fffa6h;
-  struct { uint32_t __reserved7[4];} __d34d34d34; /* |290->|2F0 */ /* 16 bytes */  struct { uint32_t __reserved7[4];} __d34d34d3423; /* 16 bytes */
-  struct { uint32_t __reserved7[4];} __d34d34d345; /* 16 bytes */  struct { uint32_t __reserved7[4];} __d34d34d34234; /* 16 bytes */
-  struct { uint32_t __reserved7[4];} __d34d34d34f; /* 16 bytes */  struct { uint32_t __reserved7[4];} __d34d34d34df; /* 16 bytes */
-  struct { uint32_t __reserved7[4];} __d34d34d34sdf; /* 16 bytes */
-  apic_icr1_t icr1; /* |300 interrupt command register */ struct {uint32_t __reserved[3];} __f34fffafh;
-  apic_icr2_t icr2;  /*310 interrupt command register - destination */ struct {uint32_t __reserved[3];} __f34fffad33h;
-  apic_lvt_timer_t lvt_timer;   /* |320 lvt timer parameters */ struct {uint32_t __reserved[3];} __f34fffad31h;
-  apic_thermal_sensor_t lvt_thermal_sensor; /* |330 */ struct {uint32_t __reserved[3];} __f34fffad35h;
-  apic_lvt_pc_t lvt_pc;   /* |340 LVT performance counter */ struct {uint32_t __reserved[3];} __f34fffad32h;
-  apic_lvt_lint_t lvt_lint0;   /* |350 LVT logical int0 */ struct {uint32_t __reserved[3];} __f34fffad36h;
-  apic_lvt_lint_t lvt_lint1;   /* |360 LVT logical int1 */ struct {uint32_t __reserved[3];} __f34fffad37h;
-  apic_lvt_error_t lvt_error;  /* |370 LVT error register */ struct {uint32_t __reserved[3];} __f34fffad38h;
+  struct { uint32_t __reserved7[4];} __d34d34d34; /* |290->|2F0 */ /* 16 bytes */
+  struct { uint32_t __reserved7[4];} __d34d34d3423; /* 16 bytes */
+  struct { uint32_t __reserved7[4];} __d34d34d345; /* 16 bytes */
+  struct { uint32_t __reserved7[4];} __d34d34d34234; /* 16 bytes */
+  struct { uint32_t __reserved7[4];} __d34d34d34f; /* 16 bytes */
+  struct { uint32_t __reserved7[4];} __d34d34d34df; /* 16 bytes */
+  /* |2F0 LFT for overflow condition of corrected machine check error; intel specific  */ 
+  apic_cmci_lvt_t cmci_lvt; 
+  struct { uint32_t __reserved7[3];} __d34d34d34ef; /* 12 bytes */
+  apic_icr1_t icr1; /* |300 interrupt command register */
+  struct {uint32_t __reserved[3];} __f34fffafh;
+  apic_icr2_t icr2;  /*310 interrupt command register - destination */
+  struct {uint32_t __reserved[3];} __f34fffad33h;
+  apic_lvt_timer_t lvt_timer;   /* |320 lvt timer parameters */ 
+  struct {uint32_t __reserved[3];} __f34fffad31h;
+  apic_thermal_sensor_t lvt_thermal_sensor; /* |330 */ 
+  struct {uint32_t __reserved[3];} __f34fffad35h;
+  apic_lvt_pc_t lvt_pc;   /* |340 LVT performance counter */ 
+  struct {uint32_t __reserved[3];} __f34fffad32h;
+  apic_lvt_lint_t lvt_lint0;   /* |350 LVT logical int0 */ 
+  struct {uint32_t __reserved[3];} __f34fffad36h;
+  apic_lvt_lint_t lvt_lint1;   /* |360 LVT logical int1 */ 
+  struct {uint32_t __reserved[3];} __f34fffad37h;
+  apic_lvt_error_t lvt_error;  /* |370 LVT error register */ 
+  struct {uint32_t __reserved[3];} __f34fffad38h;
   struct  { /* |380 LVT timers stuff */
     uint32_t count;
     uint32_t __reserved[3];
@@ -275,16 +313,19 @@ struct __local_apic_t {
     uint32_t __reserved[3];
   } timer_ccr;
   /* |3A0->|3D0 */
-  struct {uint32_t __reserved14[4];} __erferf45f; /* 16 bytes */  /* |3A0->|3D0 */  struct {uint32_t __reserved14[4];} __erferf45werf; /* 16 bytes */
-  struct {uint32_t __reserved14[4];} __erferf4wer5f; /* 16 bytes */  struct {uint32_t __reserved14[4];} __erferwerf45f; /* 16 bytes */
-  apic_timer_dcr_t timer_dcr;  /* |3E0 timer divide configuration */ struct {uint32_t __reserved[3];} __f34fffad39h;
+  struct {uint32_t __reserved14[4];} __erferf45f; /* 16 bytes */  /* |3A0->|3D0 */  
+  struct {uint32_t __reserved14[4];} __erferf45werf; /* 16 bytes */
+  struct {uint32_t __reserved14[4];} __erferf4wer5f; /* 16 bytes */  
+  struct {uint32_t __reserved14[4];} __erferwerf45f; /* 16 bytes */
+  apic_timer_dcr_t timer_dcr;  /* |3E0 timer divide configuration */ 
+  struct {uint32_t __reserved[3];} __f34fffad39h;
   /* |3F0 */
   struct {uint32_t __reserved18[4];} __erferferf45654fedf; /* 16 bytes */
 
 } __attribute__ ((packed));
 
 /*uffh, functions*/
-void local_bsp_apic_init(void);
+int local_bsp_apic_init(void);
 void local_apic_bsp_switch(void);
 uint32_t get_local_apic_id(void);
 void local_apic_timer_init(uint8_t vector);
@@ -294,11 +335,10 @@ void apic_timer_hack(void);
 
 #ifdef CONFIG_SMP
 
-void local_ap_apic_init(void);
 uint32_t apic_send_ipi_init(uint8_t apicid);
 int apic_broadcast_ipi_vector(uint8_t vector);
+int local_ap_apic_init(void);
 
 #endif /* CONFIG_SMP */
 
 #endif
-
