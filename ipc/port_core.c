@@ -40,6 +40,53 @@
 #include <ipc/gen_port.h>
 #include <eza/event.h>
 
+ipc_port_message_t *ipc_setup_task_port_message(task_t *task,ipc_gen_port_t *p,
+                                                uintptr_t snd_buf,ulong_t snd_size,
+                                                uintptr_t rcv_buf,ulong_t rcv_size)
+{
+  ipc_port_message_t *msg = &task->ipc_priv->cached_data.cached_port_message;
+  list_init_node(&msg->l);
+  IPC_RESET_MESSAGE(msg,task);
+
+  status_t r=-EFAULT;
+  task_ipc_priv_t *ipc_priv = task->ipc_priv;
+
+  /* Process send buffer */
+  if( snd_size < IPC_BUFFERED_PORT_LENGTH ) {
+    msg->send_buffer=ipc_priv->cached_data.cached_page1;
+    if( copy_from_user(msg->send_buffer,(void*)snd_buf,snd_size ) ) {
+      goto out;
+    }
+  } else {
+    msg->snd_buf.chunks=ipc_priv->cached_data.cached_page1;
+    r = ipc_setup_buffer_pages(task,&msg->snd_buf,snd_buf,snd_size);
+    if( r ) {
+      goto out;
+    }
+  }
+
+  /* Process receive buffer, if any. */
+  if( rcv_size > 0 ) {
+    if( rcv_size < IPC_BUFFERED_PORT_LENGTH ) {
+      msg->receive_buffer=ipc_priv->cached_data.cached_page2;
+    } else {
+      msg->rcv_buf.chunks=ipc_priv->cached_data.cached_page2;
+      r = ipc_setup_buffer_pages(task,&msg->rcv_buf,rcv_buf,rcv_size);
+      if( r ) {
+        goto out;
+      }
+    }
+  }
+
+  /* Setup this message. */
+  msg->data_size = snd_size;
+  msg->reply_size = rcv_size;
+  msg->sender=task;
+  return msg;
+out:
+  return NULL;
+}
+
 ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf,
                                                  ulong_t snd_size)
 {
@@ -119,6 +166,17 @@ status_t __ipc_port_send(struct __ipc_gen_port *port,
     return -EINVAL;
   }
 
+  /* In case of blocking access both client and server must support
+   * this flag.
+   */
+  r=(port->flags & IPC_BLOCKED_ACCESS) | (flags & IPC_BLOCKED_ACCESS);
+  if( r ) {
+    r=(port->flags & IPC_BLOCKED_ACCESS) & (flags & IPC_BLOCKED_ACCESS);
+    if( !r ) {
+      return -EINVAL;
+    }
+  }
+
   IPC_LOCK_PORT_W(port);
   if( !(port->flags & IPC_PORT_SHUTDOWN ) ) {
     r=msg_ops->insert_message(port,msg,flags);
@@ -135,11 +193,9 @@ status_t __ipc_port_send(struct __ipc_gen_port *port,
 
   /* Sender should wait for the reply, so put it into sleep here. */
   if( flags & IPC_BLOCKED_ACCESS ) {
-    kprintf( "  * Waiting for reply.\n" );
     IPC_TASK_ACCT_OPERATION(sender);
     event_yield( &msg->event );
     IPC_TASK_UNACCT_OPERATION(sender);
-    kprintf( "  * Got a reply: %d\n",msg->replied_size );
 
     r=msg->replied_size;
     if( r > 0 ) {
@@ -150,7 +206,7 @@ status_t __ipc_port_send(struct __ipc_gen_port *port,
     }
   }
 
-  return 0;
+  return r;
 }
 
 static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
@@ -166,14 +222,13 @@ static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
   memset(p,0,sizeof(*p));
 
   /* TODO: [mt] Support flags during IPC port creation. */
-  if( flags & IPC_BLOCKED_ACCESS ) {
-    if( flags & IPC_PRIORITIZED_PORT_QUEUE ) {
-    } else {
-      p->msg_ops=&def_port_msg_ops;
-    }
+  if( flags & IPC_PRIORITIZED_PORT_QUEUE ) {
+    return -EINVAL;
   } else {
-    p->msg_ops=&nonblock_port_msg_ops;
+    p->msg_ops=&def_port_msg_ops;
   }
+
+  p->flags=(flags & IPC_PORT_DIRECT_FLAGS);
 
   r=p->msg_ops->init_data_storage(p,owner);
   if( r ) {
@@ -355,11 +410,22 @@ recv_cycle:
       }
       IPC_UNLOCK_PORT_W(port);
     } else {
-      /* Message was successfully delivered to userspace, so perform some
-       * cleanups (if any).
+      bool free;
+      /* OK, message was successfully transferred, so remove it from the port
+       * in case it is a non-blocking transfer.
        */
-      if( msg_ops->post_receive_logic ) {
-        msg_ops->post_receive_logic(port,msg);
+      IPC_LOCK_PORT_W(port);
+      if( !(port->flags & IPC_PORT_SHUTDOWN) &&
+          !(port->flags & IPC_BLOCKED_ACCESS) ) {
+        msg_ops->remove_message(port,msg->id);
+        free=true;
+      } else {
+        free=false;
+      }
+      IPC_UNLOCK_PORT_W(port);
+
+      if(free) {
+        kprintf( "* FREEING MESSAGE: %d\n", msg->id );
       }
     }
   }
@@ -413,7 +479,8 @@ status_t __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
     return -EINVAL;
   }
 
-  if( !port->msg_ops->remove_message ) {
+  if( !port->msg_ops->remove_message ||
+      !(port->flags & IPC_BLOCKED_ACCESS)) {
     return -EINVAL;
   }
 

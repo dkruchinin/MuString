@@ -44,6 +44,8 @@
 #define REF_PORT(p)  atomic_inc(&p->use_count)
 #define UNREF_PORT(p)  atomic_dec(&p->use_count)
 
+#define IPC_PORT_DIRECT_FLAGS  (IPC_BLOCKED_ACCESS)
+
 struct __ipc_gen_port;
 
 typedef struct __ipc_port_msg_ops {
@@ -54,7 +56,6 @@ typedef struct __ipc_port_msg_ops {
                                          ulong_t flags);
   void (*free_data_storage)(struct __ipc_gen_port *port);
   void (*requeue_message)(struct __ipc_gen_port *port,ipc_port_message_t *msg);
-  void (*post_receive_logic)(struct __ipc_gen_port *port,ipc_port_message_t *msg);
   ipc_port_message_t *(*remove_message)(struct __ipc_gen_port *port,ulong_t msg_id);
   ipc_port_message_t *(*remove_head_message)(struct __ipc_gen_port *port);
 } ipc_port_msg_ops_t;
@@ -71,6 +72,9 @@ typedef struct __ipc_gen_port {
   list_head_t channels;
 } ipc_gen_port_t;
 
+ipc_port_message_t *ipc_setup_task_port_message(task_t *task,ipc_gen_port_t *p,
+                                                uintptr_t snd_buf,ulong_t snd_size,
+                                                uintptr_t rcv_buf,ulong_t rcv_size);
 status_t __ipc_port_send(ipc_gen_port_t *port,
                          ipc_port_message_t *msg,ulong_t flags,
                          uintptr_t rcv_buf,ulong_t rcv_size);
@@ -80,8 +84,9 @@ status_t __ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
                             port_msg_info_t *msg_info);
 status_t __ipc_get_port(task_t *task,ulong_t port,ipc_gen_port_t **out_port);
 void __ipc_put_port(ipc_gen_port_t *p);
+status_t __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
+                          ulong_t reply_buf,ulong_t reply_len);
 
-extern ipc_port_msg_ops_t nonblock_port_msg_ops;
 extern ipc_port_msg_ops_t def_port_msg_ops;
 /****************************************************************************/
 

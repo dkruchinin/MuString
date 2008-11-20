@@ -99,6 +99,5 @@ ipc_port_msg_ops_t nonblock_port_msg_ops = {
   .free_data_storage=nb_free_data_storage,
   .extract_message=nb_extract_message,
   .requeue_message=nb_requeue_message,
-  .post_receive_logic=nb_post_receive_logic,
 };
 

@@ -112,7 +112,10 @@ static ipc_port_message_t *def_remove_message(struct __ipc_gen_port *port,
 
     if( msg != NULL ) {
       ds->message_ptrs[msg_id]=NULL;
-      list_del(&msg->l);
+      if( list_node_is_bound(&msg->l) ) {
+        list_del(&msg->l);
+      }
+      linked_array_free_item(&ds->msg_array,msg->id);
       port->total_messages--;
       return msg;
     }
@@ -131,6 +134,7 @@ static ipc_port_message_t *def_remove_head_message(struct __ipc_gen_port *port)
     list_del(&msg->l);
     ds->message_ptrs[msg->id]=NULL;
     port->total_messages--;
+    linked_array_free_item(&ds->msg_array,msg->id);
     return msg;
   }
 

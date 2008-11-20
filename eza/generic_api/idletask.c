@@ -470,6 +470,9 @@ extern status_t __sys_port_send(ulong_t channel,ulong_t flags,
                                 uintptr_t snd_buf,ulong_t snd_size,
                                 uintptr_t rcv_buf,ulong_t rcv_size);
 
+status_t __sys_port_reply(ulong_t port,ulong_t msg_id,ulong_t reply_buf,
+                          ulong_t reply_len);
+
 static void __new_port_logic_client_thread(void *t)
 {
   ipc_port_message_t *msg1,*msg2,*msg3;
@@ -477,6 +480,7 @@ static void __new_port_logic_client_thread(void *t)
   char *data2="Hello, server 2!";
   char *data3="Hello, server 3!";
   status_t r,ch_id,i;
+  char buf[64];
 
   kprintf( "[NEW PORT CLIENT THREAD]: Starting. Creating channels to %d:%d\n",
            server_pid,__s_port_id);
@@ -510,14 +514,25 @@ static void __new_port_logic_client_thread(void *t)
     kprintf( "[NEW PORT CLIENT THREAD]: Message send statistics: %d\n",r );
     }
 */
-  kprintf( "[NEW PORT CLIENT THREAD]: Sending 3 messages to the Server.\n" );
-  r=__sys_port_send(0,0,data1,strlen(data1)+1,0,0);
-  kprintf( "  r=%d\n",r );
-  r =__sys_port_send(1,0,data2,strlen(data2)+1,0,0);
-  kprintf( "  r=%d\n",r );
-  r =__sys_port_send(3,0,data3,strlen(data3)+1,0,0);
-  kprintf( "  r=%d\n",r );
-  kprintf( "[NEW PORT CLIENT THREAD]: Message send statistics: %d\n",r );
+
+  for(i=0;i<2;i++) {
+    kprintf( "[NEW PORT CLIENT THREAD]: Sending messages to the Server.\n" );
+    r=__sys_port_send(0,IPC_BLOCKED_ACCESS,data1,strlen(data1)+1,buf,
+                      sizeof(buf));
+    kprintf( "  r=%d\n",r );
+    if( r>=0 ) {
+      kprintf( "[NEW PORT CLIENT THREAD]: Reply data: %s\n",
+               buf );
+    }
+/*
+    r =__sys_port_send(1,0,data2,strlen(data2)+1,0,0);
+    kprintf( "  r=%d\n",r );
+    r =__sys_port_send(3,0,data3,strlen(data3)+1,0,0);
+    kprintf( "  r=%d\n",r );
+    kprintf( "[NEW PORT CLIENT THREAD]: Message send statistics: %d\n",r );
+*/
+    __wait_ticks(1000, "[NEW PORT CLIENT]" );
+  }
 
   kprintf( "[NEW PORT CLIENT THREAD]: Done !\n" );
   for(;;);
@@ -529,13 +544,14 @@ static void __new_port_logic_thread(void *t)
   int i;
   char buf[64];
   port_msg_info_t msg_info;
+  char *reply_data="Hello from server !";
 
   kprintf( "[NEW PORT THREAD]: Starting ...\n" );
   server_pid=current_task()->pid;
 
   for(i=0;i<6;i++) {
     kprintf( "[NEW PORT THREAD]: Creating a port: " );
-    r=__ipc_create_port(current_task(),0);
+    r=__ipc_create_port(current_task(),IPC_BLOCKED_ACCESS);
     kprintf( "%d\n", r );
   }
 
@@ -554,6 +570,9 @@ static void __new_port_logic_thread(void *t)
         kprintf( "[NEW PORT THREAD]: Msg ID: %d, Data size: %d\n",
                  msg_info.msg_id,msg_info.msg_len);
         kprintf( "Data: %s\n", buf );
+        r=__sys_port_reply(__s_port_id,msg_info.msg_id,reply_data,
+                           strlen(reply_data)+1);
+        kprintf( "[NEW PORT THREAD]: Reply status: %d\n", r );
       } else {
         kprintf( "[NEW PORT THREAD]: Message receive failed ! %d\n", r );
         break;
@@ -577,13 +596,13 @@ void idle_loop(void)
     spawn_percpu_threads();
   }
 */
-
+/*
   if( !cpu_id() ) {
     if( kernel_thread( __new_port_logic_thread,NULL,NULL) ) {
       panic( "Can't create Migration thread !" );
     }
   }
-
+*/
 /*
   if( !cpu_id() ) {
     if( kernel_thread( __migration_thread,NULL,NULL) ) {

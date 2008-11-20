@@ -71,6 +71,25 @@ status_t __sys_create_port( ulong_t flags, ulong_t queue_size )
   return __ipc_create_port(caller,flags);
 }
 
+status_t __sys_port_reply(ulong_t port,ulong_t msg_id,ulong_t reply_buf,
+                          ulong_t reply_len) {
+  ipc_gen_port_t *p;
+  status_t r;
+
+  if( !reply_buf || reply_len > MAX_PORT_MSG_LENGTH ) {
+    return -EINVAL;
+  }
+
+  r=__ipc_get_port(current_task(),port,&p);
+  if( r ) {
+    return r;
+  }
+
+  r=__ipc_port_reply(p,msg_id,reply_buf,reply_len);
+  __ipc_put_port(p);
+  return r;
+}
+
 status_t __sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
                           ulong_t recv_len,port_msg_info_t *msg_info)
 {
@@ -78,7 +97,7 @@ status_t __sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
   status_t r;
 
   r=__ipc_get_port(current_task(),port,&p);
-  if(r) {
+  if( r ) {
     return r;
   }
 
@@ -108,6 +127,12 @@ status_t __sys_port_send(ulong_t channel,ulong_t flags,
     return -EINVAL;
   }
 
+  if( !trusted_task(caller) ) {
+    if( (flags & UNTRUSTED_MANDATORY_FLAGS) != UNTRUSTED_MANDATORY_FLAGS ) {
+      return -EPERM;
+    }
+  }
+
   LOCK_CHANNEL(c);
   port=c->server_port;
   if( port ) {
@@ -119,12 +144,9 @@ status_t __sys_port_send(ulong_t channel,ulong_t flags,
     goto put_channel;
   }
 
-  if( !trusted_task(caller) ) {
-    flags |= UNTRUSTED_MANDATORY_FLAGS;
-  }
-
   if( flags & IPC_BLOCKED_ACCESS ) {
-    msg=NULL;
+    msg=ipc_setup_task_port_message(caller,port,snd_buf,snd_size,
+                                    rcv_buf,rcv_size);
   } else {
     msg=__ipc_create_nb_port_message(caller,snd_buf,snd_size);
   }
