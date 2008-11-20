@@ -14,6 +14,8 @@
 /* Blocking mode */
 #define IPC_BLOCKED_ACCESS  0x1
 
+#define UNTRUSTED_MANDATORY_FLAGS  (IPC_BLOCKED_ACCESS)
+
 /* Send/receive flags. */
 
 /* TODO: [mt] Changes IPC_DEFAULT_PORTS to a smoller value !!! */

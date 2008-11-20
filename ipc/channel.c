@@ -27,13 +27,34 @@ static ipc_channel_t *__allocate_channel(ipc_gen_port_t *port)
   return channel;
 }
 
-ipc_channel_t *ipc_get_channel(task_t *owner,ulong_t ch_id)
+ipc_channel_t *ipc_get_channel(task_t *task,ulong_t ch_id)
 {
-  return NULL;
+  ipc_channel_t *c=NULL;
+  task_ipc_t *ipc;
+
+  LOCK_TASK_MEMBERS(task);
+  ipc=task->ipc;
+
+  if( ipc && ipc->channels ) {
+    IPC_LOCK_CHANNELS(ipc);
+    if(ch_id < task->limits->limits[LIMIT_IPC_MAX_CHANNELS] &&
+       ipc->channels[ch_id] != NULL) {
+      c=ipc->channels[ch_id];
+      REF_IPC_ITEM(c);
+    }
+    IPC_UNLOCK_CHANNELS(ipc);
+  }
+
+  UNLOCK_TASK_MEMBERS(task);
+  return c;
 }
 
 void ipc_put_channel(ipc_channel_t *channel)
 {
+  UNREF_IPC_ITEM(channel);
+
+  if( !atomic_get(&channel->use_count) ) {
+  }
 }
 
 void ipc_shutdown_channel(ipc_channel_t *channel)
@@ -91,6 +112,8 @@ status_t ipc_open_channel(task_t *owner,task_t *server,ulong_t port)
     r=-ENOMEM;
     goto free_id;
   }
+
+  channel->id=id;
 
   IPC_LOCK_CHANNELS(ipc);
   ipc->channels[id]=channel;

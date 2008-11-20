@@ -94,17 +94,49 @@ put_port:
   return r;
 }
 
-status_t __sys_port_send(pid_t pid,ulong_t port,uintptr_t snd_buf,
-                       ulong_t snd_size,uintptr_t rcv_buf,ulong_t rcv_size)
+status_t __sys_port_send(ulong_t channel,ulong_t flags,
+                         uintptr_t snd_buf,ulong_t snd_size,
+                         uintptr_t rcv_buf,ulong_t rcv_size)
 {
-  task_t *task = pid_to_task(pid);
-  status_t r;
+  task_t *caller=current_task();
+  ipc_channel_t *c=ipc_get_channel(caller,channel);
+  ipc_gen_port_t *port;
+  ipc_port_message_t *msg;
+  status_t r=-EINVAL;
 
-  if( task == NULL ) {
-    return -ESRCH;
+  if( c == NULL ) {
+    return -EINVAL;
   }
 
-  r=ipc_port_send(task,port,snd_buf,snd_size,rcv_buf,rcv_size);
-  release_task_struct(task);
+  LOCK_CHANNEL(c);
+  port=c->server_port;
+  if( port ) {
+    REF_IPC_ITEM(port);
+  }
+  UNLOCK_CHANNEL(c);
+
+  if( !port ) {
+    goto put_channel;
+  }
+
+  if( !trusted_task(caller) ) {
+    flags |= UNTRUSTED_MANDATORY_FLAGS;
+  }
+
+  if( flags & IPC_BLOCKED_ACCESS ) {
+    msg=NULL;
+  } else {
+    msg=__ipc_create_nb_port_message(caller,snd_buf,snd_size);
+  }
+
+  if( !msg ) {
+    r=-ENOMEM;
+  } else {
+    r=__ipc_port_send(port,msg,flags,rcv_buf,rcv_size);
+  }
+
+  __ipc_put_port(port);
+put_channel:
+  ipc_put_channel(c);
   return r;
 }

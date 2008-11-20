@@ -466,6 +466,10 @@ ipc_gen_port_t *__s_port;
 ulong_t __s_port_id;
 pid_t server_pid;
 
+extern status_t __sys_port_send(ulong_t channel,ulong_t flags,
+                                uintptr_t snd_buf,ulong_t snd_size,
+                                uintptr_t rcv_buf,ulong_t rcv_size);
+
 static void __new_port_logic_client_thread(void *t)
 {
   ipc_port_message_t *msg1,*msg2,*msg3;
@@ -490,8 +494,8 @@ static void __new_port_logic_client_thread(void *t)
       for(;;);
     }
   }
-  kprintf( "[NEW PORT CLIENT THREAD]: Channels created: %d\n",i ); for(;;);
-
+  kprintf( "[NEW PORT CLIENT THREAD]: Channels created: %d\n",i );
+/*
   msg1=__ipc_create_nb_port_message(current_task(),data1,
                                    strlen(data1)+1);
   msg2=__ipc_create_nb_port_message(current_task(),data2,
@@ -504,7 +508,17 @@ static void __new_port_logic_client_thread(void *t)
     r |=__ipc_port_send(__s_port,msg2,0,0,0);
     r |=__ipc_port_send(__s_port,msg3,0,0,0);
     kprintf( "[NEW PORT CLIENT THREAD]: Message send statistics: %d\n",r );
-  }
+    }
+*/
+  kprintf( "[NEW PORT CLIENT THREAD]: Sending 3 messages to the Server.\n" );
+  r=__sys_port_send(0,0,data1,strlen(data1)+1,0,0);
+  kprintf( "  r=%d\n",r );
+  r =__sys_port_send(1,0,data2,strlen(data2)+1,0,0);
+  kprintf( "  r=%d\n",r );
+  r =__sys_port_send(3,0,data3,strlen(data3)+1,0,0);
+  kprintf( "  r=%d\n",r );
+  kprintf( "[NEW PORT CLIENT THREAD]: Message send statistics: %d\n",r );
+
   kprintf( "[NEW PORT CLIENT THREAD]: Done !\n" );
   for(;;);
 }
