@@ -118,13 +118,18 @@ free_ipc:
 
 task_ipc_t *get_task_ipc(task_t *t)
 {
+  task_ipc_t *ipc;
+
   LOCK_TASK_MEMBERS(t);
   if( t->ipc ) {
     atomic_inc(&t->ipc->use_count);
+    ipc=t->ipc;
+  } else {
+    ipc=NULL;
   }
   UNLOCK_TASK_MEMBERS(t);
 
-  return t->ipc;
+  return ipc;
 }
 
 void __deinitialize_task_ipc(task_ipc_t *ipc)

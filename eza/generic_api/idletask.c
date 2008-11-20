@@ -41,6 +41,7 @@
 #include <ipc/poll.h>
 #include <eza/gc.h>
 #include <ipc/gen_port.h>
+#include <ipc/channel.h>
 
 task_t *idle_tasks[MAX_CPUS];
 
@@ -462,6 +463,8 @@ static void ta(void *d)
 }
 
 ipc_gen_port_t *__s_port;
+ulong_t __s_port_id;
+pid_t server_pid;
 
 static void __new_port_logic_client_thread(void *t)
 {
@@ -469,9 +472,25 @@ static void __new_port_logic_client_thread(void *t)
   char *data1="Hello, server 1!";
   char *data2="Hello, server 2!";
   char *data3="Hello, server 3!";
-  status_t r;
-  
-  kprintf( "[NEW PORT CLIENT THREAD]: Starting ...\n" );
+  status_t r,ch_id,i;
+
+  kprintf( "[NEW PORT CLIENT THREAD]: Starting. Creating channels to %d:%d\n",
+           server_pid,__s_port_id);
+
+  for(i=0;i<10;i++) {
+    ch_id=sys_open_channel(server_pid,__s_port_id);
+    if( ch_id < 0 ) {
+      kprintf( "[NEW PORT CLIENT THREAD]: Failed to create channel N%d: %d\n",
+               i,ch_id);
+      for(;;);
+    }
+    if( ch_id != i ) {
+      kprintf( "[NEW PORT CLIENT THREAD]: Channel ID mismatch ! %d:%d\n",
+               ch_id,i);
+      for(;;);
+    }
+  }
+  kprintf( "[NEW PORT CLIENT THREAD]: Channels created: %d\n",i ); for(;;);
 
   msg1=__ipc_create_nb_port_message(current_task(),data1,
                                    strlen(data1)+1);
@@ -493,11 +512,12 @@ static void __new_port_logic_client_thread(void *t)
 static void __new_port_logic_thread(void *t)
 {
   status_t r;
-  int i,port_num;
+  int i;
   char buf[64];
   port_msg_info_t msg_info;
 
   kprintf( "[NEW PORT THREAD]: Starting ...\n" );
+  server_pid=current_task()->pid;
 
   for(i=0;i<6;i++) {
     kprintf( "[NEW PORT THREAD]: Creating a port: " );
@@ -505,15 +525,15 @@ static void __new_port_logic_thread(void *t)
     kprintf( "%d\n", r );
   }
 
-  port_num=4;
-  r=__ipc_get_port(current_task(),port_num,&__s_port);
+  __s_port_id=4;
+  r=__ipc_get_port(current_task(),__s_port_id,&__s_port);
   if( !r ) {
     if( kernel_thread( __new_port_logic_client_thread,NULL,NULL) ) {
       panic( "Can't create Migration thread !" );
     }
 
     while( 1 ) {
-      kprintf( "[NEW PORT THREAD]: Listening on port %d ...\n", port_num );
+      kprintf( "[NEW PORT THREAD]: Listening on port %d ...\n", __s_port_id );
       r=__ipc_port_receive(__s_port,IPC_BLOCKED_ACCESS,buf,sizeof(buf),
                            &msg_info);
       if( !r ) {
@@ -527,7 +547,7 @@ static void __new_port_logic_thread(void *t)
     }
   } else {
     kprintf( "[NEW PORT THREAD]: Can't resolve port %d ! r=%d\n",
-             port_num,r );
+             __s_port_id,r );
   }
   kprintf( "[NEW PORT THREAD]: Done !\n" );
   for(;;);
@@ -543,13 +563,13 @@ void idle_loop(void)
     spawn_percpu_threads();
   }
 */
-/*
+
   if( !cpu_id() ) {
     if( kernel_thread( __new_port_logic_thread,NULL,NULL) ) {
       panic( "Can't create Migration thread !" );
     }
   }
-*/
+
 /*
   if( !cpu_id() ) {
     if( kernel_thread( __migration_thread,NULL,NULL) ) {

@@ -377,4 +377,6 @@ status_t sys_get_tid(void);
 
 void sys_exit(int code);
 
+status_t sys_open_channel(pid_t pid,ulong_t port);
+
 #endif

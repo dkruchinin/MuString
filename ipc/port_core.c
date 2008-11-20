@@ -196,9 +196,13 @@ out_free_port:
 status_t __ipc_create_port(task_t *owner,ulong_t flags)
 {
   status_t r;
-  task_ipc_t *ipc = owner->ipc;
+  task_ipc_t *ipc = get_task_ipc(owner);
   ulong_t id;
   ipc_gen_port_t *port;
+
+  if( !ipc ) {
+    return -EINVAL;
+  }
 
   LOCK_IPC(ipc);
 
@@ -244,11 +248,13 @@ status_t __ipc_create_port(task_t *owner,ulong_t flags)
 
   r = id;
   UNLOCK_IPC(ipc);
+  release_task_ipc(ipc);
   return r;
 free_id:
   linked_array_free_item(&ipc->ports_array,id);
 out_unlock:
   UNLOCK_IPC(ipc);
+  release_task_ipc(ipc);
   return r;
 }
 
@@ -307,7 +313,7 @@ status_t __ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
   task_t *owner=current_task();
   ipc_port_msg_ops_t *msg_ops=port->msg_ops;
   
-  if( !recv_buf || !msg_info || !recv_len || !owner->ipc ) {
+  if( !recv_buf || !msg_info || !recv_len ) {
     return -EINVAL;
   }
 

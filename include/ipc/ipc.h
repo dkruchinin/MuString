@@ -9,6 +9,7 @@
 #include <eza/spinlock.h>
 #include <eza/arch/arch_ipc.h>
 #include <ipc/buffer.h>
+#include <ipc/channel.h>
 
 /* Blocking mode */
 #define IPC_BLOCKED_ACCESS  0x1
@@ -18,7 +19,8 @@
 /* TODO: [mt] Changes IPC_DEFAULT_PORTS to a smoller value !!! */
 #define IPC_DEFAULT_PORTS  512
 #define IPC_DEFAULT_PORT_MESSAGES  512
-#define IPC_DEFAULT_USER_BUFFERS 512
+#define IPC_DEFAULT_USER_BUFFERS  512
+#define IPC_DEFAULT_USER_CHANNELS  512
 
 #define IPC_MAX_PORT_MESSAGES  512
 
@@ -40,6 +42,12 @@ typedef struct __task_ipc {
   ipc_port_t **ports;
   linked_array_t ports_array;
   spinlock_t port_lock;
+
+  /* Channels-related stuff. */
+  linked_array_t channel_array;
+  ulong_t num_channels;
+  ipc_channel_t **channels;
+  spinlock_t channel_lock;
 
   /* Userspace buffers-related stuff. */
   spinlock_t buffer_lock;
@@ -68,7 +76,13 @@ void release_task_ipc_priv(task_ipc_priv_t *priv);
 #define IPC_LOCK_BUFFERS(ipc) spinlock_lock(&ipc->buffer_lock);
 #define IPC_UNLOCK_BUFFERS(ipc) spinlock_unlock(&ipc->buffer_lock);
 
+#define IPC_LOCK_CHANNELS(ipc) spinlock_lock(&ipc->channel_lock)
+#define IPC_UNLOCK_CHANNELS(ipc) spinlock_unlock(&ipc->channel_lock)
+
 #define IPC_TASK_ACCT_OPERATION(t) atomic_inc(&t->ipc_priv->pstats.active_queues)
 #define IPC_TASK_UNACCT_OPERATION(t) atomic_dec(&t->ipc_priv->pstats.active_queues)
+
+#define REF_IPC_ITEM(c)  atomic_inc(&c->use_count)
+#define UNREF_IPC_ITEM(c)  atomic_dec(&c->use_count)
 
 #endif
