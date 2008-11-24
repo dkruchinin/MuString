@@ -76,6 +76,11 @@ status_t __sys_create_port( ulong_t flags, ulong_t queue_size )
   return __ipc_create_port(caller,flags);
 }
 
+status_t sys_close_port(ulong_t port)
+{
+  return ipc_close_port(current_task(),port);
+}
+
 status_t __sys_port_reply(ulong_t port,ulong_t msg_id,ulong_t reply_buf,
                           ulong_t reply_len) {
   ipc_gen_port_t *p;
@@ -85,9 +90,9 @@ status_t __sys_port_reply(ulong_t port,ulong_t msg_id,ulong_t reply_buf,
     return -EINVAL;
   }
 
-  r=__ipc_get_port(current_task(),port,&p);
-  if( r ) {
-    return r;
+  p=__ipc_get_port(current_task(),port);
+  if( !p ) {
+    return -EINVAL;
   }
 
   r=__ipc_port_reply(p,msg_id,reply_buf,reply_len);
@@ -101,17 +106,18 @@ status_t __sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
   ipc_gen_port_t *p;
   status_t r;
 
-  r=__ipc_get_port(current_task(),port,&p);
-  if( r ) {
-    return r;
+  p=__ipc_get_port(current_task(),port);
+  if( !p ) {
+    return -EINVAL;
   }
 
+/*
   if( !valid_user_address((ulong_t)msg_info) ||
       !valid_user_address(recv_buf) ) {
     r=-EFAULT;
     goto put_port;
   }
-
+*/
   r=__ipc_port_receive(p,flags,recv_buf,recv_len,msg_info);
 put_port:
   __ipc_put_port(p);

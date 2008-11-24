@@ -20,7 +20,7 @@
 #define DEF_PORT_QUEUE_SIZE  ((PAGE_SIZE)/sizeof(long))
 
 typedef struct __def_port_data_storage {
-  list_head_t messages;
+  list_head_t new_messages,all_messages;
   ipc_port_message_t **message_ptrs;
   linked_array_t msg_array;
 } def_port_data_storage_t;
@@ -51,7 +51,8 @@ static status_t def_init_data_storage(struct __ipc_gen_port *port,
     goto free_messages;
   }
 
-  list_init_head(&ds->messages);
+  list_init_head(&ds->new_messages);
+  list_init_head(&ds->all_messages);
   port->data_storage=ds;
   return 0;
 free_messages:
@@ -69,7 +70,8 @@ static status_t def_insert_message(struct __ipc_gen_port *port,
 
   if( id != INVALID_ITEM_IDX ) {
     msg->id=id;
-    list_add2tail(&ds->messages,&msg->l);
+    list_add2tail(&ds->new_messages,&msg->l);
+    list_add2tail(&ds->all_messages,&msg->messages_list);
     ds->message_ptrs[id]=msg;
     port->avail_messages++;
     port->total_messages++;
@@ -84,10 +86,13 @@ static ipc_port_message_t *def_extract_message(ipc_gen_port_t *p,ulong_t flags)
   ipc_port_message_t *msg;
   def_port_data_storage_t *ds=(def_port_data_storage_t*)p->data_storage;
 
-  msg = container_of(list_node_first(&ds->messages),ipc_port_message_t,l);
-  list_del(&msg->l);
-  p->avail_messages--;
-  return msg;
+  if( !list_is_empty(&ds->new_messages) ) {
+    msg = container_of(list_node_first(&ds->new_messages),ipc_port_message_t,l);
+    list_del(&msg->l);
+    p->avail_messages--;
+    return msg;
+  }
+  return NULL;
 }
 
 static void def_free_data_storage(struct __ipc_gen_port *port)
@@ -98,7 +103,7 @@ static void def_requeue_message(struct __ipc_gen_port *port,ipc_port_message_t *
 {
   def_port_data_storage_t *ds=(def_port_data_storage_t*)port->data_storage;
 
-  list_add2head(&ds->messages,&msg->l);
+  list_add2head(&ds->new_messages,&msg->l);
   ds->message_ptrs[msg->id]=msg;
   port->avail_messages++;
 }
@@ -113,8 +118,10 @@ static ipc_port_message_t *def_remove_message(struct __ipc_gen_port *port,
     if( msg != NULL ) {
       ds->message_ptrs[msg_id]=NULL;
       if( list_node_is_bound(&msg->l) ) {
+        port->avail_messages--;
         list_del(&msg->l);
       }
+      list_del(&msg->messages_list);
       linked_array_free_item(&ds->msg_array,msg->id);
       port->total_messages--;
       return msg;
@@ -127,11 +134,18 @@ static ipc_port_message_t *def_remove_head_message(struct __ipc_gen_port *port)
 {
   def_port_data_storage_t *ds=(def_port_data_storage_t *)port->data_storage;
 
-  if( !list_is_empty(&ds->messages) ) {
+  if( !list_is_empty(&ds->all_messages) ) {
     ipc_port_message_t *msg;
 
-    msg = container_of(list_node_first(&ds->messages),ipc_port_message_t,l);
-    list_del(&msg->l);
+    msg = container_of(list_node_first(&ds->all_messages),ipc_port_message_t,
+                       messages_list);
+    list_del(&msg->messages_list);
+
+    if( list_node_is_bound(&msg->l) ) {
+      port->avail_messages--;
+      list_del(&msg->l);
+    }
+
     ds->message_ptrs[msg->id]=NULL;
     port->total_messages--;
     linked_array_free_item(&ds->msg_array,msg->id);

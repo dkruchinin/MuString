@@ -122,8 +122,9 @@ status_t ipc_open_channel(task_t *owner,task_t *server,ulong_t port)
     goto out_unlock;
   }
 
-  r=__ipc_get_port(server,port,&server_port);
-  if( r ) {
+  server_port=__ipc_get_port(server,port);
+  if( !server_port ) {
+    r=-EINVAL;
     goto out_unlock;
   }
 

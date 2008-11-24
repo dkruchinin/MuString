@@ -63,13 +63,13 @@ typedef struct __ipc_port_msg_ops {
 typedef struct __ipc_gen_port {
   ulong_t flags;
   spinlock_t lock;
-  atomic_t use_count;
+  atomic_t use_count,own_count;
   ulong_t avail_messages,total_messages;
   wait_queue_t waitqueue;
 
   ipc_port_msg_ops_t *msg_ops;
   void *data_storage;
-  list_head_t channels;
+  list_head_t channels;  
 } ipc_gen_port_t;
 
 ipc_port_message_t *ipc_setup_task_port_message(task_t *task,ipc_gen_port_t *p,
@@ -82,11 +82,11 @@ status_t __ipc_create_port(task_t *owner,ulong_t flags);
 status_t __ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
                             ulong_t recv_buf,ulong_t recv_len,
                             port_msg_info_t *msg_info);
-status_t __ipc_get_port(task_t *task,ulong_t port,ipc_gen_port_t **out_port);
+ipc_gen_port_t *__ipc_get_port(task_t *task,ulong_t port);
 void __ipc_put_port(ipc_gen_port_t *p);
 status_t __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
                           ulong_t reply_buf,ulong_t reply_len);
-
+status_t ipc_close_port(task_t *owner,ulong_t port);
 extern ipc_port_msg_ops_t def_port_msg_ops;
 /****************************************************************************/
 

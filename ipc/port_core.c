@@ -46,6 +46,7 @@ ipc_port_message_t *ipc_setup_task_port_message(task_t *task,ipc_gen_port_t *p,
 {
   ipc_port_message_t *msg = &task->ipc_priv->cached_data.cached_port_message;
   list_init_node(&msg->l);
+  list_init_node(&msg->messages_list);
   IPC_RESET_MESSAGE(msg,task);
 
   status_t r=-EFAULT;
@@ -95,6 +96,10 @@ ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf
     if( msg ) {
       memset(msg,0,sizeof(*msg));
       event_initialize(&msg->event);
+
+      list_init_node(&msg->l);
+      list_init_node(&msg->messages_list);
+
       msg->send_buffer=(void *)((char *)msg+sizeof(*msg));
       msg->data_size=snd_size;
       msg->reply_size=0;
@@ -228,6 +233,8 @@ static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
     p->msg_ops=&def_port_msg_ops;
   }
 
+  kprintf( "__allocate_port: PORT: %p, MSG OPS=%p\n",
+           p,p->msg_ops );
   p->flags=(flags & IPC_PORT_DIRECT_FLAGS);
 
   r=p->msg_ops->init_data_storage(p,owner);
@@ -236,6 +243,7 @@ static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
   }
 
   atomic_set(&p->use_count,1);
+  atomic_set(&p->own_count,1);
   spinlock_initialize(&p->lock, "");
   p->avail_messages = p->total_messages=0;
   p->flags = flags;
@@ -245,6 +253,70 @@ static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
   return 0;
 out_free_port:
   memfree(p);
+  return r;
+}
+
+static void __shutdown_port( ipc_gen_port_t *port )
+{
+  ipc_port_message_t *msg;
+
+  while((msg=port->msg_ops->remove_head_message(port))) {
+    if( event_is_active(&msg->event) ) {
+      msg->replied_size=-EPIPE;
+      event_raise(&msg->event);
+    }
+  }
+  port->msg_ops->free_data_storage(port);
+}
+
+status_t ipc_close_port(task_t *owner,ulong_t port)
+{
+  task_ipc_t *ipc = get_task_ipc(owner);
+  ipc_gen_port_t *p;
+  bool shutdown=false;
+  status_t r;
+
+  if( !ipc ) {
+    return -EINVAL;
+  }
+
+  LOCK_IPC(ipc);
+  if( !ipc->ports || port >= owner->limits->limits[LIMIT_IPC_MAX_PORTS]) {
+    r=-EMFILE;
+    goto out_unlock;
+  }
+
+  IPC_LOCK_PORTS(ipc);
+  p=ipc->ports[port];
+  if( p ) {
+    IPC_LOCK_PORT_W(p);
+    shutdown=atomic_dec_and_test(&p->own_count);
+    kprintf( ">> __ipc_close_port(): USE=%d, OWN=%d, SHUTDOWN: %d, IPC: %d\n",
+             p->use_count,p->own_count,shutdown,ipc->use_count);
+    if(shutdown) {
+      p->flags |= IPC_PORT_SHUTDOWN;
+      ipc->ports[port]=NULL;
+    }
+    IPC_UNLOCK_PORT_W(p);
+  }
+  IPC_UNLOCK_PORTS(ipc);
+
+  if( p ) {
+    if( shutdown ) {
+      __shutdown_port(p);
+      linked_array_free_item(&ipc->ports_array,port);
+      ipc->num_ports--;
+    }
+    r=0;
+  } else {
+    r=-EINVAL;
+  }
+out_unlock:
+  UNLOCK_IPC(ipc);
+  if( p ) {
+    __ipc_put_port(p);
+  }
+  release_task_ipc(ipc);
   return r;
 }
 
@@ -432,7 +504,7 @@ recv_cycle:
   return r;
 }
 
-status_t __ipc_get_port(task_t *task,ulong_t port,ipc_gen_port_t **out_port)
+ipc_gen_port_t * __ipc_get_port(task_t *task,ulong_t port)
 {
   ipc_gen_port_t *p=NULL;
   status_t r=-EINVAL;
@@ -455,8 +527,7 @@ status_t __ipc_get_port(task_t *task,ulong_t port,ipc_gen_port_t **out_port)
   }
 
   UNLOCK_TASK_MEMBERS(task);
-  *out_port = p;
-  return r;
+  return p;
 }
 
 void __ipc_put_port(ipc_gen_port_t *p)
@@ -464,7 +535,7 @@ void __ipc_put_port(ipc_gen_port_t *p)
   UNREF_PORT(p);
 
   if( !atomic_get(&p->use_count) ) {
-    p->msg_ops->free_data_storage(p);
+    kprintf( "> FREEING A PORT: %p\n",p );
     memfree(p);
   }
 }
@@ -476,11 +547,13 @@ status_t __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
   status_t r;
 
   if( !reply_buf || reply_len > MAX_PORT_MSG_LENGTH ) {
+    kprintf( "[*]\n" );
     return -EINVAL;
   }
 
   if( !port->msg_ops->remove_message ||
       !(port->flags & IPC_BLOCKED_ACCESS)) {
+    kprintf( "[**]\n" );
     return -EINVAL;
   }
 
@@ -504,15 +577,4 @@ status_t __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
   }
 
   return r;
-}
-
-status_t __ipc_open_channel(pid_t pid,ulong_t port)
-{
-  status_t r;
-  return r;
-}
-
-status_t __ipc_close_channel(ulong_t ch_id)
-{
-  return 0;
 }

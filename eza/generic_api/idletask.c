@@ -500,18 +500,21 @@ static void __new_port_logic_client_thread(void *t)
   }
   kprintf( "[NEW PORT CLIENT THREAD]: Channels created: %d\n",i );
 
-  r=sys_close_channel(2);
-  kprintf( " [NEW PORT CLIENT THREAD]: Closing channel N2: %d\n",
-           r);
+//  r=sys_close_channel(2);
+//  kprintf( " [NEW PORT CLIENT THREAD]: Closing channel N2: %d\n",
+//           r);
+/*
+  __wait_ticks(600,"[CLIENT]");
   if( !r ) {
-    r=__sys_port_send(2,IPC_BLOCKED_ACCESS,data1,strlen(data1)+1,buf,
+    r=__sys_port_send(0,IPC_BLOCKED_ACCESS,data1,strlen(data1)+1,buf,
                       sizeof(buf));
-    kprintf( "[NEW PORT CLIENT THREAD]: Trying to send a message over a closed channel: %d\n",
-             r);
+    kprintf( "[NEW PORT CLIENT THREAD]: Trying to send a message over a closed channel(%d): %d\n",
+             0,r);
   }
 
   kprintf( "[NEW PORT CLIENT THREAD]: Done !\n" );
   for(;;);
+*/
 /*
   msg1=__ipc_create_nb_port_message(current_task(),data1,
                                    strlen(data1)+1);
@@ -547,6 +550,15 @@ static void __new_port_logic_client_thread(void *t)
     __wait_ticks(1000, "[NEW PORT CLIENT]" );
   }
 
+  kprintf( "[NEW PORT CLIENT THREAD]: Closing channels.\n" );
+  for(i=0;i<10;i++) {
+    ch_id=sys_close_channel(i);
+    if( ch_id < 0 ) {
+      kprintf( "[NEW PORT CLIENT THREAD]: Failed to close channel N%d: %d\n",
+               i,ch_id);
+      for(;;);
+    }
+  }
   kprintf( "[NEW PORT CLIENT THREAD]: Done !\n" );
   for(;;);
 }
@@ -567,22 +579,33 @@ static void __new_port_logic_thread(void *t)
     r=__ipc_create_port(current_task(),IPC_BLOCKED_ACCESS);
     kprintf( "%d\n", r );
   }
-
+  __s_port_id=2;
+  kprintf( "[NEW PORT THREAD]: Ports created: %d\n",i );
+//  if( kernel_thread( __new_port_logic_client_thread,NULL,NULL) ) {
+//    panic( "Can't create Migration thread !" );
+//  }
+/*
+  __wait_ticks(600, "[SERVER]");
+  kprintf("[NEW PORT THREAD]: Closing port %d. %d\n",
+          __s_port_id,sys_close_port(__s_port_id));
+  kprintf( "[NEW PORT THREAD]: Done !\n" );
+  for(;;);
+*/
   __s_port_id=4;
-  r=__ipc_get_port(current_task(),__s_port_id,&__s_port);
-  if( !r ) {
+  if( __s_port_id ) {
     if( kernel_thread( __new_port_logic_client_thread,NULL,NULL) ) {
       panic( "Can't create Migration thread !" );
     }
 
     while( 1 ) {
       kprintf( "[NEW PORT THREAD]: Listening on port %d ...\n", __s_port_id );
-      r=__ipc_port_receive(__s_port,IPC_BLOCKED_ACCESS,buf,sizeof(buf),
+      r=__sys_port_receive(__s_port_id,IPC_BLOCKED_ACCESS,buf,sizeof(buf),
                            &msg_info);
       if( !r ) {
         kprintf( "[NEW PORT THREAD]: Msg ID: %d, Data size: %d\n",
                  msg_info.msg_id,msg_info.msg_len);
         kprintf( "Data: %s\n", buf );
+        sys_close_port(__s_port_id);
         r=__sys_port_reply(__s_port_id,msg_info.msg_id,reply_data,
                            strlen(reply_data)+1);
         kprintf( "[NEW PORT THREAD]: Reply status: %d\n", r );
