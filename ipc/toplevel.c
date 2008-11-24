@@ -60,6 +60,11 @@ status_t sys_open_channel(pid_t pid,ulong_t port)
   return r;
 }
 
+status_t sys_close_channel(ulong_t channel)
+{
+  return ipc_close_channel(current_task(),channel);
+}
+
 status_t __sys_create_port( ulong_t flags, ulong_t queue_size )
 {
   task_t *caller=current_task();

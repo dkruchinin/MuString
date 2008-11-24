@@ -107,4 +107,23 @@ static always_inline void atomic_dec(atomic_t *a)
                     : "+m" (*a));
 }
 
+/**
+ * @fn static always_inline bool atomic_dec_and_test(atomic_t *a)
+ * Atomically decrements target atomic variable and tests if its
+ * value is zero.
+ * @return true - if atomic variable is zero, false - if not.
+ */
+static always_inline bool atomic_dec_and_test(atomic_t *a)
+{
+  atomic_dec(a);
+  return (atomic_get(a) == 0);
+}
+
+static always_inline bool atomic_sub_and_test(atomic_t *a,long sub)
+{
+  atomic_sub(a,sub);
+  return (atomic_get(a) == 0);
+}
+
+
 #endif /* __AMD64_ATOMIC_H__ */

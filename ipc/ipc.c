@@ -40,7 +40,7 @@ static task_ipc_t *__allocate_task_ipc(void)
   /* TODO: [mt] allocate task_ipc_t via slabs ! */
 }
 
-static void __free_task_ipc(task_ipc_t *ipc)
+void free_task_ipc(task_ipc_t *ipc)
 {
   /* TODO:[mt] free IPC structure properly ! */
 }
@@ -111,28 +111,12 @@ free_ipc_priv:
   __free_ipc_private_data(ipc_priv);
 free_ipc:
   if(ipc) {
-    __free_task_ipc(ipc);
+    free_task_ipc(ipc);
   }
   return -ENOMEM;
 }
 
-task_ipc_t *get_task_ipc(task_t *t)
-{
-  task_ipc_t *ipc;
-
-  LOCK_TASK_MEMBERS(t);
-  if( t->ipc ) {
-    atomic_inc(&t->ipc->use_count);
-    ipc=t->ipc;
-  } else {
-    ipc=NULL;
-  }
-  UNLOCK_TASK_MEMBERS(t);
-
-  return ipc;
-}
-
-void __deinitialize_task_ipc(task_ipc_t *ipc)
+void deinitialize_task_ipc(task_ipc_t *ipc)
 {
   uint32_t i;
 
@@ -156,16 +140,6 @@ void __deinitialize_task_ipc(task_ipc_t *ipc)
   /* Close all buffers */
 
   UNLOCK_IPC(ipc);
-}
-
-void release_task_ipc(task_ipc_t *ipc)
-{
-  atomic_dec(&ipc->use_count);
-  if( !atomic_get(&ipc->use_count) ) {
-    /* Last reference, so clean it all up. */
-    __deinitialize_task_ipc(ipc);
-    __free_task_ipc(ipc);
-  }
 }
 
 void release_task_ipc_priv(task_ipc_priv_t *priv)

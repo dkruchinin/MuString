@@ -65,8 +65,6 @@ typedef struct __task_ipc_priv {
 } task_ipc_priv_t;
 
 status_t setup_task_ipc(task_t *task);
-task_ipc_t *get_task_ipc(task_t *task);
-void release_task_ipc(task_ipc_t *ipc);
 void release_task_ipc_priv(task_ipc_priv_t *priv);
 
 #define LOCK_IPC(ipc) semaphore_down(&ipc->sem)
@@ -86,5 +84,35 @@ void release_task_ipc_priv(task_ipc_priv_t *priv);
 
 #define REF_IPC_ITEM(c)  atomic_inc(&c->use_count)
 #define UNREF_IPC_ITEM(c)  atomic_dec(&c->use_count)
+
+void free_task_ipc(task_ipc_t *ipc);
+void deinitialize_task_ipc(task_ipc_t *ipc);
+
+static inline task_ipc_t *get_task_ipc(task_t *t)
+{
+  task_ipc_t *ipc;
+
+  LOCK_TASK_MEMBERS(t);
+  if( t->ipc ) {
+    atomic_inc(&t->ipc->use_count);
+    ipc=t->ipc;
+  } else {
+    ipc=NULL;
+  }
+  UNLOCK_TASK_MEMBERS(t);
+
+  return ipc;
+}
+
+static inline void release_task_ipc(task_ipc_t *ipc)
+{
+  atomic_dec(&ipc->use_count);
+  if( !atomic_get(&ipc->use_count) ) {
+    /* Last reference, so clean it all up. */
+    deinitialize_task_ipc(ipc);
+    free_task_ipc(ipc);
+  }
+}
+
 
 #endif

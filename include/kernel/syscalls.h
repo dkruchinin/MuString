@@ -379,4 +379,6 @@ void sys_exit(int code);
 
 status_t sys_open_channel(pid_t pid,ulong_t port);
 
+status_t sys_close_channel(ulong_t channel);
+
 #endif

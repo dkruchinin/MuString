@@ -30,35 +30,78 @@ static ipc_channel_t *__allocate_channel(ipc_gen_port_t *port)
 ipc_channel_t *ipc_get_channel(task_t *task,ulong_t ch_id)
 {
   ipc_channel_t *c=NULL;
-  task_ipc_t *ipc;
+  task_ipc_t *ipc=get_task_ipc(task);
 
-  LOCK_TASK_MEMBERS(task);
-  ipc=task->ipc;
-
-  if( ipc && ipc->channels ) {
-    IPC_LOCK_CHANNELS(ipc);
-    if(ch_id < task->limits->limits[LIMIT_IPC_MAX_CHANNELS] &&
-       ipc->channels[ch_id] != NULL) {
-      c=ipc->channels[ch_id];
-      REF_IPC_ITEM(c);
+  if( ipc ) {
+    if( ipc->channels ) {
+      IPC_LOCK_CHANNELS(ipc);
+      if(ch_id < task->limits->limits[LIMIT_IPC_MAX_CHANNELS] &&
+         ipc->channels[ch_id] != NULL) {
+        c=ipc->channels[ch_id];
+        atomic_inc(&c->use_count);
+      }
+      IPC_UNLOCK_CHANNELS(ipc);
     }
-    IPC_UNLOCK_CHANNELS(ipc);
+    release_task_ipc(ipc);
   }
 
-  UNLOCK_TASK_MEMBERS(task);
   return c;
 }
 
-void ipc_put_channel(ipc_channel_t *channel)
+static void __shutdown_channel(ipc_channel_t *channel)
 {
-  UNREF_IPC_ITEM(channel);
+  __ipc_put_port(channel->server_port);
+  memfree(channel);
+}
 
-  if( !atomic_get(&channel->use_count) ) {
+void ipc_unref_channel(ipc_channel_t *channel,ulong_t c)
+{
+  bool shutdown;
+  task_ipc_t *ipc=channel->ipc;
+
+  IPC_LOCK_CHANNELS(channel->ipc);
+  if(ipc->channels) {
+    if( atomic_sub_and_test(&channel->use_count,c) ) {
+      shutdown=true;
+      ipc->channels[channel->id]=NULL;
+      ipc->num_channels--;
+      linked_array_free_item(&ipc->channel_array,channel->id);
+    } else {
+      shutdown=false;
+    }
+  }
+  IPC_UNLOCK_CHANNELS(channel->ipc);
+
+  if( shutdown ) {
+    kprintf( "* Shutting down channel: %d\n",channel->id );
+    __shutdown_channel(channel);
   }
 }
 
-void ipc_shutdown_channel(ipc_channel_t *channel)
+status_t ipc_close_channel(task_t *owner,ulong_t ch_id)
 {
+  task_ipc_t *ipc=get_task_ipc(owner);
+  ipc_channel_t *c;
+  status_t r;
+
+  if( !ipc ) {
+    return -EINVAL;
+  }
+
+  LOCK_IPC(ipc);
+  c=ipc_get_channel(current_task(),ch_id);
+
+  if( !c ) {
+    r=-EINVAL;
+  } else {
+    /* One reference after 'ipc_get_channel()' + one initial reference. */
+    ipc_unref_channel(c,2);
+    r=0;
+  }
+
+  UNLOCK_IPC(ipc);
+  release_task_ipc(ipc);
+  return r;
 }
 
 status_t ipc_open_channel(task_t *owner,task_t *server,ulong_t port)
@@ -114,6 +157,7 @@ status_t ipc_open_channel(task_t *owner,task_t *server,ulong_t port)
   }
 
   channel->id=id;
+  channel->ipc=ipc;
 
   IPC_LOCK_CHANNELS(ipc);
   ipc->channels[id]=channel;
