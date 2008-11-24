@@ -133,7 +133,7 @@ static bool io_apic_handles_irq(uint32_t irq)
     io_apic_disable_irq(i);
 }
 
-static void io_apic_enable_all(void)
+/*static*/ void io_apic_enable_all(void)
 {
   int i;
 
@@ -173,8 +173,6 @@ void io_apic_bsp_init(void)
   for(i=0;i<io_apic_pins;i++) {
     io_apic_set_ioredir(i,0x01,IRQ_BASE+i,0x0);
   }
-
-  io_apic_enable_all(); 
 }
 
 void io_apic_init(void)

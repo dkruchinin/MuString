@@ -241,6 +241,12 @@ static inline void enable_l_apic_in_msr()
 		    );
 }
 
+
+extern void io_apic_disable_all(void);
+extern void io_apic_bsp_init(void);
+extern void io_apic_enable_irq(uint32_t virq);
+extern void io_apic_enable_all();
+
 static int __local_apic_init(void)
 {
 	uint32_t v;
@@ -267,6 +273,7 @@ static int __local_apic_init(void)
   set_apic_dfr_mode(0xf); 
   set_apic_ldr_logdest(1 << apics_number);
 	apics_number++;
+	kprintf("apics_number = %d\n", apics_number);
 
   /* set 0 task priority, i. e. handle all interrupts */ 
   local_apic->tpr.reg = 0; 

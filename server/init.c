@@ -222,9 +222,9 @@ void server_run_tasks(void)
     }
 
     /* After creating the NameServer we should spawn all per-cpu threads. */
-    if( !a ) {
+    /* if( !a ) {
       spawn_percpu_threads();
-    }
+    } */
 
     r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
     if( r ) {
