@@ -40,7 +40,7 @@ extern uintptr_t _kernel_extended_end;
 #define LAST_BIOS_PAGE (BIOS_END_ADDR >> PAGE_WIDTH)
 #define KERNEL_FIRST_FREE_ADDRESS ((void *)PAGE_ALIGN(_kernel_extended_end))
 #define KERNEL_FIRST_ADDRESS ((void *)&_kernel_end)
-#define IDENT_MAP_PAGES (_mb2b(1) >> PAGE_WIDTH)
+#define IDENT_MAP_PAGES (_mb2b(2) >> PAGE_WIDTH)
 
 DEFINE_ITERATOR_CTX(page_frame, PF_ITER_ARCH,
                     e820memmap_t *mmap;
