@@ -286,12 +286,16 @@ status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg)
 
   if(cmd > SCHEDULER_MAX_COMMON_IOCTL) {
     return  -EINVAL;
-  }
+  }  
 
-  target = pid_to_task(pid);
+  target = pid_to_task(pid);  
   if( target == NULL ) {
     return -ESRCH;
   }
+  
+  /* if TF_USPC_BLOCKED flag is set, task static priority can not be changed by user */
+  if ((cmd == SYS_SCHED_CTL_SET_PRIORITY) && (target->flags & TF_USPC_BLOCKED))
+      return -EAGAIN;
 
   if( target->scheduler == NULL ) {
     r = -ENOTTY;

@@ -15,10 +15,9 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * include/eza/waitqueue.h: prototypes for waitqueues.
+ * include/eza/waitqueue.h: Wait queue API and defenitions
  */
 
 #ifndef __WAITQUEUE_H__
@@ -29,24 +28,84 @@
 #include <eza/spinlock.h>
 #include <eza/arch/types.h>
 
-typedef struct __wait_queue {
-  list_head_t waiters;
-  uint32_t num_waiters;
-  spinlock_t q_lock;
-} wait_queue_t;
+/**
+ * @typedef int (*wqueu_cmp_func_t)(wqueue_task_t *wqt1, wqueue_task_t *wqt2)
+ * @brief Wait queue custom comparison function.
+ *
+ * In case wait queue has type WQ_CUSTOM, its comparison function has to be
+ * defined explicitly by the user. Comparison function is called on each
+ * insertion into the wait queue. Inserted task position in the wait queue
+ * depens on the value returned by comparison function. Function may return:
+ * 1) negative integer - if @a wqt1 leaster than @a wqt2
+ * 2) 0 - if @a wqt1 equals to @a wqt2
+ * 3) positive integer - if @a wqt1 greater than @a wqt2
+ *
+ * @see wqueue_t
+ * @see wqueue_task_t
+ * @see wqueue_type_t
+ */
+typedef int (*wqueue_cmp_func_t)(wqueue_task_t *wqt1, wqueue_task_t *wqt2);
 
-typedef uint8_t wqueue_flags_t;
+/**
+ * @enum wqueue_type_t
+ * @brief Wait queue type
+ *
+ * Wait queue type determines semantic of insertion tasks
+ * into the queue.
+ *
+ * @see wqueue_t
+ * @see wqueue_cmp_func_t
+ */
+typedef enum __wqueue_type {
+  WQ_DEFAULT = 0, /**< Default insertion semantic: more prioritized tasks located closer to the queue head */
+  WQ_CUSTOM,      /**< User-defined insertion semantic */
+} wqueue_type_t;
 
-typedef struct __wait_queue_task {
-  list_head_t head;
-  list_node_t node;
-  task_t *task;
-  wait_queue_t *q;
-  uint32_t priority;
-} wait_queue_task_t;
+/**
+ * @struct wqueue_t
+ * @brief Main wait queue(a queue of sleeping tasks) structure
+ *
+ * Default wait queue insertion policy is insertion by tasks priority.
+ * More prioritized tasks are always closer to queue head than less prioritized.
+ *
+ * @see wqueue_type_t
+ * @see wqueue_task_t
+ * @see wqueue_cmp_func_t
+ */
+typedef struct __wqueue {
+  list_head_t waiters;        /**< A list of sleeping tasks */
+  wqueue_cmp_func_t cmp_func; /**< Tasks comparision function */
+  wqueue_type_t type;         /**< Wait queue type */
+  uint32_t num_waiters;       /**< Number of tasks in queue */
+  spinlock_t q_lock;          /**< Spinlock protecting wait queue structure */
+} wqueue_t;
 
+/**
+ * @struct wqueue_task_t
+ * @brief An item of wait queue that wraps task_t structure
+ *
+ * Wait queue item may be inserted to or removed from the wait queue.
+ * Before inserting task into the wait queue it must be wrapped by wqueue_task_t
+ * strucure. Typically that kind of structures is allocated on the stack of task
+ * that is going to insert itself into the queue.
+ *
+ * @see wqueue_t
+ * @see task_t
+ */
+typedef struct __wqueue_task {
+  list_head_t head; /**< A list of tasks of the same priority */
+  list_node_t node; /**< A node of priority list */
+  task_t *task;     /**< A pointer to task itself */
+  wait_queue_t *q;  /**< A pointer to parent wait queue */
+  uint8_t uflags;   /**< User-defined flags */
+} wqueue_task_t;
+
+/**
+ * @enum wqueue_insop_t
+ * @brief Insertion into the wait queue policies
+ */
 typedef enum __wqueue_insop {
-  WQ_INSERT_SIMPLE = 0,
+  WQ_INSERT_SIMPLE = 0, /**< Simple insertion. Do not enforce task to sleep. */
   WQ_INSERT_SLEEP,
 } wqueue_insop_t;
 
