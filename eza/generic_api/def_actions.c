@@ -13,7 +13,7 @@ void initialize_deffered_actions(void)
 
     a->flags=0;
     list_init_head(&a->pending_actions);
-    spinlock_initialize(&a->lock,"");
+    spinlock_initialize(&a->lock);
   }
 }
 

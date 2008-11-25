@@ -56,13 +56,31 @@ typedef struct __list_head {
   list_node_t head; /**< Head element of the list */
 } list_head_t;
 
+
 /**
  * @def LIST_DEFINE(name)
  * @brief Define and initialize list head with name @a name
  * @param name - name of variable
  */
 #define LIST_DEFINE(name)                                       \
-  list_head_t name = { .head = { &(name).head, &(name).head } }
+  list_head_t (name) = LIST_INITIALIZE(name)
+
+/**
+ * @def LIST_INITIALIZE
+ * @brief Initialize list head.
+ * @param name - list name
+ */
+#define LIST_INITIALIZE(name)                   \
+  { .head = { &(name).head, &(name).head } }
+
+#define SKIPLIST_DEFINE(name)                   \
+  skiplist_t (name) = SKIPLIST_INITIALIZE(name)
+
+#define SKIPLIST_INITIALIZE(name)               \
+  {                                             \
+    .head = { &(name).head, &(name).head };     \
+    .node = { MLST_LIST_NEXT, MLST_LIST_PREV }  \
+  }
 
 /**
  * @fn static inline void list_init_head(list_head_t *lst)
@@ -179,11 +197,11 @@ static inline bool list_node_prev_isbound(list_node_t *node)
 
 /**
  * @def list_add(before, new, after)
- * @param after  - will be the next node after @a new
+ * @param next  - will be the next node after @a new
  * @param new    - node to insert
  */
-#define list_add(after, new)                        \
-  (list_add_range(new, new, (after)->prev, after))
+#define list_add(next, new)                        \
+  (list_add_range(new, new, (next)->prev, next))
 
 /**
  * @def list_move2head(to, from)
@@ -202,7 +220,6 @@ static inline bool list_node_prev_isbound(list_node_t *node)
  */
 #define list_move2tail(to, from)                \
   (list_move(list_node_last(to), list_head(to), from))
-
 
 /**
  * @def list_for_each(lst, liter)
@@ -241,6 +258,7 @@ static inline bool list_node_prev_isbound(list_node_t *node)
   for (iter = list_entry(list_node_first(lst), typeof(*iter), member); \
        &iter->member != list_head(lst);                                \
        iter = list_entry(iter->member.next, typeof(*iter), member))
+    
 
 /**
  * @fn static inline int list_is_empty(list_t *list)

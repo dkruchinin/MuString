@@ -27,13 +27,13 @@
 
 #include <eza/arch/types.h>
 #include <eza/resource.h>
-#include <mm/pt.h>
 #include <eza/kstack.h>
 #include <eza/spinlock.h>
 #include <eza/arch/current.h>
 #include <ds/list.h>
 #include <eza/arch/preempt.h>
 #include <eza/task.h>
+
 
 /* Handler for extra check during the scheduling step.
  * If it returns true, target task will be rescheduled,
@@ -90,8 +90,6 @@ status_t sched_add_cpu(cpu_id_t cpu);
 status_t sched_move_task_to_cpu(task_t *task,cpu_id_t cpu);
 void update_idle_tick_statistics(scheduler_cpu_stats_t *stats);
 
-void schedule_migration(task_t *task,cpu_id_t cpu);
-
 extern scheduler_t *get_default_scheduler(void);
 
 void schedule(void);
@@ -120,7 +118,17 @@ extern void arch_sched_reset_current_need_resched(void);
 
 status_t sys_yield(void);
 status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
+status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg);
 status_t sleep(ulong_t ticks);
+
+#ifdef CONFIG_SMP
+
+#define CPU_TASK_REBALANCE_DELAY  HZ
+void migration_thread(void *data);
+status_t schedule_migration(task_t *task,cpu_id_t cpu);
+status_t schedule_remote_task_state_change(task_t *task,ulong_t state);
+
+#endif
 
 static inline void grab_task_struct(task_t *t)
 {
@@ -131,6 +139,8 @@ static inline void release_task_struct(task_t *t)
 }
 
 #define cpu_affinity_ok(task,c) (task->cpu & (1<<c))
+
+
 
 #endif
 

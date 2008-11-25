@@ -27,21 +27,22 @@
 #include <server.h>
 #include <ds/iterator.h>
 #include <ds/list.h>
+#include <mlibc/assert.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/string.h>
 #include <mm/mm.h>
 #include <mm/page.h>
 #include <mm/mmpool.h>
+#include <mm/mmap.h>
 #include <eza/kernel.h>
+#include <eza/vm.h>
 #include <eza/swks.h>
 #include <eza/arch/mm.h>
-#include <eza/arch/page.h>
-#include <eza/vm.h>
+#include <eza/arch/ptable.h>
 
 /* Initial kernel top-level page directory record. */
 uintptr_t _kernel_extended_end;
 uint8_t e820count;
-page_directory_t kernel_pt_directory;
 uint8_t k_entries[PAGE_SIZE] __attribute__((aligned(PAGE_SIZE)));
 
 static page_idx_t dma_pages = 0;
@@ -49,12 +50,6 @@ static uint64_t min_phys_addr = 0, max_phys_addr = 0;
 
 static vm_range_t direct_mapping_area;
 uintptr_t kernel_min_vaddr;
-
-static void initialize_kernel_page_directory(void)
-{
-  initialize_page_directory(&kernel_pt_directory);
-  kernel_pt_directory.entries = k_entries;
-}
 
 #ifdef DEBUG_MM
 static void verify_mapping(const char *descr, uintptr_t start_addr,
@@ -64,9 +59,9 @@ static void verify_mapping(const char *descr, uintptr_t start_addr,
   char *ptr = (char *)start_addr;
   bool ok = true;
 
-  kprintf(" Verifying %s mapping...", descr);
+  kprintf(" Verifying %s...", descr);
   for( i = 0; i < num_pages; i++ ) {
-    t = mm_pin_virtual_address(&kernel_pt_directory,(uintptr_t)ptr);
+    t = mm_pin_virt_addr(kernel_root_pagedir, (uintptr_t)ptr);
     if(t != start_idx) {
       ok = false;
       break;
@@ -77,7 +72,7 @@ static void verify_mapping(const char *descr, uintptr_t start_addr,
   }
 
   if (ok) {
-    kprintf(" %*s\n", 14 - strlen(descr), "[OK]");
+    kprintf(" %*s\n", strlen(descr) + 14, "[OK]");
     return;
   }
   
@@ -136,18 +131,16 @@ static void __extend_kernel_end(void)
 {
    uintptr_t addr = server_get_end_phy_addr();
    if (!addr) {
-      kprintf("chiki\n%p\n",KERNEL_FIRST_ADDRESS);
       _kernel_extended_end = (uintptr_t)PAGE_ALIGN(KERNEL_FIRST_ADDRESS);
-      //      for(;;);
       return;
    }
 
    _kernel_extended_end = (uintptr_t)PAGE_ALIGN(p2k_code(addr));
-
 }
 
 void arch_mm_init(void)
 {
+  CT_ASSERT((sizeof(pdir_level_t) + sizeof(pde_idx_t)) <= sizeof(atomic_t));
   kprintf("[MM] Scanning physical memory...\n");
   scan_phys_mem();
   swks.mem_total_pages = max_phys_addr >> PAGE_WIDTH;
@@ -155,7 +148,6 @@ void arch_mm_init(void)
   page_frames_array = KERNEL_FIRST_FREE_ADDRESS;  
   _kernel_extended_end =
     PAGE_ALIGN((uintptr_t)page_frames_array + sizeof(page_frame_t) * swks.mem_total_pages);
-  kprintf("UPD: %p\n", _kernel_extended_end);
   kprintf(" Scanned: %ldM, %ld pages\n", (long)_b2mb(max_phys_addr - min_phys_addr),
           (long)swks.mem_total_pages);
 }
@@ -250,41 +242,31 @@ void arch_mm_page_iter_init(page_frame_iterator_t *pfi, ITERATOR_CTX(page_frame,
 void arch_mm_remap_pages(void)
 {
   int ret;
-  page_frame_iterator_t pfi;
-  ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
-
-  mm_init_pfiter_index(&pfi, &pfi_index_ctx, 1, IDENT_MAP_PAGES - 1);
-
-  /* First, initialize kernel default page-table directory. */
-  initialize_kernel_page_directory();
-  kprintf(" PGD: Virt = 0x%x, Phys = 0x%x\n",
-          kernel_pt_directory.entries, virt_to_phys(kernel_pt_directory.entries));
 
   /* Create identity mapping */
-  ret = mm_map_pages(&kernel_pt_directory, &pfi, 0x1000, IDENT_MAP_PAGES - 1, MAP_KERNEL | MAP_RW);
-  if(ret != 0)
-    panic( "arch_mm_remap_pages(): Can't remap physical pages (DMA identical mapping) !" );
-
-  verify_mapping("identity", 0x1000, IDENT_MAP_PAGES - 1, 1);
-  
-  /* Now we should remap all available physical memory starting at 'KERNEL_BASE'. */
-  mm_init_pfiter_index(&pfi, &pfi_index_ctx, 0, swks.mem_total_pages - 1);
-  ret = mm_map_pages(&kernel_pt_directory, &pfi, KERNEL_BASE,
-                     swks.mem_total_pages, MAP_KERNEL | MAP_RW);
-  if( ret != 0 ) {
-    panic( "arch_mm_remap_pages(): Can't remap physical pages !" );
+  ret = mmap_kern(0x1000, 1, IDENT_MAP_PAGES - 1, MAP_RW);
+  if (ret) {
+    panic("arch_mm_remap_pages(): Can't create identity mapping (%p -> %p)! [errcode=%d]",
+          0x1000, IDENT_MAP_PAGES << PAGE_WIDTH, ret);
   }
 
+  verify_mapping("identity mapping", 0x1000, IDENT_MAP_PAGES - 1, 1);
+  
+  /* Now we should remap all available physical memory starting at 'KERNEL_BASE'. */
+  ret = mmap_kern(KERNEL_BASE, 0, swks.mem_total_pages, MAP_RW | MAP_EXEC);
+  if (ret)
+    panic("arch_mm_remap_pages(): Can't remap physical pages !");
+
   /* Verify that mappings are valid. */  
-  verify_mapping("general", KERNEL_BASE, swks.mem_total_pages, 0);
+  verify_mapping("general mapping", KERNEL_BASE, swks.mem_total_pages, 0);
 
   /* Now we should register our direct mapping area and kernel area
    * to allow them be mapped as mandatory areas in user memory space.
    */
   direct_mapping_area.phys_addr=0x1000;
   direct_mapping_area.virt_addr=0x1000;
-  direct_mapping_area.num_pages=4095;
-  direct_mapping_area.map_flags=MAP_KERNEL | MAP_RW;
+  direct_mapping_area.num_pages=IDENT_MAP_PAGES - 1;
+  direct_mapping_area.map_flags= MAP_USER | MAP_RW;
   vm_register_user_mandatory_area(&direct_mapping_area);
 
   /* TODO: [mt] redesign 'kernel_min_vaddr'. */
@@ -293,16 +275,17 @@ void arch_mm_remap_pages(void)
   /* All CPUs must initially reload their CR3 registers with already
    * initialized Level-4 page directory.
    */
-  arch_smp_mm_init(0);
+  arch_smp_mm_init(0);  
 }
 
+/* FIXME DK: move this fucking stuff to another(better) place... */
 status_t arch_vm_map_kernel_area(task_t *task)
 {
-  uintptr_t *src_pml4,*dst_pml4;
-  int idx = (KERNEL_BASE >> 39) & 0x1FF;
+  pde_t *src_pml4, *dst_pml4;
+  pde_idx_t eidx = pgt_vaddr2idx(KERNEL_BASE, PTABLE_LEVEL_LAST);
 
-  src_pml4 = ((uintptr_t *)kernel_pt_directory.entries)+idx;
-  dst_pml4 = ((uintptr_t *)task->page_dir.entries)+idx;  
+  src_pml4 = pgt_fetch_entry(kernel_root_pagedir, eidx);
+  dst_pml4 = pgt_fetch_entry(task->page_dir, eidx);
 
   /* Just copy PML4 entry from kernel page directoy to user one. */
   *dst_pml4 = *src_pml4;
@@ -311,13 +294,6 @@ status_t arch_vm_map_kernel_area(task_t *task)
 }
 
 void arch_smp_mm_init(int cpu)
-{
-  load_cr3( _k2p((uintptr_t)&kernel_pt_directory.entries[0]), 1, 1 );
+{  
+  load_cr3(_k2p((uintptr_t)pframe_to_virt(kernel_root_pagedir)), 1, 1);
 }
-
-/* AMD 64-specific function for zeroizing a page. */
-void arch_clean_page(page_frame_t *frame)
-{
-  memset( pframe_to_virt(frame), 0, PAGE_SIZE );
-}
-

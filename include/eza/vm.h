@@ -4,7 +4,7 @@
 #include <eza/arch/types.h>
 #include <ds/list.h>
 #include <eza/spinlock.h>
-#include <mm/pt.h>
+#include <mm/mmap.h>
 #include <eza/task.h>
 
 /* TODO: [mt] lock/unlock task VM via semaphores ! */

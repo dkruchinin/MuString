@@ -25,7 +25,7 @@
 #include <eza/errno.h>
 #include <eza/security.h>
 #include <eza/smp.h>
-#include <eza/semaphore.h>
+#include <eza/mutex.h>
 #include <eza/swks.h>
 #include <eza/resource.h>
 #include <mlibc/rbtree.h>
@@ -33,11 +33,11 @@
 #include <mlibc/string.h>
 #include <kernel/syscalls.h>
 
-static DEFINE_MUTEX(ioports_lock);
+static MUTEX_DEFINE(ioports_lock);
 static struct rb_root ioports_root;
 
-#define LOCK_IOPORTS  semaphore_down(&ioports_lock)
-#define UNLOCK_IOPORTS  semaphore_up(&ioports_lock)
+#define LOCK_IOPORTS  mutex_lock(&ioports_lock)
+#define UNLOCK_IOPORTS  mutex_unlock(&ioports_lock)
 
 typedef struct __ioport_range {
   struct rb_node node;

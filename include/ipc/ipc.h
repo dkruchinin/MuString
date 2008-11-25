@@ -2,7 +2,7 @@
 #define  __IPC_H__
 
 #include <eza/arch/types.h>
-#include <eza/semaphore.h>
+#include <eza/mutex.h>
 #include <ipc/port.h>
 #include <eza/arch/atomic.h>
 #include <ds/linked_array.h>
@@ -32,7 +32,7 @@ typedef struct __ipc_pstats {
 } ipc_pstats_t;
 
 typedef struct __task_ipc {
-  semaphore_t sem;
+  mutex_t mutex;
   atomic_t use_count;  /* Number of tasks using this IPC structure. */
 
   /* port-related stuff. */
@@ -59,8 +59,8 @@ task_ipc_t *get_task_ipc(task_t *task);
 void release_task_ipc(task_ipc_t *ipc);
 void release_task_ipc_priv(task_ipc_priv_t *priv);
 
-#define LOCK_IPC(ipc) semaphore_down(&ipc->sem)
-#define UNLOCK_IPC(ipc) semaphore_up(&ipc->sem)
+#define LOCK_IPC(ipc)  mutex_lock(&(ipc)->mutex)
+#define UNLOCK_IPC(ipc) mutex_unlock(&(ipc)->mutex);
 
 #define IPC_LOCK_PORTS(ipc) spinlock_lock(&ipc->port_lock)
 #define IPC_UNLOCK_PORTS(ipc) spinlock_unlock(&ipc->port_lock)

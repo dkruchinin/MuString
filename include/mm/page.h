@@ -38,6 +38,7 @@
 #include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 
+
 #define NOF_MM_POOLS 2 /**< Number of MM pools in system */
 
 /**
@@ -61,6 +62,8 @@ typedef uint16_t page_flags_t;
 #define PAGE_POOLS_MASK (PF_PGEN | PF_PDMA)
 #define PAGE_PRESENT_MASK (PAGE_POOL_MASK | PF_RESERVED)
 
+typedef uint8_t pd_flags_t;
+
 /**
  * @struct page_frame_t
  * @brief Describes one physical page.
@@ -74,12 +77,19 @@ typedef struct __page_frame {
   list_head_t head;    /**< Obvious */
   list_node_t node;    /**< Obvious */
   page_idx_t idx;      /**< Page frame index in the pframe_pages_array */
-  atomic_t refcount;   /**< Number of references to the physical page */
+  union {
+    atomic_t refcount;   /**< Number of references to the physical page */
+    struct {
+      pdir_level_t level;
+      pde_idx_t entries;
+    };
+  };
   page_flags_t flags;  /**< Page flags */
   uint32_t _private;   /**< Private data that may be used by internal page frame allocator */  
 } page_frame_t;
 
 #define PF_ITER_UNDEF_VAL (-0xf)
+
 
 /**
  * @struct page_frame_iterator_t
@@ -107,7 +117,7 @@ extern page_frame_t *page_frames_array;
 
 static inline void *pframe_to_virt(page_frame_t *frame)
 {
-  return (void *)(KERNEL_BASE + frame->idx * PAGE_SIZE);
+  return (void *)(KERNEL_BASE + (frame->idx << PAGE_WIDTH));
 }
 
 static inline page_idx_t pframe_number(page_frame_t *frame)
@@ -122,7 +132,7 @@ static inline page_frame_t *pframe_by_number(page_idx_t idx)
 
 static inline void *pframe_phys_addr(page_frame_t *frame)
 {
-  return (void *)((uintptr_t)frame->idx * PAGE_SIZE);
+  return (void *)((uintptr_t)frame->idx << PAGE_WIDTH);
 }
 
 static inline void *virt_to_phys(void *virt)
@@ -132,7 +142,7 @@ static inline void *virt_to_phys(void *virt)
 
 static inline void *pframe_id_to_virt( page_idx_t idx )
 {
-  return (void *)(KERNEL_BASE + idx * PAGE_SIZE);
+  return (void *)(KERNEL_BASE + (idx << PAGE_WIDTH));
 }
 
 static inline page_idx_t virt_to_pframe_id(void *virt)

@@ -27,6 +27,7 @@
  * Basic memory management functionality.
  */
 
+#include <config.h>
 #include <ds/iterator.h>
 #include <ds/list.h>
 #include <mlibc/kprintf.h>
@@ -34,12 +35,13 @@
 #include <mm/page.h>
 #include <mm/mmpool.h>
 #include <mm/idalloc.h>
+#include <mm/mmap.h>
 #include <eza/kernel.h>
 #include <eza/arch/mm.h>
-#include <config.h>
+#include <eza/arch/ptable.h>
 
 #ifndef IDALLOC_VPAGES
-  #define IDALLOC_VPAGES 2
+#define IDALLOC_VPAGES 2
 #endif
 
 /* An array of all physical pages */
@@ -80,8 +82,8 @@ void mm_init(void)
   }
 
   kprintf("[MM] Memory pools were initialized\n");
-
-/*
+  
+  /*
    * Now we may initialize "init data allocator"
    * Note: idalloc allocator will cut from general pool's
    * pages no more than IDALLOC_PAGES. After initialization
@@ -101,6 +103,11 @@ void mm_init(void)
             atomic_get(&pool->free_pages), pool->reserved_pages);
     mmpools_init_pool_allocator(pool);
   }
+
+  /* create and initialize kernel pagatable root directory */
+  kernel_root_pagedir = mm_create_root_pagedir();
+  if (!kernel_root_pagedir)
+      panic("Can't create kernel root page directory (ENOMEM)");
 
   /* Now we can remap memory */
   arch_mm_remap_pages();

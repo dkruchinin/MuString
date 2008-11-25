@@ -603,7 +603,7 @@ void tlsf_alloc_init(mm_pool_t *pool)
   memset(tlsf, 0, sizeof(*tlsf));
   check_tlsf_defs(); /* some paranoic checks */
   tlsf->owner = pool->type;
-  spinlock_initialize(&tlsf->lock, "TLSF spinlock");
+  spinlock_initialize(&tlsf->lock);
 
   /*
    * build_tlsf_map uses function __free_pages which
