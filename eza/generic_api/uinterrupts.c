@@ -11,6 +11,7 @@
 #include <eza/vm.h>
 #include <mm/pfalloc.h>
 #include <mm/mm.h>
+#include <mm/mmap.h>
 #include <eza/scheduler.h>
 #include <eza/kconsole.h>
 
@@ -104,7 +105,7 @@ struct __userspace_events_data *allocate_task_uspace_events_data(void)
     uspace_irqs_t *uirqs=&uevents->uspace_irqs;
 
     /* Initialize IRQs-related stuff. */
-    mutex_initialize(&uirqs->mutex);
+    //mutex_initialize(&uirqs->mutex); /* FIXME DK: uncomment later... (u know when :)) */
     spinlock_initialize(&uirqs->lock);
     uirqs->array=NULL;
   }
@@ -173,8 +174,8 @@ status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   caller=current_task();
 
   LOCK_TASK_VM(caller);
-  idx=mm_pin_virtual_address(&caller->page_dir,addr);
-  if( idx != INVALID_PAGE_IDX ) {
+  idx=mm_pin_virt_addr(caller->page_dir,addr);
+  if(idx >= 0) {
     pframe=pframe_by_number(idx);
     get_page(pframe);
     kaddr=pframe_to_virt(pframe);

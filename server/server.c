@@ -22,7 +22,7 @@
  */
 
 #include <eza/arch/types.h>
-#include <mm/pt.h>
+#include <mm/mmap.h>
 #include <mlibc/kprintf.h>
 #include <server.h>
 

@@ -22,17 +22,16 @@
  */
 
 #include <eza/arch/types.h>
-#include <eza/arch/page.h>
 #include <eza/scheduler.h>
 #include <eza/process.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/mm.h>
 #include <mm/mm.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
-#include <mm/pt.h>
+#include <mm/mmap.h>
 #include <eza/arch/elf.h>
 #include <eza/kconsole.h>
+#include <eza/errno.h>
 #include <kernel/elf.h>
 #include <kernel/vm.h>
 #include <mlibc/kprintf.h>
@@ -42,7 +41,6 @@
 
 static status_t __create_task_mm(task_t *task, int num)
 {
-  page_frame_iterator_t pfi;
   uintptr_t code;
   size_t code_size,data_size,text_size,bss_size;
   page_frame_t *stack;
@@ -56,13 +54,12 @@ static status_t __create_task_mm(task_t *task, int num)
   size_t real_code_size=0,real_data_size=0;
   size_t last_data_size,real_data_offset=0;
   size_t last_offset,last_sect_size,last_data_offset;
-  ITERATOR_CTX(page_frame,PF_ITER_INDEX) pfi_idx_ctx;
   status_t r;
   int i;
 
   stack=alloc_pages(USER_STACK_SIZE,AF_PGEN|AF_ZERO);
   if(!stack)
-    return -1;
+    return -ENOMEM;
 
   code_size=init.server[num].size>>PAGE_WIDTH; /*it's a code size in pages */
   code_size++;
@@ -150,39 +147,37 @@ static status_t __create_task_mm(task_t *task, int num)
 
   /* alloc memory for bss */
   bss=alloc_pages(bss_size,AF_PGEN|AF_ZERO);
-  if(!bss)    return -1;
+  if(!bss)
+    return -ENOMEM;
 
 
   /*  kprintf("elf entry -> %p\n",ehead.e_entry); */
 
   /*remap pages*/
-  mm_init_pfiter_index(&pfi,&pfi_idx_ctx,code>>PAGE_WIDTH,(code>>PAGE_WIDTH)+text_size-1); /* .text + .rodata sections */
-  r = mm_map_pages(&task->page_dir,&pfi,USER_START_VIRT,text_size,MAP_RW);
-  if(r!=0)    return -1;
+  r = mmap(task->page_dir, USER_START_VIRT, code >> PAGE_WIDTH, text_size, MAP_USER | MAP_READ | MAP_EXEC);
+  if (r)
+    return r;
 
-  mm_init_pfiter_index(&pfi,&pfi_idx_ctx,data_bss>>PAGE_WIDTH,(data_bss>>PAGE_WIDTH)+data_size-1); /* .text + .rodata sections */
-  r = mm_map_pages(&task->page_dir,&pfi,real_data_offset,data_size,MAP_RW);
-  if(r!=0)    return -1;
+  r = mmap(task->page_dir, real_data_offset, data_bss >> PAGE_WIDTH, data_size, MAP_USER | MAP_RW);  
+  if (r)
+    return r;
 
-  mm_init_pfiter_index(&pfi,&pfi_idx_ctx,pframe_number(bss),pframe_number(bss)+bss_size);
-  r=mm_map_pages(&task->page_dir,&pfi,bss_virt,bss_size,MAP_RW);
-  if(r!=0)    return -1;
+  r = mmap(task->page_dir, bss_virt, pframe_number(bss), bss_size, MAP_USER | MAP_RW);
+  if (r)
+    return r;
 
-  mm_init_pfiter_index(&pfi,&pfi_idx_ctx,pframe_number(stack),pframe_number(stack)+USER_STACK_SIZE);
-  r=mm_map_pages(&task->page_dir,&pfi,USPACE_END-0x40000,USER_STACK_SIZE,MAP_RW);
-  if(r!=0)    return -1;
+  r = mmap(task->page_dir, USPACE_END-0x40000, pframe_number(stack), USER_STACK_SIZE, MAP_USER | MAP_RW);
+  if (r)
+    return r;
 
   r=do_task_control(task,SYS_PR_CTL_SET_ENTRYPOINT,ehead.e_entry);
   r|=do_task_control(task,SYS_PR_CTL_SET_STACK,USPACE_END-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH));
 
-  idx=mm_pin_virtual_address(&task->page_dir,USER_START_VIRT);
-  idx=mm_pin_virtual_address(&task->page_dir,KERNEL_BASE + 0x8000);
 
-  if(r!=0)    return -1;
+  if (r)
+    return r;
 
   /*  kprintf("Grub module: %p\n size: %ld\n",init.server[num].addr,init.server[num].size);*/
-
-
 
   return 0;
 }
@@ -194,8 +189,10 @@ void server_run_tasks(void)
   status_t r;
   kconsole_t *kconsole=default_console();
 
-  if(i<=0)
+  if( i<=0 ) {
+    spawn_percpu_threads();
     return;
+  }
 
   kprintf("[SRV] Starting servers: %d ... \n",i);
   kconsole->disable(); /* shut off console */
@@ -222,9 +219,19 @@ void server_run_tasks(void)
     }
 
     /* After creating the NameServer we should spawn all per-cpu threads. */
+<<<<<<< .merge_file_EpF9sZ
     /* if( !a ) {
       spawn_percpu_threads();
     } */
+=======
+    /*
+     * FIXME [MT]: spawn_run_tasks panics if it can not move task from one CPU to another.
+     * This occurs if spawn_run_tasks runs *before* the second CPU was enabled.
+     */
+    /*if( !a ) {
+      spawn_percpu_threads();
+      }*/
+>>>>>>> .merge_file_TBk6lY
 
     r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
     if( r ) {

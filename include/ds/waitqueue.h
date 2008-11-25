@@ -27,6 +27,7 @@
 #include <ds/list.h>
 #include <eza/task.h>
 #include <eza/spinlock.h>
+#include <eza/errno.h>
 #include <eza/arch/types.h>
 
 typedef struct __wait_queue {
@@ -34,8 +35,6 @@ typedef struct __wait_queue {
   uint32_t num_waiters;
   spinlock_t q_lock;
 } wait_queue_t;
-
-typedef uint8_t wqueue_flags_t;
 
 typedef struct __wait_queue_task {
   list_head_t head;
@@ -55,32 +54,36 @@ typedef enum __wqeue_delop {
   WQ_DELETE_WAKEUP,
 } wqueue_delop_t;
 
-#define waitqueue_push(wq, task)                \
-  waitqueue_insert(wq, task, WQ_INSERT_SLEEP)
+#define WAITQUEUE_DEFINE(name)                          \
+    wait_queue_t (name) = WAITQUEUE_INITIALIZE(name)
 
-static inline status_t waitqueue_push(wait_queue_t *wq, wait_queue_task_t *wq_task)
-{
-  return waitqueue_insert(wq, wq_task, WQ_INSERT_SLEEP);
-}
+#define WAITQUEUE_INITIALIZE(name)                                      \
+  {   .waiters = LIST_INITIALIZE((name).waiters),                       \
+      .num_waiters = 0,                                                 \
+      .q_lock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V), }
 
-static inline status_t waitqueue_pop(wait_queue_t *wq)
-{
-  if (waitqueue_is_empty(wq))
-    return -EINVAL;
+#define waitqueue_push(wq, wq_task)                 \
+  waitqueue_insert(wq, wq_task, WQ_INSERT_SLEEP);
 
-  return waitqueue_delete(wq,
-                          list_entry(list_node_first(&wq->head), wait_queue_task_t, node),
-                          WQ_DELETE_WAKEUP);
-}
+#define waitqueue_pop(wq)                                           \
+  waitqueue_delete(wq, waitqueue_first_task(wq), WQ_DELETE_WAKEUP);
 
 static inline bool waitqueue_is_empty(wait_queue_t *wq)
 {
-  return !!(wq->num_waiters);
+  return !(wq->num_waiters);
 }
 
 status_t waitqueue_initialize(wait_queue_t *wq);
 status_t waitqueue_prepare_task(wait_queue_task_t *wq_task, task_t *task);
-void waitqueue_insert(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_insop_t iop);
-void waitqueue_delete(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_delop_t dop);
+status_t waitqueue_insert(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_insop_t iop);
+status_t waitqueue_delete(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_delop_t dop);
+wait_queue_task_t *waitqueue_first_task(wait_queue_t *wq);
+
+#define DEBUG_WAITQUEUE /* FIXME DK: remove after debug */
+#ifdef DEBUG_WAITQUEUE
+void waitqueue_dump(wait_queue_t *wq);
+#else
+#define waitqueue_dump(wq)
+#endif /* DEBUG_WAITQUEUE */
 
 #endif /* __WAITQUEUE_H__ */

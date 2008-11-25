@@ -16,92 +16,155 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
  * mlibc/waitqueue.c: implementation of waitqueues.
  */
 
+#include <ds/list.h>
+#include <ds/waitqueue.h>
 #include <eza/task.h>
 #include <eza/spinlock.h>
-#include <ds/list.h>
-#include <eza/arch/interrupt.h>
-#include <eza/arch/types.h>
 #include <eza/scheduler.h>
-#include <eza/waitqueue.h>
+#include <eza/arch/types.h>
 
-void waitqueue_initialize(wait_queue_t *wq)
+static void __insert_task(wait_queue_t *wq, wait_queue_task_t *wq_task)
+{
+  list_node_t *next = NULL;
+  
+  if (likely(!list_is_empty(&wq->waiters))) {
+    wait_queue_task_t *t;
+    
+    list_for_each_entry(&wq->waiters, t, node) {
+      if (t->priority == wq_task->priority) {
+        next = list_head(&t->head);
+        break;
+      }
+      if (t->priority > wq_task->priority) {
+        next = &t->node;
+        break;
+      }
+    }
+  }
+  else
+    next = list_head(&wq->waiters);
+
+  list_add(next, &wq_task->node);
+  wq_task->q = wq;
+  wq->num_waiters++;
+}
+
+static void __delete_task(wait_queue_t *wq, wait_queue_task_t *wq_task)
+{    
+  if (!list_is_empty(&wq_task->head)) {
+    wait_queue_task_t *t = list_entry(list_node_first(&wq_task->head),
+                                      wait_queue_task_t, node);
+    list_del(&t->node);
+    list_add(&wq_task->node, &t->node);
+    if (!list_is_empty(&wq_task->head))
+      list_move(list_head(&t->head), list_head(&t->head), &wq_task->head);
+  }
+
+  list_del(&wq_task->node);
+  list_init_head(&wq_task->head);
+  wq_task->q = NULL;
+  wq->num_waiters--;
+}
+
+status_t waitqueue_initialize(wait_queue_t *wq)
 {
   list_init_head(&wq->waiters);
-  wq->num_waiters=0;
-  spinlock_initialize(&wq->q_lock,"");
+  wq->num_waiters = 0;  
+  spinlock_initialize(&wq->q_lock);
+  return 0;
 }
 
-void waitqueue_add_task(wait_queue_t *wq,wait_queue_task_t *w)
+status_t waitqueue_prepare_task(wait_queue_task_t *wq_task, task_t *task)
 {
-  list_init_node(&w->l);
-  w->flags = 0;
+  status_t ret;
+  
+  list_init_head(&wq_task->head);
+  wq_task->task = task;
+  wq_task->q = NULL;
+  ret = do_scheduler_control(task, SYS_SCHED_CTL_GET_PRIORITY, 0);
+  if (ret < 0)
+    return ret;
 
-  LOCK_WAITQUEUE(wq);
-  list_add2tail(&wq->waiters,&w->l);
-  w->q=wq;
-  wq->num_waiters++;
-  UNLOCK_WAITQUEUE(wq);
+  wq_task->priority = ret;
+  return 0;
 }
 
-void waitqueue_remove_task(wait_queue_t *wq,wait_queue_task_t *w)
+status_t waitqueue_insert(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_insop_t iop)
 {
-  LOCK_WAITQUEUE(wq);
-  if( w->q == wq ) {
-    wq->num_waiters--;
-    list_del(&w->l);
-    w->q=NULL;
+  status_t ret = 0;
+  
+  spinlock_lock(&wq->q_lock);
+  __insert_task(wq, wq_task);
+  if (iop == WQ_INSERT_SLEEP)
+    ret = sched_change_task_state(wq_task->task, TASK_STATE_SLEEPING);
+
+  spinlock_unlock(&wq->q_lock);
+  return ret;
+}
+
+status_t waitqueue_delete(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_delop_t dop)
+{
+  status_t ret = 0;
+
+  if (waitqueue_is_empty(wq)) {
+    ret = -EINVAL;
+    goto out;
   }
-  UNLOCK_WAITQUEUE(wq);
+  
+  spinlock_lock(&wq->q_lock);
+  __delete_task(wq, wq_task);
+  if (dop == WQ_DELETE_WAKEUP)
+    ret = sched_change_task_state(wq_task->task, TASK_STATE_RUNNABLE);
+
+  spinlock_unlock(&wq->q_lock);
+
+  out:
+  return ret;
 }
 
-bool waitqueue_is_empty(wait_queue_t *wq)
+wait_queue_task_t *waitqueue_first_task(wait_queue_t *wq)
 {
-  /* No need to lock - we just read a pointer. */
-  return list_is_empty(&wq->waiters);
+  wait_queue_task_t *t = NULL;
+  
+  if (!waitqueue_is_empty(wq)) {
+    spinlock_lock(&wq->q_lock);
+    t = list_entry(list_node_first(&wq->waiters), wait_queue_task_t, node);
+    spinlock_unlock(&wq->q_lock);
+  }
+
+  return t;
 }
 
-ulong_t waitqueue_get_tasks_number(wait_queue_t *wq)
+#ifdef DEBUG_WAITQUEUE
+#include <mlibc/kprintf.h>
+
+void waitqueue_dump(wait_queue_t *wq)
 {
-  return wq->num_waiters;
-}
+  if (waitqueue_is_empty(wq)) {
+    kprintf("[WQ empty]\n");
+    return;
+  }
+  else {
+    wait_queue_task_t *t;
 
-void waitqueue_wake_one_task(wait_queue_t *wq)
-{
-  LOCK_WAITQUEUE(wq);
-  if(wq->num_waiters > 0) {
-    wait_queue_task_t *waiter;
-    list_node_t *n = list_node_first(&wq->waiters);
+    spinlock_lock(&wq->q_lock);
+    kprintf("[WQ dump (%d waiters)]:\n", wq->num_waiters);
+    list_for_each_entry(&wq->waiters, t, node) {
+      wait_queue_task_t *subt;
+      
+      kprintf(" [%d]=> %d", t->priority, t->task->pid);
+      list_for_each_entry(&t->head, subt, node)
+        kprintf("->%d", subt->task->pid);
 
-    wq->num_waiters--;
-
-    list_del(n);
-    UNLOCK_WAITQUEUE(wq);
-
-    waiter = container_of(n,wait_queue_task_t,l);
-    waiter->q=NULL;
-
-    waiter->flags |= WQ_EVENT_OCCURED;
-    sched_change_task_state(waiter->task,TASK_STATE_RUNNABLE);
-  } else {
-    UNLOCK_WAITQUEUE(wq);
+      kprintf("\n");
+    }
+    
+    spinlock_unlock(&wq->q_lock);
   }
 }
-
-static bool waitqueue_lazy_sched_handler(void *data)
-{
-  wait_queue_task_t *t = (wait_queue_task_t*)data;
-  return !(t->flags & WQ_EVENT_OCCURED);
-}
-
-void waitqueue_yield(wait_queue_task_t *w)
-{
-  sched_change_task_state_lazy(w->task,TASK_STATE_SLEEPING,
-                               waitqueue_lazy_sched_handler,w);
-  w->flags &= ~WQ_EVENT_OCCURED;
-}
-
-
+#endif /* DEBUG_WAITQUEUE */

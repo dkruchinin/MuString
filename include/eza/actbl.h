@@ -29,6 +29,10 @@
 #define RSDT_SIGNATURE "RSDT"
 #define MADT_SIGNATURE "APIC"
 
+#define RSDP_CHECKSUM_LEN 20
+#define RSDP_EXT_CHECKSUM_LEN 16
+#define ACPI_TABSIGN_LEN			8 /* the length of the table signature */
+
 #define LAPIC_TABLE_TYPE 0
 
 struct acpi_rsdp {
@@ -38,6 +42,7 @@ struct acpi_rsdp {
 	uint8_t revision;
 	uint32_t rsdt_addr;
 	uint32_t len;
+<<<<<<< .merge_file_OB3X6V
 	uint64_t xsdt_addr;
 	uint8_t ext_checksum;
 	uint8_t __res[3];
@@ -46,6 +51,16 @@ struct acpi_rsdp {
 struct rsdt_header {
 	char signature[4];
 	uint32_t tablen;
+=======
+	uint64_t xsdt_addr_low;
+	uint8_t ext_checksum;
+	uint8_t __res[3];
+} __attribute__ ((packed));
+
+struct acpi_tab_header {
+	char signature[4];
+	uint32_t len;
+>>>>>>> .merge_file_R2g2hP
 	uint8_t revision;
 	uint8_t checksum;
 	char oemid[6];
@@ -56,6 +71,7 @@ struct rsdt_header {
 };
 
 struct acpi_rsdt {
+<<<<<<< .merge_file_OB3X6V
 	struct rsdt_header header;
 	uint32_t tbl_addrs[1]; /* array of physical addresses that points to other headers */
 };
@@ -70,10 +86,19 @@ struct madt_header {
 	uint32_t oem_rev;
 	uint32_t vendor_id;
 	uint32_t vendor_rev;
+=======
+	struct acpi_tab_header header;
+	uint32_t tbl_addrs[1]; /* array of physical addresses that points to other headers */
+};
+
+struct acpi_madt {
+	struct acpi_tab_header header;
+>>>>>>> .merge_file_R2g2hP
 	uint32_t lapic_addr;
 	uint32_t flags;
 };
 
+<<<<<<< .merge_file_OB3X6V
 struct acpi_cfgtab_header {
 	uint8_t type;
 	uint8_t len;
@@ -90,15 +115,38 @@ struct acpi_madt {
 	struct madt_header header;
 	struct madt_lapic lapic[1];
 };
+=======
+typedef struct __acpi_subtab_header {
+	uint8_t type;
+	uint8_t len;
+} acpi_subtab_header_t;
+
+typedef struct __madt_lapic {
+	acpi_subtab_header_t header;
+	uint8_t cpuid;
+	uint8_t apic_id;
+	uint32_t flags;
+} madt_lapic_t;
+>>>>>>> .merge_file_R2g2hP
 
 /* 
  * get local apic description structures from the acpi configuration space
  * 
+<<<<<<< .merge_file_OB3X6V
  * @[out] madt_lapic - buffer to store found local apic structures
  * @size - size of the buffer
  *
  * Return the number of stored local apic structures
  */
 uint32_t get_acpi_lapic_structs(struct *madt_lapic, uint32_t size);
+=======
+ * @[out] buf - buffer to store found local apic structures
+ * @size - size of the buffer
+ *
+ * Return the number (non negative) of stored local apic structures,
+ * or -1 if some of acpi tables is broken 
+ */
+int get_acpi_lapic_structs(void *buf, uint32_t size);
+>>>>>>> .merge_file_R2g2hP
 
 #endif
