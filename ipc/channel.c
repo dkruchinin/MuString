@@ -73,7 +73,7 @@ void ipc_unref_channel(ipc_channel_t *channel,ulong_t c)
   IPC_UNLOCK_CHANNELS(channel->ipc);
 
   if( shutdown ) {
-    kprintf( "* Shutting down channel: %d\n",channel->id );
+//    kprintf( "* Shutting down channel: %d\n",channel->id );
     __shutdown_channel(channel);
   }
 }
@@ -163,6 +163,10 @@ status_t ipc_open_channel(task_t *owner,task_t *server,ulong_t port)
   IPC_LOCK_CHANNELS(ipc);
   ipc->channels[id]=channel;
   ipc->num_channels++;
+
+  if( id > ipc->max_channel_num ) {
+    ipc->max_channel_num=id;
+  }
   IPC_UNLOCK_CHANNELS(ipc);
 
   r=id;

@@ -233,8 +233,6 @@ static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
     p->msg_ops=&def_port_msg_ops;
   }
 
-  kprintf( "__allocate_port: PORT: %p, MSG OPS=%p\n",
-           p,p->msg_ops );
   p->flags=(flags & IPC_PORT_DIRECT_FLAGS);
 
   r=p->msg_ops->init_data_storage(p,owner);
@@ -291,8 +289,8 @@ status_t ipc_close_port(task_t *owner,ulong_t port)
   if( p ) {
     IPC_LOCK_PORT_W(p);
     shutdown=atomic_dec_and_test(&p->own_count);
-    kprintf( ">> __ipc_close_port(): USE=%d, OWN=%d, SHUTDOWN: %d, IPC: %d\n",
-             p->use_count,p->own_count,shutdown,ipc->use_count);
+//  kprintf( ">> __ipc_close_port(%p): USE=%d, OWN=%d, SHUTDOWN: %d, IPC: %d\n",
+//           p,p->use_count,p->own_count,shutdown,ipc->use_count);
     if(shutdown) {
       p->flags |= IPC_PORT_SHUTDOWN;
       ipc->ports[port]=NULL;
@@ -371,6 +369,10 @@ status_t __ipc_create_port(task_t *owner,ulong_t flags)
   IPC_LOCK_PORTS(ipc);
   ipc->ports[id] = port;
   ipc->num_ports++;
+
+  if( id > ipc->max_port_num ) {
+    ipc->max_port_num=id;
+  }
   IPC_UNLOCK_PORTS(ipc);
 
   r = id;
@@ -497,7 +499,7 @@ recv_cycle:
       IPC_UNLOCK_PORT_W(port);
 
       if(free) {
-        kprintf( "* FREEING MESSAGE: %d\n", msg->id );
+        memfree(msg);
       }
     }
   }
@@ -535,7 +537,7 @@ void __ipc_put_port(ipc_gen_port_t *p)
   UNREF_PORT(p);
 
   if( !atomic_get(&p->use_count) ) {
-    kprintf( "> FREEING A PORT: %p\n",p );
+//  kprintf( "> FREEING A PORT: %p\n",p );
     memfree(p);
   }
 }
@@ -547,13 +549,11 @@ status_t __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
   status_t r;
 
   if( !reply_buf || reply_len > MAX_PORT_MSG_LENGTH ) {
-    kprintf( "[*]\n" );
     return -EINVAL;
   }
 
   if( !port->msg_ops->remove_message ||
       !(port->flags & IPC_BLOCKED_ACCESS)) {
-    kprintf( "[**]\n" );
     return -EINVAL;
   }
 
@@ -577,4 +577,34 @@ status_t __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
   }
 
   return r;
+}
+
+poll_event_t ipc_port_get_pending_events(ipc_port_t *port)
+{
+  poll_event_t e;
+
+  IPC_LOCK_PORT_W(port);
+  if(port->avail_messages) {
+    e=POLLIN | POLLRDNORM;
+  } else {
+    e=0;
+  }
+  IPC_UNLOCK_PORT_W(port);
+  return e;
+}
+
+void ipc_port_add_poller(ipc_port_t *port,task_t *poller, wait_queue_task_t *w)
+{
+  w->task=poller;
+
+  IPC_LOCK_PORT_W(port);
+  waitqueue_add_task(&port->waitqueue,w);
+  IPC_UNLOCK_PORT_W(port);
+}
+
+void ipc_port_remove_poller(ipc_port_t *port,wait_queue_task_t *w)
+{
+  IPC_LOCK_PORT_W(port);
+  waitqueue_remove_task(&port->waitqueue,w);
+  IPC_UNLOCK_PORT_W(port);
 }

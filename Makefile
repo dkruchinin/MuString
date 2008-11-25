@@ -17,6 +17,9 @@
 -include kernel/Makefile.inc
 -include ipc/Makefile.inc
 
+#testcases
+-include tests/Makefile.inc
+
 # arch specific
 -include eza/$(ARCH)/Makefile.inc
 
@@ -37,7 +40,7 @@ endif
 
 MUIOBJS=$(LIBEZA_OBJS) $(LIBARCHEZA_OBJS) $(LIBMM_OBJS) \
         $(LIBEZA_CORE_OBJS) $(MLIBC_OBJS) $(LIBSERVER_OBJS) $(KERNEL_OBJS) \
-	$(IPC_OBJS)
+	$(IPC_OBJS) $(TESTS_OBJS)
 
 all: build bootimage
 

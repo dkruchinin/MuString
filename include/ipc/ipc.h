@@ -40,14 +40,14 @@ typedef struct __task_ipc {
   atomic_t use_count;  /* Number of tasks using this IPC structure. */
 
   /* port-related stuff. */
-  ulong_t num_ports;
+  ulong_t num_ports,max_port_num;
   ipc_port_t **ports;
   linked_array_t ports_array;
   spinlock_t port_lock;
 
   /* Channels-related stuff. */
   linked_array_t channel_array;
-  ulong_t num_channels;
+  ulong_t num_channels,max_channel_num;
   ipc_channel_t **channels;
   spinlock_t channel_lock;
 
@@ -86,7 +86,7 @@ void release_task_ipc_priv(task_ipc_priv_t *priv);
 #define UNREF_IPC_ITEM(c)  atomic_dec(&c->use_count)
 
 void free_task_ipc(task_ipc_t *ipc);
-void deinitialize_task_ipc(task_ipc_t *ipc);
+void close_ipc_resources(task_ipc_t *ipc);
 
 static inline task_ipc_t *get_task_ipc(task_t *t)
 {
@@ -108,11 +108,8 @@ static inline void release_task_ipc(task_ipc_t *ipc)
 {
   atomic_dec(&ipc->use_count);
   if( !atomic_get(&ipc->use_count) ) {
-    /* Last reference, so clean it all up. */
-    deinitialize_task_ipc(ipc);
     free_task_ipc(ipc);
   }
 }
-
 
 #endif

@@ -116,30 +116,29 @@ free_ipc:
   return -ENOMEM;
 }
 
-void deinitialize_task_ipc(task_ipc_t *ipc)
+void close_ipc_resources(task_ipc_t *ipc)
 {
   uint32_t i;
 
-  LOCK_IPC(ipc);
-
   /* Close all open ports. */
-  for(i=0;i<ipc->num_ports && ipc->ports;i++) {
-    ipc_port_t *port;
+  if( ipc->ports ) {
+    for(i=0;i<=ipc->max_port_num;i++) {
+      if( ipc->ports[i] ) {
+        ipc_close_port(current_task(),i);
+      }
+    }
+  }
 
-    IPC_LOCK_PORTS(ipc);
-    port=ipc->ports[i];
-    ipc->ports[i]=NULL;
-    IPC_UNLOCK_PORTS(ipc);
-
-    if( port ) {
-      ipc_shutdown_port(port);
-      ipc_put_port(port);
+  /* Close all channels. */
+  if( ipc->channels ) {
+    for(i=0;i<=ipc->max_channel_num;i++) {
+      if( ipc->channels[i] ) {
+        ipc_close_channel(current_task(),i);
+      }
     }
   }
 
   /* Close all buffers */
-
-  UNLOCK_IPC(ipc);
 }
 
 void release_task_ipc_priv(task_ipc_priv_t *priv)

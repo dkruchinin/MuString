@@ -178,7 +178,7 @@ static ipc_port_message_t *___extract_message_from_port_queue(ipc_port_t *p)
   return msg;
 }
 
-poll_event_t ipc_port_get_pending_events(ipc_port_t *port)
+poll_event_t __ipc_port_get_pending_events(ipc_port_t *port)
 {
   poll_event_t e;
 
@@ -192,7 +192,7 @@ poll_event_t ipc_port_get_pending_events(ipc_port_t *port)
   return e;
 }
 
-void ipc_port_add_poller(ipc_port_t *port,task_t *poller, wait_queue_task_t *w)
+void __ipc_port_add_poller(ipc_port_t *port,task_t *poller, wait_queue_task_t *w)
 {
   w->task=poller;
 
@@ -201,7 +201,7 @@ void ipc_port_add_poller(ipc_port_t *port,task_t *poller, wait_queue_task_t *w)
   IPC_UNLOCK_PORT_W(port);
 }
 
-void ipc_port_remove_poller(ipc_port_t *port,wait_queue_task_t *w)
+void __ipc_port_remove_poller(ipc_port_t *port,wait_queue_task_t *w)
 {
   IPC_LOCK_PORT_W(port);
   waitqueue_remove_task(&port->waitqueue,w);

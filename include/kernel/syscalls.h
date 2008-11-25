@@ -165,12 +165,9 @@ status_t sys_create_port( ulong_t flags, ulong_t queue_size );
  *                            ulong_t snd_size,uintptr_t rcv_buf,ulong_t rcv_size)
  * @brief Synchronously send data to target port.
  *
- * This system call synchronously sends data to target port that belongs
- * to target process. After sending data, calling process is put into sleep
- * until the receiver receives the data and replies to the calling process.
+ * This system call sends data to target port over the channel.
  *
- * @param pid Pid of the process that owns the port.
- * @param port Identificator of the port.
+ * @param channel Identificator of the channel.
  * @param snd_buf Pointer to the buffer that contains data to be sent.
  * @param snd_size Number of bytes to be sent.
  * @param rcv_buf Pointer to buffer that will contain reply data.
@@ -190,8 +187,9 @@ status_t sys_create_port( ulong_t flags, ulong_t queue_size );
  *             b) message had insufficient size (currently only up to 2MB
  *                can be transferred via ports).
  */
-status_t sys_port_send(pid_t pid,ulong_t port,uintptr_t snd_buf,
-                       ulong_t snd_size,uintptr_t rcv_buf,ulong_t rcv_size);
+status_t sys_port_send(ulong_t channel,ulong_t flags,
+                       uintptr_t snd_buf,ulong_t snd_size,
+                       uintptr_t rcv_buf,ulong_t rcv_size);
 
 /**
  * @fn status_t sys_port_receive( ulong_t port, ulong_t flags, ulong_t recv_buf,
