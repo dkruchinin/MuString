@@ -39,7 +39,7 @@
 #include <eza/arch/atomic.h>
 
 typedef struct __poll_kitem {
-  wait_queue_task_t qtask;
+  wqueue_task_t qtask;
   ipc_port_t *port;
   poll_event_t events,revents;
 } poll_kitem_t;
@@ -59,7 +59,7 @@ status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
 {
   status_t nevents;
   task_t *caller=current_task();
-  ulong_t size=nfds*sizeof(wait_queue_task_t);
+  ulong_t size=nfds*sizeof(wqueue_task_t);
   poll_kitem_t *pkitems;
   bool use_slab=(size<=512);
   ulong_t i;

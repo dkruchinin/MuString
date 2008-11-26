@@ -29,6 +29,7 @@
 #include <eza/errno.h>
 #include <eza/arch/types.h>
 
+typedef struct __wqueue_task wqueue_task_t;
 
 /**
  * @typedef int (*wqueue_cmp_func_t)(wait_queue_task_t *wqt1, wait_queue_task_t *wqt2)
@@ -47,7 +48,7 @@
  * @see wqueue_task_t
  * @see wqueue_type_t
  */
-typedef int (*wqueue_cmp_func_t)(wait_queue_task_t *wqt1, wait_queue_task_t *wqt2);
+typedef int (*wqueue_cmp_func_t)(wqueue_task_t *wqt1, wqueue_task_t *wqt2);
 
 /**
  * @enum wqueue_type_t
@@ -76,7 +77,7 @@ typedef enum __wqueue_type {
  */
 typedef struct __wait_queue {
   list_head_t waiters;        /**< A list of waiting tasks */
-  wqueue_cmd_func_t cmp_func; /**< Custom wait queue tasks compare function */
+  wqueue_cmp_func_t cmp_func; /**< Custom wait queue tasks compare function */
   spinlock_t q_lock;          /**< Wait queue strucure lock */
   wqueue_type_t type;         /**< Wait queue type */
   uint32_t num_waiters;       /**< Total number of waiters in queue */
@@ -94,14 +95,14 @@ typedef struct __wait_queue {
  * @see wqueue_prepare_task
  * @see task_t
  */
-typedef struct __wqueue_task {
+struct __wqueue_task {
   list_head_t head;  /**< A list of waiting tasts of the same priority */
   list_node_t node;  /**< A list node  */
   task_t *task;      /**< Task itself */
   wqueue_t *q;       /**< A pointer to parent wait queue */
   bool uspc_blocked; /**<  */
   uint8_t cflags;    /**< Customizable by user flags */ 
-} wqueue_task_t;
+};
 
 /**
  * @enum wqueue_insop_t
@@ -130,6 +131,8 @@ typedef enum __wqeue_delop {
  *
  * @return 0 on success, negative error code on error.
  */
+#define waitqueue_push(wq, wq_task)             \
+    waitqueue_insert(wq, wq_task, WQ_INSERT_SLEEP)
 
 /**
  * @fn wqueue_pop(wqueue_t *wq)
@@ -139,7 +142,7 @@ typedef enum __wqeue_delop {
  * @return 0 on success, negative error code on error.
  */
 #define waitqueue_pop(wq)                                           \
-  waitqueue_delete(waitqueue_first_task(wq), WQ_DELETE_WAKEUP);
+  waitqueue_delete(waitqueue_first_task(wq), WQ_DELETE_WAKEUP)
 
 /**
  * @brief Check if wait queue is empty
@@ -159,7 +162,7 @@ static inline bool waitqueue_is_empty(wqueue_t *wq)
  *
  * @return 0 on success, -EINVAL if @a wq_type is invalid.
  */
-status_t waitqueue_initialize(wqueue_t *wq, wqueue_type_t *wq_type);
+status_t waitqueue_initialize(wqueue_t *wq, wqueue_type_t wq_type);
 
 /**
  * @brief "Wrap" a task_t with wqueue_task_t strcutre and prepare it for insertion into wait queue
@@ -195,11 +198,23 @@ status_t waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t dop);
  */
 wqueue_task_t *waitqueue_first_task(wqueue_t *wq);
 
+int __wqueue_cmp_default(wqueue_task_t *wqt1, wqueue_task_t *wqt2);
+
 #define DEBUG_WAITQUEUE /* FIXME DK: remove after debug */
 #ifdef DEBUG_WAITQUEUE
-void waitqueue_dump(wait_queue_t *wq);
+void waitqueue_dump(wqueue_t *wq);
 #else
 #define waitqueue_dump(wq)
 #endif /* DEBUG_WAITQUEUE */
+
+#define WQUEUE_DEFINE_PRIO(name)                \
+    wqueue_t (name) = WQUEUE_INITIALIZE_PRIO(name)
+
+#define WQUEUE_INITIALIZE_PRIO(name)                                \
+    {       .waiters = LIST_INITIALIZE((name).waiters),             \
+            .cmp_func = __wqueue_cmp_default,                       \
+            .q_lock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V),   \
+            .type = WQ_PRIO,                                        \
+            .num_waiters = 0,     }
 
 #endif /* __WAITQUEUE_H__ */

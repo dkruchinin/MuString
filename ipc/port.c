@@ -193,7 +193,7 @@ poll_event_t ipc_port_get_pending_events(ipc_port_t *port)
   return e;
 }
 
-void ipc_port_add_poller(ipc_port_t *port,task_t *poller, wait_queue_task_t *w)
+void ipc_port_add_poller(ipc_port_t *port,task_t *poller, wqueue_task_t *w)
 {
   waitqueue_prepare_task(w, poller);
   IPC_LOCK_PORT_W(port);  
@@ -201,17 +201,17 @@ void ipc_port_add_poller(ipc_port_t *port,task_t *poller, wait_queue_task_t *w)
   IPC_UNLOCK_PORT_W(port);
 }
 
-void ipc_port_remove_poller(ipc_port_t *port,wait_queue_task_t *w)
+void ipc_port_remove_poller(ipc_port_t *port, wqueue_task_t *w)
 {
   IPC_LOCK_PORT_W(port);
-  waitqueue_delete(&port->waitqueue, w, WQ_DELETE_SIMPLE);
+  waitqueue_delete(w, WQ_DELETE_SIMPLE);
   IPC_UNLOCK_PORT_W(port);
 }
 
 /* NOTE: Port must be W-locked before calling this function ! */
 static void __put_receiver_into_sleep(task_t *receiver,ipc_port_t *port)
 {
-  wait_queue_task_t w;
+  wqueue_task_t w;
 
   waitqueue_prepare_task(&w, receiver);  
   /* Now we can unlock the port. */
@@ -243,14 +243,14 @@ static status_t __allocate_port(ipc_port_t **out_port,ulong_t flags,
   spinlock_initialize(&p->lock);
   /* TODO: [mt] allocate memory via slabs ! */
   linked_array_initialize(&p->msg_array,
-                          owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES] );
+                          owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES]);
   p->queue_size = queue_size;
   p->avail_messages = 0;
   p->flags = flags;
   p->owner = owner;
 
   list_init_head(&p->messages);
-  waitqueue_initialize(&p->waitqueue);
+  waitqueue_initialize(&p->waitqueue, WQ_PRIO);
   *out_port = p;
   return 0;
 }

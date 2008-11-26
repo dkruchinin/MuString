@@ -48,6 +48,15 @@ static inline bool mutex_is_locked(mutex_t *mutex)
   return !!mutex->executer.task;
 }
 
+#define MUTEX_DEFINE(name)                      \
+    mutex_t (name) = MUTEX_INITIALIZE(name)
+
+#define MUTEX_INITIALIZE(name)                  \
+    {       .lock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V),  \
+            .wq = WQUEUE_INITIALIZE_PRIO((name).wq),             \
+            .executer = { NULL, TASK_PRIO_INVAL },               \
+            .max_prio = TASK_PRIO_INVAL }
+
 void mutex_initialize(mutex_t *mutex);
 void mutex_lock(mutex_t *mutex);
 void mutex_unlock(mutex_t *mutex);

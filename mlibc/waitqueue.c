@@ -59,7 +59,7 @@ static void __delete_task(wqueue_task_t *wq_task)
 {    
   if (!list_is_empty(&wq_task->head)) {
     wqueue_task_t *t = list_entry(list_node_first(&wq_task->head),
-                                      wait_queue_task_t, node);
+                                      wqueue_task_t, node);
     list_del(&t->node);
     list_add(&wq_task->node, &t->node);
     if (!list_is_empty(&wq_task->head))
@@ -72,7 +72,17 @@ static void __delete_task(wqueue_task_t *wq_task)
   wq_task->q = NULL;
 }
 
-status_t waitqueue_initialize(wqueue_t *wq, wqueue_type_t *type)
+int __wqueue_cmp_default(wqueue_task_t *wqt1, wqueue_task_t *wqt2)
+{
+  if (wqt1->task->static_priority < wqt2->task->static_priority)
+    return 1;
+  else if (wqt1->task->static_priority > wqt2->task->static_priority)
+    return -1;
+  else
+    return 0;
+}
+
+status_t waitqueue_initialize(wqueue_t *wq, wqueue_type_t type)
 {  
   list_init_head(&wq->waiters);
   wq->num_waiters = 0;  
@@ -80,7 +90,7 @@ status_t waitqueue_initialize(wqueue_t *wq, wqueue_type_t *type)
   wq->type = type;
   switch (type) {
       case WQ_PRIO:
-        wq->cmp_func = __wq_tasks_prio_cmp;
+        wq->cmp_func = __wqueue_cmp_default;
         break;
       case WQ_CUSTOM:
         wq->cmp_func = NULL;
@@ -97,7 +107,7 @@ void waitqueue_prepare_task(wqueue_task_t *wq_task, task_t *task)
   list_init_head(&wq_task->head);
   wq_task->task = task;
   wq_task->q = NULL;
-  wq->task->uspc_blocked = task->flags & TF_USPC_BLOCKED;
+  wq_task->uspc_blocked = task->flags & TF_USPC_BLOCKED;
   task->flags |= TF_USPC_BLOCKED; /* block priority changing from user-space */
 }
 
@@ -128,7 +138,7 @@ status_t waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t dop)
    
   __delete_task(wq_task);
   if (!wq_task->uspc_blocked)
-    wq_task->task &= ~TF_USPC_BLOCKED;
+    wq_task->task->flags &= ~TF_USPC_BLOCKED;
   if (dop == WQ_DELETE_WAKEUP)
     ret = sched_change_task_state(wq_task->task, TASK_STATE_RUNNABLE);
 
@@ -137,13 +147,13 @@ status_t waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t dop)
   return ret;
 }
 
-wqueue_task_t *waitqueue_first_task(wait_queue_t *wq)
+wqueue_task_t *waitqueue_first_task(wqueue_t *wq)
 {
   wqueue_task_t *t = NULL;
 
   spinlock_lock(&wq->q_lock);
   if (!waitqueue_is_empty(wq))
-    t = list_entry(list_node_first(&wq->waiters), wait_queue_task_t, node);    
+    t = list_entry(list_node_first(&wq->waiters), wqueue_task_t, node);
 
   spinlock_unlock(&wq->q_lock);
   return t;
@@ -159,7 +169,7 @@ void waitqueue_dump(wqueue_t *wq)
     return;
   }
   else {
-    wait_queue_task_t *t;
+    wqueue_task_t *t;
     char *wq_type = NULL;
 
     spinlock_lock(&wq->q_lock);
@@ -176,7 +186,7 @@ void waitqueue_dump(wqueue_t *wq)
     list_for_each_entry(&wq->waiters, t, node) {
       wqueue_task_t *subt;
       
-      kprintf(" [%d]=> %d", t->priority, t->task->pid);
+      kprintf(" [%d]=> %d", t->task->static_priority, t->task->pid);
       list_for_each_entry(&t->head, subt, node)
         kprintf("->%d", subt->task->pid);
 

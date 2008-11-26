@@ -1,86 +1,107 @@
-# 
-# (c) Copyright MString core development team <http://mstring.berlios.de>
-# (c) Copyright Tirra <tirra.newly@gmail.com> 
-#
-# Makefile: general makefile for MuiString
-#
+CC := $(TOOLCHAIN)gcc
+AR := $(TOOLCHAIN)ar
+AS := $(TOOLCHAIN)as
+LD := $(TOOLCHAIN)ld
+OBJDUMP := $(TOOLCHAIN)objdump
+OBJCOPY := $(TOOLCHAIN)objcopy
 
--include config
--include Makefile.inc
+MAKE := make -s
+GREP := grep
+GMAP := eza/gmap.py
+LN := ln
+RM := rm
+MKDIR := mkdir
+Q := @
+ECHO := echo
 
-# libs
--include eza/generic_api/Makefile.inc
--include mm/Makefile.inc
--include mlibc/Makefile.inc
-# abstract things
--include server/Makefile.inc
--include kernel/Makefile.inc
--include ipc/Makefile.inc
-
-# arch specific
--include eza/$(ARCH)/Makefile.inc
-
-CFLAGS+=-Iinclude/
-
-ifeq ($(PARANOIC),y)
-     CFLAGS += -Werror
+ifeq ($(VERBOSE), y)
+	Q := 
+endif
+ifneq ($(NOCOLOR), y)
+	$NOCOLOR :=
 endif
 
-ifeq ($(CONFIG_SMP),y)
-     CFLAGS += -DCONFIG_SMP
+CFLAGS += -Wall -nostdlib -nostdinc -fno-builtin -fomit-frame-pointer -DCONFIG_SMP -g
+LDFLAGS += -M
+INCLUDE += -Iinclude
+
+ifndef $(BUILD_ROOT)
+	BUILD_ROOT := $(CURDIR)
 endif
 
-ifeq ($(CONFIG_APIC),y)
-     CFLAGS += -DCONFIG_APIC
-endif
+ODIR := vmjari_objs
+OBJECTS :=
 
+export CC LD AR OBJDUMP OBJCOPY GMAP GREP CPP AS ECHO
+export GREP MAKE LN RM GMAP Q MKDIR
+export CFLAGS LDFLAGS INCLUDE
+export BUILD_ROOT ARCH NOCOLOR OBJECTS
 
-MUIOBJS=$(LIBEZA_OBJS) $(LIBARCHEZA_OBJS) $(LIBMM_OBJS) \
-        $(LIBEZA_CORE_OBJS) $(MLIBC_OBJS) $(LIBSERVER_OBJS) $(KERNEL_OBJS) \
-	$(IPC_OBJS)
+GENERICS = mm mlibc ipc server eza
 
-all: build bootimage
+include config
+include include/Makefile.inc
+include eza/$(ARCH)/Makefile.inc
 
-build: make-symlinks vmuielf
-
-make-symlinks:
+define create_symlinks
+	$(Q)$(shell [ -e $(BUILD_ROOT)/include/eza/arch ] && $(RM) -f $(BUILD_ROOT)/include/eza/arch)
 	$(Q)$(LN) -snf $(ARCH) include/eza/arch
+endef
 
-%.o: %.S
-	$(Q)$(ECHO) "[AS] $^"
-	$(Q)$(CC) $(CFLAGS) $(EXTRFL) -n -D__ASM__ -c -o $@ $<
+.PHONY: all vmuielf rmap.bin collect_objects
+all: vmuielf bootimage
 
-%.o: %.c
-	$(Q)$(ECHO) "[CC] $^"
-	$(Q)$(CC) $(CFLAGS) $(EXTRFL) -c -o $@ $^
+vmuielf: prepare $(addprefix generic_, $(GENERICS)) muielf
+	$(call PRINT_LABEL,"OBJCOPY")
+	$(Q)$(ECHO) "$@"
+	$(Q)$(OBJCOPY) -O binary muielf $@
 
-kernel.ld: eza/$(ARCH)/kernel.ld.S
-	$(Q)$(ECHO) "[PS] $^"
-	$(Q)$(CC) $(CFLAGS) $(EXTRFL) -D__ASM__ -E -x c $< | $(GREP) -v "^\#" > $@
+prepare:
+	$(call create_symlinks)
+	$(Q)$(MKDIR) -p $(ODIR)
 
-vmuielf: muielf
-	$(Q)$(ECHO) "[OBJCOPY] $@"
-	$(Q)$(OBJCOPY) -O binary $< $@
+muielf: $(addprefix $(ODIR)/, kernel.ld rmap.o)	
+	$(call PRINT_LABEL,"LD")
+	$(Q)$(ECHO) "$^"
+	$(Q)$(LD) -T $(ODIR)/kernel.ld $(LDFLAGS) $(OBJECTS) $(ODIR)/rmap.o -o $@ -Map $(ODIR)/muielf.map
 
-muielf: rmap.o
-	$(Q)$(ECHO) "[LD] $^"
-	$(Q)$(LD) -T kernel.ld $(LDFLAGS) $(MUIOBJS) rmap.o -o $@ -Map muielf.map
+generic_%:
+	$(call PRINT_HEADER,"$(subst generic_,,$@)")
+	$(Q)$(MAKE) -f rules.mak target=$(subst generic_,,$@)
 
-rmap.bin: $(MUIOBJS) kernel.ld
-	$(Q)$(ECHO) $(SYMTAB_SECTION) | $(AS) $(ASFLAGS) -o emap.o
-	$(Q)$(LD) -T kernel.ld $(LDFLAGS) -q $(MUIOBJS) emap.o -o $@ -Map mui.pre.map
-	$(Q)$(OBJDUMP) -t $(MUIOBJS) > mui.objdump
-	$(Q)$(GMAP) mui.pre.map mui.objdump rmap.bin 
-	$(Q)$(ECHO) "[MK] Regeneration ..."
-	$(Q)$(ECHO) $(SYMTAB_SECTION)" .incbin \"$@\"" | $(AS) $(ASFLAGS) -o emapo.o
-	$(Q)$(LD) -T kernel.ld $(LDFLAGS) $(MUIOBJS) emapo.o -o $@ -Map mui.pre.map
-	$(Q)$(OBJDUMP) -t $(MUIOBJS) > mui.objdump
-	$(Q)$(GMAP) mui.pre.map mui.objdump rmap.bin
+clean_%:
+	$(call PRINT_HEADER,"Cleaning $(subst clean_,,$@):")
+	$(Q)$(MAKE) -f rules.mak target=$(subst clean_,,$@) clean
 
+clean:
+	$(Q)$(RM) -rf $(ODIR)
+	$(Q)$(RM) -f muielf vmuielf
+	$(Q)$(MAKE) -C. $(addprefix clean_, $(GENERICS))
 
-rmap.o: rmap.bin
-	$(Q)$(ECHO) "[AS] $^"
-	$(Q)$(ECHO) $(SYMTAB_SECTION)" .incbin \"$<\"" | $(AS) $(ASFLAGS) -o $@
+$(ODIR)/rmap.o: $(ODIR)/rmap.bin
+	$(call create_rmap)
+
+$(ODIR)/kernel.ld: $(BUILD_ROOT)/eza/$(ARCH)/kernel.ld.S
+	$(call PRINT_LABEL,"CPP")
+	$(Q)$(ECHO) "$<"
+	$(Q)$(CC) $(CFLAGS) $(INCLUDE) -D__ASM__ -E -x c $< | $(GREP) -v "^\#" > $@
+
+collect_objects:
+	$(eval OBJECTS := $(call collect_objects))
+
+$(ODIR)/rmap.bin: collect_objects $(ODIR)/kernel.ld
+	$(call pre_linking_action)	
+	$(call PRINT_LABEL,"LD")
+	$(Q)$(ECHO) "Linking all together..."
+	$(Q)$(LD) -T $(ODIR)/kernel.ld $(LDFLAGS) -q $(OBJECTS) -o $@ -Map $(ODIR)/mui.pre.map	
+	$(Q)$(OBJDUMP) -t $(OBJECTS) > $(ODIR)/mui.objdump
+	$(Q)$(GMAP) $(addprefix $(ODIR)/, mui.pre.map mui.objdump rmap.bin)
+	$(call PRINT_LABEL,"MK")
+	$(Q)$(ECHO) "Regeneration ..."
+	$(call post_linking_action)
+	$(Q)$(LD) -T $(ODIR)/kernel.ld $(LDFLAGS) $(OBJECTS) $(ODIR)/emapo.o -o $@ -Map $(ODIR)/mui.pre.map
+	$(Q)$(OBJDUMP) -t $(OBJECTS) > $(ODIR)/mui.objdump	
+	$(Q)$(GMAP) $(addprefix $(ODIR)/, mui.pre.map mui.objdump rmap.bin)
 
 bootimage: vmuielf
 # Creates a 20 MB bootable FAT HD image: 44 tracks, 16 heads, 63 sectors
@@ -108,6 +129,3 @@ bootimage: vmuielf
 	@echo " boot: disk"
 	@echo "*********************************************************************************"
 
-clean:
-	rm -f $(MUIOBJS)
-	rm -f muielf muielf.map kernel.ld *.map *.o *.raw *.objdump *.bin vmuielf boot.img
