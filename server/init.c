@@ -182,6 +182,8 @@ static status_t __create_task_mm(task_t *task, int num)
   return 0;
 }
 
+#ifndef CONFIG_TEST
+
 void server_run_tasks(void)
 {
   int i=server_get_num(),a;
@@ -235,3 +237,12 @@ void server_run_tasks(void)
 
   return;
 }
+
+#else
+
+void server_run_tasks(void)
+{
+  //spawn_percpu_threads();
+}
+
+#endif /* !CONFIG_TEST */

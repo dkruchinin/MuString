@@ -52,7 +52,7 @@ void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
 
-#ifdef TEST
+#ifdef CONFIG_TEST
   if( !cpu_id() ) {
     run_tests();
   }

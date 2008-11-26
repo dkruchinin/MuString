@@ -386,31 +386,13 @@ out_unlock:
   return r;
 }
 
-/* NOTE: Port must be W-locked before calling this function ! */
-/*
-static void __put_receiver_into_sleep_orig(task_t *receiver,ipc_gen_port_t *port)
-{
-  wait_queue_task_t w;
-
-  w.task=receiver;
-  waitqueue_add_task(&port->waitqueue,&w);
-
-  IPC_UNLOCK_PORT_W(port);
-
-  IPC_TASK_ACCT_OPERATION(receiver);
-  waitqueue_yield(&w);
-  IPC_TASK_UNACCT_OPERATION(receiver);
-}
-*/
-
 /* FIXME: [mt] potential deadlock problem ! [R] */
 static void __put_receiver_into_sleep(task_t *receiver,ipc_gen_port_t *port)
 {
   wait_queue_task_t w;
 
-  w.task=receiver;
-
   IPC_TASK_ACCT_OPERATION(receiver);
+  waitqueue_prepare_task(&w,receiver);
   waitqueue_push(&port->waitqueue,&w);
   IPC_TASK_UNACCT_OPERATION(receiver);
 }
@@ -615,7 +597,7 @@ void ipc_port_add_poller(ipc_gen_port_t *port,task_t *poller, wait_queue_task_t 
 {
   //IPC_LOCK_PORT_W(port);
   //waitqueue_add_task(&port->waitqueue,w);
-  w->task=poller;
+  waitqueue_prepare_task(w,poller);
   waitqueue_insert(&port->waitqueue,w,WQ_INSERT_SIMPLE);
   //IPC_UNLOCK_PORT_W(port);
 }
