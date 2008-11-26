@@ -22,6 +22,7 @@
 
 #include <eza/kernel.h>
 #include <mlibc/kprintf.h>
+#include <ds/waitqueue.h>
 #include <eza/smp.h>
 #include <eza/arch/scheduler.h>
 #include <eza/arch/types.h>
@@ -45,7 +46,6 @@
 #include <test.h>
 
 task_t *idle_tasks[MAX_CPUS];
-
 #define STEP 600
 
 void idle_loop(void)
@@ -66,3 +66,4 @@ void idle_loop(void)
     }
   }
 }
+

@@ -25,7 +25,6 @@
 #include <ipc/port.h>
 #include <eza/task.h>
 #include <eza/errno.h>
-#include <eza/semaphore.h>
 #include <mm/pfalloc.h>
 #include <mm/page.h>
 #include <ds/linked_array.h>
@@ -117,7 +116,7 @@ ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf
 
 static void __notify_message_arrived(ipc_gen_port_t *port)
 {
-  waitqueue_wake_one_task(&port->waitqueue);
+  waitqueue_pop(&port->waitqueue);
 }
 
 static status_t __transfer_reply_data(ipc_port_message_t *msg,
@@ -242,7 +241,7 @@ static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
 
   atomic_set(&p->use_count,1);
   atomic_set(&p->own_count,1);
-  spinlock_initialize(&p->lock, "");
+  spinlock_initialize(&p->lock);
   p->avail_messages = p->total_messages=0;
   p->flags = flags;
   list_init_head(&p->channels);
@@ -388,18 +387,31 @@ out_unlock:
 }
 
 /* NOTE: Port must be W-locked before calling this function ! */
-static void __put_receiver_into_sleep(task_t *receiver,ipc_gen_port_t *port)
+/*
+static void __put_receiver_into_sleep_orig(task_t *receiver,ipc_gen_port_t *port)
 {
   wait_queue_task_t w;
 
   w.task=receiver;
   waitqueue_add_task(&port->waitqueue,&w);
 
-  /* Now we can unlock the port. */
   IPC_UNLOCK_PORT_W(port);
 
   IPC_TASK_ACCT_OPERATION(receiver);
   waitqueue_yield(&w);
+  IPC_TASK_UNACCT_OPERATION(receiver);
+}
+*/
+
+/* FIXME: [mt] potential deadlock problem ! [R] */
+static void __put_receiver_into_sleep(task_t *receiver,ipc_gen_port_t *port)
+{
+  wait_queue_task_t w;
+
+  w.task=receiver;
+
+  IPC_TASK_ACCT_OPERATION(receiver);
+  waitqueue_push(&port->waitqueue,&w);
   IPC_TASK_UNACCT_OPERATION(receiver);
 }
 
@@ -449,6 +461,7 @@ status_t __ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
   /* Main 'Receive' cycle. */
 recv_cycle:
   msg=NULL;
+
   IPC_LOCK_PORT_W(port);
   if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
     if( !port->avail_messages ) {
@@ -458,6 +471,11 @@ recv_cycle:
        * since in will be unlocked after putting the receiver in the
        * port's waitqueue.
        */
+        /* FIXME: [mt] new version of __put_receiver_into_sleep() doesn't
+         * require the port to be W-locked !
+         */
+        IPC_UNLOCK_PORT_W(port);
+
         __put_receiver_into_sleep(owner,port);
         goto recv_cycle;
       } else {
@@ -595,16 +613,16 @@ poll_event_t ipc_port_get_pending_events(ipc_gen_port_t *port)
 
 void ipc_port_add_poller(ipc_gen_port_t *port,task_t *poller, wait_queue_task_t *w)
 {
+  //IPC_LOCK_PORT_W(port);
+  //waitqueue_add_task(&port->waitqueue,w);
   w->task=poller;
-
-  IPC_LOCK_PORT_W(port);
-  waitqueue_add_task(&port->waitqueue,w);
-  IPC_UNLOCK_PORT_W(port);
+  waitqueue_insert(&port->waitqueue,w,WQ_INSERT_SIMPLE);
+  //IPC_UNLOCK_PORT_W(port);
 }
 
 void ipc_port_remove_poller(ipc_gen_port_t *port,wait_queue_task_t *w)
 {
-  IPC_LOCK_PORT_W(port);
-  waitqueue_remove_task(&port->waitqueue,w);
-  IPC_UNLOCK_PORT_W(port);
+  //IPC_LOCK_PORT_W(port);
+  waitqueue_delete(&port->waitqueue,w,WQ_DELETE_SIMPLE);
+  //IPC_UNLOCK_PORT_W(port);
 }

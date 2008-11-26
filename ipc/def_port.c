@@ -2,7 +2,6 @@
 #include <ipc/port.h>
 #include <eza/task.h>
 #include <eza/errno.h>
-#include <eza/semaphore.h>
 #include <mm/pfalloc.h>
 #include <mm/page.h>
 #include <ds/linked_array.h>
@@ -133,7 +132,7 @@ static ipc_port_message_t *def_remove_message(struct __ipc_gen_port *port,
 static ipc_port_message_t *def_remove_head_message(struct __ipc_gen_port *port)
 {
   def_port_data_storage_t *ds=(def_port_data_storage_t *)port->data_storage;
-
+  
   if( !list_is_empty(&ds->all_messages) ) {
     ipc_port_message_t *msg;
 

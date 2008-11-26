@@ -51,12 +51,12 @@ typedef unsigned int uint32_t;
 typedef unsigned long long uint64_t;
 typedef unsigned long ulong_t;
 typedef signed long long_t;
-typedef uint8_t bool;
+typedef unsigned int bool;
 /* system used types */
 typedef uint64_t size_t;
 typedef uint64_t count_t;
 typedef uint64_t index_t;
-typedef uint64_t uintptr_t;
+typedef unsigned long uintptr_t;
 typedef uint32_t pid_t;
 typedef uint16_t uid_t;
 typedef ulong_t tid_t;
@@ -82,24 +82,6 @@ typedef enum __task_privilege {
   TPL_KERNEL = 0,  /* Kernel task - the most serious level. */
   TPL_USER = 1,    /* User task - the least serious level */
 } task_privelege_t;
-
-/* PTE entry structure specific for amd64 */
-typedef struct {
-  unsigned present : 1;
-  unsigned rw : 1;
-  unsigned us : 1;
-  unsigned pwt : 1;
-  unsigned pcd : 1;
-  unsigned a : 1;
-  unsigned d : 1;
-  unsigned pat: 1;
-  unsigned g : 1;
-  unsigned available_9_11: 3;
-  unsigned base_0_19: 20;
-  unsigned base_20_39: 20;
-  unsigned available_52_62: 11;
-  unsigned nx: 1;
-} __attribute__ ((packed)) pte_t;
 
 #define TYPE_LONG_SHIFT  6
 #define BITS_PER_LONG  64

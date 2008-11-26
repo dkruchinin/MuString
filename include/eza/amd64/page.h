@@ -58,6 +58,9 @@
 
 #include <eza/arch/types.h>
 
+typedef int32_t pde_idx_t;
+typedef uint32_t pdir_level_t;
+
 static inline uintptr_t _k2p(uintptr_t p)
 {
   if(p>KERNEL_BASE)

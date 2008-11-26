@@ -28,6 +28,7 @@
 #include <mlibc/kprintf.h>
 #include <mm/mm.h>
 #include <mm/page.h>
+#include <mm/mmap.h>
 #include <eza/errno.h>
 #include <mlibc/string.h>
 #include <eza/smp.h>
@@ -57,7 +58,7 @@ static void __arch_setup_ctx(task_t *newtask,uint64_t rsp)
   arch_context_t *ctx = (arch_context_t*)&(newtask->arch_context[0]);
 
   /* Setup CR3 */
-  ctx->cr3 = _k2p((uintptr_t)&(newtask->page_dir.entries[0]));
+  ctx->cr3 = _k2p((uintptr_t)pframe_to_virt(newtask->page_dir));
   ctx->rsp = rsp;
   ctx->fs = USER_SELECTOR(UDATA_DES);
   ctx->es = USER_SELECTOR(UDATA_DES);
@@ -125,9 +126,10 @@ void initialize_idle_tasks(void)
   page_frame_t *ts_page;
   int r, cpu;
   cpu_sched_stat_t *sched_stat;
-  page_frame_iterator_t pfi;
+  mmap_info_t minfo;
 
-  init_pfiter_alloc(&pfi);
+  memset(&minfo, 0, sizeof(minfo));  
+  init_pfiter_alloc(&minfo.pfi);
   for( cpu = 0; cpu < MAX_CPUS; cpu++ ) {
     ts_page = alloc_page(AF_PGEN | AF_ZERO);
     if( ts_page == NULL ) {
@@ -138,7 +140,7 @@ void initialize_idle_tasks(void)
     idle_tasks[cpu] = task;
 
     /* Setup PIDs and default priorities. */
-    spinlock_initialize(&task->lock, "Task's spinlock");
+    spinlock_initialize(&task->lock);
     task->pid = task->ppid = 0;
     task->cpu = cpu;
 
@@ -148,8 +150,7 @@ void initialize_idle_tasks(void)
 
 
     /* Initialize page tables to default kernel page directory. */
-    initialize_page_directory(&task->page_dir);
-    task->page_dir.entries = kernel_pt_directory.entries;
+    task->page_dir = kernel_root_pagedir;
 
     /* Initialize kernel stack.
      * Since kernel stacks aren't properly initialized, we can't use standard
@@ -160,9 +161,11 @@ void initialize_idle_tasks(void)
     }
 
     next_frame = NULL;
-    r = mm_map_pages( &task->page_dir, &pfi,
-                      task->kernel_stack.low_address, KERNEL_STACK_PAGES,
-                      MAP_KERNEL | MAP_RW);
+    minfo.va_from = task->kernel_stack.low_address;
+    minfo.va_to = minfo.va_from + ((KERNEL_STACK_PAGES - 1) << PAGE_WIDTH);
+    minfo.flags = MAP_RW;
+    r = mmap_pages(task->page_dir, &minfo);
+    
     if( r != 0 ) {
       panic( "initialize_idle_tasks(): Can't map kernel stack for idle task !" );
     }
@@ -237,7 +240,6 @@ static uint64_t __setup_kernel_task_context(task_t *task)
 static uint64_t __setup_user_task_context(task_t *task)
 {
   regs_t *regs = (regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
-
   /* Prepare a fake CPU-saved context */
   memset( regs, 0, sizeof(regs_t) );
 
@@ -279,7 +281,6 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   fsave -= delta;
 
   memset( (char *)fsave, 0, 512 );
-
   /* Save size of this context for further use in RESTORE_ALL. */
   fsave -= 8;
   *((uint64_t *)fsave) = delta;

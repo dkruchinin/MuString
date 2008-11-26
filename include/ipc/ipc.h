@@ -2,7 +2,7 @@
 #define  __IPC_H__
 
 #include <eza/arch/types.h>
-#include <eza/semaphore.h>
+#include <eza/mutex.h>
 #include <ipc/port.h>
 #include <eza/arch/atomic.h>
 #include <ds/linked_array.h>
@@ -10,6 +10,7 @@
 #include <eza/arch/arch_ipc.h>
 #include <ipc/buffer.h>
 #include <ipc/channel.h>
+#include <ipc/gen_port.h>
 
 /* Blocking mode */
 #define IPC_BLOCKED_ACCESS  0x1
@@ -36,12 +37,12 @@ typedef struct __ipc_pstats {
 } ipc_pstats_t;
 
 typedef struct __task_ipc {
-  semaphore_t sem;
+  mutex_t mutex;
   atomic_t use_count;  /* Number of tasks using this IPC structure. */
 
   /* port-related stuff. */
   ulong_t num_ports,max_port_num;
-  ipc_port_t **ports;
+  ipc_gen_port_t **ports;
   linked_array_t ports_array;
   spinlock_t port_lock;
 
@@ -67,8 +68,11 @@ typedef struct __task_ipc_priv {
 status_t setup_task_ipc(task_t *task);
 void release_task_ipc_priv(task_ipc_priv_t *priv);
 
-#define LOCK_IPC(ipc) semaphore_down(&ipc->sem)
-#define UNLOCK_IPC(ipc) semaphore_up(&ipc->sem)
+#define LOCK_IPC(ipc)  mutex_lock(&(ipc)->mutex)
+#define UNLOCK_IPC(ipc) mutex_unlock(&(ipc)->mutex);
+
+//#define LOCK_IPC(ipc)
+//#define UNLOCK_IPC(ipc)
 
 #define IPC_LOCK_PORTS(ipc) spinlock_lock(&ipc->port_lock)
 #define IPC_UNLOCK_PORTS(ipc) spinlock_unlock(&ipc->port_lock)

@@ -43,6 +43,7 @@ static void install_generic_irq_handlers(void)
   register_irq(0, timer_interrupt_handler, NULL, 0 );
 }
 
+#ifdef CONFIG_SMP
 static void install_smp_irq_handlers(void)
 {
   const idt_t *idt;
@@ -57,6 +58,7 @@ static void install_smp_irq_handlers(void)
     panic( "arch_initialize_irqs(): Can't install SMP irqs !" );
   }
 }
+#endif /* CONFIG_SMP */
 
 void arch_initialize_irqs(void)
 {

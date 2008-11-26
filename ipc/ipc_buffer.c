@@ -4,6 +4,7 @@
 #include <eza/errno.h>
 #include <ipc/ipc.h>
 #include <mm/pfalloc.h>
+#include <mm/mmap.h>
 #include <ds/linked_array.h>
 #include <eza/limits.h>
 #include <eza/vm.h>
@@ -63,7 +64,7 @@ static void ipc_put_buffer( ipc_user_buffer_t *buf )
 status_t ipc_setup_buffer_pages(task_t *owner,ipc_user_buffer_t *buf,
                                 uintptr_t start_addr, ulong_t size)
 {
-  page_directory_t *pd = &owner->page_dir;
+  page_frame_t *pd = owner->page_dir;
   page_idx_t idx;
   ulong_t chunk_num;
   status_t r=-EFAULT;
@@ -78,10 +79,9 @@ status_t ipc_setup_buffer_pages(task_t *owner,ipc_user_buffer_t *buf,
   LOCK_TASK_VM(owner);
 
   /* Process the first chunk. */
-  idx = mm_pin_virtual_address(pd,start_addr);
-  if( idx == INVALID_PAGE_IDX ) {
+  idx = mm_pin_virt_addr(pd, start_addr);
+  if (idx < 0)
     goto out;
-  }
 
   pchunk = buf->chunks;
 
@@ -100,8 +100,8 @@ status_t ipc_setup_buffer_pages(task_t *owner,ipc_user_buffer_t *buf,
 
   /* Process the rest of chunks. */
   while( size ) {
-    idx=mm_pin_virtual_address(pd,start_addr);
-    if( idx == INVALID_PAGE_IDX ) {
+    idx = mm_pin_virt_addr(pd, start_addr);
+    if(idx < 0) {
       goto out;
     }
     pchunk++;

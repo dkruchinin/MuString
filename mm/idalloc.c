@@ -52,7 +52,7 @@ void idalloc_enable(mm_pool_t *pool)
   page_frame_t *first_page;
   
   memset(&idalloc_meminfo, 0, sizeof(idalloc_meminfo));
-  spinlock_initialize(&idalloc_meminfo.lock, "");
+  spinlock_initialize(&idalloc_meminfo.lock);
   list_init_head(&idalloc_meminfo.avail_pages);
   list_init_head(&idalloc_meminfo.used_pages);
   if (IDALLOC_PAGES <= 0)

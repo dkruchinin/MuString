@@ -15,36 +15,44 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * eza/generic_api/panic.: implementation of the kernel insufficient state handler,
- *                         the 'panic()' routine.
+ * eza/amd64/mm/ptable.c - AMD64-specific page-table management API
  *
  */
 
-#include <mlibc/stdarg.h>
-#include <mlibc/kprintf.h>
-#include <eza/kernel.h>
-#include <eza/kconsole.h>
-#include <eza/interrupt.h>
+#include <mlibc/assert.h>
+#include <mm/page.h>
+#include <mm/pfalloc.h>
+#include <mm/mmap.h>
+#include <eza/spinlock.h>
+#include <eza/arch/ptable.h>
+#include <eza/arch/types.h>
 
-#define PANIC_BUF_SIZE 1024
-
-void panic(const char *fmt, ...)
+pde_flags_t pgt_translate_flags(unsigned int mmap_flags)
 {
-  va_list ap;
-  char panic_buf[PANIC_BUF_SIZE];
+  pde_flags_t flags = 0;
 
-  interrupts_disable();
-  default_console()->enable();
+  CT_ASSERT(sizeof(mmap_flags) >= sizeof(mmap_flags_t));
+  if (mmap_flags & MAP_USER)
+    flags |= PDE_US;
+  if (mmap_flags & MAP_WRITE)
+    flags |= PDE_RW;
+  if (mmap_flags & MAP_DONTCACHE)
+    flags |= PDE_PCD;
+  if (!(mmap_flags & MAP_EXEC))
+    flags |= PDE_NX;
 
-  va_start(ap, fmt);
-  vsnprintf(panic_buf, sizeof(panic_buf), fmt, ap);
-  va_end(ap);
-  kprintf("\n========[!!PANIC!!]=========\n");
-  kprintf("%s\n", panic_buf);  
+  return flags;
+}
 
-  for(;;);
+page_frame_t *pgt_create_pagedir(page_frame_t *parent, pdir_level_t level)
+{
+  page_frame_t *dir = alloc_page(AF_ZERO | AF_PGEN);
+  
+  if (dir)
+    mm_pagedir_initialize(dir, parent, level);
+
+  return dir;
 }
 

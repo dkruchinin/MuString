@@ -30,7 +30,7 @@ typedef struct __event_t {
 
 static inline void event_initialize(event_t *event)
 {
-  spinlock_initialize( &event->__lock, "" );
+  spinlock_initialize(&event->__lock);
   event->flags=0;
   event->task=NULL;
   event->ev_checker=NULL;

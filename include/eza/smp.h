@@ -28,12 +28,12 @@
 #include <config.h>
 #include <eza/arch/cpu.h>
 #include <eza/arch/types.h>
+#include <eza/arch/scheduler.h>
 
 extern volatile cpu_id_t online_cpus;
 
 #ifdef CONFIG_SMP
 /* Real cpu_id() is defined in include/<arch>/scheduler.h  */
-  #include <eza/arch/scheduler.h>
 #define __CPUS MAX_CPUS
 #else
 #define cpu_id() 0
