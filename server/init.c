@@ -192,7 +192,7 @@ void server_run_tasks(void)
   kconsole_t *kconsole=default_console();
 
   if( i<=0 ) {
-    spawn_percpu_threads();
+    //spawn_percpu_threads();
     return;
   }
 

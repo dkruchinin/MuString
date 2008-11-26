@@ -141,6 +141,37 @@ void close_ipc_resources(task_ipc_t *ipc)
   /* Close all buffers */
 }
 
+void dup_task_ipc_resources(task_ipc_t *ipc)
+{
+  int i;
+
+  LOCK_IPC(ipc);
+
+  /* Duplicate all open ports. */
+  if( ipc->ports ) {
+    for(i=0;i<=ipc->max_port_num;i++) {
+      IPC_LOCK_PORTS(ipc);
+      if( ipc->ports[i] ) {
+        atomic_inc(&ipc->ports[i]->own_count);
+      }
+      IPC_UNLOCK_PORTS(ipc);
+    }
+  }
+
+  /* Duplicate all open channels. */
+  if( ipc->channels ) {
+    for(i=0;i<=ipc->max_channel_num;i++) {
+      IPC_LOCK_CHANNELS(ipc);
+      if( ipc->channels[i] ) {
+        atomic_inc(&ipc->channels[i]->use_count);
+      }
+      IPC_UNLOCK_CHANNELS(ipc);
+    }
+  }
+
+  UNLOCK_IPC(ipc);
+}
+
 void release_task_ipc_priv(task_ipc_priv_t *priv)
 {
   __free_ipc_private_data(priv);

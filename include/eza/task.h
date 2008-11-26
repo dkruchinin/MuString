@@ -227,6 +227,7 @@ void free_task_struct(task_t *task);
 
 void cleanup_thread_data(void *t,ulong_t arg);
 
-
+/* Default kernel threads flags. */
+#define KERNEL_THREAD_FLAGS  (CLONE_MM)
 
 #endif

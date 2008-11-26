@@ -47,9 +47,6 @@ extern void user_fork_path(void);
 /* Bytes enough to store our arch-specific context. */
 #define ARCH_CONTEXT_BUF_SIZE  1256
 
-/* Default kernel threads flags. */
-#define KERNEL_THREAD_FLAGS  (CLONE_MM)
-
 /* Per-CPU glabal structure that reflects the most important kernel states. */
 cpu_sched_stat_t PER_CPU_VAR(cpu_sched_stat);
 

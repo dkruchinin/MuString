@@ -40,10 +40,5 @@ extern cpu_sched_stat_t PER_CPU_VAR(cpu_sched_stat);
     load_stack_pointer(t->kernel_stack.high_address-128);                       \
   }
 
-static regs_t *arch_get_syscall_stack_frame(task_t *caller)
-{
-    return (regs_t *)(caller->kernel_stack.high_address-sizeof(regs_t));
-}
-
 #endif
 

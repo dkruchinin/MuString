@@ -72,10 +72,10 @@ static bool __verify_message(ulong_t id,char *msg)
   return !memcmp(patterns[id],msg,strlen(patterns[id])+1);
 }
 
-static bool __verify_big_message(char *buf,ulong_t *diff_offset)
+static bool __verify_big_message(uint8_t *buf,ulong_t *diff_offset)
 {
   int i;
-  char *p=__big_message_pattern;
+  uint8_t *p=__big_message_pattern;
 
   for(i=0;i<BIG_MESSAGE_SIZE;i++) {
     if( *p != *buf ) {
@@ -121,8 +121,8 @@ static void __client_thread(void *ctx)
   tf->printf(CLIENT_THREAD "Sending messages in blocking mode.\n" );  
   for(i=0;i<TEST_ROUNDS;i++) {
     r=sys_port_send(channels[i],IPC_BLOCKED_ACCESS,
-                    patterns[i],strlen(patterns[i])+1,
-                    __client_rcv_buf,sizeof(__client_rcv_buf));
+                    (ulong_t)patterns[i],strlen(patterns[i])+1,
+                    (ulong_t)__client_rcv_buf,sizeof(__client_rcv_buf));
     if( r < 0 ) {
       tf->printf(CLIENT_THREAD "Error while sending data over channel N%d : %d\n",
                  channels[i],r);
@@ -150,8 +150,8 @@ static void __client_thread(void *ctx)
    ****************************************************************/
   tf->printf(CLIENT_THREAD "Sending a big message in blocking mode.\n" );
   r=sys_port_send(channels[BIG_MESSAGE_PORT_ID],IPC_BLOCKED_ACCESS,
-                  __big_message_pattern,BIG_MESSAGE_SIZE,
-                  __big_message_client_buf,BIG_MESSAGE_SIZE);
+                  (ulong_t)__big_message_pattern,BIG_MESSAGE_SIZE,
+                  (ulong_t)__big_message_client_buf,BIG_MESSAGE_SIZE);
   if( r < 0 ) {
     tf->printf(CLIENT_THREAD "Error while sending a big message over channel N%d : %d\n",
                channels[BIG_MESSAGE_PORT_ID],r);
@@ -182,8 +182,8 @@ static void __client_thread(void *ctx)
    ****************************************************************/
   tf->printf(CLIENT_THREAD "Trying to send a non-blocking message to a blocking channel.\n" );
   r=sys_port_send(channels[0],0,
-                  patterns[0],strlen(patterns[0])+1,
-                  __client_rcv_buf,sizeof(__client_rcv_buf));
+                  (ulong_t)patterns[0],strlen(patterns[0])+1,
+                  (ulong_t)__client_rcv_buf,sizeof(__client_rcv_buf));
   if( r == -EINVAL ) {
     tf->passed();
   } else {
@@ -193,7 +193,7 @@ static void __client_thread(void *ctx)
   tf->printf(CLIENT_THREAD "Sending messages in non-blocking mode.\n" );
   for( i=0; i<TEST_ROUNDS;i++ ) {
     r=sys_port_send(channels[NON_BLOCKED_PORT_ID],0,
-                    patterns[i],strlen(patterns[i])+1,
+                    (ulong_t)patterns[i],strlen(patterns[i])+1,
                     0,0);
     if( r < 0 ) {
       tf->printf(CLIENT_THREAD "Error while sending data over channel N%d : %d\n",
@@ -206,8 +206,6 @@ static void __client_thread(void *ctx)
   tf->passed();
 
   goto exit_test;
-abort_test:
-  tf->abort();
 exit_test:
   sys_exit(0);
 }
@@ -236,8 +234,8 @@ static void __poll_client(void *d)
   for(i=0;i<TEST_ROUNDS;i++) {
     tf->printf(POLL_CLIENT "Sending message to port %d.\n",port );
     r=sys_port_send(channel,IPC_BLOCKED_ACCESS,
-                    patterns[msg_id],strlen(patterns[msg_id])+1,
-                    client_rcv_buf,sizeof(client_rcv_buf));
+                    (ulong_t)patterns[msg_id],strlen(patterns[msg_id])+1,
+                    (ulong_t)client_rcv_buf,sizeof(client_rcv_buf));
     if( r < 0 ) {
       tf->printf(POLL_CLIENT "Error occured while sending message: %d\n",r);
       tf->failed();
@@ -263,8 +261,8 @@ static void __poll_client(void *d)
   if( port == 0 ) {
     tf->printf(POLL_CLIENT "Testing correct client wake-up on port closing...\n" );
     r=sys_port_send(channel,IPC_BLOCKED_ACCESS,
-                    patterns[msg_id],strlen(patterns[msg_id])+1,
-                    client_rcv_buf,sizeof(client_rcv_buf));
+                    (ulong_t)patterns[msg_id],strlen(patterns[msg_id])+1,
+                    (ulong_t)client_rcv_buf,sizeof(client_rcv_buf));
     if( r == -EPIPE ) {
       tf->printf( POLL_CLIENT "Got -EPIPE. It seems that kernel woke us properly.\n" );
       tp->finished_tests=true;
@@ -335,7 +333,7 @@ static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
                     fds[i].fd);
         tf->abort();
       }
-      r=sys_port_receive(fds[i].fd,0,server_rcv_buf,
+      r=sys_port_receive(fds[i].fd,0,(ulong_t)server_rcv_buf,
                          sizeof(server_rcv_buf),&msg_info);
       if( r != 0 ) {
         tf->printf( SERVER_THREAD "Error during processing port N %d. r=%d\n",
@@ -356,7 +354,7 @@ static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
         }
         /* Reply here. */
         r=sys_port_reply(fds[i].fd,msg_info.msg_id,
-                         patterns[msg_id],strlen(patterns[msg_id])+1);
+                         (ulong_t)patterns[msg_id],strlen(patterns[msg_id])+1);
         if( r ) {
           tf->printf(SERVER_THREAD "Error occured during replying via port %d. r=%d\n",
                      fds[i].fd,r);
@@ -377,7 +375,7 @@ static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
    * or not.
    */
   tf->printf(SERVER_THREAD "Testing client wake-up during port closing.\n" );
-  r=sys_port_receive(0,0,server_rcv_buf,
+  r=sys_port_receive(0,0,(ulong_t)server_rcv_buf,
                      sizeof(server_rcv_buf),&msg_info);
   if( r != 0 ) {
     tf->printf( SERVER_THREAD "Error during receiving message for client wake-up. r=%d\n",
@@ -442,7 +440,7 @@ static void __server_thread(void *ctx)
    ********************************************************/
   tf->printf(SERVER_THREAD "Testing message delivery in blocking mode.\n" );
   for(i=0;i<TEST_ROUNDS;i++) {
-    r=sys_port_receive(i,IPC_BLOCKED_ACCESS,__server_rcv_buf,
+    r=sys_port_receive(i,IPC_BLOCKED_ACCESS,(ulong_t)__server_rcv_buf,
                        sizeof(__server_rcv_buf),&msg_info);
     if( r ) {
       tf->printf(SERVER_THREAD "Insufficient return value during 'sys_port_receive': %d\n",
@@ -472,7 +470,7 @@ static void __server_thread(void *ctx)
         }
       }
     }
-    r=sys_port_reply(i,0,patterns[i],strlen(patterns[i])+1);
+    r=sys_port_reply(i,0,(ulong_t)patterns[i],strlen(patterns[i])+1);
     if( r ) {
       tf->printf(SERVER_THREAD "Insufficient return value during 'sys_port_reply': %d\n",
                  r);
@@ -486,7 +484,8 @@ static void __server_thread(void *ctx)
    ****************************************************************/
   tf->printf(SERVER_THREAD "Testing delivery of a big message (%d bytes).\n",
              BIG_MESSAGE_SIZE);
-  r=sys_port_receive(BIG_MESSAGE_PORT_ID,IPC_BLOCKED_ACCESS,__big_message_server_buf,
+  r=sys_port_receive(BIG_MESSAGE_PORT_ID,IPC_BLOCKED_ACCESS,
+                     (ulong_t)__big_message_server_buf,
                      BIG_MESSAGE_SIZE,&msg_info);
   if( r ) {
       tf->printf(SERVER_THREAD "Insufficient return value during 'sys_port_receive': %d\n",
@@ -513,7 +512,7 @@ static void __server_thread(void *ctx)
     }
   }
   r=sys_port_reply(BIG_MESSAGE_PORT_ID,msg_info.msg_id,
-                   __big_message_pattern,BIG_MESSAGE_SIZE);
+                   (ulong_t)__big_message_pattern,BIG_MESSAGE_SIZE);
   if( r ) {
     tf->printf(SERVER_THREAD "Insufficient return value during 'sys_port_reply': %d\n",
                r);
@@ -528,7 +527,8 @@ static void __server_thread(void *ctx)
   tf->printf(SERVER_THREAD "Testing message delivery in non-blocking mode.\n" );
 
   for(i=0;i<TEST_ROUNDS;i++) {
-    r=sys_port_receive(NON_BLOCKED_PORT_ID,IPC_BLOCKED_ACCESS,__server_rcv_buf,
+    r=sys_port_receive(NON_BLOCKED_PORT_ID,IPC_BLOCKED_ACCESS,
+                       (ulong_t)__server_rcv_buf,
                        sizeof(__server_rcv_buf),&msg_info);
     if( r ) {
       tf->printf(SERVER_THREAD "Insufficient return value during 'sys_port_receive': %d\n",
@@ -593,8 +593,8 @@ static bool __ipc_tests_initialize(void **ctx)
 
 void __ipc_tests_run(test_framework_t *f,void *ctx)
 {
-  DECLARE_TEST_CONTEXT;
-
+  ipc_test_ctx_t *tctx=(ipc_test_ctx_t*)ctx;
+  
   tctx->tf=f;
 
   if( kernel_thread(__server_thread,tctx,NULL) ) {

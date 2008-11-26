@@ -57,6 +57,10 @@ status_t sys_port_reply(ulong_t port,ulong_t msg_id,ulong_t reply_buf,
     return -EINVAL;
   }
 
+  if( !valid_user_address_range(reply_buf,reply_len) ) {
+    return -EFAULT;
+  }
+
   p=__ipc_get_port(current_task(),port);
   if( !p ) {
     return -EINVAL;
@@ -73,19 +77,17 @@ status_t sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
   ipc_gen_port_t *p;
   status_t r;
 
+  if( !valid_user_address_range((ulong_t)msg_info,sizeof(*msg_info)) ||
+      !valid_user_address_range(recv_buf,recv_len) ) {
+    return -EFAULT;
+  }
+
   p=__ipc_get_port(current_task(),port);
   if( !p ) {
     return -EINVAL;
   }
 
-  if( !valid_user_address((ulong_t)msg_info) ||
-      !valid_user_address(recv_buf) ) {
-    r=-EFAULT;
-    goto put_port;
-  }
-
   r=__ipc_port_receive(p,flags,recv_buf,recv_len,msg_info);
-put_port:
   __ipc_put_port(p);
   return r;
 }
@@ -104,6 +106,11 @@ status_t sys_port_send(ulong_t channel,ulong_t flags,
     return -EINVAL;
   }
 
+  if( !valid_user_address_range((ulong_t)snd_buf,snd_size) ||
+      !valid_user_address_range(rcv_buf,rcv_size) ) {
+    return -EFAULT;
+  }
+  
   if( !trusted_task(caller) ) {
     if( (flags & UNTRUSTED_MANDATORY_FLAGS) != UNTRUSTED_MANDATORY_FLAGS ) {
       return -EPERM;

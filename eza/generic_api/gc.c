@@ -140,5 +140,9 @@ void gc_schedule_action(gc_action_t *action)
   list_add2tail(alist,&action->l);
   UNLOCK_TASKLIST();
 
-  sched_change_task_state(gc_threads[cpu_id()][GC_THREAD_IDX], TASK_STATE_RUNNABLE);
+  if( gc_threads[cpu_id()][GC_THREAD_IDX] ) {
+    sched_change_task_state(gc_threads[cpu_id()][GC_THREAD_IDX], TASK_STATE_RUNNABLE);
+  } else {
+    kprintf( KO_WARNING "gc_schedule_action(): scheduling GC action without GC thread !\n" );
+  }
 }

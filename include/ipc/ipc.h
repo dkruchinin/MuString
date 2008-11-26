@@ -71,9 +71,6 @@ void release_task_ipc_priv(task_ipc_priv_t *priv);
 #define LOCK_IPC(ipc)  mutex_lock(&(ipc)->mutex)
 #define UNLOCK_IPC(ipc) mutex_unlock(&(ipc)->mutex);
 
-//#define LOCK_IPC(ipc)
-//#define UNLOCK_IPC(ipc)
-
 #define IPC_LOCK_PORTS(ipc) spinlock_lock(&ipc->port_lock)
 #define IPC_UNLOCK_PORTS(ipc) spinlock_unlock(&ipc->port_lock)
 
@@ -91,6 +88,7 @@ void release_task_ipc_priv(task_ipc_priv_t *priv);
 
 void free_task_ipc(task_ipc_t *ipc);
 void close_ipc_resources(task_ipc_t *ipc);
+void dup_task_ipc_resources(task_ipc_t *ipc);
 
 static inline task_ipc_t *get_task_ipc(task_t *t)
 {

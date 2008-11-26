@@ -51,6 +51,9 @@ syscall_table:
 	.quad   sys_scheduler_control
 	.quad   sys_get_tid                     /* 15  */
 	.quad   sys_exit
+	.quad   sys_open_channel
+	.quad   sys_close_channel
+	.quad   sys_close_port
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \
