@@ -42,6 +42,7 @@
 status_t copy_to_user(void *dest,void *src,ulong_t size);
 status_t copy_from_user(void *dest,void *src,ulong_t size);
 
+#ifndef TEST
 static inline bool valid_user_address(uintptr_t addr)
 {
   return (addr >= USER_START_VIRT && addr < USER_MAX_VIRT);
@@ -55,6 +56,14 @@ static inline bool valid_user_address_range(uintptr_t addr,ulong_t size)
   }
   return false;
 }
+#else
+
+/* If we're running tests, allow syscalls to work with kernel space. */
+#define valid_user_address(a)  (true)
+#define valid_user_address_range(a,s)  (true)
+
+#endif
+
 
 #endif /* __KERNEL_VM_H__ */
 

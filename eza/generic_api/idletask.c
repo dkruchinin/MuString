@@ -47,23 +47,21 @@
 task_t *idle_tasks[MAX_CPUS];
 
 #define STEP 600
-#define TICKS_TO_WAIT 300
-
-ulong_t syscall_counter=0;
 
 void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
 
+#ifdef TEST
   if( !cpu_id() ) {
     run_tests();
   }
+#endif
 
   for( ;; ) {
     if( swks.system_ticks_64 >= target_tick ) {
-      kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d), SYSCALLS: %d\n",
-               cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic(),
-               syscall_counter );
+      kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
+               cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
       target_tick += STEP;
     }
   }

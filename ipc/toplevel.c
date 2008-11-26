@@ -78,13 +78,12 @@ status_t sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
     return -EINVAL;
   }
 
-/*
   if( !valid_user_address((ulong_t)msg_info) ||
       !valid_user_address(recv_buf) ) {
     r=-EFAULT;
     goto put_port;
   }
-*/
+
   r=__ipc_port_receive(p,flags,recv_buf,recv_len,msg_info);
 put_port:
   __ipc_put_port(p);

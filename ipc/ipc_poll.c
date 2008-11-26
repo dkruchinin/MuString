@@ -37,10 +37,11 @@
 #include <eza/arch/page.h>
 #include <eza/scheduler.h>
 #include <eza/arch/atomic.h>
+#include <ipc/gen_port.h>
 
 typedef struct __poll_kitem {
   wait_queue_task_t qtask;
-  ipc_port_t *port;
+  ipc_gen_port_t *port;
   poll_event_t events,revents;
 } poll_kitem_t;
 
@@ -92,14 +93,15 @@ status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
   /* First, create the list of all IPC ports to be polled. */
   for(i=0;i<nfds;i++) {
     pollfd_t upfd;
-    ipc_port_t *port;
+    ipc_gen_port_t *port;
 
     if( copy_from_user(&upfd,&pfds[i],sizeof(upfd)) ) {
       nevents=-EFAULT;
       break;
     }
 
-    if( ipc_get_port(caller,upfd.fd,&port) ) {
+    port=__ipc_get_port(caller,upfd.fd);
+    if( !port ) {
       nevents=-EINVAL;
       break;
     }
@@ -149,7 +151,7 @@ put_ports:
       ipc_port_remove_poller(pkitems[i].port,&pkitems[i].qtask);
       IPC_TASK_UNACCT_OPERATION(caller);
     }
-    ipc_put_port(pkitems[i].port);
+    __ipc_put_port(pkitems[i].port);
 
     /* Copy resulting events back to userspace. */
     if(nevents>0) {
