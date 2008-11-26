@@ -41,7 +41,7 @@
 #include <eza/arch/ptable.h>
 
 #ifndef IDALLOC_VPAGES
-#define IDALLOC_VPAGES 2
+#define IDALLOC_VPAGES 64
 #endif
 
 /* An array of all physical pages */

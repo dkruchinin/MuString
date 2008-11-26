@@ -89,7 +89,7 @@ static void main_routine_stage1(void)
   swks_add_version_info();
 
   /* OK, we can proceed. */
-  server_run_tasks();
+  // server_run_tasks();
 
   /* Enter idle loop. */
 

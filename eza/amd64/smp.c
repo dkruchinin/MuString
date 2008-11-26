@@ -35,16 +35,12 @@
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 #include <mlibc/string.h>
+#include <eza/smp.h>
 #include <eza/arch/smp.h>
 
 #ifdef CONFIG_SMP
 
-/*
- * TODO: add acpi detection for smp
- *       it should follows from multiprocessor table
- */
-
-void arch_smp_init(void)
+void arch_smp_init(int ncpus)
 {
   ptr_16_64_t gdtr;
   int i=1,r=0;
@@ -55,13 +51,16 @@ void arch_smp_init(void)
 
 
   /* ok setup new gdt */
-  while(i<NR_CPUS) {
+  while(i<ncpus) {
     protected_ap_gdtr.limit=GDT_ITEMS * sizeof(struct __descriptor);
     protected_ap_gdtr.base=((uintptr_t)&gdt[i][0]-0xffffffff80000000);
     gdtr.base=(uint64_t)&gdt[i];
     
     r=apic_send_ipi_init(i);
-    atom_usleep(1000);
+    atom_usleep(20000);
+		if (!is_cpu_online(i))
+			panic("CPU %d did not start!\n");
+
     i++;
   }
 }

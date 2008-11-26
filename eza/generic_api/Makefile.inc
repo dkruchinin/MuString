@@ -23,4 +23,5 @@ LIBEZA_OBJS=eza/generic_api/main.o \
 	eza/generic_api/def_actions.o  \
 	eza/generic_api/exit.o \
 	eza/generic_api/gc.o \
-    eza/generic_api/mutex.o
+  eza/generic_api/mutex.o \
+		eza/generic_api/actbl.o

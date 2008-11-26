@@ -33,6 +33,8 @@
 #include <eza/arch/mm_types.h>
 #include <eza/arch/interrupt.h>
 #include <eza/arch/gdt.h>
+#include <mm/idalloc.h>
+#include <mm/mmap.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 #include <mlibc/string.h>
@@ -50,12 +52,27 @@
 
 volatile struct __local_apic_t *local_apic; 
 static int apics_number;
+uint32_t local_apic_base = DEFAULT_APIC_BASE;
+uint8_t local_apic_ids[NR_CPUS];
 
-#if (NR_CPUS > 8)
-	uint8_t dest_mode = DMODE_PHY;
-#else
-	uint8_t dest_mode = DMODE_LOGIC;
-#endif
+static int __map_apic_page(void)
+{
+  int32_t res;
+  uintptr_t apic_vaddr;
+
+  apic_vaddr=(uintptr_t)idalloc_allocate_vregion(1);
+  if( !apic_vaddr ) {
+    panic( "[MM] Can't allocate memory range for mapping APIC !\n" );
+  }
+
+  res = mmap_kern(apic_vaddr, local_apic_base >> PAGE_WIDTH, 1, MAP_RW | MAP_DONTCACHE | MAP_EXEC);
+  if(res<0) {
+    panic("[MM] Cannot map IO page for APIC.\n");
+  }
+
+  local_apic=(struct __local_apic_t *)apic_vaddr;
+  return 0;
+}
 
 /*
  * default functions to access APIC (local APIC)
@@ -188,7 +205,7 @@ static int __local_apic_check(void)
   /*check for lvt*/
   v0=__get_maxlvt();
   if(v0<0x02 || v0==0xff)
-  return -1;
+		return -1;
 
   return 0;
 }
@@ -269,9 +286,8 @@ static int __local_apic_init(void)
   __disable_apic();
 
   set_apic_dfr_mode(0xf); 
-  set_apic_ldr_logdest(1 << apics_number);
+  set_apic_ldr_logdest(1 << (apics_number & 7));
 	apics_number++;
-	kprintf("apics_number = %d\n", apics_number);
 
   /* set 0 task priority, i. e. handle all interrupts */ 
   local_apic->tpr.reg = 0; 
@@ -317,7 +333,7 @@ static int __local_apic_init(void)
   /* set icr1 registers*/
   icr1=local_apic->icr1;
   icr1.tx_mode=TXMODE_INIT;
-  icr1.rx_mode=DMODE_LOGIC;
+  icr1.rx_mode=DMODE_PHY;
   icr1.level=0x0;
   icr1.shorthand=0x2;
   icr1.trigger=0x1;
@@ -347,6 +363,7 @@ static void __unmask_extint(void)
 /*init functions makes me happy*/
 int local_bsp_apic_init(void)
 {
+	__map_apic_page();
 	if (__local_apic_init())
 		 return -1;
 
@@ -491,13 +508,13 @@ void apic_spurious_vector_handler(uint32_t irq)
 
 #ifdef CONFIG_SMP
 
-uint32_t apic_send_ipi_init(uint8_t apicid)
+uint32_t apic_send_ipi_init(int cpu)
 {
   int i=0;
   apic_icr1_t icr1=local_apic->icr1;
   apic_icr2_t icr2=local_apic->icr2;
 
-  icr2.dest=apicid;
+  icr2.dest=local_apic_ids[cpu];
   local_apic->icr2.reg=icr2.reg;  
   icr1.tx_mode=TXMODE_INIT;
   icr1.rx_mode=DMODE_PHY;
@@ -546,7 +563,7 @@ int apic_broadcast_ipi_vector(uint8_t vector)
   apic_icr1_t icr1=local_apic->icr1;
 
   icr1.tx_mode=TXMODE_FIXED;
-  icr1.rx_mode=DMODE_LOGIC;
+  icr1.rx_mode=DMODE_PHY;
   icr1.level=LEVEL_ASSERT;
   icr1.trigger=TRIG_LEVEL; /* trigger mode -> level */
   icr1.shorthand=SHORTHAND_ALLEXS; /* all exclude ipi */

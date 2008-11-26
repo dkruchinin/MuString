@@ -28,7 +28,7 @@
 #include <config.h>
 #include <eza/arch/types.h>
 
-#define APIC_BASE    0xfee00000
+#define DEFAULT_APIC_BASE    0xfee00000
 
 #define APIC_INT_EOI  0x0
 
@@ -335,7 +335,8 @@ void apic_timer_hack(void);
 
 #ifdef CONFIG_SMP
 
-uint32_t apic_send_ipi_init(uint8_t apicid);
+uint32_t apic_send_ipi_init(int cpu);
+uint32_t apic_send_vector(int cpu, uint8_t vector);
 int apic_broadcast_ipi_vector(uint8_t vector);
 int local_ap_apic_init(void);
 
