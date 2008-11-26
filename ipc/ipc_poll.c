@@ -31,7 +31,6 @@
 #include <ipc/poll.h>
 #include <eza/time.h>
 #include <mm/slab.h>
-#include <eza/waitqueue.h>
 #include <eza/errno.h>
 #include <mm/pfalloc.h>
 #include <eza/arch/page.h>
