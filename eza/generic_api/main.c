@@ -86,7 +86,7 @@ static void main_routine_stage1(void)
    */
   interrupts_enable();
   initialize_swks();
-  swks_add_version_info();
+  //swks_add_version_info();
 
   /* OK, we can proceed. */
   server_run_tasks();
@@ -111,7 +111,7 @@ void main_routine(void) /* this function called from boostrap assembler code */
   install_fault_handlers();
   initialize_irqs();
   kcons->enable();
-  print_kernel_version_info();
+  //print_kernel_version_info();
   kprintf("[MB] Modules: %d\n",init.c);
   kprintf("[LW] Initialized CPU vectors.\n");
 

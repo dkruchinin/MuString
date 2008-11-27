@@ -1,1 +1,0 @@
-/* This file was deprecated. Its content now lives in 'ipc/port_core.c' */

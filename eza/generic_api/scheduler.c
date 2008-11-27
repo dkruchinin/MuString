@@ -22,6 +22,7 @@
  *
  */
 
+#include <config.h>
 #include <mlibc/kprintf.h>
 #include <eza/scheduler.h>
 #include <eza/kernel.h>
@@ -61,9 +62,9 @@ static scheduler_t *active_scheduler = NULL;
 #define LOCK_SCHEDULER_LIST spinlock_lock(&scheduler_lock)
 #define UNLOCK_SCHEDULER_LIST spinlock_unlock(&scheduler_lock)
 
-static list_head_t migration_lists[NR_CPUS];
-static spinlock_t migration_locks[NR_CPUS];
-static list_head_t migration_actions[NR_CPUS];
+static list_head_t migration_lists[CONFIG_NRCPUS];
+static spinlock_t migration_locks[CONFIG_NRCPUS];
+static list_head_t migration_actions[CONFIG_NRCPUS];
 
 static void initialize_sched_internals(void)
 {
@@ -87,7 +88,7 @@ void initialize_scheduler(void)
 
   initialize_idle_tasks();
 
-  for(i=0;i<NR_CPUS;i++) {
+  for(i=0;i<CONFIG_NRCPUS;i++) {
     spinlock_initialize(&migration_locks[i]);
     list_init_head(&migration_lists[i]);
     list_init_head(&migration_actions[i]);
@@ -245,8 +246,6 @@ status_t sys_yield(void)
 
 status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
 {
-  status_t r;
-
   switch( cmd ) {
     case SYS_SCHED_CTL_GET_AFFINITY_MASK:
       return task->cpu_affinity_mask;
@@ -286,12 +285,16 @@ status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg)
 
   if(cmd > SCHEDULER_MAX_COMMON_IOCTL) {
     return  -EINVAL;
-  }
+  }  
 
-  target = pid_to_task(pid);
+  target = pid_to_task(pid);  
   if( target == NULL ) {
     return -ESRCH;
   }
+  
+  /* if TF_USPC_BLOCKED flag is set, task static priority can not be changed by user */
+  if ((cmd == SYS_SCHED_CTL_SET_PRIORITY) && (target->flags & TF_USPC_BLOCKED))
+      return -EAGAIN;
 
   if( target->scheduler == NULL ) {
     r = -ENOTTY;
@@ -345,6 +348,7 @@ status_t sleep(ulong_t ticks)
 }
 
 #ifdef CONFIG_SMP
+#include <eza/arch/apic.h>
 
 static void __remote_task_state_change_action(void *data,ulong_t data_arg)
 {
@@ -410,7 +414,7 @@ status_t schedule_remote_task_state_change(task_t *task,ulong_t state)
 /* NOTE: Task must be locked before calling this function ! */
 status_t schedule_migration(task_t *task,cpu_id_t cpu)
 {
-  if( cpu < NR_CPUS ) {
+  if( cpu < CONFIG_NRCPUS ) {
     if( !list_node_is_bound(&task->migration_list) ) {
       /* Make one extra reference to prevent this task structure from
        * being freed concurrently (via 'sys_exit()', for example.

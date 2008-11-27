@@ -15,10 +15,9 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * mlibc/waitqueue.c: implementation of waitqueues.
+ * mlibc/waitqueue.c: Implementation of waitqueues.
  */
 
 #include <ds/list.h>
@@ -28,19 +27,21 @@
 #include <eza/scheduler.h>
 #include <eza/arch/types.h>
 
-static void __insert_task(wait_queue_t *wq, wait_queue_task_t *wq_task)
+static void __insert_task(wqueue_t *wq, wqueue_task_t *wq_task)
 {
   list_node_t *next = NULL;
   
   if (likely(!list_is_empty(&wq->waiters))) {
-    wait_queue_task_t *t;
+    wqueue_task_t *t;
     
     list_for_each_entry(&wq->waiters, t, node) {
-      if (t->priority == wq_task->priority) {
+      int cmp_ret = wq->cmp_func(t, wq_task);
+      
+      if (!cmp_ret) { /* t == wq_task */
         next = list_head(&t->head);
         break;
       }
-      if (t->priority > wq_task->priority) {
+      if (t > 0) { /* t > wq_task */
         next = &t->node;
         break;
       }
@@ -54,11 +55,11 @@ static void __insert_task(wait_queue_t *wq, wait_queue_task_t *wq_task)
   wq->num_waiters++;
 }
 
-static void __delete_task(wait_queue_t *wq, wait_queue_task_t *wq_task)
+static void __delete_task(wqueue_task_t *wq_task)
 {    
   if (!list_is_empty(&wq_task->head)) {
-    wait_queue_task_t *t = list_entry(list_node_first(&wq_task->head),
-                                      wait_queue_task_t, node);
+    wqueue_task_t *t = list_entry(list_node_first(&wq_task->head),
+                                      wqueue_task_t, node);
     list_del(&t->node);
     list_add(&wq_task->node, &t->node);
     if (!list_is_empty(&wq_task->head))
@@ -66,39 +67,56 @@ static void __delete_task(wait_queue_t *wq, wait_queue_task_t *wq_task)
   }
 
   list_del(&wq_task->node);
-  list_init_head(&wq_task->head);
+  list_init_head(&wq_task->head);  
+  wq_task->q->num_waiters--;
   wq_task->q = NULL;
-  wq->num_waiters--;
 }
 
-status_t waitqueue_initialize(wait_queue_t *wq)
+int __wqueue_cmp_default(wqueue_task_t *wqt1, wqueue_task_t *wqt2)
 {
+  if (wqt1->task->static_priority < wqt2->task->static_priority)
+    return 1;
+  else if (wqt1->task->static_priority > wqt2->task->static_priority)
+    return -1;
+  else
+    return 0;
+}
+
+status_t waitqueue_initialize(wqueue_t *wq, wqueue_type_t type)
+{  
   list_init_head(&wq->waiters);
   wq->num_waiters = 0;  
   spinlock_initialize(&wq->q_lock);
+  wq->type = type;
+  switch (type) {
+      case WQ_PRIO:
+        wq->cmp_func = __wqueue_cmp_default;
+        break;
+      case WQ_CUSTOM:
+        wq->cmp_func = NULL;
+        break;
+      default:
+        return -EINVAL;
+  }
+  
   return 0;
 }
 
-status_t waitqueue_prepare_task(wait_queue_task_t *wq_task, task_t *task)
+void waitqueue_prepare_task(wqueue_task_t *wq_task, task_t *task)
 {
-  status_t ret;
-  
   list_init_head(&wq_task->head);
   wq_task->task = task;
   wq_task->q = NULL;
-  ret = do_scheduler_control(task, SYS_SCHED_CTL_GET_PRIORITY, 0);
-  if (ret < 0)
-    return ret;
-
-  wq_task->priority = ret;
-  return 0;
+  wq_task->uspc_blocked = task->flags & TF_USPC_BLOCKED;
+  task->flags |= TF_USPC_BLOCKED; /* block priority changing from user-space */
 }
 
-status_t waitqueue_insert(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_insop_t iop)
+status_t waitqueue_insert(wqueue_t *wq, wqueue_task_t *wq_task, wqueue_insop_t iop)
 {
   status_t ret = 0;
   
   spinlock_lock(&wq->q_lock);
+  ASSERT(wq->cmp_func != NULL);
   __insert_task(wq, wq_task);
   if (iop == WQ_INSERT_SLEEP)
     ret = sched_change_task_state(wq_task->task, TASK_STATE_SLEEPING);
@@ -107,57 +125,68 @@ status_t waitqueue_insert(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_i
   return ret;
 }
 
-status_t waitqueue_delete(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_delop_t dop)
+status_t waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t dop)
 {
   status_t ret = 0;
+  wqueue_t *wq = wq_task->q;
 
+  spinlock_lock(&wq->q_lock);
   if (waitqueue_is_empty(wq)) {
     ret = -EINVAL;
     goto out;
   }
-  
-  spinlock_lock(&wq->q_lock);
-  __delete_task(wq, wq_task);
+   
+  __delete_task(wq_task);
+  if (!wq_task->uspc_blocked)
+    wq_task->task->flags &= ~TF_USPC_BLOCKED;
   if (dop == WQ_DELETE_WAKEUP)
     ret = sched_change_task_state(wq_task->task, TASK_STATE_RUNNABLE);
 
-  spinlock_unlock(&wq->q_lock);
-
   out:
+  spinlock_unlock(&wq->q_lock);
   return ret;
 }
 
-wait_queue_task_t *waitqueue_first_task(wait_queue_t *wq)
+wqueue_task_t *waitqueue_first_task(wqueue_t *wq)
 {
-  wait_queue_task_t *t = NULL;
-  
-  if (!waitqueue_is_empty(wq)) {
-    spinlock_lock(&wq->q_lock);
-    t = list_entry(list_node_first(&wq->waiters), wait_queue_task_t, node);
-    spinlock_unlock(&wq->q_lock);
-  }
+  wqueue_task_t *t = NULL;
 
+  spinlock_lock(&wq->q_lock);
+  if (!waitqueue_is_empty(wq))
+    t = list_entry(list_node_first(&wq->waiters), wqueue_task_t, node);
+
+  spinlock_unlock(&wq->q_lock);
   return t;
 }
 
 #ifdef DEBUG_WAITQUEUE
 #include <mlibc/kprintf.h>
 
-void waitqueue_dump(wait_queue_t *wq)
+void waitqueue_dump(wqueue_t *wq)
 {
   if (waitqueue_is_empty(wq)) {
     kprintf("[WQ empty]\n");
     return;
   }
   else {
-    wait_queue_task_t *t;
+    wqueue_task_t *t;
+    char *wq_type = NULL;
 
     spinlock_lock(&wq->q_lock);
-    kprintf("[WQ dump (%d waiters)]:\n", wq->num_waiters);
+    switch (wq->type) {
+        case WQ_PRIO:
+          wq_type = "Priority based";
+          break;
+        case WQ_CUSTOM:
+          wq_type = "Custom";
+          break;
+    }
+    
+    kprintf("[WQ dump (TYPE: %s, Waiters: %d)]:\n", wq_type, wq->num_waiters);
     list_for_each_entry(&wq->waiters, t, node) {
-      wait_queue_task_t *subt;
+      wqueue_task_t *subt;
       
-      kprintf(" [%d]=> %d", t->priority, t->task->pid);
+      kprintf(" [%d]=> %d", t->task->static_priority, t->task->pid);
       list_for_each_entry(&t->head, subt, node)
         kprintf("->%d", subt->task->pid);
 

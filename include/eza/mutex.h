@@ -29,9 +29,13 @@
 #include <eza/task.h>
 #include <eza/arch/types.h>
 
+/**
+ * @brief General mutex structure
+ *
+ */
 typedef struct __mutex {
   spinlock_t lock;
-  wait_queue_t wq;
+  wqueue_t wq;
   struct {
     task_t *task;
     uint32_t priority;
@@ -39,19 +43,19 @@ typedef struct __mutex {
   uint32_t max_prio;
 } mutex_t;
 
-#define MUTEX_DEFINE(name)                      \
-  mutex_t (name) = MUTEX_INITIALIZE(name)
-
-#define MUTEX_INITIALIZE(name)                              \
-  {   .lock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V),   \
-      .wq = WAITQUEUE_INITIALIZE((name).wq),                \
-      .executer = { NULL, TASK_PRIO_INVAL, },               \
-      .max_prio = TASK_PRIO_INVAL, }
-
 static inline bool mutex_is_locked(mutex_t *mutex)
 {
   return !!mutex->executer.task;
 }
+
+#define MUTEX_DEFINE(name)                      \
+    mutex_t (name) = MUTEX_INITIALIZE(name)
+
+#define MUTEX_INITIALIZE(name)                  \
+    {       .lock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V),  \
+            .wq = WQUEUE_INITIALIZE_PRIO((name).wq),             \
+            .executer = { NULL, TASK_PRIO_INVAL },               \
+            .max_prio = TASK_PRIO_INVAL }
 
 void mutex_initialize(mutex_t *mutex);
 void mutex_lock(mutex_t *mutex);

@@ -87,6 +87,11 @@ struct __task_ipc;
 struct __userspace_events_data;
 struct __task_ipc_priv;
 
+/* task flags */
+typedef enum __task_flags {
+  TF_USPC_BLOCKED = 0x01, /**< Block facility to change task's static priority outside the kernel **/
+} task_flags_t;
+
 /* Abstract object for scheduling. */
 typedef struct __task_struct {
   pid_t pid, ppid;
@@ -101,7 +106,7 @@ typedef struct __task_struct {
   kernel_stack_t kernel_stack;
   page_frame_t *page_dir;
   list_node_t pid_list;
-  ulong_t flags;
+  task_flags_t flags;
 
   spinlock_t lock;
 

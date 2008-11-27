@@ -32,7 +32,7 @@
 void mutex_initialize(mutex_t *mutex)
 {
   spinlock_initialize(&mutex->lock);
-  waitqueue_initialize(&mutex->wq);
+  waitqueue_initialize(&mutex->wq, WQ_PRIO);
   mutex->executer.task = NULL;
   mutex->executer.priority = TASK_PRIO_INVAL;
   mutex->max_prio = TASK_PRIO_INVAL;
@@ -42,63 +42,61 @@ void mutex_lock(mutex_t *mutex)
 {
   spinlock_lock(&mutex->lock);
   if (!mutex_is_locked(mutex)) {
+    kprintf("locker: %d\n", current_task()->pid);
     mutex->executer.task = current_task();
-    mutex->max_prio = do_scheduler_control(current_task(), SYS_SCHED_CTL_GET_PRIORITY, 0);
+    mutex->max_prio = current_task()->static_priority;
     mutex->executer.priority = mutex->max_prio;
-    ASSERT(mutex->max_prio >= 0);
     spinlock_unlock(&mutex->lock);
   }
   else {
-    wait_queue_task_t cur;
+    wqueue_task_t cur;
     
     if (mutex->executer.task == current_task()) {
-      kprintf(KO_WARNING, "Task %p with pid %d locks mutex %p it already owns!\n",
+      kprintf(KO_WARNING, "Task %p with pid %d locks already locked by itself mutex %p!\n",
               current_task(), current_task()->pid, mutex);
       spinlock_unlock(&mutex->lock);
       return;
     }
 
     waitqueue_prepare_task(&cur, current_task());
-    if (cur.priority < mutex->max_prio) {
+    if (cur.task->static_priority < mutex->max_prio) {
       status_t ret;        
-      
-      ret = do_scheduler_control(mutex->executer.task, SYS_SCHED_CTL_SET_PRIORITY, cur.priority);
+
+      kprintf("change prio to(%d) %d\n", mutex->executer.task->pid, cur.task->static_priority);
+      ret = do_scheduler_control(mutex->executer.task, SYS_SCHED_CTL_SET_PRIORITY, cur.task->static_priority);
       if (ret)
         panic("mutex_lock: do_scheduler_control returned an error: %d", ret);
 
-      mutex->max_prio = cur.priority;
+      mutex->max_prio = cur.task->static_priority;
     }
 
     waitqueue_dump(&mutex->wq);
     spinlock_unlock(&mutex->lock);
     waitqueue_push(&mutex->wq, &cur);
-  }  
+  }
 }
 
 void mutex_unlock(mutex_t *mutex)
-{
+{  
   if (!mutex_is_locked(mutex))
     return;
   else {
     uint32_t prio;
-    wait_queue_task_t *wq_task;
+    wqueue_task_t *wq_task;
 
-    spinlock_lock(&mutex->lock);    
-    ASSERT(mutex->executer.task == current_task());
-    /* FIXME: if this code located here, panic occurs in shceduler's __shuffle_task... 
-    prio = do_scheduler_control(current_task(), SYS_SCHED_CTL_GET_PRIORITY, 0);
-    if (prio != mutex->executer.priority)
-    do_scheduler_control(current_task(), SYS_SCHED_CTL_SET_PRIORITY, mutex->executer.priority);*/
+    spinlock_lock(&mutex->lock);
+    prio = mutex->executer.priority;
+    if (prio != current_task()->static_priority)
+      do_scheduler_control(current_task(), SYS_SCHED_CTL_SET_PRIORITY, mutex->executer.priority);
 
     prio = mutex->executer.priority;
     wq_task = waitqueue_first_task(&mutex->wq);
     if (wq_task) {
       mutex->executer.task = wq_task->task;
-      mutex->executer.priority = wq_task->priority;      
-      if (mutex->max_prio < wq_task->priority)
-        mutex->max_prio = wq_task->priority;
+      if (mutex->max_prio < wq_task->task->static_priority)
+        mutex->max_prio = wq_task->task->static_priority;
 
-      waitqueue_delete(&mutex->wq, wq_task, WQ_DELETE_WAKEUP);
+      waitqueue_delete(wq_task, WQ_DELETE_WAKEUP);
       waitqueue_dump(&mutex->wq);
       goto out;
     }
@@ -108,9 +106,6 @@ void mutex_unlock(mutex_t *mutex)
     mutex->max_prio = TASK_PRIO_INVAL;
     
     out:
-    if (prio != do_scheduler_control(current_task(), SYS_SCHED_CTL_GET_PRIORITY, 0))
-      do_scheduler_control(current_task(), SYS_SCHED_CTL_SET_PRIORITY, prio);
-    
     spinlock_unlock(&mutex->lock);
   }
 }
@@ -119,9 +114,9 @@ bool mutex_trylock(mutex_t *mutex)
 {
   bool stat;
 
-  if (!(stat = mutex_is_locked(mutex)))
+  if ((stat = !mutex_is_locked(mutex)))
     mutex_lock(mutex);
-
+  
   return stat;
 }
 

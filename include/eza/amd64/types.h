@@ -89,7 +89,7 @@ typedef enum __task_privilege {
 #ifdef CONFIG_ALWAYS_INLINE
 #define always_inline inline __attribute__((always_inline))
 #else
-#define always_inline
+#define always_inline inline
 #endif /* CONFIG_ALWAYS_INLINE */
 
 #endif
