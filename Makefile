@@ -67,10 +67,12 @@ vmuielf: prepare $(addprefix generic_, $(GENERICS)) muielf
 	$(call echo-label,"OBJCOPY","$@")
 	$(Q)$(OBJCOPY) -O binary muielf $@
 
-prepare:
+check_config:
 ifeq ($(shell [ -f $(BUILD_ROOT)/.config ] && echo "ok"),)
 	$(Q)$(MAKE) help_config
 endif
+
+prepare: check_config
 	$(Q)$(call create_symlinks)
 	$(Q)$(MKDIR) -p $(ODIR)
 
@@ -95,7 +97,7 @@ clean:
 
 cleanconf:
 	$(call echo-header,"Cleaning configs")
-	$(Q)$(RM) -f .config include/autoconf.h include/config/auto.conf include/config/auto.conf.cmd
+	$(Q)$(RM) -rf .config include/autoconf.h include/config/*
 
 distclean: clean cleanconf
 
@@ -147,7 +149,7 @@ bootimage: vmuielf
 	@echo " boot: disk"
 	@echo "*********************************************************************************"
 
-config: 
+config:
 	$(Q)$(MAKE) -C kbuild conf BUILD_ROOT=$(BUILD_ROOT)
 	$(Q)$(BUILD_ROOT)/kbuild/conf $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
 	$(Q)$(ECHO) "ARCH=$(arch)" >> .config

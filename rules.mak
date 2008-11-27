@@ -1,6 +1,6 @@
 -include .config
 include include/Makefile.inc
-include $(BUILD_ROOT)/$(target)/Makefile
+-include $(BUILD_ROOT)/$(target)/Makefile
 
 OBJDIR := $(target)/objects
 objs := $(addprefix $(OBJDIR)/, $(filter %.o,$(obj-y)))
