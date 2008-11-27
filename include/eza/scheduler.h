@@ -25,6 +25,7 @@
 #ifndef __SCHEDULER_H__
 #define __SCHEDULER_H__ 
 
+#include <config.h>
 #include <eza/arch/types.h>
 #include <eza/resource.h>
 #include <eza/kstack.h>
@@ -78,7 +79,7 @@ void sched_timer_tick(void);
 
 void idle_loop(void);
 
-extern task_t *idle_tasks[MAX_CPUS];
+extern task_t *idle_tasks[CONFIG_NRCPUS];
 
 status_t sched_change_task_state(task_t *task,task_state_t state);
 status_t sched_change_task_state_lazy(task_t *task,task_state_t state,

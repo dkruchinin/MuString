@@ -130,7 +130,7 @@ void initialize_idle_tasks(void)
 
   memset(&minfo, 0, sizeof(minfo));  
   init_pfiter_alloc(&minfo.pfi);
-  for( cpu = 0; cpu < MAX_CPUS; cpu++ ) {
+  for( cpu = 0; cpu < CONFIG_NRCPUS; cpu++ ) {
     ts_page = alloc_page(AF_PGEN | AF_ZERO);
     if( ts_page == NULL ) {
       panic( "initialize_idle_tasks(): Can't allocate main structure for idle task !" );  

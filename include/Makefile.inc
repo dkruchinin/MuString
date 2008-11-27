@@ -1,23 +1,24 @@
-define PRINT_HEADER
-	$(if $(NOCOLOR), 
-	$(Q)$(ECHO) -n "[*] ",
-	$(Q)$(ECHO) -n -e "[\e[1;31m*\e[0m] ")
-    $(Q)$(ECHO) "$(1)"
+define colored
+$(if $(NOCOLOR),$(1),$(1)$(2)\e[0m)
 endef
 
-define PRINT_SUBHDR
-	$(if $(NOCOLOR), 
-	$(Q)$(ECHO) -n "  [$1] ",
-	$(Q)$(ECHO) -n -e "  [\e[1;31m$1\e[0m] ")
-    $(Q)$(ECHO) "$(2)"
+define echo-header
+	$(Q)$(ECHO) -e "[$(call colored,\e[1;31m,*)] $(1)"
 endef
 
-define PRINT_LABEL
-	$(if $(NOCOLOR), 
-	$(Q)$(ECHO) -n "   [$1] ",
-	$(Q)$(ECHO) -n -e "   [\e[1;32m$1\e[0m] ")
+define echo-action
+	$(Q)$(ECHO) -e "   [$(call colored,\e[1;32m,$(1))] $(2)"
+endef
+
+define echo-section
+	$(Q)$(ECHO) -e "  [$(call colored,\e[1;31m,$(1))] $(2)"
 endef
 
 define collect_objects
-	$(shell find . -name "*.o")
+	$(shell find $(GENERICS) -name "*.o")
+endef
+
+define create_symlinks
+	$(shell [ -e $(BUILD_ROOT)/include/eza/arch ] && $(RM) -f $(BUILD_ROOT)/include/eza/arch)
+	$(LN) -snf $(ARCH) include/eza/arch
 endef

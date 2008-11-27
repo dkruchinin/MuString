@@ -11,7 +11,6 @@ define post_linking_action
 endef
 
 define create_rmap
-	$(call PRINT_LABEL,"AS")
-	$(Q)$(ECHO) "$^"
+	$(call echo-action,"AS","$^")
 	$(Q)$(ECHO) $(SYMTAB_SECTION)" .incbin \"$(ODIR)/rmap.o\"" | $(AS) $(ASFLAGS) -o $(ODIR)/rmap.o	
 endef

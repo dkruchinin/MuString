@@ -55,7 +55,7 @@ void arch_smp_init(void)
 
 
   /* ok setup new gdt */
-  while(i<NR_CPUS) {
+  while(i<CONFIG_NRCPUS) {
     protected_ap_gdtr.limit=GDT_ITEMS * sizeof(struct __descriptor);
     protected_ap_gdtr.base=((uintptr_t)&gdt[i][0]-0xffffffff80000000);
     gdtr.base=(uint64_t)&gdt[i];

@@ -42,7 +42,7 @@
 #include <ipc/poll.h>
 #include <eza/gc.h>
 
-task_t *idle_tasks[MAX_CPUS];
+task_t *idle_tasks[CONFIG_NRCPUS];
 
 
 #define STEP 600

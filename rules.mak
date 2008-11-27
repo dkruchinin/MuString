@@ -1,8 +1,4 @@
-#$(target)/kernel.ld: $(BUILD_ROOT)/eza/$(ARCH)/kernel.ld.S
-#	$(Q)$(ECHO) "[PS] $^"
-#	$(Q)$(CC) $(CFLAGS) $(EXTRFL) -D__ASM__ -E -x c $< | $(GREP) -v "^\#" > $@
-
-include config
+-include .config
 include include/Makefile.inc
 include $(BUILD_ROOT)/$(target)/Makefile
 
@@ -16,21 +12,19 @@ mkobjdir:
 	$(MKDIR) -p $(OBJDIR)
 
 $(OBJDIR)/%.o: $(target)/%.S
-	$(call PRINT_LABEL,"AS")
-	$(Q)$(ECHO) "$(notdir $@)"
-	$(Q)$(CC) $(CFLAGS) $(INCLUDE) -n -D__ASM__ -c -o $@ $<
+	$(call echo-action,"AS","$(notdir $@)")
+	$(Q)$(CC) $(CFLAGS) $(INCLUDE) -n -D__ASM__ -c $< -o $@
 
 $(OBJDIR)/%.o: $(target)/%.c
-	$(call PRINT_LABEL,"CC")
-	$(Q)$(ECHO) "$(notdir $@)"
-	$(Q)$(CC) $(CFLAGS) $(INCLUDE) -c -o $@ $^
+	$(call echo-action,"CC","$(notdir $@)")
+	$(Q)$(CC) $(CFLAGS) $(INCLUDE) -c $^ -o $@
 
 dir_$(target)/%:
-	$(call PRINT_SUBHDR,"+","$(subst dir_,,$@)")
+	$(call echo-section,"+","$(subst dir_,,$@)")
 	$(Q)$(MAKE) -f rules.mak target=$(subst dir_,,$@)
 
 clean_$(target)/%:
-	$(call PRINT_SUBHDR,"-","$(subst clean_,,$@)")
+	$(call echo-section,"-","$(subst clean_,,$@)")
 	$(Q)$(MAKE) -f rules.mak target=$(subst clean_,,$@) clean
 
 clean: $(addprefix clean_$(target)/, $(dirs))

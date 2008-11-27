@@ -35,13 +35,13 @@
 #include <eza/arch/mm.h>
 
 /* Global per-CPU GDT entries. */
-descriptor_t gdt[NR_CPUS][GDT_ITEMS]={
+descriptor_t gdt[CONFIG_NRCPUS][GDT_ITEMS]={
   GDT_CPU_ENTRIES,
   GDT_CPU_ENTRIES
 };
 
 /* Global per-cpu TSS entries. */
-tss_t tss[NR_CPUS];
+tss_t tss[CONFIG_NRCPUS];
 
 /* Global IDT array */
 idescriptor_t idt[IDT_ITEMS];
@@ -177,7 +177,7 @@ void arch_pmm_init(cpu_id_t cpu)
   tss_dsc->dpl=PL_KERNEL;
   gdt_tss_setbase(&gdt[cpu][TSS_DES],(uintptr_t)tss_p);
 
-  gdtr.limit = sizeof(gdt) / NR_CPUS;
+  gdtr.limit = sizeof(gdt) / CONFIG_NRCPUS;
   gdtr.base = (uint64_t)&gdt[cpu][0];
   gdt_tss_setlim(&gdt[cpu][TSS_DES],(uintptr_t)TSS_BASIC_SIZE-1+1);
 

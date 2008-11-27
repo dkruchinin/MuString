@@ -1,1 +1,1 @@
-obj-y += $(ARCH) generic_api
+obj-y +=  generic_api arch/$(ARCH)

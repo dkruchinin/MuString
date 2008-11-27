@@ -1,3 +1,9 @@
+ifndef $(BUILD_ROOT)
+	BUILD_ROOT := $(CURDIR)
+endif
+
+ODIR := vmjari_objs
+OBJECTS :=
 CC := $(TOOLCHAIN)gcc
 AR := $(TOOLCHAIN)ar
 AS := $(TOOLCHAIN)as
@@ -5,99 +11,107 @@ LD := $(TOOLCHAIN)ld
 OBJDUMP := $(TOOLCHAIN)objdump
 OBJCOPY := $(TOOLCHAIN)objcopy
 
-MAKE := make -s
+HOSTCC := gcc
+HOSTLD := ld
+# HOSTCFLAGS
+# HOSTLDFLAGS
+
 GREP := grep
 GMAP := eza/gmap.py
 LN := ln
 RM := rm
+CP := cp
 MKDIR := mkdir
-Q := @
 ECHO := echo
 
-ifeq ($(VERBOSE), y)
-	Q := 
-endif
-ifneq ($(NOCOLOR), y)
-	$NOCOLOR :=
+ifeq ($(VERBOSE),y)
+Q := 
+MAKE := make
+else
+Q := @
+MAKE := make -s
 endif
 
-CFLAGS += -Wall -nostdlib -nostdinc -fno-builtin -fomit-frame-pointer -DCONFIG_SMP -g
+
+ifneq ($(NOCOLOR), y)
+NOCOLOR :=
+endif
+
+CFLAGS += -Wall -nostdlib -nostdinc -fno-builtin -fomit-frame-pointer -g -DCONFIG_SMP
 LDFLAGS += -M
 INCLUDE += -Iinclude
 
-ifndef $(BUILD_ROOT)
-	BUILD_ROOT := $(CURDIR)
-endif
-
-ODIR := vmjari_objs
-OBJECTS :=
-
 export CC LD AR OBJDUMP OBJCOPY GMAP GREP CPP AS ECHO
-export GREP MAKE LN RM GMAP Q MKDIR
+export HOSTCC HOSTLD HOSTCFLAGS HOSTLDFLAGS
+export GREP MAKE LN RM GMAP MKDIR CP
 export CFLAGS LDFLAGS INCLUDE
 export BUILD_ROOT ARCH NOCOLOR OBJECTS
 
-GENERICS = mm mlibc ipc server eza
 
-include config
+GENERICS = eza mm mlibc ipc server
+
 include include/Makefile.inc
-include eza/$(ARCH)/Makefile.inc
 
-define create_symlinks
-	$(Q)$(shell [ -e $(BUILD_ROOT)/include/eza/arch ] && $(RM) -f $(BUILD_ROOT)/include/eza/arch)
-	$(Q)$(LN) -snf $(ARCH) include/eza/arch
-endef
+-include .config
+-include eza/arch/$(ARCH)/Makefile.inc
 
 .PHONY: all vmuielf rmap.bin collect_objects
-all: vmuielf bootimage
+all: .config host vmuielf bootimage
+
+host:
+	$(call echo-header,"kbuild")
+	$(Q)$(MAKE) all -C kbuild BUILD_ROOT=$(BUILD_ROOT)
 
 vmuielf: prepare $(addprefix generic_, $(GENERICS)) muielf
-	$(call PRINT_LABEL,"OBJCOPY")
-	$(Q)$(ECHO) "$@"
+	$(call echo-label,"OBJCOPY","$@")
 	$(Q)$(OBJCOPY) -O binary muielf $@
 
-prepare:
-	$(call create_symlinks)
+prepare:	
+	$(Q)$(call create_symlinks)
 	$(Q)$(MKDIR) -p $(ODIR)
 
 muielf: $(addprefix $(ODIR)/, kernel.ld rmap.o)	
-	$(call PRINT_LABEL,"LD")
-	$(Q)$(ECHO) "$^"
+	$(call echo-action,"LD","$^")
 	$(Q)$(LD) -T $(ODIR)/kernel.ld $(LDFLAGS) $(OBJECTS) $(ODIR)/rmap.o -o $@ -Map $(ODIR)/muielf.map
 
 generic_%:
-	$(call PRINT_HEADER,"$(subst generic_,,$@)")
+	$(call echo-header,"$(subst generic_,,$@)")
 	$(Q)$(MAKE) -f rules.mak target=$(subst generic_,,$@)
 
 clean_%:
-	$(call PRINT_HEADER,"Cleaning $(subst clean_,,$@):")
+	$(call echo-header,"Cleaning $(subst clean_,,$@):")
 	$(Q)$(MAKE) -f rules.mak target=$(subst clean_,,$@) clean
 
 clean:
 	$(Q)$(RM) -rf $(ODIR)
 	$(Q)$(RM) -f muielf vmuielf
 	$(Q)$(MAKE) -C. $(addprefix clean_, $(GENERICS))
+	$(call echo-header,"Cleaning host")
+	$(Q)$(MAKE) -C kbuild clean
+
+cleanconf:
+	$(call echo-header,"Cleaning configs")
+	$(Q)$(RM) -f .config include/autoconf.h include/config/auto.conf include/config/auto.conf.cmd
+
+distclean: clean cleanconf
 
 $(ODIR)/rmap.o: $(ODIR)/rmap.bin
 	$(call create_rmap)
 
-$(ODIR)/kernel.ld: $(BUILD_ROOT)/eza/$(ARCH)/kernel.ld.S
-	$(call PRINT_LABEL,"CPP")
-	$(Q)$(ECHO) "$<"
+$(ODIR)/kernel.ld: $(BUILD_ROOT)/eza/arch/$(ARCH)/kernel.ld.S
+	$(call echo-action,"CPP","$<")
 	$(Q)$(CC) $(CFLAGS) $(INCLUDE) -D__ASM__ -E -x c $< | $(GREP) -v "^\#" > $@
 
 collect_objects:
 	$(eval OBJECTS := $(call collect_objects))
 
-$(ODIR)/rmap.bin: collect_objects $(ODIR)/kernel.ld
+$(ODIR)/rmap.bin: collect_objects $(ODIR)/kernel.ld	
 	$(call pre_linking_action)	
-	$(call PRINT_LABEL,"LD")
-	$(Q)$(ECHO) "Linking all together..."
+	$(call echo-action,"LD","Linking all together...")
 	$(Q)$(LD) -T $(ODIR)/kernel.ld $(LDFLAGS) -q $(OBJECTS) -o $@ -Map $(ODIR)/mui.pre.map	
 	$(Q)$(OBJDUMP) -t $(OBJECTS) > $(ODIR)/mui.objdump
 	$(Q)$(GMAP) $(addprefix $(ODIR)/, mui.pre.map mui.objdump rmap.bin)
-	$(call PRINT_LABEL,"MK")
-	$(Q)$(ECHO) "Regeneration ..."
+	$(call echo-action,"MK","Regeneration...")
 	$(call post_linking_action)
 	$(Q)$(LD) -T $(ODIR)/kernel.ld $(LDFLAGS) $(OBJECTS) $(ODIR)/emapo.o -o $@ -Map $(ODIR)/mui.pre.map
 	$(Q)$(OBJDUMP) -t $(OBJECTS) > $(ODIR)/mui.objdump	
@@ -129,3 +143,32 @@ bootimage: vmuielf
 	@echo " boot: disk"
 	@echo "*********************************************************************************"
 
+config: 
+	$(Q)$(MAKE) -C kbuild conf BUILD_ROOT=$(BUILD_ROOT)
+	$(Q)$(BUILD_ROOT)/kbuild/conf $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
+	$(Q)$(ECHO) "ARCH=$(arch)" >> .config
+
+menuconfig: host
+	$(Q)$(MAKE) -C kbuild BUILD_ROOT=$(BUILD_ROOT)
+	$(Q)$(BUILD_ROOT)/kbuild/mconf $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
+	$(Q)$(BUILD_ROOT)/kbuild/conf -s $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
+	$(Q)$(ECHO) "ARCH=$(arch)" >> .config
+
+help:
+	$(Q)$(ECHO) "USAGE: make [action] [OPTIONS] [VARIABLES]"
+	$(Q)$(ECHO) "   OPTIONS:"
+	$(Q)$(ECHO) "      NOCOLOR=[y/n]       Enable/disable color (default: enabled)"
+	$(Q)$(ECHO) "      VERBOSE=[y/n]       Enable/disable verbose mode (default: disabled)"
+	$(Q)$(ECHO) "      target=<dir>        Specify building directory"
+	$(Q)$(ECHO) "      TOOLCHAIN=<prefix>  Specify toolchain prefix"
+	$(Q)$(ECHO) "    Customizible variables:"
+	$(Q)$(ECHO) "      CFLAGS, LDFLAGS, INCLUDE, HOSTCC, HOSTCFLAGS, HOSTLDFLAGS"
+	$(Q)$(ECHO) "    Available actions:"
+	$(Q)$(ECHO) "      make [config|menuconfig] arch=<your_arch> - configure the kernel"
+	$(Q)$(ECHO) "       supported architectures: $(subst eza/arch/,,$(shell find eza/arch/ -maxdepth 1 -type d -print))"	
+	$(Q)$(ECHO) "      make all - build all"
+	$(Q)$(ECHO) "      make host - build host utilites"
+	$(Q)$(ECHO) "      make vmuielf - build kernel image"
+	$(Q)$(ECHO) "      make clean - clean directories from object files"
+	$(Q)$(ECHO) "      make cleanconf - remove config"
+	$(Q)$(ECHO) "      make distclean - combines two actions above"

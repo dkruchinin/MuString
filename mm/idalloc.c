@@ -55,7 +55,7 @@ void idalloc_enable(mm_pool_t *pool)
   spinlock_initialize(&idalloc_meminfo.lock);
   list_init_head(&idalloc_meminfo.avail_pages);
   list_init_head(&idalloc_meminfo.used_pages);
-  if (IDALLOC_PAGES <= 0)
+  if (CONFIG_IDALLOC_PAGES <= 0)
     return;
 
   /*
@@ -69,18 +69,18 @@ void idalloc_enable(mm_pool_t *pool)
     __prepare_page(pool->pages + i);
     list_add2tail(&idalloc_meminfo.avail_pages, &pool->pages[i].node);
     pool->reserved_pages++;
-    if (++npages == IDALLOC_PAGES)
+    if (++npages == CONFIG_IDALLOC_PAGES)
       break;
   }
-  if (npages != IDALLOC_PAGES) {
+  if (npages != CONFIG_IDALLOC_PAGES) {
     panic("idalloc_enable: Can't get %d pages for init-data allocator from pool %s",
-          IDALLOC_PAGES, mmpools_get_pool_name(pool->type));
+          CONFIG_IDALLOC_PAGES, mmpools_get_pool_name(pool->type));
   }
 
-  atomic_sub(&pool->free_pages, IDALLOC_PAGES);
+  atomic_sub(&pool->free_pages, CONFIG_IDALLOC_PAGES);
   first_page = list_entry(list_node_first(&idalloc_meminfo.avail_pages), page_frame_t, node);
   first_page->_private |= IDALLOC_PAGE_INUSE; /* mark first page as active one */
-  idalloc_meminfo.npages = IDALLOC_PAGES;
+  idalloc_meminfo.npages = CONFIG_IDALLOC_PAGES;
   idalloc_meminfo.mem = pframe_to_virt(first_page);
   idalloc_meminfo.is_enabled = true;
 }
