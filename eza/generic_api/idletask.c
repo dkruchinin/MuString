@@ -53,11 +53,13 @@ ulong_t syscall_counter = 0;
 task_t *server_task;
 status_t server_port,server_port2,server_port3;
 
+#if 0 /* DEACTIVATED */
 static char counters[512] __attribute__((aligned(PAGE_SIZE)));
+#endif
 
 #define wait_ticks(x,y)
 
-static void __wait_ticks(ulong_t n, char *s)
+/*static void __wait_ticks(ulong_t n, char *s)
 {
   uint64_t target_tick = swks.system_ticks_64 + n;
 
@@ -435,7 +437,7 @@ static void ta(void *d)
   kprintf( ">>> ACTION !\n" );
 }
 
-/*static void creator(void *data)
+static void creator(void *data)
 {
   if( kernel_thread(ioport_thread,NULL) != 0 ) {
     panic( "Can't create server thread for testing port IPC functionality !\n" );
@@ -524,7 +526,6 @@ static void runner(void *data)
 void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
-  bool flag=false;
 
 /*
   if( !cpu_id() ) {

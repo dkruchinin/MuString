@@ -37,7 +37,8 @@ ifneq ($(NOCOLOR), y)
 NOCOLOR :=
 endif
 
-CFLAGS += -Wall -nostdlib -nostdinc -fno-builtin -fomit-frame-pointer -g -DCONFIG_SMP
+
+CFLAGS += -Wall -nostdlib -nostdinc -fno-builtin -fomit-frame-pointer -g 
 LDFLAGS += -M
 INCLUDE += -Iinclude
 
@@ -56,7 +57,7 @@ include include/Makefile.inc
 -include eza/arch/$(ARCH)/Makefile.inc
 
 .PHONY: all vmuielf rmap.bin collect_objects
-all: .config host vmuielf bootimage
+all: host vmuielf bootimage
 
 host:
 	$(call echo-header,"kbuild")
@@ -66,7 +67,10 @@ vmuielf: prepare $(addprefix generic_, $(GENERICS)) muielf
 	$(call echo-label,"OBJCOPY","$@")
 	$(Q)$(OBJCOPY) -O binary muielf $@
 
-prepare:	
+prepare:
+ifeq ($(shell [ -f $(BUILD_ROOT)/.config ] && echo "ok"),)
+	$(Q)$(MAKE) help_config
+endif
 	$(Q)$(call create_symlinks)
 	$(Q)$(MKDIR) -p $(ODIR)
 
@@ -165,10 +169,17 @@ help:
 	$(Q)$(ECHO) "      CFLAGS, LDFLAGS, INCLUDE, HOSTCC, HOSTCFLAGS, HOSTLDFLAGS"
 	$(Q)$(ECHO) "    Available actions:"
 	$(Q)$(ECHO) "      make [config|menuconfig] arch=<your_arch> - configure the kernel"
-	$(Q)$(ECHO) "       supported architectures: $(subst eza/arch/,,$(shell find eza/arch/ -maxdepth 1 -type d -print))"	
 	$(Q)$(ECHO) "      make all - build all"
 	$(Q)$(ECHO) "      make host - build host utilites"
 	$(Q)$(ECHO) "      make vmuielf - build kernel image"
 	$(Q)$(ECHO) "      make clean - clean directories from object files"
 	$(Q)$(ECHO) "      make cleanconf - remove config"
 	$(Q)$(ECHO) "      make distclean - combines two actions above"
+
+help_config:
+	$(Q)$(ECHO) "Before building kernel you should configure it"
+	$(Q)$(ECHO) "Run make [config or menuconfig] arch=<your_arch>"
+	$(Q)$(ECHO) "Supported architectures:"
+	$(call show_archs)
+	$(Q)$(ECHO)
+	$(Q)exit 2

@@ -614,20 +614,23 @@ static void __shuffle_remote_task(task_t *target)
 }
 
 /* NOTE: target task must be locked ! */
-static void __shuffle_task(task_t *target,eza_sched_taskdata_t *sdata)
+static void __shuffle_task(task_t *target,eza_sched_taskdata_t *sdata, uint32_t new_prio)
 {
-  /* Ignore sleepers. */
-  if( target->state != TASK_STATE_RUNNING &&
-      target->state != TASK_STATE_RUNNABLE ) {
+  /* In case task is sleeping we must be able to change its priority as well */
+  if (target->state != TASK_STATE_RUNNING && target->state != TASK_STATE_RUNNABLE) {
+    target->priority = target->static_priority = new_prio;
     return;
   }
-
   if( target->cpu == cpu_id() ) {
     eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
     task_t *mpt;
 
-    LOCK_CPU_SCHED_DATA(sched_data);
+    
+    LOCK_CPU_SCHED_DATA(sched_data);    
+
     __remove_task_from_array(sched_data->active_array,target);
+    target->priority = target->static_priority = new_prio;
+    kprintf("CHANGED PRIORITY (%d) TO %d\n", target->pid, target->static_priority);
     __add_task_to_array(sched_data->active_array,target);
 
     mpt=__get_most_prioritized_task(sched_data);
@@ -638,6 +641,7 @@ static void __shuffle_task(task_t *target,eza_sched_taskdata_t *sdata)
     } else {
       panic( "__shuffle_task(): No runnable tasks after adding a task !" );
     }
+
     UNLOCK_CPU_SCHED_DATA(sched_data);
   } else {
     __shuffle_remote_task(target);
@@ -672,10 +676,8 @@ static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
         if( trusted ) {
           interrupts_disable();
           LOCK_TASK_STRUCT(target);
-
-          target->static_priority=arg;
-          target->priority=arg;
-          __shuffle_task(target,sdata);
+          
+          __shuffle_task(target,sdata, arg);
 
           UNLOCK_TASK_STRUCT(target);
           interrupts_enable();

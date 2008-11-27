@@ -19,6 +19,10 @@ define collect_objects
 endef
 
 define create_symlinks
-	$(shell [ -e $(BUILD_ROOT)/include/eza/arch ] && $(RM) -f $(BUILD_ROOT)/include/eza/arch)
-	$(LN) -snf $(ARCH) include/eza/arch
+	$(Q)$(shell [ -e $(BUILD_ROOT)/include/eza/arch ] && $(RM) -f $(BUILD_ROOT)/include/eza/arch)
+	$(Q)$(LN) -snf $(ARCH) include/eza/arch
+endef
+
+define show_archs
+	$(foreach a,$(subst eza/arch/,,$(shell find eza/arch/ -maxdepth 1 -type d -print)),$(Q)$(ECHO) " * $(a)")
 endef

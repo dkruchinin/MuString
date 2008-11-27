@@ -167,11 +167,13 @@ static void __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
     task->ppid=0;
   }
 }
-
+ 
+#if 0 /* [DEACTIVATED] */
 static void __free_task_struct(task_t *task)
 {
   memfree(task);
 }
+#endif 
 
 void cleanup_thread_data(void *t,ulong_t arg)
 {

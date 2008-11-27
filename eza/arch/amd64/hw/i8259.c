@@ -22,6 +22,7 @@
  *
  */
 
+#include <config.h>
 #include <eza/interrupt.h>
 #include <eza/arch/8259.h>
 #include <eza/arch/types.h>
@@ -89,6 +90,7 @@ static bool i8259a_handles_irq(uint32_t irq)
 }
 
 
+#ifndef CONFIG_APIC
 static hw_interrupt_controller_t i8259A_pic = {
   .descr = "I8259A",
   .handles_irq = i8259a_handles_irq,
@@ -98,6 +100,7 @@ static hw_interrupt_controller_t i8259A_pic = {
   .disable_irq = i8259a_disable_irq,
   .ack_irq = i8259a_ack_irq,
 };
+#endif /* CONFIG_APIC */
 
 static void initialize_pic(void)
 {

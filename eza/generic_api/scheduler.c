@@ -246,8 +246,6 @@ status_t sys_yield(void)
 
 status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
 {
-  status_t r;
-
   switch( cmd ) {
     case SYS_SCHED_CTL_GET_AFFINITY_MASK:
       return task->cpu_affinity_mask;
@@ -350,6 +348,7 @@ status_t sleep(ulong_t ticks)
 }
 
 #ifdef CONFIG_SMP
+#include <eza/arch/apic.h>
 
 static void __remote_task_state_change_action(void *data,ulong_t data_arg)
 {
