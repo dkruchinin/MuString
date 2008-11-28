@@ -44,6 +44,10 @@
 #define SC_NANOSLEEP           13
 #define SC_SCHED_CONTROL       14
 #define SC_GET_TID             15
+#define SC_EXIT                16
+#define SC_OPEN_CHANNEL        17
+#define SC_CLOSE_CHANNEL       18
+#define SC_CLOSE_PORT          19
 
 /**
  * @fn status_t sys_get_pid(void)

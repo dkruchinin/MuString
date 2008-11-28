@@ -40,7 +40,7 @@ gc_action_t *gc_allocate_action(gc_actor_t actor, void *data,
 void gc_schedule_action(gc_action_t *action);
 void gc_free_action(gc_action_t *action);
 
-#define GC_THREAD_IDX  0
-#define MIGRATION_THREAD_IDX  1
+#define GC_THREAD_IDX  1
+#define MIGRATION_THREAD_IDX  0
 
 #endif

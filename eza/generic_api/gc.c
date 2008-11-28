@@ -73,10 +73,8 @@ static void __gc_thread_logic(void *arg)
 }
 
 static gc_actor_t __percpu_threads[NUM_PERCPU_THREADS] = {
-  __gc_thread_logic,
-#ifdef CONFIG_SMP
   migration_thread,
-#endif
+  __gc_thread_logic,
 };
 
 void spawn_percpu_threads(void)
@@ -101,7 +99,7 @@ void spawn_percpu_threads(void)
       for(j=0;j<NUM_PERCPU_THREADS;j++) {
         if( sched_move_task_to_cpu(ts[j],i) ) {
           panic( "Can't move GC thread N %d to CPU %d !\n",
-                 i,cpu_id() );
+                 i,i );
         }
       }
     }

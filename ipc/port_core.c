@@ -52,7 +52,7 @@ ipc_port_message_t *ipc_setup_task_port_message(task_t *task,ipc_gen_port_t *p,
   task_ipc_priv_t *ipc_priv = task->ipc_priv;
 
   /* Process send buffer */
-  if( snd_size < IPC_BUFFERED_PORT_LENGTH ) {
+  if( snd_size <= IPC_BUFFERED_PORT_LENGTH ) {
     msg->send_buffer=ipc_priv->cached_data.cached_page1;
     if( copy_from_user(msg->send_buffer,(void*)snd_buf,snd_size ) ) {
       goto out;
@@ -66,8 +66,8 @@ ipc_port_message_t *ipc_setup_task_port_message(task_t *task,ipc_gen_port_t *p,
   }
 
   /* Process receive buffer, if any. */
-  if( rcv_size > 0 ) {
-    if( rcv_size < IPC_BUFFERED_PORT_LENGTH ) {
+  if( rcv_size >= 0 ) {
+    if( rcv_size <= IPC_BUFFERED_PORT_LENGTH ) {
       msg->receive_buffer=ipc_priv->cached_data.cached_page2;
     } else {
       msg->rcv_buf.chunks=ipc_priv->cached_data.cached_page2;
@@ -208,6 +208,8 @@ status_t __ipc_port_send(struct __ipc_gen_port *port,
         r=msg->replied_size;
       }
     }
+  } else {
+    r=msg->data_size;
   }
 
   return r;
