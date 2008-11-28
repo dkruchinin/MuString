@@ -21,7 +21,7 @@
  */
 
 /*
- * The root system descriptor pointer is serached in the following areas:
+ * The root system descriptor pointer is searched in the following areas:
  *
  * 1) In the bios rom at addresses 0xE0000 - 0xFFFFF
  * 2) In the first kilobyte of EBDA
@@ -91,11 +91,10 @@ static int map_acpi_tables(uint32_t *phys_addrs, int naddrs, uintptr_t va, uint3
 	/* extra pages to map fully trailing table */
 	eidx += EXTRA_PAGES;
 
-	m = sidx - eidx + 1;
+	m = eidx - sidx + 1;
 	*base_addr = sidx << PAGE_WIDTH;
 	if (i) {
 		/* map needed physical memory */
-		kprintf("[%s]: line %d, map from idx = %d upto idx = %d\n", __FUNCTION__, __LINE__, sidx, eidx);		
 		mmap_kern(va, sidx, m, MAP_READ);
 	}
 	if (m > mapped_pages)
@@ -111,8 +110,6 @@ static bool verify_checksum(uint8_t *buf, uint32_t size)
 
 	for (i = 0; i < size; i++)
 		c += buf[i];
-
-	kprintf("checksum = %d\n", c);
 
 	return (c == 0);
 }
@@ -151,17 +148,14 @@ static struct acpi_madt *find_madt(uint32_t *phys_addrs, int cnt, uintptr_t va)
 	uint32_t base;
 
 	while (i < cnt && madt == NULL) {
-		//kprintf("Map physical address 0x%x\n", phys_addrs[i]);
-
 		if (!phys_range_is_mapped(phys_addrs[i] >> PAGE_WIDTH, EXTRA_PAGES)) {
 			j = map_acpi_tables(phys_addrs + i, cnt - i, va, &base);
-			kprintf("[%s]: line %d, i = %d, j = %d\n", __FUNCTION__, __LINE__, i, j);			
 			p = (uint8_t*)va;
 		} else {
 			j = 1;
 			base = phys_addrs[i] & PAGE_ADDR_MASK;
 			p = pframe_id_to_virt(phys_addrs[i] >> PAGE_WIDTH);
-		}
+		}	
 
 		for (j += i; i < j; i++) {
 			h = (struct acpi_tab_header*)(p + (phys_addrs[i] - base));
@@ -216,19 +210,13 @@ int get_acpi_lapic_info(uint32_t *lapic_base, uint8_t *lapic_ids, int size, int 
 	} else 
 		return 0;
 
-	kprintf("[%s]: line %d, idalloc_meminfo.is_enabled = %d, idalloc_meminfo.avail_vpages = %ld\n",
-					__FUNCTION__, __LINE__, idalloc_meminfo.is_enabled, idalloc_meminfo.avail_vpages);
-
 	va = (uintptr_t)idalloc_allocate_vregion(MAX_MAPPED_PAGES + EXTRA_PAGES * 2);
 	if (!va)
 		return -ENOMEM;
 
-	kprintf("[%s]: line %d\n", __FUNCTION__, __LINE__);	
-
-	va1 = va + PAGE_WIDTH * EXTRA_PAGES;	
+	va1 = va + PAGE_SIZE * EXTRA_PAGES;	
 	s = rsdp->rsdt_addr >> PAGE_WIDTH;
 	if (!phys_range_is_mapped(s, EXTRA_PAGES)) {
-		kprintf("[%s]: line %d\n", __FUNCTION__, __LINE__);	
 		if (mmap_kern(va, s, EXTRA_PAGES, MAP_READ) < 0)
 			return -ENOMEM;
 
@@ -236,12 +224,8 @@ int get_acpi_lapic_info(uint32_t *lapic_base, uint8_t *lapic_ids, int size, int 
 	} else
 		p = pframe_id_to_virt(s);
 
-	kprintf("[%s]: line %d\n", __FUNCTION__, __LINE__);	
-
 	rsdt = (struct acpi_rsdt*)(p + (rsdp->rsdt_addr & PAGE_OFFSET_MASK));
-	kprintf("[%s]: line %d; rsdt addr = 0x%x, tablen = %d\n", __FUNCTION__, __LINE__, rsdp->rsdt_addr, rsdt->header.len);
 	if (verify_checksum((uint8_t*)rsdt, rsdt->header.len)) {
-		kprintf("[%s]: line %d\n", __FUNCTION__, __LINE__);	
 		s = (rsdt->header.len - sizeof(rsdt->header)) / sizeof(rsdt->tbl_addrs);
 		madt = find_madt(rsdt->tbl_addrs, s, va1);
 	} else {
@@ -250,10 +234,7 @@ int get_acpi_lapic_info(uint32_t *lapic_base, uint8_t *lapic_ids, int size, int 
 		goto out;
 	}
 
-	kprintf("[%s]: line %d\n", __FUNCTION__, __LINE__);
-
 	if (madt != NULL) {
-		//kprintf("MADT is found, table size = %d!!!\n", madt->header.len);
 		if (madt == ACPI_BROKEN) {
 			kprintf("MADT is broken!\n");
 			ret = -EINVAL;
@@ -261,8 +242,6 @@ int get_acpi_lapic_info(uint32_t *lapic_base, uint8_t *lapic_ids, int size, int 
 		}
 	} else
 		goto out;
-
-	kprintf("[%s]: line %d\n", __FUNCTION__, __LINE__);	
 
 	*lapic_base =  madt->lapic_addr;
 	p = (uint8_t*)madt + madt->header.len;
@@ -278,8 +257,6 @@ int get_acpi_lapic_info(uint32_t *lapic_base, uint8_t *lapic_ids, int size, int 
 		
 		lapic = (madt_lapic_t*)((ulong_t)lapic + lapic->header.len);
 	}
-
-	kprintf("%d local apic tables are found!!!\n", s / sizeof(madt_lapic_t));
 
 	ret = (s > size) ? size : s;
 	*total_apics = s;

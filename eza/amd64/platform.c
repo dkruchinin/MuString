@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
+ * (c) Copyright 2008 Dmitry Gromada <gromada@jarios.org>
  *
  * eza/amd64/platform.c: specific platform initialization.
  *
@@ -51,7 +52,7 @@ void arch_specific_init(void)
 	uint32_t apic_base = 0;
 	int n;
 	uint8_t id;
-
+	
   kprintf("[HW] Init arch specific ...\n");
 	
 	r = get_acpi_lapic_info(&apic_base, local_apic_ids, NR_CPUS, &n);
@@ -62,13 +63,7 @@ void arch_specific_init(void)
 
 #ifdef CONFIG_SMP
 	if (r > 0) {
-		/* debug */
-		kprintf("APIC ids: ");
-		for (i = 0; i < r; i++)
-			kprintf("%d \n", local_apic_ids[i]);
-
-		kprintf("\n");
-		/* check that apic physical id order is correct */
+		/* ensure that the APIC ID of the bootstrap CPU is the first in the ID array */
 		id = get_local_apic_id();
 		for (i = 0; (i < r) && (local_apic_ids[i] != id); i++);
 		
@@ -80,11 +75,13 @@ void arch_specific_init(void)
 			local_apic_ids[0] = id;
 		}
 		
-		kprintf("Launch other cpus ... ");
-		arch_smp_init(r);
-		kprintf("OK\n");
+		kprintf("Launch other cpus");
 		if (r < n)
-			kprintf("%d CPUs is found, %d is launched\n", n, r);
+			kprintf(", found CPUs: %d, being launched CPUs: %d\n", n - 1, r - 1);
+		else
+			kprintf(", total number of CPUs: %d\n", r);
+
+		arch_smp_init(r);
 	}
 #endif
 }

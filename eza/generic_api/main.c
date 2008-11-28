@@ -89,7 +89,7 @@ static void main_routine_stage1(void)
   swks_add_version_info();
 
   /* OK, we can proceed. */
-  // server_run_tasks();
+  server_run_tasks();
 
   /* Enter idle loop. */
 
@@ -169,10 +169,10 @@ void main_smpap_routine(void)
    * contexts, etc.
    */
   arch_activate_idle_task(cpu);
-  cpu++;
+	cpu++;
 
   /* Continue CPU initialization in new context. */
-  main_smpap_routine_stage1(1);
+  main_smpap_routine_stage1(cpu - 1);
 }
 #endif
 

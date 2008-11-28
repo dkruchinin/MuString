@@ -53,13 +53,19 @@ void arch_smp_init(int ncpus)
   /* ok setup new gdt */
   while(i<ncpus) {
     protected_ap_gdtr.limit=GDT_ITEMS * sizeof(struct __descriptor);
+		memcpy(gdt[i], gdt[0], sizeof(descriptor_t) * GDT_ITEMS);
     protected_ap_gdtr.base=((uintptr_t)&gdt[i][0]-0xffffffff80000000);
     gdtr.base=(uint64_t)&gdt[i];
     
-    r=apic_send_ipi_init(i);
-    atom_usleep(20000);
-		if (!is_cpu_online(i))
-			panic("CPU %d did not start!\n");
+    if (apic_send_ipi_init(i))
+			panic("Can't send init interrupt\n");
+		
+		/* wait maximum 1 second for the start of the next cpu */
+		for (r = 0; (r < 100) && !is_cpu_online(i); r++)
+			atom_usleep(10000);
+
+		if (r == 100)
+			panic("CPU %d did not start!\n", i);
 
     i++;
   }

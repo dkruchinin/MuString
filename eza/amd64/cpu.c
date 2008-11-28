@@ -90,6 +90,7 @@ void arch_cpu_init(cpu_id_t cpu)
 
   /* disable i/o on upper levels */
   cpu_clean_iopl_nt_flags();
+
   /* disable align checking */
   cpu_clean_am_flag();
 
