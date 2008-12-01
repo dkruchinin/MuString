@@ -85,12 +85,6 @@ void initialize_ipc(void);
 //void ipc_port_add_poller(ipc_port_t *port,task_t *poller, wait_queue_task_t *w);
 //void ipc_port_remove_poller(ipc_port_t *port,wait_queue_task_t *w);
 //poll_event_t ipc_port_get_pending_events(ipc_port_t *port);
-void ipc_shutdown_port(ipc_port_t *port);
-void ipc_put_port(ipc_port_t *p);
-status_t ipc_get_port(task_t *task,ulong_t port,ipc_port_t **out_port);
-void ipc_port_add_poller(ipc_port_t *port,task_t *poller, wqueue_task_t *w);
-void ipc_port_remove_poller(ipc_port_t *port,wqueue_task_t *w);
-poll_event_t ipc_port_get_pending_events(ipc_port_t *port);
 
 //status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size);
 //status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,

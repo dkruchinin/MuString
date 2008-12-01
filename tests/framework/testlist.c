@@ -1,3 +1,4 @@
+#include <config.h>
 #include <mlibc/kprintf.h>
 #include <eza/arch/types.h>
 #include <test.h>
@@ -5,9 +6,15 @@
 #include <mm/slab.h>
 
 extern testcase_t ipc_testcase;
+extern testcase_t wq_testcase;
 
 static testcase_t *known_testcases[] = {
+#ifdef CONFIG_TEST_IPC
   &ipc_testcase,
+#endif
+#ifdef CONFIG_TEST_WQ
+  &wq_testcase,
+#endif
   NULL,
 };
 

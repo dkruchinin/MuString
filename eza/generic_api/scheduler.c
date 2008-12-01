@@ -168,12 +168,12 @@ status_t sched_change_task_state(task_t *task,task_state_t state)
   return active_scheduler->change_task_state(task,state);
 }
 
-status_t sched_change_task_state_lazy(task_t *task,task_state_t state,
-                                      lazy_sched_handler_t handler,void *data)
+status_t sched_change_task_state_deferred(task_t *task,task_state_t state,
+                                         deferred_sched_handler_t handler,void *data)
 {
   if(active_scheduler != NULL &&
-     active_scheduler->change_task_state_lazy != NULL) {
-    return active_scheduler->change_task_state_lazy(task,state,handler,data);
+     active_scheduler->change_task_state_deferred != NULL) {
+    return active_scheduler->change_task_state_deferred(task,state,handler,data);
   }
   return -ENOTTY;
 }
@@ -339,8 +339,8 @@ status_t sleep(ulong_t ticks)
     if( !add_timer(&timer) ) {
       return -EAGAIN;
     }
-    sched_change_task_state_lazy(current_task(),TASK_STATE_SLEEPING,
-                                 __sleep_timer_lazy_routine,&timer);
+    sched_change_task_state_deferred(current_task(),TASK_STATE_SLEEPING,
+                                     __sleep_timer_lazy_routine,&timer);
 
     delete_timer(&timer);
   }

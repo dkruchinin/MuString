@@ -19,7 +19,7 @@ config APIC
 config SMP
        default y
        bool "Symmetric multi-processing support"
-       depends on APIC
+       select APIC
 
 config NRCPUS
        int "Maximum number of CPUs (2-64)"
@@ -49,3 +49,6 @@ config KCORE_STACK_PAGES
 
 source "mm/Kconfig"
 endmenu
+
+source "kernel/Kconfig"
+source "tests/Kconfig"

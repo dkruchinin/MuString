@@ -43,7 +43,7 @@ ipc_port_message_t *ipc_setup_task_port_message(task_t *task,ipc_gen_port_t *p,
                                                 uintptr_t snd_buf,ulong_t snd_size,
                                                 uintptr_t rcv_buf,ulong_t rcv_size)
 {
-  ipc_port_message_t *msg = &task->ipc_priv->cached_data.cached_port_message;
+  ipc_port_message_t *msg = &task->ipc_priv->cached_data.cached_port_message;  
   list_init_node(&msg->l);
   list_init_node(&msg->messages_list);
   IPC_RESET_MESSAGE(msg,task);
@@ -104,7 +104,7 @@ ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf
       msg->reply_size=0;
       msg->sender=owner;
 
-      if( !copy_from_user(msg->send_buffer,snd_buf,snd_size) ) {
+      if( !copy_from_user(msg->send_buffer,(void *)snd_buf,snd_size) ) {
         return msg;
       } else {
         memfree(msg);
@@ -116,7 +116,7 @@ ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf
 
 static void __notify_message_arrived(ipc_gen_port_t *port)
 {
-  waitqueue_pop(&port->waitqueue);
+    waitqueue_pop(&port->waitqueue, NULL);
 }
 
 static status_t __transfer_reply_data(ipc_port_message_t *msg,
@@ -389,7 +389,7 @@ out_unlock:
 /* FIXME: [mt] potential deadlock problem ! [R] */
 static void __put_receiver_into_sleep(task_t *receiver,ipc_gen_port_t *port)
 {
-  wait_queue_task_t w;
+  wqueue_task_t w;
 
   IPC_TASK_ACCT_OPERATION(receiver);
   waitqueue_prepare_task(&w,receiver);
@@ -593,7 +593,7 @@ poll_event_t ipc_port_get_pending_events(ipc_gen_port_t *port)
   return e;
 }
 
-void ipc_port_add_poller(ipc_gen_port_t *port,task_t *poller, wait_queue_task_t *w)
+void ipc_port_add_poller(ipc_gen_port_t *port,task_t *poller, wqueue_task_t *w)
 {
   //IPC_LOCK_PORT_W(port);
   //waitqueue_add_task(&port->waitqueue,w);
@@ -602,9 +602,9 @@ void ipc_port_add_poller(ipc_gen_port_t *port,task_t *poller, wait_queue_task_t 
   //IPC_UNLOCK_PORT_W(port);
 }
 
-void ipc_port_remove_poller(ipc_gen_port_t *port,wait_queue_task_t *w)
+void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w)
 {
   //IPC_LOCK_PORT_W(port);
-  waitqueue_delete(&port->waitqueue,w,WQ_DELETE_SIMPLE);
+  waitqueue_delete(w,WQ_DELETE_SIMPLE);
   //IPC_UNLOCK_PORT_W(port);
 }

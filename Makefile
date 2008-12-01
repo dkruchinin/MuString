@@ -48,13 +48,15 @@ export GREP MAKE LN RM GMAP MKDIR CP
 export CFLAGS LDFLAGS INCLUDE
 export BUILD_ROOT ARCH NOCOLOR OBJECTS
 
-
-GENERICS = eza mm mlibc ipc server
-
 include include/Makefile.inc
 
 -include .config
 -include eza/arch/$(ARCH)/Makefile.inc
+
+GENERICS = eza mm mlibc ipc server
+ifeq ($(CONFIG_TEST),y)
+GENERICS += tests
+endif
 
 .PHONY: all vmuielf rmap.bin collect_objects
 all: host vmuielf bootimage
@@ -90,7 +92,7 @@ clean_%:
 
 clean:
 	$(Q)$(RM) -rf $(ODIR)
-	$(Q)$(RM) -f muielf vmuielf
+	$(Q)$(RM) -f muielf vmuielf boot.img
 	$(Q)$(MAKE) -C. $(addprefix clean_, $(GENERICS))
 	$(call echo-header,"Cleaning host")
 	$(Q)$(MAKE) -C kbuild clean

@@ -489,7 +489,7 @@ static void def_reset(void)
 
 /* NOTE: task must be locked before calling this function ! */
 static status_t __change_local_task_state(task_t *task,task_state_t new_state,
-                                          lazy_sched_handler_t handler,void *data)
+                                          deferred_sched_handler_t handler,void *data)
 {
   status_t r = -EINVAL;
   task_state_t prev_state;
@@ -523,14 +523,14 @@ static status_t __change_local_task_state(task_t *task,task_state_t new_state,
       if( task->state == TASK_STATE_RUNNABLE
 	    || task->state == TASK_STATE_RUNNING ) {
 	  __deactivate_local_task(task,sched_data);
-          r = 0;
+      r = 0;
 	}
        break;
     default:
       break;
   }
 
-out_unlock:
+  out_unlock:
   UNLOCK_CPU_SCHED_DATA(sched_data);
   UNLOCK_TASK_STRUCT(task);
   return r;
@@ -539,7 +539,7 @@ out_unlock:
 int sched_verbose1;
 
 static status_t __change_task_state(task_t *task,task_state_t new_state,
-                                    lazy_sched_handler_t h,void *data)
+                                    deferred_sched_handler_t h,void *data)
 {
   status_t r;
   long is;
@@ -630,7 +630,6 @@ static void __shuffle_task(task_t *target,eza_sched_taskdata_t *sdata, uint32_t 
 
     __remove_task_from_array(sched_data->active_array,target);
     target->priority = target->static_priority = new_prio;
-    kprintf("CHANGED PRIORITY (%d) TO %d\n", target->pid, target->static_priority);
     __add_task_to_array(sched_data->active_array,target);
 
     mpt=__get_most_prioritized_task(sched_data);
@@ -673,16 +672,16 @@ static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
       return -EINVAL;
     case SYS_SCHED_CTL_SET_PRIORITY:
       if(arg <= EZA_SCHED_PRIORITY_MAX) {
-        if( trusted ) {
-          interrupts_disable();
-          LOCK_TASK_STRUCT(target);
-          
-          __shuffle_task(target,sdata, arg);
-
-          UNLOCK_TASK_STRUCT(target);
-          interrupts_enable();
-          cond_reschedule();
-          return 0;
+          if( trusted ) {
+            interrupts_disable();
+            LOCK_TASK_STRUCT(target);
+            ASSERT(!(task->flags & TF_USPC_BLOCKED));
+            __shuffle_task(target,sdata, arg);
+            
+            UNLOCK_TASK_STRUCT(target);
+            interrupts_enable();
+            cond_reschedule();
+            return 0;
         } else {
           return -EPERM;
         }
@@ -702,9 +701,9 @@ static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
   return -EINVAL;
 }
 
-static status_t def_change_task_state_lazy(task_t *task, task_state_t state,
-                                           lazy_sched_handler_t handler,
-                                           void *data)
+static status_t def_change_task_state_deferred(task_t *task, task_state_t state,
+                                              deferred_sched_handler_t handler,
+                                              void *data)
 {
   return __change_task_state(task,state,handler,data);
 }
@@ -769,7 +768,7 @@ static struct __scheduler eza_default_scheduler = {
   .schedule = def_schedule,
   .reset = def_reset,
   .change_task_state = def_change_task_state,
-  .change_task_state_lazy = def_change_task_state_lazy,
+  .change_task_state_deferred = def_change_task_state_deferred,
   .setup_idle_task = def_setup_idle_task,
   .scheduler_control = def_scheduler_control,
 };

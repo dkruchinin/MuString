@@ -17,92 +17,65 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * include/eza/waitqueue.h: Wait queue API and defenitions.
+ * include/eza/waitqueue.h: Priority-sorted wait queue API and defenitions
+ */
+
+/* TODO DK: write appropriate description */
+/**
+ * @file include/eza/waitqueue.h
+ * @author Dan Kruchinin
+ * @brief Priority-sorted wait queue API and defenitions
  */
 
 #ifndef __WAITQUEUE_H__
 #define __WAITQUEUE_H__
 
 #include <ds/list.h>
+#include <eza/scheduler.h>
 #include <eza/task.h>
 #include <eza/spinlock.h>
 #include <eza/errno.h>
 #include <eza/arch/types.h>
 
-typedef struct __wqueue_task wqueue_task_t;
-
-/**
- * @typedef int (*wqueue_cmp_func_t)(wait_queue_task_t *wqt1, wait_queue_task_t *wqt2)
- * @brief Wait queue custom compare function.
- *
- * If wait queue has WQ_CUSTOM type its comparison function must be defined explicitely
- * by the user. Compare function is called on each insertion into wait queue. Depending
- * on the code returning by comparision function, wait queue makes a descition where exactly
- * new task should be placed.
- * wqueue_cmp_func_t should return:
- *  1) negative integer if wqt1 is leaster than wqt2
- *  2) 0 if wqt1 is equal to wqt2
- *  3) positive integer if wqt1 is greater then wqt2
- *
- * @see wqueue_t
- * @see wqueue_task_t
- * @see wqueue_type_t
- */
-typedef int (*wqueue_cmp_func_t)(wqueue_task_t *wqt1, wqueue_task_t *wqt2);
-
-/**
- * @enum wqueue_type_t
- * @brief Wait queue type
- *
- * Wait queues differ from each other by their types.
- * Type of wait queue determines semantic of insertion new
- * tasks into the queue. Broadly speaking the *position* of the
- * the task in wait queue waiters list. 
- *
- * @see wqueue_t
- * @see wqueue_task_t
- * @see wqueue_cmp_func_t
- */
-typedef enum __wqueue_type {
-  WQ_PRIO,     /**< Priority semantic: more prioritized tasts placed before less prioritized */
-  WQ_CUSTOM,   /**< User-defined insertion semantic */
-} wqueue_type_t;
-
 /**
  * @struct wqueue_t
- * @brief General wait queue structure
- * @see wqueue_type_t
- * @see wqueue_cmp_func_t
+ * @brief General structure of priority-sorted wait queue.
  * @see wqueue_task_t
  */
 typedef struct __wait_queue {
-  list_head_t waiters;        /**< A list of waiting tasks */
-  wqueue_cmp_func_t cmp_func; /**< Custom wait queue tasks compare function */
-  spinlock_t q_lock;          /**< Wait queue strucure lock */
-  wqueue_type_t type;         /**< Wait queue type */
-  uint32_t num_waiters;       /**< Total number of waiters in queue */
+  list_head_t waiters;  /**< A list of waiting tasks */
+  spinlock_t q_lock;    /**< Wait queue strucure lock */
+  uint32_t num_waiters; /**< Total number of waiters in queue */
+  struct {
+    deferred_sched_handler_t sleep_if_needful; /**< This function checks if task *really* must be forced to sleep */
+    void (*pre_wakeup)(void *data);            /**< This function(if exists) makes some
+                                                    actions that should be done *before* task will be waked up  */
+  } acts;
 } wqueue_t;
 
 /**
  * @struct wqueue_task_t
  * @brief task_t-wrapper structure that is insertend into the wait queue
  *
- * Before inserting new task into the wait queue it must be wrapped by
+ * Before inserting new task into the wait queue, it must be wrapped by
  * this structure using waitqueue_prepare_task()
  * Typically wqueue_task_t is created on the stack of task that is going to sleep.
+ * @NOTE: wqueue_prepare_task *must* be called before each insertion of task into the wait queu
+ *        It is not enough to prepare task only one time.
  *
  * @see wqueue_t
  * @see wqueue_prepare_task
  * @see task_t
+ * @see TF_USPC_BLOCKED
  */
-struct __wqueue_task {
+typedef struct __wqueue_task {
   list_head_t head;  /**< A list of waiting tasts of the same priority */
   list_node_t node;  /**< A list node  */
-  task_t *task;      /**< Task itself */
+  task_t *task;      /**< The task itself */
   wqueue_t *q;       /**< A pointer to parent wait queue */
-  bool uspc_blocked; /**<  */
-  uint8_t cflags;    /**< Customizable by user flags */ 
-};
+  bool uspc_blocked; /**< Saved state of TF_USPC_BLOCKED flag */
+  uint8_t eflags;    /**< Event flags. May be customized by user */ 
+} wqueue_task_t;
 
 /**
  * @enum wqueue_insop_t
@@ -124,6 +97,25 @@ typedef enum __wqeue_delop {
 } wqueue_delop_t;
 
 /**
+ * @brief Check if wait queue is empty
+ * @param wq - A pointer to the wait queue
+ *
+ * @return true if queue is empty and false otherwise.
+ */
+static inline bool waitqueue_is_empty(wqueue_t *wq)
+{
+  return !(wq->num_waiters);
+}
+
+/*
+ * the following three functions are internals
+ * they must never be called explicitly
+ */
+status_t __waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t dop);
+bool __wq_sleep_if_needful(void *data);
+void __wq_pre_wakeup(void *data);
+
+/**
  * @fn status_t waitqueue_push(wqueue_t *wq, wqueueu_task_t *wq_task)
  * @beief Insert @a wq_task into the @a wq wait queue and force task to sleep
  * @param wq      - A pointer to the wait queue task will be inserted to
@@ -135,34 +127,26 @@ typedef enum __wqeue_delop {
     waitqueue_insert(wq, wq_task, WQ_INSERT_SLEEP)
 
 /**
- * @fn wqueue_pop(wqueue_t *wq)
  * @brief Pop *first* task from the wait queue @a wq and wake it up.
- * @param wq - A pointer to the wait queue task will be removed from.
+ * @param wq   - A pointer to the wait queue task will be removed from.
+ * @param task - An optional pointer to pointer to task_t where popped task will be written to.
  *
  * @return 0 on success, negative error code on error.
  */
-#define waitqueue_pop(wq)                                           \
-  waitqueue_delete(waitqueue_first_task(wq), WQ_DELETE_WAKEUP)
-
-/**
- * @brief Check if wait queue is empty
- * @param wq - A pointer to the wait queue
- *
- * @return true if queue is empty and false otherwise.
- */
-static inline bool waitqueue_is_empty(wqueue_t *wq)
-{
-  return !(wq->num_waiters);
-}
-
+status_t waitqueue_pop(wqueue_t *wq, task_t **task);
+  
 /**
  * @brief Initialize a wait queue
- * @param wq      - A pointer to the wait queue structure
- * @param wq_type - A type of wait queue
  *
- * @return 0 on success, -EINVAL if @a wq_type is invalid.
+ * After wait queue is initialized user may to override queue's
+ * "sleep_if_needful" and "pre_wakeup" functions.
+ * The first one is dereferred schedule function which checks
+ * if task *really* have to be forced in sleeping state.
+ * The other one is an optional function that may do any
+ * custom actions *before* task is waked up.
+ * @param wq      - A pointer to the wait queue structure
  */
-status_t waitqueue_initialize(wqueue_t *wq, wqueue_type_t wq_type);
+void waitqueue_initialize(wqueue_t *wq);
 
 /**
  * @brief "Wrap" a task_t with wqueue_task_t strcutre and prepare it for insertion into wait queue
@@ -190,7 +174,18 @@ status_t waitqueue_insert(wqueue_t *wq, wqueue_task_t *wq_task, wqueue_insop_t i
  * @return 0 on success, negative error code value on error
  * @see wqueue_delop_t
  */
-status_t waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t dop);
+static inline status_t waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t dop)
+{
+  wqueue_t *wq = wq_task->q;
+  status_t ret;
+
+  kprintf("QUEUE:=> %p, task(%p)\n", wq, wq_task);
+  spinlock_lock(&wq->q_lock);  
+  ret = __waitqueue_delete(wq_task, dop);
+  spinlock_unlock(&wq->q_lock);
+
+  return ret;
+}
 
 /**
  * @brief Get the very first task located in the wait queue
@@ -200,21 +195,21 @@ wqueue_task_t *waitqueue_first_task(wqueue_t *wq);
 
 int __wqueue_cmp_default(wqueue_task_t *wqt1, wqueue_task_t *wqt2);
 
-#define DEBUG_WAITQUEUE /* FIXME DK: remove after debug */
-#ifdef DEBUG_WAITQUEUE
+#define CONFIG_DEBUG_WAITQUEUE /* FIXME DK: remove after debugging */
+#ifdef CONFIG_DEBUG_WAITQUEUE
 void waitqueue_dump(wqueue_t *wq);
 #else
 #define waitqueue_dump(wq)
-#endif /* DEBUG_WAITQUEUE */
+#endif /* CONFIG_DEBUG_WAITQUEUE */
+
 
 #define WQUEUE_DEFINE_PRIO(name)                \
     wqueue_t (name) = WQUEUE_INITIALIZE_PRIO(name)
 
-#define WQUEUE_INITIALIZE_PRIO(name)                                \
-    {       .waiters = LIST_INITIALIZE((name).waiters),             \
-            .cmp_func = __wqueue_cmp_default,                       \
-            .q_lock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V),   \
-            .type = WQ_PRIO,                                        \
-            .num_waiters = 0,     }
+#define WQUEUE_INITIALIZE_PRIO(name)                                  \
+  {   .waiters = LIST_INITIALIZE((name).waiters),                     \
+      .q_lock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V),           \
+      .num_waiters = 0,                                               \
+      .acts = { __wq_sleep_if_needful, __wq_pre_wakeup },   }
 
 #endif /* __WAITQUEUE_H__ */

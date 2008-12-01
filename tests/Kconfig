@@ -1,0 +1,13 @@
+menuconfig TEST
+        bool "Make MuString with tests included"
+        default n
+
+if TEST
+config TEST_IPC
+       bool "IPC test"
+       default n
+
+config TEST_WQ
+       bool "Wait queue test"
+       default n
+endif

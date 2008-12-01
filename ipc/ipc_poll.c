@@ -49,7 +49,7 @@ struct __plazy_data {
   ulong_t nqueues;
 };
 
-static bool poll_lazy_sched_handler(void *data)
+static bool poll_deferred_sched_handler(void *data)
 {
   struct __plazy_data *p=(struct __plazy_data*)data;
   return atomic_get(&p->task->ipc_priv->pstats.active_queues)==p->nqueues;
@@ -130,8 +130,8 @@ status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
   /* Sleep a little bit. */
   ldata.task=caller;
   ldata.nqueues=nfds;
-  sched_change_task_state_lazy(caller,TASK_STATE_SLEEPING,
-                               poll_lazy_sched_handler,&ldata);
+  sched_change_task_state_deferred(caller,TASK_STATE_SLEEPING,
+                                  poll_deferred_sched_handler,&ldata);
 
   /* Count the resulting number of pending events. */
   nevents=0;

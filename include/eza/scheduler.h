@@ -40,7 +40,7 @@
  * If it returns true, target task will be rescheduled,
  * otherwise - it won't.
  */
-typedef bool (*lazy_sched_handler_t)(void *data);
+typedef bool (*deferred_sched_handler_t)(void *data);
 
 /* Abstract scheduler. */
 typedef struct __scheduler {
@@ -55,8 +55,8 @@ typedef struct __scheduler {
   void (*schedule)(void);
   void (*reset)(void);
   status_t (*change_task_state)(task_t *task,task_state_t state);
-  status_t (*change_task_state_lazy)(task_t *task,task_state_t state,
-                                     lazy_sched_handler_t handler,void *data);
+  status_t (*change_task_state_deferred)(task_t *task,task_state_t state,
+                                        deferred_sched_handler_t handler,void *data);
   status_t (*setup_idle_task)(task_t *task);
   status_t (*scheduler_control)(task_t *task, ulong_t cmd,ulong_t arg);
 } scheduler_t;
@@ -82,8 +82,8 @@ void idle_loop(void);
 extern task_t *idle_tasks[CONFIG_NRCPUS];
 
 status_t sched_change_task_state(task_t *task,task_state_t state);
-status_t sched_change_task_state_lazy(task_t *task,task_state_t state,
-                                      lazy_sched_handler_t handler,void *data);
+status_t sched_change_task_state_deferred(task_t *task,task_state_t state,
+                                         deferred_sched_handler_t handler,void *data);
 status_t sched_add_task(task_t *task);
 status_t sched_del_task(task_t *task);
 status_t sched_setup_idle_task(task_t *task);

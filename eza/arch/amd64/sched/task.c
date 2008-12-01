@@ -21,6 +21,7 @@
  */
 
 #include <ds/iterator.h>
+#include <kernel/syscalls.h>
 #include <eza/task.h>
 #include <eza/arch/context.h>
 #include <mlibc/string.h>
@@ -81,7 +82,7 @@ void kernel_thread_helper(void (*fn)(void*), void *data)
 //  for(;;);
 
     fn(data);
-  l2: goto l2;
+    sys_exit(0);
 }
 
 

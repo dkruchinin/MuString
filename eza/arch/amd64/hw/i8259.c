@@ -28,18 +28,19 @@
 #include <eza/arch/types.h>
 #include <eza/arch/asm.h>
 
+static void i8259a_disable_all(void)
+{
+  outb(I8259PIC0_BASE+1,0xff);
+  outb(I8259PIC1_BASE+1,0xff);
+}
+
+#ifndef CONFIG_APIC
 static void i8259a_enable_all(void)
 {
   /*enable on PIC0*/
   outb(I8259PIC0_BASE+1,0x0);
   /*enable on PIC1*/
   outb(I8259PIC1_BASE+1,0x0);
-}
-
-static void i8259a_disable_all(void)
-{
-  outb(I8259PIC0_BASE+1,0xff);
-  outb(I8259PIC1_BASE+1,0xff);
 }
 
 static void i8259a_enable_irq(uint32_t irq)
@@ -90,7 +91,6 @@ static bool i8259a_handles_irq(uint32_t irq)
 }
 
 
-#ifndef CONFIG_APIC
 static hw_interrupt_controller_t i8259A_pic = {
   .descr = "I8259A",
   .handles_irq = i8259a_handles_irq,

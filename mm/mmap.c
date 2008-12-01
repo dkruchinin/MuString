@@ -97,10 +97,8 @@ int mm_map_entries(pde_t *pde_start, pde_idx_t entries,
   while (entries--) {
     ASSERT(!pgt_pde_is_mapped(pde));
     iter_next(pfi);
-    if (!iter_isrunning(pfi)) {
-      kprintf("there!\n");
+    if (!iter_isrunning(pfi))
       return -EINVAL;
-    }
 
     pgt_pde_save(pde++, pfi->pf_idx, flags);
   }

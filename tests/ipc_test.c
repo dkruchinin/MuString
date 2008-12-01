@@ -236,6 +236,7 @@ static void __poll_client(void *d)
     r=sys_port_send(channel,IPC_BLOCKED_ACCESS,
                     (ulong_t)patterns[msg_id],strlen(patterns[msg_id])+1,
                     (ulong_t)client_rcv_buf,sizeof(client_rcv_buf));
+    tf->printf("ok\n");
     if( r < 0 ) {
       tf->printf(POLL_CLIENT "Error occured while sending message: %d\n",r);
       tf->failed();

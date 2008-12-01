@@ -76,7 +76,6 @@ typedef uint32_t bit_idx_t;
 
 /* SMP-related stuff. */
 typedef uint32_t cpu_id_t;
-typedef uint32_t priority_t;
 
 typedef enum __task_privilege {
   TPL_KERNEL = 0,  /* Kernel task - the most serious level. */
