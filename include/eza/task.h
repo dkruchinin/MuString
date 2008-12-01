@@ -225,6 +225,8 @@ void free_task_struct(task_t *task);
 
 #define is_thread(task)  ((task)->group_leader && (task)->group_leader != (task))
 
+#define task_is_migrable(t) (!list_node_is_bound(&(t)->migration_list))
+
 void cleanup_thread_data(void *t,ulong_t arg);
 
 /* Default kernel threads flags. */

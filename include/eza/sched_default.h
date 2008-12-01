@@ -57,7 +57,7 @@
 #define EZA_SCHED_DEF_NONRT_PRIO (EZA_SCHED_NONRT_MIN_PRIO + EZA_SCHED_NONRT_PRIOS/2)
 
 #define EZA_SCHED_CPUS MAX_CPUS
-#define EZA_SCHED_NUM_ARRAYS 1
+#define EZA_SCHED_NUM_ARRAYS 2
 #define EZA_SCHED_BITMAP_PATTERN 0x00
 
 #define EZA_SCHED_INITIAL_TASK_PRIORITY EZA_SCHED_DEF_NONRT_PRIO
@@ -75,7 +75,7 @@
 typedef enum __sched_discipline {
   SCHED_RR = 0,  /* Round-robin discipline. */
   SCHED_FIFO = 1, /* FIFO discipline. */
-  SCHED_ADAPTIVE = 2, /* Default 'O(1)-like' discipline. */
+  SCHED_OTHER = 2, /* Default 'O(1)-like' discipline. */
 } sched_discipline_t;
 
 typedef struct __eza_sched_prio_array {
@@ -94,10 +94,13 @@ typedef struct __eze_sched_taskdata {
   eza_sched_prio_array_t *array;
 } eza_sched_taskdata_t;
 
+#define is_rt_task(t) (((t)->sched_discipline == SCHED_RR) ||   \
+                       ((t)->sched_discipline) == SCHED_FIFO)
+
 typedef struct __eza_sched_cpudata {
   spinlock_t lock;
   scheduler_cpu_stats_t *stats;
-  eza_sched_prio_array_t *active_array;
+  eza_sched_prio_array_t *active_array,*expired_array;
   eza_sched_prio_array_t arrays[EZA_SCHED_NUM_ARRAYS];
   cpu_id_t cpu_id;
 } eza_sched_cpudata_t;
