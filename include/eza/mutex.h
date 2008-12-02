@@ -25,7 +25,7 @@
 #define __MUTEX_H__
 
 #include <ds/waitqueue.h>
-#include <sync/spinlock.h>
+#include <eza/spinlock.h>
 #include <eza/task.h>
 #include <eza/arch/types.h>
 
@@ -52,8 +52,7 @@ static inline bool mutex_is_locked(mutex_t *mutex)
 #define MUTEX_INITIALIZE(name)                  \
     {       .lock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V),  \
             .wq = WQUEUE_INITIALIZE_PRIO((name).wq),             \
-            .executer = { NULL, TASK_PRIO_INVAL },               \
-            .max_prio = TASK_PRIO_INVAL }
+            .executer = NULL,   }
 
 void mutex_initialize(mutex_t *mutex);
 void mutex_lock(mutex_t *mutex);

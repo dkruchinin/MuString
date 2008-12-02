@@ -34,7 +34,6 @@ void mutex_initialize(mutex_t *mutex)
   spinlock_initialize(&mutex->lock);
   waitqueue_initialize(&mutex->wq);
   mutex->executer = NULL;
-  mutex->flags = flags;
 }
 
 void mutex_lock(mutex_t *mutex)
@@ -46,7 +45,7 @@ void mutex_lock(mutex_t *mutex)
     wqueue_task_t wq_task;
 
     waitqueue_prepare_task(&wq_task, current_task());
-    waiqueue_push(&mutex->wq, &wq_task);
+    waitqueue_push(&mutex->wq, &wq_task);
   }
   
   spinlock_unlock(&mutex->lock);
