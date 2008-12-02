@@ -177,12 +177,15 @@ status_t waitqueue_insert(wqueue_t *wq, wqueue_task_t *wq_task, wqueue_insop_t i
 static inline status_t waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t dop)
 {
   wqueue_t *wq = wq_task->q;
-  status_t ret;
+  status_t ret = 0;
 
-  spinlock_lock(&wq->q_lock);  
+  spinlock_lock(&wq->q_lock);
+  if (!wq)
+      goto out;
+  
   ret = __waitqueue_delete(wq_task, dop);
-  spinlock_unlock(&wq->q_lock);
-
+  out:
+  spinlock_unlock(&wq->q_lock);  
   return ret;
 }
 
