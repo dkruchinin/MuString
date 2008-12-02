@@ -161,3 +161,9 @@ int __mmap_pages(page_frame_t *dir, mmap_info_t *minfo, pdir_level_t level)
 
   return ret;
 }
+
+int __unmap_pages(page_frame_t *dir, mmap_info_t *minfo, pdir_level_t level)
+{
+  /* TODO DK: implement */
+  return 0;
+}

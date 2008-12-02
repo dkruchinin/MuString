@@ -88,6 +88,7 @@ struct __scheduler;
 struct __task_ipc;
 struct __userspace_events_data;
 struct __task_ipc_priv;
+struct __task_mutex_locks;
 
 /* task flags */
 typedef enum __task_flags {
@@ -103,7 +104,7 @@ typedef struct __task_struct {
   cpu_id_t cpu;
   task_state_t state;
   cpu_array_t cpu_affinity_mask;
-  priority_t static_priority, priority;
+  priority_t static_priority, priority, orig_priority;
 
   kernel_stack_t kernel_stack;
   page_frame_t *page_dir;
@@ -127,15 +128,18 @@ typedef struct __task_struct {
   struct __task_ipc *ipc;
   struct __task_ipc_priv *ipc_priv;
 
+  struct __task_mutex_locks *active_locks;
+
   /* Limits-related stuff. */
   task_limits_t *limits;
-
+  
   /* Lock for protecting changing and outer access the following fields:
    *   ipc,ipc_priv,limits
    */
   spinlock_t member_lock;
 
   struct __userspace_events_data *uspace_events;
+    
   /* Arch-dependent context is located here */
   uint8_t arch_context[256];
 } task_t;

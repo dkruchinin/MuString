@@ -31,16 +31,56 @@
 
 void mutex_initialize(mutex_t *mutex)
 {
-    /*spinlock_initialize(&mutex->lock);
-  waitqueue_initialize(&mutex->wq, WQ_PRIO);
-  mutex->executer.task = NULL;
-  mutex->executer.priority = TASK_PRIO_INVAL;
-  mutex->max_prio = TASK_PRIO_INVAL;*/
+  spinlock_initialize(&mutex->lock);
+  waitqueue_initialize(&mutex->wq);
+  mutex->executer = NULL;
+  mutex->flags = flags;
 }
 
 void mutex_lock(mutex_t *mutex)
 {
-    /*spinlock_lock(&mutex->lock);
+  spinlock_lock(&mutex->lock);
+  if (!mutex_is_locked(mutex))
+    mutex->executer = current_task();
+  else {
+    wqueue_task_t wq_task;
+
+    waitqueue_prepare_task(&wq_task, current_task());
+    waiqueue_push(&mutex->wq, &wq_task);
+  }
+  
+  spinlock_unlock(&mutex->lock);
+}
+
+void mutex_unlock(mutex_t *mutex)
+{
+  spinlock_lock(&mutex->lock);
+  mutex->executer = NULL;  
+  if (!waitqueue_is_empty(&mutex->wq)) {
+    task_t *next;
+
+    waitqueue_pop(&mutex->wq, &next);
+    mutex->executer = next;
+  }
+  
+  spinlock_unlock(&mutex->lock);
+}
+
+bool mutex_trylock(mutex_t *mutex)
+{
+  bool stat;
+
+  if ((stat = !mutex_is_locked(mutex)))
+    mutex_lock(mutex);
+  
+  return stat;
+}
+
+
+#if 0
+void mutex_lock(mutex_t *mutex)
+{
+    spinlock_lock(&mutex->lock);
   if (!mutex_is_locked(mutex)) {
     kprintf("locker: %d\n", current_task()->pid);
     mutex->executer.task = current_task();
@@ -73,12 +113,12 @@ void mutex_lock(mutex_t *mutex)
     waitqueue_dump(&mutex->wq);
     spinlock_unlock(&mutex->lock);
     waitqueue_push(&mutex->wq, &cur);
-    }*/
+  }
 }
 
 void mutex_unlock(mutex_t *mutex)
 {  
-    /*if (!mutex_is_locked(mutex))
+    if (!mutex_is_locked(mutex))
     return;
   else {
     uint32_t prio;
@@ -107,16 +147,6 @@ void mutex_unlock(mutex_t *mutex)
     
     out:
     spinlock_unlock(&mutex->lock);
-    }*/
+  }
 }
-
-bool mutex_trylock(mutex_t *mutex)
-{
-  bool stat;
-
-  if ((stat = !mutex_is_locked(mutex)))
-    mutex_lock(mutex);
-  
-  return stat;
-}
-
+#endif 

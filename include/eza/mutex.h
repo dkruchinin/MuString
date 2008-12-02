@@ -25,9 +25,11 @@
 #define __MUTEX_H__
 
 #include <ds/waitqueue.h>
-#include <eza/spinlock.h>
+#include <sync/spinlock.h>
 #include <eza/task.h>
 #include <eza/arch/types.h>
+
+/* TODO DK: implement priority inheritance and priority ceiling mutex protocol */
 
 /**
  * @brief General mutex structure
@@ -36,16 +38,12 @@
 typedef struct __mutex {
   spinlock_t lock;
   wqueue_t wq;
-  struct {
-    task_t *task;
-    uint32_t priority;
-  } executer;
-  uint32_t max_prio;
+  task_t *executer;
 } mutex_t;
 
 static inline bool mutex_is_locked(mutex_t *mutex)
 {
-  return !!mutex->executer.task;
+  return !!mutex->executer;
 }
 
 #define MUTEX_DEFINE(name)                      \
