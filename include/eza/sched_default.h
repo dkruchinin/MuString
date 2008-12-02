@@ -72,15 +72,10 @@
 #define FIND_FIRST_BITMAP_BIT(array) \
   find_first_bit_mem_64(&array->bitmap[0],EZA_SCHED_TOTAL_WIDTH)
 
-typedef enum __sched_discipline {
-  SCHED_RR = 0,  /* Round-robin discipline. */
-  SCHED_FIFO = 1, /* FIFO discipline. */
-  SCHED_OTHER = 2, /* Default 'O(1)-like' discipline. */
-} sched_discipline_t;
-
 typedef struct __eza_sched_prio_array {
   eza_sched_type_t bitmap[EZA_SCHED_TOTAL_WIDTH];
   list_head_t queues[EZA_SCHED_TOTAL_PRIOS];
+  ulong_t num_tasks;
 } eza_sched_prio_array_t;
 
 typedef struct __eze_sched_taskdata {
@@ -122,6 +117,7 @@ static inline void __add_task_to_array(eza_sched_prio_array_t *array,task_t *tas
   sched_data->array = array;
   SET_BITMAP_BIT(array,prio);
   list_add2tail(&array->queues[prio],&sched_data->runlist);
+  array->num_tasks++;
 }
 
 /* NOTE: Array mus be locked !
@@ -133,7 +129,8 @@ static inline void __remove_task_from_array(eza_sched_prio_array_t *array,task_t
 
   list_del(&sched_data->runlist);
   sched_data->array = NULL;
-
+  array->num_tasks--;
+  
   if( list_is_empty( &array->queues[prio] ) ) {
     RESET_BITMAP_BIT(array,prio);
   }

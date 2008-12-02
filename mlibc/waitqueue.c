@@ -117,13 +117,17 @@ status_t waitqueue_delete(wait_queue_t *wq, wait_queue_task_t *wq_task, wqueue_d
   }
   
   spinlock_lock(&wq->q_lock);
+  if( !wq_task->q ) {
+    goto out_unlock;
+  }
+
   __delete_task(wq, wq_task);
   if (dop == WQ_DELETE_WAKEUP)
     ret = sched_change_task_state(wq_task->task, TASK_STATE_RUNNABLE);
 
+out_unlock:
   spinlock_unlock(&wq->q_lock);
-
-  out:
+out:
   return ret;
 }
 

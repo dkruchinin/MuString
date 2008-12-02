@@ -44,7 +44,7 @@ static void __def_run(test_framework_t *tf,void *ctx)
       break;
     }
 
-    tf->printf( "Running testcase: '%s'\n", tcase->id );
+    tf->printf( "\nRunning testcase: '%s'\n\n", tcase->id );
     tcase->run(tf,t_ctx);
     tcase->deinitialize(t_ctx);
 

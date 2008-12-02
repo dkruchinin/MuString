@@ -68,10 +68,7 @@ typedef enum __wqeue_delop {
 #define waitqueue_pop(wq)                                           \
   waitqueue_delete(wq, waitqueue_first_task(wq), WQ_DELETE_WAKEUP);
 
-static inline bool waitqueue_is_empty(wait_queue_t *wq)
-{
-  return !(wq->num_waiters);
-}
+#define waitqueue_is_empty(wq) !((wq)->num_waiters)
 
 status_t waitqueue_initialize(wait_queue_t *wq);
 status_t waitqueue_prepare_task(wait_queue_task_t *wq_task, task_t *task);

@@ -48,6 +48,7 @@
 #include <eza/kconsole.h>
 #include <eza/gc.h>
 #include <eza/time.h>
+#include <eza/arch/profile.h>
 
 extern void initialize_idle_tasks(void);
 
@@ -245,7 +246,7 @@ status_t sys_yield(void)
 
 status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
 {
-  status_t r;
+  ulong_t is;
 
   switch( cmd ) {
     case SYS_SCHED_CTL_GET_AFFINITY_MASK:
@@ -264,7 +265,9 @@ status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
         return -EINVAL;
       }
 
+      interrupts_save_and_disable(is);
       LOCK_TASK_STRUCT(task);
+
       if( task->cpu_affinity_mask != arg ) {
         if( !(task->cpu_affinity_mask & (1 << cpu_id())) ) {
           /* Schedule immediate migration. */
@@ -272,6 +275,7 @@ status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
         }
       }
       UNLOCK_TASK_STRUCT(task);
+      interrupts_restore(is);
 
       return 0;
     default:
@@ -439,7 +443,6 @@ void do_smp_scheduler_interrupt_handler(void)
                           TASK_STATE_RUNNABLE);
 }
 
-/* TODO: [mt] Implement thread migration via 'gc_action_t'. */
 void migration_thread(void *data)
 {
   while(true) {

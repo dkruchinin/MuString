@@ -23,6 +23,7 @@ struct __gc_action;
 
 typedef void (*gc_action_dtor_t)(struct __gc_action *action);
 typedef void (*gc_actor_t)(void *data,ulong_t data_arg);
+typedef void (*actor_t)(void *data);
 
 typedef struct __gc_action {
   ulong_t type;
@@ -39,6 +40,20 @@ gc_action_t *gc_allocate_action(gc_actor_t actor, void *data,
                                 ulong_t data_arg);
 void gc_schedule_action(gc_action_t *action);
 void gc_free_action(gc_action_t *action);
+void spawn_percpu_threads(void);
+
+#define GC_TASK_RESOURCE  0x1
+
+static inline void gc_init_action(gc_action_t *action,gc_actor_t actor,
+                                  void *data,long_t data_arg)
+{
+  action->action=actor;
+  action->data=data;
+  list_init_node(&action->l);
+  list_init_head(&action->data_list_head);
+  action->type=0;
+  action->data_arg=data_arg;
+}
 
 #define GC_THREAD_IDX  1
 #define MIGRATION_THREAD_IDX  0

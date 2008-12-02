@@ -60,6 +60,13 @@ typedef struct __scheduler {
   status_t (*scheduler_control)(task_t *task, ulong_t cmd,ulong_t arg);
 } scheduler_t;
 
+/* Main scheduling policies. */
+typedef enum __sched_discipline {
+  SCHED_RR = 0,  /* Round-robin discipline. */
+  SCHED_FIFO = 1, /* FIFO discipline. */
+  SCHED_OTHER = 2, /* Default 'O(1)-like' discipline. */
+} sched_discipline_t;
+
 #define GRAB_SCHEDULER(s)
 #define RELEASE_SCHEDULER(s)
 

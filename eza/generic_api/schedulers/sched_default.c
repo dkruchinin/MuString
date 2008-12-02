@@ -138,6 +138,7 @@ static void initialize_cpu_sched_data(eza_sched_cpudata_t *cpudata, cpu_id_t cpu
     eza_sched_prio_array_t *array = &cpudata->arrays[arr];
     list_head_t *lh = &array->queues[0];
 
+    array->num_tasks=0;
     memset(&array->bitmap[0], EZA_SCHED_BITMAP_PATTERN,
            sizeof(eza_sched_type_t)*EZA_SCHED_TOTAL_WIDTH);
 
@@ -329,65 +330,6 @@ static void def_scheduler_tick(void)
   UNLOCK_TASK_STRUCT(current);
 }
 
-/* NOTE: Currently works only for current task ! */
-static status_t def_del_task(task_t *task)
-{
-  status_t r;
-  eza_sched_taskdata_t *sdata;
-
-  if( task != current_task() ) {
-    return -EINVAL;
-  }
-
-  interrupts_disable();
-  LOCK_TASK_STRUCT(task);
-
-  if( task->scheduler != &eza_default_scheduler || !task->sched_data ) {
-    r=-EINVAL;
-    UNLOCK_TASK_STRUCT(task);
-    interrupts_enable();
-  } else {
-    gc_action_t *action;
-    eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
-
-    /* First, remove this task from all arrays. */
-    sdata=EZA_TASK_SCHED_DATA(task);
-    __remove_task_from_array(sdata->array,task);
-    task->sched_data=NULL;
-    UNLOCK_TASK_STRUCT(task);
-    interrupts_enable();
-
-    /* Phase 1: Free scheduler private data. */
-    if( sdata ) {
-      free_task_sched_data(sdata);
-    }
-
-    /* Phase 2: Prepare deffered actions. */
-    action=gc_allocate_action(cleanup_thread_data,task,0);
-
-    /* Now we can schedule deffered resource freeing. */
-    preempt_disable();
-    interrupts_disable();
-    LOCK_TASK_STRUCT(task);
-
-    sdata=task->sched_data;
-    task->scheduler=NULL;
-    sched_data->stats->active_tasks--;
-    sched_set_current_need_resched();
-
-    UNLOCK_TASK_STRUCT(task);
-    interrupts_enable();
-
-    if( action ) {
-      gc_schedule_action(action);
-    }
-    /* No way to return - we're leaving the CPU forever ... */
-    preempt_enable();
-  }
-
-  return r;
-}
-
 static status_t def_add_task(task_t *task)
 {
   cpu_id_t cpu = cpu_id();
@@ -499,6 +441,50 @@ get_next_task:
   if( ints_enabled ) {
       interrupts_enable();
   }
+}
+
+/* NOTE: Currently works only for current task ! */
+static status_t def_del_task(task_t *task)
+{
+  status_t r;
+  gc_action_t action;
+  eza_sched_cpudata_t *sched_data=CPU_SCHED_DATA();
+
+  if( task != current_task() ) {
+    return -EINVAL;
+  }
+
+  /* Prepare a deferred action. */
+  gc_init_action(&action,cleanup_thread_data,task,0);
+  action.type=GC_TASK_RESOURCE;
+  action.dtor=NULL;
+
+  interrupts_disable();
+  LOCK_TASK_STRUCT(task);
+
+  if( task->scheduler != &eza_default_scheduler || !task->sched_data ) {
+    r=-EINVAL;
+    UNLOCK_TASK_STRUCT(task);
+    interrupts_enable();
+  } else {
+    eza_sched_taskdata_t *sdata=EZA_TASK_SCHED_DATA(task);
+
+    LOCK_CPU_SCHED_DATA(sched_data);
+    __remove_task_from_array(sdata->array,task);
+    sched_data->stats->active_tasks--;
+    UNLOCK_CPU_SCHED_DATA(sched_data);
+
+    gc_schedule_action(&action);
+    sched_set_current_need_resched();
+
+    UNLOCK_TASK_STRUCT(task);
+    interrupts_enable();
+
+    /* Leave the CPU forever. */
+    def_schedule();
+  }
+
+  return r;
 }
 
 static void def_reset(void)

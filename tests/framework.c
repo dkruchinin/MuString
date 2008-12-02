@@ -98,16 +98,4 @@ void run_tests(void)
            tc->get_num_executed(tc_ctx),
            tc->get_num_testcases(tc_ctx));
   kprintf( "Failed tests: %d\n\n",num_failed );
-
-  /* Don't exit - we can possibly have PID 1. */
-  for(;;);
 }
-
-/*
-void __run_tests(void)
-{
-  if( kernel_thread(__test_runner,NULL,NULL) ) {
-    panic( "run_tests(): Can't execute runner task !\n" );
-  }
-  }
-*/

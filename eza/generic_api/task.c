@@ -46,6 +46,7 @@
 static index_array_t pid_array;
 static spinlock_t pid_array_lock;
 static memcache_t *task_cache;
+static bool init_launched;
 
 /* Macros for dealing with PID array locks. */
 #define LOCK_PID_ARRAY spinlock_lock(&pid_array_lock)
@@ -75,18 +76,18 @@ void initialize_task_subsystem(void)
   /* Sanity check: allocate PID 0 for idle tasks, so the next available PID
    * will be 1 (init).
    */
-  idle = __allocate_pid();
+  idle=__allocate_pid();
   if(idle != 0) {
-    panic( "initialize_task_subsystem(): Can't allocate PID for idle tasks ! (%d returned)",
+    panic( "initialize_task_subsystem(): Can't allocate PID for idle task ! (%d returned)\n",
            idle );
   }
 
-#ifdef CONFIG_TEST
-  /* To avoid kernel panic when exiting the first test task (its PID will
-   * almost always be 1), we reserve PID 1.
-   */
-  __allocate_pid();
-#endif
+  /* Reserve a PID for the init task. */
+  idle=__allocate_pid();
+  if(idle != 1) {
+    panic( "initialize_task_subsystem(): Can't allocate PID for Init task ! (%d returned)\n",
+           idle );
+  }
 
   task_cache = create_memcache( "Task struct memcache", sizeof(task_t),
                                 2, SMCF_PGEN);
@@ -94,6 +95,7 @@ void initialize_task_subsystem(void)
     panic( "initialize_task_subsystem(): Can't create the task struct memcache !" );
   }
 
+  init_launched=false;
   initialize_process_subsystem();
 }
 
@@ -128,6 +130,23 @@ static status_t __alloc_pid_and_tid(task_t *parent,ulong_t flags,
 {
   pid_t pid;
   tid_t tid;
+
+  /* Init task ? */
+  if( flags & TASK_INIT ) {
+    status_t r;
+
+    LOCK_PID_ARRAY;
+    if( !init_launched ) {
+      *ppid=1;
+      *ptid=1;
+      init_launched=true;
+      r=0;
+    } else {
+      r=-EINVAL;
+    }
+    UNLOCK_PID_ARRAY;
+    return r;
+  }
 
   if( (flags & CLONE_MM) && priv != TPL_KERNEL ) {
     pid=parent->pid;
@@ -250,7 +269,7 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
   }
 
   /* TODO: [mt] Add memory limit check. */
-  /* goto task_create_fault; */  
+  /* goto task_create_fault; */
   r=__alloc_pid_and_tid(parent,flags,&pid,&tid,priv);
   if( r ) {
     goto task_create_fault;

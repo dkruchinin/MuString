@@ -232,4 +232,6 @@ void cleanup_thread_data(void *t,ulong_t arg);
 /* Default kernel threads flags. */
 #define KERNEL_THREAD_FLAGS  (CLONE_MM)
 
+#define TASK_INIT   0x80000000   /* This task is the NameServer i.e. 'init' */
+
 #endif
