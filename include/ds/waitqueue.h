@@ -179,7 +179,6 @@ static inline status_t waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t d
   wqueue_t *wq = wq_task->q;
   status_t ret;
 
-  kprintf("QUEUE:=> %p, task(%p)\n", wq, wq_task);
   spinlock_lock(&wq->q_lock);  
   ret = __waitqueue_delete(wq_task, dop);
   spinlock_unlock(&wq->q_lock);
