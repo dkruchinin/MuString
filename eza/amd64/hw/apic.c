@@ -39,6 +39,111 @@
 #include <mlibc/unistd.h>
 #include <mlibc/string.h>
 
+/*
+ * Black mages from intel and amd wrote that
+ * local APIC is memory mapped, I'm afraid on this
+ * solution looks ugly ...
+ * TODO: I get unclear sense while some higher
+ * abstraction not being implemented.
+ */
+
+volatile struct __local_apic_t *local_apic = DEFAULT_APIC_BASE;
+static int apics_number;
+static uint8_t local_apic_ids[NR_CPUS];
+
+/*
+ * default functions to access APIC (local APIC)
+ * I think that gcc can try to make optimization on it
+ * to avoid I'm stay `volatile` flag here.
+ */
+static inline uint32_t __apic_read(ulong_t rv)
+{
+    return *((volatile uint32_t *)((ulong_t)local_apic+rv));
+}
+
+static inline void __apic_write(ulong_t rv,uint32_t val)
+{
+    *((volatile uint32_t *)((ulong_t)local_apic+rv))=val;
+}
+
+static uint32_t __get_maxlvt(void)
+{
+  apic_version_t version=local_apic->version;
+
+  return version.max_lvt;
+}
+
+static void __set_lvt_lint_vector(uint32_t lint_num,uint32_t vector)
+{
+  apic_lvt_lint_t lvt_lint;
+
+  if(!lint_num) {
+    lvt_lint=local_apic->lvt_lint0;
+    lvt_lint.vector=vector;
+    local_apic->lvt_lint0.reg=lvt_lint.reg;
+  }  else {
+    lvt_lint=local_apic->lvt_lint1;
+    lvt_lint.vector=vector;
+    local_apic->lvt_lint1.reg=lvt_lint.reg;
+  }
+}
+
+static void __enable_apic(void)
+{
+  apic_svr_t svr=local_apic->svr;
+
+  svr.apic_enabled=0x1;
+  svr.cpu_focus=0x1;
+  local_apic->svr.reg=svr.reg;
+}
+
+static void __disable_apic(void)
+{
+  apic_svr_t svr=local_apic->svr;
+
+  svr.apic_enabled=0x0;
+  svr.cpu_focus=0x0;
+  local_apic->svr.reg=svr.reg;
+}
+
+void apic_shootout(void)
+{
+  __disable_apic();
+}
+
+static void __local_apic_clear(void)
+{
+  uint32_t max_lvt;
+  uint32_t v;
+  apic_lvt_error_t lvt_error=local_apic->lvt_error;
+  apic_lvt_timer_t lvt_timer=local_apic->lvt_timer;
+  apic_lvt_lint_t lvt_lint=local_apic->lvt_lint0;
+  apic_lvt_pc_t lvt_pc=local_apic->lvt_pc;
+
+  max_lvt=__get_maxlvt();
+
+  if(max_lvt>=3) {
+    v=0xfe;
+    lvt_error.vector=v;
+    lvt_error.mask |= (1 << 0);
+    local_apic->lvt_error.reg=lvt_error.reg;
+  }
+
+  /* mask timer and LVTs*/
+  lvt_timer.mask = 0x1;
+  local_apic->lvt_timer.reg=lvt_timer.reg;
+  lvt_lint.mask=0x1;
+  local_apic->lvt_lint0.reg = lvt_lint.reg;
+  lvt_lint=local_apic->lvt_lint1;
+  lvt_lint.mask=0x1;
+  local_apic->lvt_lint1.reg = lvt_lint.reg;
+
+  if(max_lvt>=4) {
+    lvt_pc.mask = 0x1;
+    local_apic->lvt_pc.reg=lvt_pc.reg;
+  } 
+}
+
 static int __local_apic_chkerr(void)
 {
   apic_esr_t esr;
@@ -382,7 +487,7 @@ void apic_spurious_vector_handler(uint32_t irq)
 
 #ifdef CONFIG_SMP
 
-uint32_t apic_send_ipi_init(int cpu)
+int apic_send_ipi_init(int cpu)
 {
   int i=0;
   apic_icr1_t icr1=local_apic->icr1;
