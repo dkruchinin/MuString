@@ -39,7 +39,6 @@
 #include <mlibc/unistd.h>
 #include <eza/swks.h>
 #include <eza/actbl.h>
-#include <config.h>
 
 extern volatile uint32_t local_apic_base;
 extern volatile uint8_t local_apic_ids[NR_CPUS];
@@ -53,12 +52,14 @@ void arch_specific_init(void)
 	int n;
 	uint8_t id;
 	
-  kprintf("[HW] Init arch specific ...\n");
+	kprintf("[HW] Init arch specific ...\n");
 	
 	r = get_acpi_lapic_info(&apic_base, local_apic_ids, NR_CPUS, &n);
-
-  local_apic_bsp_switch(); 
-  if (local_bsp_apic_init() == -1)
+	if (apic_base)
+		local_apic_base = apic_base;
+	
+	local_apic_bsp_switch(); 
+	if (local_bsp_apic_init() == -1)
 		panic("[HW] APIC is not found!\n");
 
 #ifdef CONFIG_SMP
@@ -99,7 +100,7 @@ void arch_specific_init(void)
 
 void arch_ap_specific_init(void)
 {
-   local_ap_apic_init();
+	local_ap_apic_init();
 }
 
 #endif
@@ -108,6 +109,6 @@ void arch_initialize_swks(void)
 {
  /* According to the x86 programming manual, we must reserve
   * eight bits after the last available I/O port in all IOPMs.
-  */
-  swks.ioports_available=(PAGE_SIZE-sizeof(tss_t)-1)*8;
+  */ 
+	swks.ioports_available=(PAGE_SIZE-sizeof(tss_t)-1)*8;
 }

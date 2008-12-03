@@ -38,135 +38,6 @@
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 #include <mlibc/string.h>
-#include <mlibc/bitwise.h>
-#include <eza/arch/interrupt.h>
-#include <eza/arch/smp.h>
-
-/*
- * Black mages from intel and amd wrote that
- * local APIC is memory mapped, I'm afraid on this
- * solution looks ugly ...
- * TODO: I get unclear sense while some higher
- * abstraction not being implemented.
- */
-
-volatile struct __local_apic_t *local_apic; 
-static int apics_number;
-uint32_t local_apic_base = DEFAULT_APIC_BASE;
-uint8_t local_apic_ids[NR_CPUS];
-
-static int __map_apic_page(void)
-{
-  int32_t res;
-  uintptr_t apic_vaddr;
-
-  apic_vaddr=(uintptr_t)idalloc_allocate_vregion(1);
-  if( !apic_vaddr ) {
-    panic( "[MM] Can't allocate memory range for mapping APIC !\n" );
-  }
-
-  res = mmap_kern(apic_vaddr, local_apic_base >> PAGE_WIDTH, 1, MAP_RW | MAP_DONTCACHE | MAP_EXEC);
-  if(res<0) {
-    panic("[MM] Cannot map IO page for APIC.\n");
-  }
-
-  local_apic=(struct __local_apic_t *)apic_vaddr;
-  return 0;
-}
-
-/*
- * default functions to access APIC (local APIC)
- * I think that gcc can try to make optimization on it
- * to avoid I'm stay `volatile` flag here.
- */
-static inline uint32_t __apic_read(ulong_t rv)
-{
-    return *((volatile uint32_t *)((ulong_t)local_apic+rv));
-}
-
-static inline void __apic_write(ulong_t rv,uint32_t val)
-{
-    *((volatile uint32_t *)((ulong_t)local_apic+rv))=val;
-}
-
-static uint32_t __get_maxlvt(void)
-{
-  apic_version_t version=local_apic->version;
-
-  return version.max_lvt;
-}
-
-static void __set_lvt_lint_vector(uint32_t lint_num,uint32_t vector)
-{
-  apic_lvt_lint_t lvt_lint;
-
-  if(!lint_num) {
-    lvt_lint=local_apic->lvt_lint0;
-    lvt_lint.vector=vector;
-    local_apic->lvt_lint0.reg=lvt_lint.reg;
-  }  else {
-    lvt_lint=local_apic->lvt_lint1;
-    lvt_lint.vector=vector;
-    local_apic->lvt_lint1.reg=lvt_lint.reg;
-  }
-}
-
-static void __enable_apic(void)
-{
-  apic_svr_t svr=local_apic->svr;
-
-  svr.apic_enabled=0x1;
-  svr.cpu_focus=0x1;
-  local_apic->svr.reg=svr.reg;
-}
-
-static void __disable_apic(void)
-{
-  apic_svr_t svr=local_apic->svr;
-
-  svr.apic_enabled=0x0;
-  svr.cpu_focus=0x0;
-  local_apic->svr.reg=svr.reg;
-}
-
-void apic_shootout(void)
-{
-  __disable_apic();
-}
-
-static void __local_apic_clear(void)
-{
-  uint32_t max_lvt;
-  uint32_t v;
-  apic_lvt_error_t lvt_error=local_apic->lvt_error;
-  apic_lvt_timer_t lvt_timer=local_apic->lvt_timer;
-  apic_lvt_lint_t lvt_lint=local_apic->lvt_lint0;
-  apic_lvt_pc_t lvt_pc=local_apic->lvt_pc;
-
-  max_lvt=__get_maxlvt();
-
-  if(max_lvt>=3) {
-    v=0xfe;
-    lvt_error.vector=v;
-    lvt_error.mask |= (1 << 0);
-    local_apic->lvt_error.reg=lvt_error.reg;
-  }
-
-  /* mask timer and LVTs*/
-  lvt_timer.mask = 0x1;
-  local_apic->lvt_timer.reg=lvt_timer.reg;
-  lvt_lint.mask=0x1;
-  local_apic->lvt_lint0.reg = lvt_lint.reg;
-  lvt_lint=local_apic->lvt_lint1;
-  lvt_lint.mask=0x1;
-  local_apic->lvt_lint1.reg = lvt_lint.reg;
-
-  if(max_lvt>=4) {
-    lvt_pc.mask = 0x1;
-    local_apic->lvt_pc.reg=lvt_pc.reg;
-  }
-  
-}
 
 static int __local_apic_chkerr(void)
 {
@@ -177,9 +48,9 @@ static int __local_apic_chkerr(void)
 
   if(esr.rx_cs_err){i++;kprintf("[LA] Receive checksum failed.\n");}
   if(esr.tx_accept_err){i++;kprintf("[LA] Transfer failed.\n");}
-  if(esr.rx_accept_err){i++;kprintf("[LA] Receive failed.\n");}
+  if(esr.rx_accept_err){i++;kprintf("[LA] IPI is not accepted by any CPU.\n");}
   if(esr.tx_illegal_vector){i++;kprintf("[LA] Illegal transfer vector.\n");}
-  if(esr.rx_illegal_vector){i++;kprintf("[LA] Illegal receive vector.\n");}
+  if(esr.rx_illegal_vector){kprintf("[LA] Illegal receive vector.\n");}
   if(esr.reg_illegal_addr){i++;kprintf("[LA] Illegal register address.\n");}
 
   return i;
@@ -269,17 +140,20 @@ static int __local_apic_init(void)
   apic_lvt_lint_t lvt_lint;
   apic_icr1_t icr1;
 
-  kprintf("[LW] Checking APIC is present ... ");
-  if(__local_apic_check()<0) {
-    kprintf("FAIL\n");
-    return -1;
-  } else
-    kprintf("OK\n");
+	if (!apics_number) {
+		kprintf("[LW] Checking APIC is present ... ");
+		if(__local_apic_check()<0) {
+			kprintf("FAIL\n");
+			return -1;
+		} else
+			kprintf("OK\n");
+	}
 
   enable_l_apic_in_msr(); 
 
   v=get_apic_version();
-  kprintf("[LW] APIC version: %d\n",v);
+	if (!apics_number)
+		kprintf("[HW] APIC version: %d\n",v);
 
   /* first we're need to clear APIC to avoid magical results */
   __local_apic_clear();
@@ -513,6 +387,7 @@ uint32_t apic_send_ipi_init(int cpu)
   int i=0;
   apic_icr1_t icr1=local_apic->icr1;
   apic_icr2_t icr2=local_apic->icr2;
+	int ret = 0;
 
   icr2.dest=local_apic_ids[cpu];
   local_apic->icr2.reg=icr2.reg;  
@@ -525,8 +400,8 @@ uint32_t apic_send_ipi_init(int cpu)
   local_apic->icr1.reg=icr1.reg;  
 
   atom_usleep(20);
-  if(local_apic->esr.reg!=0)
-    return __local_apic_chkerr();
+  if (local_apic->esr.reg != 0 && __local_apic_chkerr())
+    return -1;
 
   icr1=local_apic->icr1;
   icr1.tx_mode=TXMODE_INIT;
@@ -537,8 +412,8 @@ uint32_t apic_send_ipi_init(int cpu)
   icr1.vector=0;
   local_apic->icr1.reg=icr1.reg;  
   atom_usleep(10000);
-  if(local_apic->esr.reg!=0)
-    return __local_apic_chkerr();
+  if ( local_apic->esr.reg != 0 &&__local_apic_chkerr())
+		return -1;
 
 
   for(i=0;i<2;i++) { /* if we're have APIC not from 80486DX or higher, we're need to send it twice */
@@ -551,15 +426,20 @@ uint32_t apic_send_ipi_init(int cpu)
     icr1.shorthand=0x0;
     local_apic->icr1.reg=icr1.reg;  
     atom_usleep(200);
-    if(local_apic->esr.reg!=0)
-      return __local_apic_chkerr();
+    if (local_apic->esr.reg != 0 && __local_apic_chkerr())
+			return -1;
   }
 
-  return __local_apic_chkerr();
+  if (__local_apic_chkerr())
+		ret = -1;
+
+	return ret;
 }
 
 int apic_broadcast_ipi_vector(uint8_t vector)
 {
+	int ret = 0;
+
   apic_icr1_t icr1=local_apic->icr1;
 
   icr1.tx_mode=TXMODE_FIXED;
@@ -570,7 +450,14 @@ int apic_broadcast_ipi_vector(uint8_t vector)
   icr1.vector=vector;
   local_apic->icr1.reg=icr1.reg;  
 
-  return __local_apic_chkerr();
+  if (__local_apic_chkerr())
+		ret = -1;
+	
+	return ret;
+}
+
+int apic_send_vector(int cpu, uint8_t vector)
+{
 }
 
 int local_ap_apic_init(void)

@@ -335,8 +335,8 @@ void apic_timer_hack(void);
 
 #ifdef CONFIG_SMP
 
-uint32_t apic_send_ipi_init(int cpu);
-uint32_t apic_send_vector(int cpu, uint8_t vector);
+int apic_send_ipi_init(int cpu);
+int apic_send_vector(int cpu, uint8_t vector);
 int apic_broadcast_ipi_vector(uint8_t vector);
 int local_ap_apic_init(void);
 

@@ -185,6 +185,8 @@ int get_acpi_lapic_info(uint32_t *lapic_base, uint8_t *lapic_ids, int size, int 
 	uintptr_t va, va1;
 	int ret = 0, s;
 	
+	kprintf("[HW] Parse ACPI table\n");	
+
 	/* search in the bios rom */
 	p = pframe_id_to_virt(BIOS_ROM >> PAGE_WIDTH);
 
