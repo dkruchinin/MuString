@@ -63,6 +63,8 @@ static void __traveller_thread(void *d)
   }
   tf->printf(TRAVELLER_ID "Leaving long busy-wait loop.\n");
 
+  for(;;);
+
   sys_exit(0);
 }
 
@@ -75,7 +77,8 @@ static void __migration_test(void *d)
 
   if( do_scheduler_control(current_task(),SYS_SCHED_CTL_SET_POLICY,
                            SCHED_FIFO) ) {
-    panic(SERVER_ID "Can't change my scheduling policy to SCHED_FIFO !\n" );
+    tf->printf(SERVER_ID "Can't change my scheduling policy to SCHED_FIFO !\n" );
+    tf->abort();
   }
 
   for(i=0;i<NR_CPUS-1;i++) {
@@ -98,6 +101,8 @@ static void __migration_test(void *d)
 
     td->task=t;
 
+    tf->printf(SERVER_ID"Moving %d to CPU #%d\n",
+               t->pid,td->target_cpu);
     r=sched_move_task_to_cpu(t,td->target_cpu);
     if( r ) {
       tf->printf(SERVER_ID "Can't move task %d to CPU %d: r=%d\n",
@@ -106,6 +111,8 @@ static void __migration_test(void *d)
     }
   }
 
+  tf->printf(SERVER_ID "All threads we processed.\n");
+  for(;;);
   sleep(HZ/10);
 
   /* Now change state for all remote tasks. */

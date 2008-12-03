@@ -101,12 +101,7 @@ typedef struct __eza_sched_cpudata {
   cpu_id_t cpu_id;
 } eza_sched_cpudata_t;
 
-static eza_sched_taskdata_t *allocate_task_sched_data(void);
-static void free_task_sched_data(eza_sched_taskdata_t *data);
-static eza_sched_cpudata_t *allocate_cpu_sched_data(cpu_id_t cpu);
-static void free_cpu_sched_data(eza_sched_cpudata_t *data);
-static status_t setup_new_task(task_t *task);
-static void initialize_cpu_sched_data(eza_sched_cpudata_t *queue, cpu_id_t cpu);
+extern eza_sched_cpudata_t *sched_cpu_data[EZA_SCHED_CPUS];
 
 /* Array must be locked prior to calling this function !
  */
@@ -153,5 +148,13 @@ static inline task_t *__get_most_prioritized_task(eza_sched_cpudata_t *sched_dat
   }
   return NULL;
 }
+
+#define LOCK_CPU_SCHED_DATA(d)                  \
+    spinlock_lock(&d->lock)
+
+#define UNLOCK_CPU_SCHED_DATA(d)                \
+    spinlock_unlock(&d->lock)
+
+#define EZA_TASK_SCHED_DATA(t) ((eza_sched_taskdata_t *)t->sched_data)
 
 #endif

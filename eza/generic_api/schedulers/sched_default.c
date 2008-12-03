@@ -60,15 +60,7 @@ static spinlock_t cpu_data_lock;
 #define UNLOCK_CPU_ARRAY()                      \
     spinlock_unlock(&cpu_data_lock)
 
-#define LOCK_CPU_SCHED_DATA(d)                  \
-    spinlock_lock(&d->lock)
-
-#define UNLOCK_CPU_SCHED_DATA(d)                \
-    spinlock_unlock(&d->lock)
-
 #define CPU_SCHED_DATA() sched_cpu_data[cpu_id()]
-
-#define EZA_TASK_SCHED_DATA(t) ((eza_sched_taskdata_t *)t->sched_data)
 
 #define PRIO_TO_TIMESLICE(p) (p*3*1)
 
@@ -85,9 +77,14 @@ static spinlock_t cpu_data_lock;
     interrupts_enable();                        \
     cond_reschedule()
 
-#define activate_task(t) def_change_task_state(t,TASK_STATE_RUNNABLE)
-
 #define migration_thread(cpu)  gc_threads[cpu][MIGRATION_THREAD_IDX]
+
+static eza_sched_taskdata_t *allocate_task_sched_data(void);
+static void free_task_sched_data(eza_sched_taskdata_t *data);
+static eza_sched_cpudata_t *allocate_cpu_sched_data(cpu_id_t cpu);
+static void free_cpu_sched_data(eza_sched_cpudata_t *data);
+static status_t setup_new_task(task_t *task);
+static void initialize_cpu_sched_data(eza_sched_cpudata_t *queue, cpu_id_t cpu);
 
 static eza_sched_taskdata_t *allocate_task_sched_data(void)
 {
@@ -581,7 +578,6 @@ static inline void __reschedule_task(task_t *t)
 {
   set_task_need_resched(t);
   if( t->cpu != cpu_id() ) {
-    kprintf( "**** Sending IPI to CPU #%d\n", t->cpu );
     apic_broadcast_ipi_vector(SCHEDULER_IPI_IRQ_VEC);
   }
 }
@@ -621,7 +617,12 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
       task->state = TASK_STATE_RUNNABLE;
       __add_task_to_array(sched_data->active_array,task);
       sched_data->stats->active_tasks++;
-
+/*
+      kprintf( "]]] CURRENT: %d, CPRIO: %d, NEW: %d, NEW PRIO: %d, STATE: %d\n",
+               sched_data->running_task->pid,
+               sched_data->running_task->priority,
+               task->pid,task->priority,new_state);
+*/
       if( task->priority < sched_data->running_task->priority ) {
         __reschedule_task(task);
       }
@@ -634,6 +635,7 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
         __remove_task_from_array(tdata->array,task);
         sched_data->stats->active_tasks--;
         sched_data->stats->sleeping_tasks++;
+        task->state=new_state;
 
         if( task == sched_data->running_task ) {
           __reschedule_task(task);
@@ -839,13 +841,14 @@ static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
   if(cpu >= EZA_SCHED_CPUS || !sched_cpu_data[cpu]) {
     return -EINVAL;
   }
- 
+
   if( cpu != cpu_id() ) {
     t.task=task;
     event_initialize(&t.e);
     list_init_node(&t.l);
     event_set_task(&t.e,current_task());
 
+    stop_task(task);
     schedule_task_migration(&t,cpu);
     activate_task(migration_thread(cpu));
     event_yield(&t.e);

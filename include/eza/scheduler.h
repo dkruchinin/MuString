@@ -155,5 +155,8 @@ static inline void release_task_struct(task_t *t)
 
 #define cpu_affinity_ok(task,c) (task->cpu & (1<<c))
 
+#define activate_task(t) sched_change_task_state(t,TASK_STATE_RUNNABLE)
+#define stop_task(t) sched_change_task_state(t,TASK_STATE_STOPPED)
+
 #endif
 

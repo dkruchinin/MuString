@@ -49,6 +49,7 @@
 #include <eza/gc.h>
 #include <eza/time.h>
 #include <eza/arch/profile.h>
+#include <eza/sched_default.h>
 
 extern void initialize_idle_tasks(void);
 
@@ -62,7 +63,6 @@ static scheduler_t *active_scheduler = NULL;
 #define LOCK_SCHEDULER_LIST spinlock_lock(&scheduler_lock)
 #define UNLOCK_SCHEDULER_LIST spinlock_unlock(&scheduler_lock)
 
-static list_head_t migration_lists[NR_CPUS];
 static spinlock_t migration_locks[NR_CPUS];
 static list_head_t migration_actions[NR_CPUS];
 
@@ -90,7 +90,6 @@ void initialize_scheduler(void)
 
   for(i=0;i<NR_CPUS;i++) {
     spinlock_initialize(&migration_locks[i]);
-    list_init_head(&migration_lists[i]);
     list_init_head(&migration_actions[i]);
   }
 }
@@ -350,13 +349,11 @@ status_t sleep(ulong_t ticks)
 
 #ifdef CONFIG_SMP
 
-//     apic_broadcast_ipi_vector(SCHEDULER_IPI_IRQ_VEC);
-
 status_t schedule_task_migration(migration_action_t *a,cpu_id_t cpu)
 {
   if( cpu < NR_CPUS ) {
     spinlock_lock(&migration_locks[cpu]);
-    list_add2tail(&migration_lists[cpu], &a->l);
+    list_add2tail(&migration_actions[cpu], &a->l);
     spinlock_unlock(&migration_locks[cpu]);
     return 0;
   } else {
@@ -366,6 +363,39 @@ status_t schedule_task_migration(migration_action_t *a,cpu_id_t cpu)
 
 void do_smp_scheduler_interrupt_handler(void)
 {
+}
+
+static status_t __move_task_to_cpu(task_t *t,cpu_id_t cpu)
+{
+  eza_sched_cpudata_t *src_cpu,*dst_cpu;
+  eza_sched_taskdata_t *tdata = EZA_TASK_SCHED_DATA(t);
+  status_t r;
+
+  src_cpu=sched_cpu_data[t->cpu];
+  LOCK_CPU_SCHED_DATA(src_cpu);
+
+  if( t->state != TASK_STATE_STOPPED ) {
+    r=-EBUSY;
+    goto unlock_src;
+  }
+
+  dst_cpu=sched_cpu_data[cpu_id()];
+  LOCK_CPU_SCHED_DATA(dst_cpu);
+
+  __add_task_to_array(&dst_cpu->active_array,t);
+  dst_cpu->stats->active_tasks++;
+  t->cpu=cpu_id();
+
+  r=0;
+  UNLOCK_CPU_SCHED_DATA(dst_cpu);
+unlock_src:
+  UNLOCK_CPU_SCHED_DATA(src_cpu);
+
+  if( !r ) {
+    activate_task(t);
+  }
+
+  return r;
 }
 
 void migration_thread(void *data)
@@ -387,9 +417,8 @@ void migration_thread(void *data)
         migration_action_t *action=container_of(n,migration_action_t,l);
 
         list_del(n);
-        kprintf( ">> Migrating task %d to CPU %d !\n",
-                 action->task->pid,
-                 cpu_id());
+        __move_task_to_cpu(action->task,cpu_id() );
+        event_raise(&action->e);
       }
     } else {
       spinlock_unlock(&migration_locks[cpu]);
