@@ -45,12 +45,13 @@
 #include <eza/kconsole.h>
 #include <eza/gc.h>
 #include <eza/arch/apic.h>
+#include <eza/arch/current.h>
 
 /* Our own scheduler. */
 static struct __scheduler eza_default_scheduler;
 
 /* Glabal per-CPU array. */
-static eza_sched_cpudata_t *sched_cpu_data[EZA_SCHED_CPUS];
+eza_sched_cpudata_t *sched_cpu_data[EZA_SCHED_CPUS];
 static spinlock_t cpu_data_lock;
 
 #define LOCK_CPU_ARRAY()                        \
@@ -83,6 +84,10 @@ static spinlock_t cpu_data_lock;
 #define __LEAVE_USER_ATOMIC()                   \
     interrupts_enable();                        \
     cond_reschedule()
+
+#define activate_task(t) def_change_task_state(t,TASK_STATE_RUNNABLE)
+
+#define migration_thread(cpu)  gc_threads[cpu][MIGRATION_THREAD_IDX]
 
 static eza_sched_taskdata_t *allocate_task_sched_data(void)
 {
@@ -203,6 +208,8 @@ static inline void __recalculate_timeslice_and_priority(task_t *task)
   }
 }
 
+int sched_verbose1;
+
 /* Task must be locked while calling this function !
  */
 static inline status_t __activate_local_task(task_t *task, eza_sched_cpudata_t *sched_data)
@@ -212,8 +219,10 @@ static inline status_t __activate_local_task(task_t *task, eza_sched_cpudata_t *
   __add_task_to_array(sched_data->active_array,task);
   sched_data->stats->active_tasks++;
 
-//  kprintf( "++ ACTIVATING LOCAL TASK: %d NEW PRIO: %d, CURRENT: %p, CRRENT PRIO: %d\n",
-//           task->pid, EZA_TASK_PRIORITY(task), current_task()->pid, cdata->priority );
+  if( cpu_id() && sched_verbose1 ) {
+    kprintf( "++ ACTIVATING LOCAL TASK: %d NEW PRIO: %d, CURRENT: %d, CRRENT PRIO: %d\n",
+             task->pid, task->priority, current_task()->pid, current_task()->priority );
+  }
   if( task->priority < current_task()->priority ) {
     sched_set_current_need_resched();
   }
@@ -268,6 +277,7 @@ static status_t def_add_cpu(cpu_id_t cpu)
 
   if( sched_cpu_data[cpu] == NULL ) {
     sched_cpu_data[cpu] = cpudata;
+    cpudata->running_task=idle_tasks[cpu];
     r = 0;
   } else {
     r = -EEXIST;
@@ -314,6 +324,9 @@ static void def_scheduler_tick(void)
   }
 
   if( !tdata->time_slice ) {
+    if( cpu_id() && sched_verbose1 ) {
+      kprintf( "* Timeslice is over for %d\n", current->pid );
+    }
     if( discipl == SCHED_RR ) {
       __remove_task_from_array(cpudata->active_array,current);
       __recalculate_timeslice_and_priority(current);
@@ -408,7 +421,6 @@ get_next_task:
     }
   }
   sched_data->stats->task_switches++;
-  UNLOCK_CPU_SCHED_DATA(sched_data);
 
   if(current->state == TASK_STATE_RUNNING) {
     current->state = TASK_STATE_RUNNABLE;
@@ -416,19 +428,20 @@ get_next_task:
 
   /* Do we really need to swicth hardware context ? */
   if( next != current ) {
+    sched_data->running_task=next;
     need_switch = true;
   } else {
     need_switch = false;
   }
 
+  UNLOCK_CPU_SCHED_DATA(sched_data);
   if( next->state == TASK_STATE_RUNNABLE ) {
     next->state = TASK_STATE_RUNNING;
   }
 
   UNLOCK_TASK_STRUCT(current);
 
-
-  if( sched_verbose ) {
+  if( sched_verbose1 && cpu_id() ) {
     kprintf( "** [%d] RESCHED TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , TS: %d **\n",
              cpu_id(), current_task()->pid, need_switch,
              next->pid, EZA_TASK_SCHED_DATA(next)->time_slice );
@@ -547,17 +560,108 @@ out_unlock:
   return r;
 }
 
-int sched_verbose1;
+static inline eza_sched_cpudata_t *__task_cpu_data_locked(task_t *t,
+                                                          ulong_t *is)
+{
+  while(1) {
+    cpu_id_t cpu=t->cpu;
+    eza_sched_cpudata_t *d=sched_cpu_data[cpu];
+
+    interrupts_save_and_disable(*is);
+    spinlock_lock(&d->lock);
+    if( t->cpu == cpu ) {
+      return d;
+    }
+    spinlock_unlock(&d->lock);
+    interrupts_restore(*is);
+  }
+}
+
+static inline void __reschedule_task(task_t *t)
+{
+  set_task_need_resched(t);
+  if( t->cpu != cpu_id() ) {
+    kprintf( "**** Sending IPI to CPU #%d\n", t->cpu );
+    apic_broadcast_ipi_vector(SCHEDULER_IPI_IRQ_VEC);
+  }
+}
 
 static status_t __change_task_state(task_t *task,task_state_t new_state,
+                                    lazy_sched_handler_t h,void *data)
+{
+  ulong_t is;
+  status_t r=0;
+  eza_sched_cpudata_t *sched_data;
+  task_state_t prev_state;
+  eza_sched_taskdata_t *tdata = EZA_TASK_SCHED_DATA(task);
+
+  if( task->cpu != cpu_id() ) {
+    h=NULL;
+  }
+
+  sched_data=__task_cpu_data_locked(task,&is);
+  if( h != NULL && !h(data) ) {
+    kprintf( "[*] Breaking lazy scheduling loop.\n" );
+    goto out_unlock;
+  }
+
+  prev_state=task->state;
+  r=-EINVAL;
+
+  switch(new_state) {
+    case TASK_STATE_RUNNABLE:
+      r=0;
+
+      if( prev_state == TASK_STATE_RUNNABLE ||
+          prev_state == TASK_STATE_RUNNING ) {
+        break;
+      }
+
+      __recalculate_timeslice_and_priority(task);
+      task->state = TASK_STATE_RUNNABLE;
+      __add_task_to_array(sched_data->active_array,task);
+      sched_data->stats->active_tasks++;
+
+      if( task->priority < sched_data->running_task->priority ) {
+        __reschedule_task(task);
+      }
+      break;
+    case TASK_STATE_STOPPED:
+    case TASK_STATE_SLEEPING:
+      if( task->state == TASK_STATE_RUNNABLE
+          || task->state == TASK_STATE_RUNNING ) {
+
+        __remove_task_from_array(tdata->array,task);
+        sched_data->stats->active_tasks--;
+        sched_data->stats->sleeping_tasks++;
+
+        if( task == sched_data->running_task ) {
+          __reschedule_task(task);
+        }
+        r=0;
+      }
+      break;
+    default:
+      break;
+  }
+
+out_unlock:
+  UNLOCK_CPU_SCHED_DATA(sched_data);
+  interrupts_restore(is);
+  cond_reschedule();
+  return r;
+}
+ 
+static status_t __change_task_state1(task_t *task,task_state_t new_state,
                                     lazy_sched_handler_t h,void *data)
 {
   status_t r;
   long is;
 
-  if( sched_verbose1 && !cpu_id() ) {
-    kprintf( "[%d] BEFORE CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d, PID: %d, TASK CPU: %d\n",
-             cpu_id(),in_atomic(), current_task_needs_resched(),
+  if( sched_verbose1 && cpu_id() ) {
+    kprintf( "[%d] BEFORE CHANGE STATE: CURRENT: %d ATOMIC=%d,NEED RESCHED: %d, PID: %d, TASK CPU: %d\n",
+             cpu_id(), current_task()->pid,
+             in_atomic(), current_task_needs_resched(),
              task->pid,task->cpu);
   }
 
@@ -572,11 +676,12 @@ change_task_state:
     UNLOCK_TASK_STRUCT(task);
     interrupts_restore(is);
 
-    kprintf( "[%d] BEFORE CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d, PID: %d, TASK CPU: %d\n",
-             cpu_id(),in_atomic(), current_task_needs_resched(),
+    kprintf( "R [%d] BEFORE CHANGE STATE: CURRENT: %d ATOMIC=%d,NEED RESCHED: %d, PID: %d, TASK CPU: %d\n",
+             cpu_id(), current_task()->pid,
+             in_atomic(), current_task_needs_resched(),
              task->pid,task->cpu);
 
-    r=schedule_remote_task_state_change(task,new_state);
+//    r=schedule_remote_task_state_change(task,new_state);
     if( r == -EAGAIN ) {
       /* Task has changed its CPU one more time while performing our
        * request. So perform the operation yet again.
@@ -585,9 +690,10 @@ change_task_state:
     }
   }
 
-  if( sched_verbose1 && !cpu_id() ) {
-    kprintf( "[%d] AFTER CHANGE STATE: ATOMIC=%d,NEED RESCHED: %d, ion: %d, INTS: %d\n",
-             cpu_id(),in_atomic(), current_task_needs_resched(), is,
+  if( sched_verbose1 && cpu_id() ) {
+    kprintf( "[%d] AFTER CHANGE STATE: CURRENT: %d, ATOMIC=%d,NEED RESCHED: %d, ion: %d, INTS: %d\n",
+             cpu_id(),current_task()->pid,
+             in_atomic(), current_task_needs_resched(), is,
              is_interrupts_enabled() );
   }
   cond_reschedule();
@@ -728,52 +834,24 @@ static status_t def_change_task_state_lazy(task_t *task, task_state_t state,
 }
 
 static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
-  eza_sched_taskdata_t *sdata = EZA_TASK_SCHED_DATA(task);
-  status_t r;
-  cpu_id_t mycpu=cpu_id();
-  eza_sched_cpudata_t *sched_data=CPU_SCHED_DATA();
-  bool active;
+  migration_action_t t;
 
   if(cpu >= EZA_SCHED_CPUS || !sched_cpu_data[cpu]) {
     return -EINVAL;
   }
+ 
+  if( cpu != cpu_id() ) {
+    t.task=task;
+    event_initialize(&t.e);
+    list_init_node(&t.l);
+    event_set_task(&t.e,current_task());
 
-  __ENTER_USER_ATOMIC();
-  LOCK_TASK_STRUCT(task);
-
-  active=task->state == TASK_STATE_RUNNABLE || task->state==TASK_STATE_RUNNING;
-
-  if( !sdata || task->scheduler != &eza_default_scheduler ||
-      !task_is_migrable(task) ) {
-    r=-EINVAL;
-  } else {
-    r=0;
-    if( cpu != mycpu ) {
-      task->cpu=cpu;
-
-      if( active ) {
-        LOCK_CPU_SCHED_DATA(sched_data);
-        sched_data->stats->active_tasks--;
-        __remove_task_from_array(sdata->array,task);
-        UNLOCK_CPU_SCHED_DATA(sched_data);
-
-        if( task == current_task() ) {
-          sched_set_current_need_resched();
-        }
-
-        task->state=TASK_STATE_STOPPED;
-        r=schedule_migration(task,cpu);
-      } else {
-        LOCK_CPU_SCHED_DATA(sched_data);
-        sched_data->stats->sleeping_tasks--;
-        UNLOCK_CPU_SCHED_DATA(sched_data);
-      }
-    }
+    schedule_task_migration(&t,cpu);
+    activate_task(migration_thread(cpu));
+    event_yield(&t.e);
   }
-  UNLOCK_TASK_STRUCT(task);
-  __LEAVE_USER_ATOMIC();
 
-  return r;
+  return 0;
 }
 
 static struct __scheduler eza_default_scheduler = {

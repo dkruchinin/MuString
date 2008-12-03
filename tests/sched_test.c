@@ -28,6 +28,8 @@
 #define SERVER_ID "[Migration test] "
 #define TRAVELLER_ID "[CPU Traveller] "
 
+#define TRAVELLER_SLEEP_TICKS  1000
+
 typedef struct __sched_test_ctx {
   test_framework_t *tf;
   ulong_t server_pid;
@@ -37,21 +39,29 @@ typedef struct __sched_test_ctx {
 typedef struct __sched_thread_data {
   ulong_t target_cpu;
   test_framework_t *tf;
+  task_t *task;
 } sched_thread_data_t;
 
 static void __traveller_thread(void *d)
 {
   sched_thread_data_t *td=(sched_thread_data_t*)d;
   test_framework_t *tf=td->tf;
+  uint64_t target_tick=swks.system_ticks_64 + TRAVELLER_SLEEP_TICKS;
 
   tf->printf(TRAVELLER_ID "PID: %d, Starting on CPU %d, Target CPU: %d\n",
              current_task()->pid,cpu_id(),td->target_cpu);
-
+  
   if( cpu_id() != td->target_cpu ) {
     tf->failed();
   } else {
     tf->passed();
   }
+
+  /* Simulate some activity ... */
+  tf->printf(TRAVELLER_ID "Entering long busy-wait loop.\n");
+  while(swks.system_ticks_64 < target_tick) {
+  }
+  tf->printf(TRAVELLER_ID "Leaving long busy-wait loop.\n");
 
   sys_exit(0);
 }
@@ -86,6 +96,8 @@ static void __migration_test(void *d)
       tf->abort();
     }
 
+    td->task=t;
+
     r=sched_move_task_to_cpu(t,td->target_cpu);
     if( r ) {
       tf->printf(SERVER_ID "Can't move task %d to CPU %d: r=%d\n",
@@ -96,6 +108,43 @@ static void __migration_test(void *d)
 
   sleep(HZ/10);
 
+  /* Now change state for all remote tasks. */
+  tf->printf(SERVER_ID "Now put all remote tasks into sleep.\n");
+  for( i=0;i<NR_CPUS-1;i++ ) {
+    tf->printf(SERVER_ID "Putting into sleep task %d (CPU: %d)\n",
+               thread_data[i]->task->pid,
+               thread_data[i]->target_cpu);
+    r=sched_change_task_state(thread_data[i]->task,TASK_STATE_STOPPED);
+    if( r ) {
+      tf->printf(SERVER_ID "Can't change state of PID %d (CPU %d): r=%d\n",
+                 thread_data[i]->task->pid,
+                 thread_data[i]->target_cpu,r);
+      tf->failed();
+    } else {
+      tf->passed();
+    }
+  }
+
+  sleep(HZ*100);
+
+  /* Now restore state for all remote tasks. */
+  tf->printf(SERVER_ID "Now wake up all remote tasks.\n");
+  for( i=0;i<NR_CPUS-1;i++ ) {
+    tf->printf(SERVER_ID "Waking up task %d (CPU: %d)\n",
+               thread_data[i]->task->pid,
+               thread_data[i]->target_cpu);
+    r=sched_change_task_state(thread_data[i]->task,TASK_STATE_RUNNABLE);
+    if( r ) {
+      tf->printf(SERVER_ID "Can't change state of PID %d (CPU %d): r=%d\n",
+                 thread_data[i]->task->pid,
+                 thread_data[i]->target_cpu,r);
+      tf->failed();
+    } else {
+      tf->passed();
+    }
+  }
+
+  /* Resource cleanup */
   for(i=0;i<NR_CPUS-1;i++) {
     memfree(thread_data[i]);
   }
@@ -112,10 +161,11 @@ static void __test_thread(void *d)
   tctx->tf->printf(SERVER_ID "Calling migration tests.\n");
   __migration_test(tctx);
   tctx->tf->printf(SERVER_ID "Calling priority tests.\n");
-  __priority_test(tctx);
+  //__priority_test(tctx);
 
   tctx->tf->printf(SERVER_ID "All scheduler tests finished.\n");
-  tctx->tests_finished=true;
+  for(;;);
+  //tctx->tests_finished=true;
   sys_exit(0);
 }
 

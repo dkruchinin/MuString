@@ -350,97 +350,22 @@ status_t sleep(ulong_t ticks)
 
 #ifdef CONFIG_SMP
 
-static void __remote_task_state_change_action(void *data,ulong_t data_arg)
-{
-  task_t *task=(task_t*)data;
+//     apic_broadcast_ipi_vector(SCHEDULER_IPI_IRQ_VEC);
 
-  /* First, remove the task from the list. */
-  interrupts_disable();
-  LOCK_TASK_STRUCT(task);
-  if( list_node_is_bound( &task->migration_list ) ) {
-    list_del(&task->migration_list);
-  }
-  UNLOCK_TASK_STRUCT(task);
-  interrupts_enable();
-
-  sched_change_task_state(task,data_arg);
-
-  release_task_struct(task);
-}
-
-status_t schedule_remote_task_state_change(task_t *task,ulong_t state)
-{
-  long is;
-  gc_action_t *action=gc_allocate_action(__remote_task_state_change_action,
-                                        task,state);
-  bool go=false;
-  status_t r;
-
-  if( !action ) {
-    return -ENOMEM;
-  }
-
-  interrupts_save_and_disable(is);
-  LOCK_TASK_STRUCT(task);
-
-  if( task->cpu != cpu_id() ) {
-    if( !list_node_is_bound(&task->migration_list) ) {
-      ulong_t cpu=task->cpu;
-
-      spinlock_lock(&migration_locks[cpu]);
-      list_add2tail(&migration_actions[cpu], &action->l);
-      list_add2tail(&action->data_list_head, &task->migration_list);
-      spinlock_unlock(&migration_locks[cpu]);
-      go=true;
-    } else {
-      r=-EBUSY;
-    }
-  } else {
-    r=-EAGAIN;
-  }
-
-  UNLOCK_TASK_STRUCT(task);
-  interrupts_restore(is);
-
-  if( go ) {
-    apic_broadcast_ipi_vector(SCHEDULER_IPI_IRQ_VEC);
-    r=0;
-  } else {
-    gc_free_action(action);
-  }
-  return r;
-}
-
-/* NOTE: Task must be locked before calling this function ! */
-status_t schedule_migration(task_t *task,cpu_id_t cpu)
+status_t schedule_task_migration(migration_action_t *a,cpu_id_t cpu)
 {
   if( cpu < NR_CPUS ) {
-    if( !list_node_is_bound(&task->migration_list) ) {
-      /* Make one extra reference to prevent this task structure from
-       * being freed concurrently (via 'sys_exit()', for example.
-       */
-      grab_task_struct(task);
-
-      spinlock_lock(&migration_locks[cpu]);
-      list_add2tail(&migration_lists[cpu], &task->migration_list);
-      spinlock_unlock(&migration_locks[cpu]);
-      apic_broadcast_ipi_vector(SCHEDULER_IPI_IRQ_VEC);
-      return 0;
-    } else {
-      return -EBUSY;
-    }
+    spinlock_lock(&migration_locks[cpu]);
+    list_add2tail(&migration_lists[cpu], &a->l);
+    spinlock_unlock(&migration_locks[cpu]);
+    return 0;
+  } else {
+    return -EINVAL;
   }
-  return -EINVAL;
 }
 
 void do_smp_scheduler_interrupt_handler(void)
 {
-  if( !gc_threads[cpu_id()][MIGRATION_THREAD_IDX] ) {
-    panic( "Thread migration IPI: Can't launch migration thread for CPU #%d!\n",
-           cpu_id());
-  }
-  sched_change_task_state(gc_threads[cpu_id()][MIGRATION_THREAD_IDX],
-                          TASK_STATE_RUNNABLE);
 }
 
 void migration_thread(void *data)
@@ -450,34 +375,6 @@ void migration_thread(void *data)
     cpu_id_t cpu=cpu_id();
     list_node_t *n, *ns;
 
-    list_init_head(&private);
-    mytasks=&migration_lists[cpu];
-    spinlock_lock(&migration_locks[cpu]);
-
-    /* Quest N1: process all threads that were forced to migrate to this CPU.
-     */
-    if( !list_is_empty(mytasks) ) {
-      list_move2head(&private,mytasks);
-      spinlock_unlock(&migration_locks[cpu]);
-
-      list_for_each_safe(&private,n,ns) {
-        task_t *task=container_of(n,task_t,migration_list);
-
-        if( task->cpu != cpu ) {
-          panic( "Tasks's CPUs differ after migration ! %d:%d\n",
-                 cpu,task->cpu);
-        }
-
-        list_del(n);
-        sched_change_task_state(task,TASK_STATE_RUNNABLE);
-      }
-    } else {
-      spinlock_unlock(&migration_locks[cpu]);
-    }
-
-    /* Quest N2: Process asynchronous task-repated requests (like
-     * state change, priority change, etc ...
-     */
     mytasks=&migration_actions[cpu];
     list_init_head(&private);
     spinlock_lock(&migration_locks[cpu]);
@@ -487,16 +384,18 @@ void migration_thread(void *data)
       spinlock_unlock(&migration_locks[cpu]);
 
       list_for_each_safe(&private,n,ns) {
-        gc_action_t *action=container_of(n,gc_action_t,l);
+        migration_action_t *action=container_of(n,migration_action_t,l);
 
         list_del(n);
-        action->action(action->data,action->data_arg);
-        action->dtor(action);
+        kprintf( ">> Migrating task %d to CPU %d !\n",
+                 action->task->pid,
+                 cpu_id());
       }
     } else {
       spinlock_unlock(&migration_locks[cpu]);
     }
     sched_change_task_state(current_task(),TASK_STATE_SLEEPING);
+    kprintf( "CPU%d: Migration thread got woken up !\n",cpu_id() );
   }
 }
 

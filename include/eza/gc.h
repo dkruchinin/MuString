@@ -55,6 +55,13 @@ static inline void gc_init_action(gc_action_t *action,gc_actor_t actor,
   action->data_arg=data_arg;
 }
 
+static inline void gc_put_action(gc_action_t *action)
+{
+  if(action->dtor) {
+    action->dtor(action);
+  }
+}
+
 #define GC_THREAD_IDX  1
 #define MIGRATION_THREAD_IDX  0
 

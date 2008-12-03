@@ -33,7 +33,7 @@
 #include <ds/list.h>
 #include <eza/arch/preempt.h>
 #include <eza/task.h>
-
+#include <eza/event.h>
 
 /* Handler for extra check during the scheduling step.
  * If it returns true, target task will be rescheduled,
@@ -102,11 +102,14 @@ extern scheduler_t *get_default_scheduler(void);
 void schedule(void);
 
 /* Macros that deal with resceduling needs. */
-extern void arch_sched_set_current_need_resched(void);
-extern void arch_sched_reset_current_need_resched(void);
+//extern void arch_sched_set_current_need_resched(void);
+//extern void arch_sched_reset_current_need_resched(void);
+//extern void arch_sched_set_cpu_need_resched(cpu_id_t cpu);
 
 #define sched_set_current_need_resched() arch_sched_set_current_need_resched()
 #define sched_reset_current_need_resched() arch_sched_reset_current_need_resched()
+
+#define set_task_need_resched(t)  arch_sched_set_cpu_need_resched((t)->cpu)
 
 #define SYS_SCHED_CTL_SET_POLICY  0x0
 #define SYS_SCHED_CTL_GET_POLICY  0x1
@@ -130,10 +133,15 @@ status_t sleep(ulong_t ticks);
 
 #ifdef CONFIG_SMP
 
+typedef struct __migration_action_t {
+  task_t *task;
+  event_t e;
+  list_node_t l;
+} migration_action_t;
+
 #define CPU_TASK_REBALANCE_DELAY  HZ
 void migration_thread(void *data);
-status_t schedule_migration(task_t *task,cpu_id_t cpu);
-status_t schedule_remote_task_state_change(task_t *task,ulong_t state);
+status_t schedule_task_migration(migration_action_t *a,cpu_id_t cpu);
 
 #endif
 
@@ -146,8 +154,6 @@ static inline void release_task_struct(task_t *t)
 }
 
 #define cpu_affinity_ok(task,c) (task->cpu & (1<<c))
-
-
 
 #endif
 
