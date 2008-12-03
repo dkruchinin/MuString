@@ -4,7 +4,6 @@
 #include <eza/arch/types.h>
 #include <eza/spinlock.h>
 #include <eza/task.h>
-//#include <eza/scheduler.h>
 
 #define EVENT_OCCURED  0x1
 

@@ -54,6 +54,8 @@
 #include <eza/gc.h>
 #include <eza/arch/mm.h>
 
+#include <eza/bspinlock.h>
+
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
 };
@@ -99,6 +101,32 @@ static void main_routine_stage1(void)
   idle_loop();
 }
 
+static binded_spinlock_t block;
+
+static void lock_test()
+{
+  bool locked;
+
+  binded_spinlock_initialize(&block, cpu_id());
+
+  kprintf( "* Locking the lock.\n" );
+  //binded_spinlock_lock(&block);
+  kprintf( "    * Done ! Lock=0x%X\n",block.__lock );
+
+  locked=binded_spinlock_trylock(&block);
+  kprintf( "* Trying to lock: %d\n",locked);
+
+  if( locked ) {
+    kprintf( "    * Done ! Lock=0x%X\n",block.__lock );
+//    kprintf( "* Locking the lock one more time.\n" );
+//    binded_spinlock_lock(&block);
+//    kprintf( "    * Done ! Lock=0x%X\n",block.__lock );
+  }
+
+  kprintf( "------ FINISHED !\n" );
+  for(;;);
+}
+
 void main_routine(void) /* this function called from boostrap assembler code */
 {
   kconsole_t *kcons = default_console();
@@ -116,6 +144,9 @@ void main_routine(void) /* this function called from boostrap assembler code */
   kprintf("[LW] Initialized CPU vectors.\n");
 
   mm_init();
+
+  lock_test();
+
   slab_allocator_init();
 
   initialize_scheduler();

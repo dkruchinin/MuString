@@ -23,6 +23,8 @@
 #include <test.h>
 #include <mm/slab.h>
 #include <eza/errno.h>
+#include <eza/spinlock.h>
+#include <eza/arch/spinlock.h>
 
 #define TEST_ID "Scheduler tests"
 #define SERVER_ID "[Migration test] "
@@ -164,8 +166,20 @@ static void __priority_test(void *d)
 static void __test_thread(void *d)
 {
   sched_test_ctx_t *tctx=(sched_test_ctx_t*)d;
+  spinlock_t lock;
 
+  /*
+  spinlock_initialize(&lock);
   tctx->tf->printf(SERVER_ID "Calling migration tests.\n");
+  spinlock_lock(&lock);
+  tctx->tf->printf( "spinlock_trylock() against locked spinlock: %d\n",
+                     spinlock_trylock(&lock) );
+  tctx->tf->printf( "Unlocking spinlock.\n" );
+  spinlock_unlock(&lock);
+  tctx->tf->printf( "spinlock_trylock() against unlocked spinlock: %d\n",
+                     spinlock_trylock(&lock) );
+  */
+  
   __migration_test(tctx);
   tctx->tf->printf(SERVER_ID "Calling priority tests.\n");
   //__priority_test(tctx);

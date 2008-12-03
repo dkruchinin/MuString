@@ -379,12 +379,7 @@ static void def_schedule(void)
   eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
   task_t *current = current_task();
   task_t *next;
-  bool need_switch,ints_enabled,arrays_switched;
-
-  if( sched_verbose ) {
-    kprintf( "ENTERING SCHEDULE STEP (%d).\n", cpu_id() );
-  }
-//  __READ_TIMESTAMP_COUNTER(__t1);
+  bool need_switch,ints_enabled,arrays_switched=false;
 
   /* From this moment we are in atomic context until 'arch_activate_task()'
    * finishes its job or until interrupts will be enabled in no context
@@ -395,11 +390,8 @@ static void def_schedule(void)
     interrupts_disable();
   }
 
-  arrays_switched=false;
-
-  LOCK_TASK_STRUCT(current);
+  __LOCK_CPU_SCHED_DATA(sched_data);
   sched_reset_current_need_resched();
-  LOCK_CPU_SCHED_DATA(sched_data);
 
 get_next_task:
   next = __get_most_prioritized_task(sched_data);
@@ -431,25 +423,17 @@ get_next_task:
     need_switch = false;
   }
 
-  UNLOCK_CPU_SCHED_DATA(sched_data);
   if( next->state == TASK_STATE_RUNNABLE ) {
     next->state = TASK_STATE_RUNNING;
   }
-
-  UNLOCK_TASK_STRUCT(current);
-
-  if( sched_verbose1 && cpu_id() ) {
-    kprintf( "** [%d] RESCHED TASK: PID: %d, NEED SWITCH: %d, NEXT: %d , TS: %d **\n",
-             cpu_id(), current_task()->pid, need_switch,
-             next->pid, EZA_TASK_SCHED_DATA(next)->time_slice );
-  }
+  __UNLOCK_CPU_SCHED_DATA(sched_data);
 
   if( need_switch ) {
     arch_activate_task(next);
   }
 
   if( ints_enabled ) {
-      interrupts_enable();
+    interrupts_enable();
   }
 }
 

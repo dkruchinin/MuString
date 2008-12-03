@@ -32,6 +32,7 @@
 #include <eza/bits.h>
 #include <eza/arch/bits.h>
 #include <eza/spinlock.h>
+#include <eza/bspinlock.h>
 
 #define eza_sched_type_t uint64_t
 #define EZA_SCHED_PRIO_GRANULARITY 64
@@ -156,5 +157,8 @@ static inline task_t *__get_most_prioritized_task(eza_sched_cpudata_t *sched_dat
     spinlock_unlock(&d->lock)
 
 #define EZA_TASK_SCHED_DATA(t) ((eza_sched_taskdata_t *)t->sched_data)
+
+#define __LOCK_CPU_SCHED_DATA(d)  binded_spinlock_lock(d)
+#define __UNLOCK_CPU_SCHED_DATA(d)  binded_spinlock_unlock(d)
 
 #endif
