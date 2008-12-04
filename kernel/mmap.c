@@ -51,6 +51,8 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
   task_t *task;
   int _flags = MAP_USER | MAP_EXEC;
 
+	kprintf("Mapping offset %p at %p address\n", offset, addr);
+
 #if 0
   mm_pool_t *pool;
 #endif
@@ -70,7 +72,7 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
 #if 0
     kprintf("mmap() no fd\n");
 #endif
-    if(flags & MMAP_PHYS && offset) {
+    if(flags & MMAP_PHYS) {
       /* TODO: ak, check rights */
 #if 0
       kprintf("mmap() yummie fuck\n");

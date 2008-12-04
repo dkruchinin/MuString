@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
+ * (c) Copyright 2008 Dmitry Gromada <gromada@jarios.org>
  *
  * eza/amd64/smp.c: SMP support on amd64 architecture.
  *
@@ -28,40 +29,43 @@
 #include <eza/arch/types.h>
 #include <eza/arch/asm.h>
 #include <eza/arch/apic.h>
-#include <eza/arch/ioapic.h>
 #include <eza/arch/mm_types.h>
 #include <eza/arch/interrupt.h>
 #include <eza/arch/gdt.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 #include <mlibc/string.h>
+#include <eza/smp.h>
 #include <eza/arch/smp.h>
 
 #ifdef CONFIG_SMP
 
-/*
- * TODO: add acpi detection for smp
- *       it should follows from multiprocessor table
- */
-
-void arch_smp_init(void)
+void arch_smp_init(int ncpus)
 {
   ptr_16_64_t gdtr;
   int i=1,r=0;
 
   /* set BIOS area to don't make a POST on INIT signal */
-    /*  outb(0x70, 0xf); 
-      outb(0x71, 0xa); */
-
+  outb(0x70, 0xf); 
+  outb(0x71, 0xa);
 
   /* ok setup new gdt */
-  while(i<NR_CPUS) {
+  while(i<ncpus) {
     protected_ap_gdtr.limit=GDT_ITEMS * sizeof(struct __descriptor);
+		memcpy(gdt[i], gdt[0], sizeof(descriptor_t) * GDT_ITEMS);
     protected_ap_gdtr.base=((uintptr_t)&gdt[i][0]-0xffffffff80000000);
     gdtr.base=(uint64_t)&gdt[i];
     
-    r=apic_send_ipi_init(i);
-    atom_usleep(1000);
+    if (apic_send_ipi_init(i))
+			panic("Can't send init interrupt\n");
+		
+		/* wait maximum 1 second for the start of the next cpu */
+		for (r = 0; (r < 100) && !is_cpu_online(i); r++)
+			atom_usleep(10000);
+
+		if (r == 100)
+			panic("CPU %d did not start!\n", i);
+
     i++;
   }
 }

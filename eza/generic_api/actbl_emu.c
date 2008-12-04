@@ -13,26 +13,24 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
- * 
- * Originally written by MadTirra <madtirra@jarios.org>
- * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  *
- * include/kernel/mman.h: some hardcoded values for mmap syscall
+ * (c) Copyright 2006,2007,2008 Jari OS Core Team <http://jarios.org>
+ * (c) Copyright 2008 Dmitry Gromada <gromada@jarios.org>
  *
+ * Fake acpi table parser to run the kernel on an emulator
  */
 
-#ifndef __KERNEL_MMAN_H__
-#define __KERNEL_MMAN_H__
-
 #include <eza/arch/types.h>
+#include <eza/actbl.h>
 
-#define NOFD  (1 << 24)
+int get_acpi_lapic_info(uint32_t *lapic_base, uint8_t *lapic_ids, int size, int *total_apics)
+{
+	int i;
 
-#define MMAP_NONCACHABLE  0x01
-#define MMAP_RDONLY       0x02
-#define MMAP_RW           0x04
-#define MMAP_PHYS         0x08
+	*total_apics = size;
 
+	for (i = 0; i < size; i++)
+		lapic_ids[i] = i;
 
-#endif /* __KERNEL_MMAN_H__ */
-
+	return size;
+}

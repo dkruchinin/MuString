@@ -1,3 +1,5 @@
+-include ../../config
+
 LIBEZA_OBJS=eza/generic_api/main.o \
 	eza/generic_api/kconsole.o \
 	eza/generic_api/vga.o \
@@ -23,4 +25,10 @@ LIBEZA_OBJS=eza/generic_api/main.o \
 	eza/generic_api/def_actions.o  \
 	eza/generic_api/exit.o \
 	eza/generic_api/gc.o \
-    eza/generic_api/mutex.o
+  eza/generic_api/mutex.o
+
+ifeq ($(CONFIG_EMU), y)
+	LIBEZA_OBJS+=eza/generic_api/actbl_emu.o
+else
+	LIBEZA_OBJS+=eza/generic_api/actbl.o
+endif

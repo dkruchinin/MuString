@@ -169,10 +169,10 @@ void main_smpap_routine(void)
    * contexts, etc.
    */
   arch_activate_idle_task(cpu);
-  cpu++;
+	cpu++;
 
   /* Continue CPU initialization in new context. */
-  main_smpap_routine_stage1(1);
+  main_smpap_routine_stage1(cpu - 1);
 }
 #endif
 

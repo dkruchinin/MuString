@@ -34,6 +34,7 @@
 #define ACPI_TABSIGN_LEN			8 /* the length of the table signature */
 
 #define LAPIC_TABLE_TYPE 0
+#define LAPIC_ENABLED 1
 
 struct acpi_rsdp {
 	char signature[8];
@@ -83,14 +84,16 @@ typedef struct __madt_lapic {
 } madt_lapic_t;
 
 /* 
- * get local apic description structures from the acpi configuration space
+ * get local apics information from the acpi configuration space
  * 
- * @[out] buf - buffer to store found local apic structures
- * @size - size of the buffer
+ * @[out] lapic_base: location to store base address of the local apic
+ * @[out] lapic_ids: buffer to store found enabled local apic ids
+ * @size: size of the buffer
+ * @[put] total_apics:  output location to store the total number of enabled apics
  *
- * Return the number (non negative) of stored local apic structures,
- * or -1 if some of acpi tables is broken 
+ * Return the number found local apics on success,
+ *	or negated error code if some error occurs
  */
-int get_acpi_lapic_structs(void *buf, uint32_t size);
+int get_acpi_lapic_info(uint32_t *lapic_base, uint8_t *apic_ids, int size, int *total_apics);
 
 #endif
