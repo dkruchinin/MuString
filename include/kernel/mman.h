@@ -28,10 +28,10 @@
 
 #define NOFD  (1 << 24)
 
-#define MMAP_NONCACHABLE  0x02
-#define MMAP_RDONLY       0x04
-#define MMAP_RW           0x08
-#define MMAP_PHYS         0x0f
+#define MMAP_NONCACHABLE  0x01
+#define MMAP_RDONLY       0x02
+#define MMAP_RW           0x04
+#define MMAP_PHYS         0x08
 
 
 #endif /* __KERNEL_MMAN_H__ */

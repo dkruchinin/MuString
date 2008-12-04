@@ -2,13 +2,13 @@
 #include <eza/def_actions.h>
 #include <config.h>
 
-static percpu_def_actions_t cpu_actions[NR_CPUS];
+static percpu_def_actions_t cpu_actions[CONFIG_NRCPUS];
 
 void initialize_deffered_actions(void)
 {
   ulong_t i;
 
-  for(i=0;i<NR_CPUS;i++) {
+  for(i=0;i<CONFIG_NRCPUS;i++) {
     percpu_def_actions_t *a=&cpu_actions[i];
 
     a->flags=0;

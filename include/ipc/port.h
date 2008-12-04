@@ -62,7 +62,7 @@ typedef struct __ipc_port_t {
   list_head_t messages;
   ipc_port_message_t **message_ptrs;
   task_t *owner;
-  wait_queue_t waitqueue;
+  wqueue_t waitqueue;
 } ipc_port_t;
 
 typedef struct __port_msg_info {

@@ -109,7 +109,7 @@ status_t sys_port_send(ulong_t channel,ulong_t flags,
   if( !valid_user_address_range((ulong_t)snd_buf,snd_size) ) {
     return -EFAULT;
   }
-  
+
   if( !trusted_task(caller) ) {
     if( (flags & UNTRUSTED_MANDATORY_FLAGS) != UNTRUSTED_MANDATORY_FLAGS ) {
       return -EPERM;
@@ -146,7 +146,7 @@ status_t sys_port_send(ulong_t channel,ulong_t flags,
 
 put_port:
   __ipc_put_port(port);
-put_channel:
+  put_channel:
   ipc_put_channel(c);
   return r;
 }

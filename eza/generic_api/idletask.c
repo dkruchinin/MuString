@@ -43,10 +43,21 @@
 #include <eza/gc.h>
 #include <ipc/gen_port.h>
 #include <ipc/channel.h>
-#include <test.h>
 
-task_t *idle_tasks[MAX_CPUS];
+#ifdef CONFIG_TEST
+#include <test.h>
+#endif
+
+
+task_t *idle_tasks[CONFIG_NRCPUS];
 #define STEP 600
+#define TICKS_TO_WAIT 300
+
+ulong_t syscall_counter = 0;
+
+task_t *server_task;
+status_t server_port,server_port2,server_port3;
+
 
 void idle_loop(void)
 {

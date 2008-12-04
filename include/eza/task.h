@@ -60,6 +60,7 @@
 #define LOCK_TASK_MEMBERS(t) spinlock_lock(&t->member_lock)
 #define UNLOCK_TASK_MEMBERS(t) spinlock_unlock(&t->member_lock)
 
+
 typedef uint32_t time_slice_t;
 
 typedef enum __task_creation_flag_t {
@@ -79,6 +80,7 @@ typedef enum __task_state {
   TASK_STATE_SUSPENDED = 6,
 } task_state_t;
 
+typedef uint32_t priority_t;
 typedef uint32_t cpu_array_t;
 
 #define CPU_AFFINITY_ALL_CPUS 0
@@ -87,6 +89,12 @@ struct __scheduler;
 struct __task_ipc;
 struct __userspace_events_data;
 struct __task_ipc_priv;
+struct __task_mutex_locks;
+
+/* task flags */
+typedef enum __task_flags {
+  TF_USPC_BLOCKED = 0x01, /**< Block facility to change task's static priority outside the kernel **/
+} task_flags_t;
 
 /* Abstract object for scheduling. */
 typedef struct __task_struct {
@@ -97,12 +105,12 @@ typedef struct __task_struct {
   cpu_id_t cpu;
   task_state_t state;
   cpu_array_t cpu_affinity_mask;
-  priority_t static_priority, priority;
+  priority_t static_priority, priority, orig_priority;
 
   kernel_stack_t kernel_stack;
   page_frame_t *page_dir;
   list_node_t pid_list;
-  ulong_t flags;
+  task_flags_t flags;
 
   spinlock_t lock;
 
@@ -121,15 +129,18 @@ typedef struct __task_struct {
   struct __task_ipc *ipc;
   struct __task_ipc_priv *ipc_priv;
 
+  struct __task_mutex_locks *active_locks;
+
   /* Limits-related stuff. */
   task_limits_t *limits;
-
+  
   /* Lock for protecting changing and outer access the following fields:
    *   ipc,ipc_priv,limits
    */
   spinlock_t member_lock;
 
   struct __userspace_events_data *uspace_events;
+    
   /* Arch-dependent context is located here */
   uint8_t arch_context[256];
 } task_t;

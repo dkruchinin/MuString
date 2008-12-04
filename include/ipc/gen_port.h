@@ -65,7 +65,7 @@ typedef struct __ipc_gen_port {
   spinlock_t lock;
   atomic_t use_count,own_count;
   ulong_t avail_messages,total_messages;
-  wait_queue_t waitqueue;
+  wqueue_t waitqueue;
 
   ipc_port_msg_ops_t *msg_ops;
   void *data_storage;
@@ -93,8 +93,8 @@ extern ipc_port_msg_ops_t def_port_msg_ops;
 ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf,
                                                  ulong_t snd_size);
 poll_event_t ipc_port_get_pending_events(ipc_gen_port_t *port);
-void ipc_port_add_poller(ipc_gen_port_t *port,task_t *poller, wait_queue_task_t *w);
-void ipc_port_remove_poller(ipc_gen_port_t *port,wait_queue_task_t *w);
+void ipc_port_add_poller(ipc_gen_port_t *port,task_t *poller, wqueue_task_t *w);
+void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w);
 
 #define IPC_NB_MESSAGE_MAXLEN  (512-sizeof(ipc_port_message_t))
 

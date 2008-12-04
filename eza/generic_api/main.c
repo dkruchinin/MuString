@@ -87,7 +87,7 @@ static void main_routine_stage1(void)
 
   interrupts_enable();
   initialize_swks();
-  swks_add_version_info();
+  //swks_add_version_info();
 
   /* OK, we can proceed. */
   spawn_percpu_threads();
@@ -112,7 +112,7 @@ void main_routine(void) /* this function called from boostrap assembler code */
   install_fault_handlers();
   initialize_irqs();
   kcons->enable();
-  print_kernel_version_info();
+  //print_kernel_version_info();
   kprintf("[MB] Modules: %d\n",init.c);
   kprintf("[LW] Initialized CPU vectors.\n");
 
@@ -173,10 +173,10 @@ void main_smpap_routine(void)
    * contexts, etc.
    */
   arch_activate_idle_task(cpu);
-  cpu++;
+	cpu++;
 
   /* Continue CPU initialization in new context. */
-  main_smpap_routine_stage1(1);
+  main_smpap_routine_stage1(cpu - 1);
 }
 #endif
 

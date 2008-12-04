@@ -39,7 +39,7 @@
 #include <ipc/gen_port.h>
 
 typedef struct __poll_kitem {
-  wait_queue_task_t qtask;
+  wqueue_task_t qtask;
   ipc_gen_port_t *port;
   poll_event_t events,revents;
 } poll_kitem_t;
@@ -49,7 +49,7 @@ struct __plazy_data {
   ulong_t nqueues;
 };
 
-static bool poll_lazy_sched_handler(void *data)
+static bool poll_deferred_sched_handler(void *data)
 {
   struct __plazy_data *p=(struct __plazy_data*)data;
   return atomic_get(&p->task->ipc_priv->pstats.active_queues)==p->nqueues;
@@ -59,7 +59,7 @@ status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
 {
   status_t nevents;
   task_t *caller=current_task();
-  ulong_t size=nfds*sizeof(wait_queue_task_t);
+  ulong_t size=nfds*sizeof(wqueue_task_t);
   poll_kitem_t *pkitems;
   bool use_slab=(size<=512);
   ulong_t i;
@@ -130,8 +130,8 @@ status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
   /* Sleep a little bit. */
   ldata.task=caller;
   ldata.nqueues=nfds;
-  sched_change_task_state_lazy(caller,TASK_STATE_SLEEPING,
-                               poll_lazy_sched_handler,&ldata);
+  sched_change_task_state_deferred(caller,TASK_STATE_SLEEPING,
+                                  poll_deferred_sched_handler,&ldata);
 
   /* Count the resulting number of pending events. */
   nevents=0;

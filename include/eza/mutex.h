@@ -29,29 +29,30 @@
 #include <eza/task.h>
 #include <eza/arch/types.h>
 
+/* TODO DK: implement priority inheritance and priority ceiling mutex protocol */
+
+/**
+ * @brief General mutex structure
+ *
+ */
 typedef struct __mutex {
   spinlock_t lock;
-  wait_queue_t wq;
-  struct {
-    task_t *task;
-    uint32_t priority;
-  } executer;
-  uint32_t max_prio;
+  wqueue_t wq;
+  task_t *executer;
 } mutex_t;
-
-#define MUTEX_DEFINE(name)                      \
-  mutex_t (name) = MUTEX_INITIALIZE(name)
-
-#define MUTEX_INITIALIZE(name)                              \
-  {   .lock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V),   \
-      .wq = WAITQUEUE_INITIALIZE((name).wq),                \
-      .executer = { NULL, TASK_PRIO_INVAL, },               \
-      .max_prio = TASK_PRIO_INVAL, }
 
 static inline bool mutex_is_locked(mutex_t *mutex)
 {
-  return !!mutex->executer.task;
+  return !!mutex->executer;
 }
+
+#define MUTEX_DEFINE(name)                      \
+    mutex_t (name) = MUTEX_INITIALIZE(name)
+
+#define MUTEX_INITIALIZE(name)                  \
+    {       .lock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V),  \
+            .wq = WQUEUE_INITIALIZE_PRIO((name).wq),             \
+            .executer = NULL,   }
 
 void mutex_initialize(mutex_t *mutex);
 void mutex_lock(mutex_t *mutex);

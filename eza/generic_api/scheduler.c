@@ -22,6 +22,7 @@
  *
  */
 
+#include <config.h>
 #include <mlibc/kprintf.h>
 #include <eza/scheduler.h>
 #include <eza/kernel.h>
@@ -63,8 +64,8 @@ static scheduler_t *active_scheduler = NULL;
 #define LOCK_SCHEDULER_LIST spinlock_lock(&scheduler_lock)
 #define UNLOCK_SCHEDULER_LIST spinlock_unlock(&scheduler_lock)
 
-static spinlock_t migration_locks[NR_CPUS];
-static list_head_t migration_actions[NR_CPUS];
+static spinlock_t migration_locks[CONFIG_NRCPUS];
+static list_head_t migration_actions[CONFIG_NRCPUS];
 
 static void initialize_sched_internals(void)
 {
@@ -88,7 +89,7 @@ void initialize_scheduler(void)
 
   initialize_idle_tasks();
 
-  for(i=0;i<NR_CPUS;i++) {
+  for(i=0;i<CONFIG_NRCPUS;i++) {
     spinlock_initialize(&migration_locks[i]);
     list_init_head(&migration_actions[i]);
   }
@@ -167,12 +168,12 @@ status_t sched_change_task_state(task_t *task,task_state_t state)
   return active_scheduler->change_task_state(task,state);
 }
 
-status_t sched_change_task_state_lazy(task_t *task,task_state_t state,
-                                      lazy_sched_handler_t handler,void *data)
+status_t sched_change_task_state_deferred(task_t *task,task_state_t state,
+                                         deferred_sched_handler_t handler,void *data)
 {
   if(active_scheduler != NULL &&
-     active_scheduler->change_task_state_lazy != NULL) {
-    return active_scheduler->change_task_state_lazy(task,state,handler,data);
+     active_scheduler->change_task_state_deferred != NULL) {
+    return active_scheduler->change_task_state_deferred(task,state,handler,data);
   }
   return -ENOTTY;
 }
@@ -289,12 +290,16 @@ status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg)
 
   if(cmd > SCHEDULER_MAX_COMMON_IOCTL) {
     return  -EINVAL;
-  }
+  }  
 
-  target = pid_to_task(pid);
+  target = pid_to_task(pid);  
   if( target == NULL ) {
     return -ESRCH;
   }
+  
+  /* if TF_USPC_BLOCKED flag is set, task static priority can not be changed by user */
+  if ((cmd == SYS_SCHED_CTL_SET_PRIORITY) && (target->flags & TF_USPC_BLOCKED))
+      return -EAGAIN;
 
   if( target->scheduler == NULL ) {
     r = -ENOTTY;
@@ -339,8 +344,8 @@ status_t sleep(ulong_t ticks)
     if( !add_timer(&timer) ) {
       return -EAGAIN;
     }
-    sched_change_task_state_lazy(current_task(),TASK_STATE_SLEEPING,
-                                 __sleep_timer_lazy_routine,&timer);
+    sched_change_task_state_deferred(current_task(),TASK_STATE_SLEEPING,
+                                     __sleep_timer_lazy_routine,&timer);
 
     delete_timer(&timer);
   }
@@ -348,10 +353,11 @@ status_t sleep(ulong_t ticks)
 }
 
 #ifdef CONFIG_SMP
+#include <eza/arch/apic.h>
 
 status_t schedule_task_migration(migration_action_t *a,cpu_id_t cpu)
 {
-  if( cpu < NR_CPUS ) {
+  if( cpu < CONFIG_NRCPUS ) {
     spinlock_lock(&migration_locks[cpu]);
     list_add2tail(&migration_actions[cpu], &a->l);
     spinlock_unlock(&migration_locks[cpu]);

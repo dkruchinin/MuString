@@ -97,10 +97,8 @@ int mm_map_entries(pde_t *pde_start, pde_idx_t entries,
   while (entries--) {
     ASSERT(!pgt_pde_is_mapped(pde));
     iter_next(pfi);
-    if (!iter_isrunning(pfi)) {
-      kprintf("there!\n");
+    if (!iter_isrunning(pfi))
       return -EINVAL;
-    }
 
     pgt_pde_save(pde++, pfi->pf_idx, flags);
   }
@@ -162,4 +160,10 @@ int __mmap_pages(page_frame_t *dir, mmap_info_t *minfo, pdir_level_t level)
   }
 
   return ret;
+}
+
+int __unmap_pages(page_frame_t *dir, mmap_info_t *minfo, pdir_level_t level)
+{
+  /* TODO DK: implement */
+  return 0;
 }

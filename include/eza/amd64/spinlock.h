@@ -26,6 +26,7 @@
 #ifndef __AMD64_SPINLOCK_H__
 #define __AMD64_SPINLOCK_H__
 
+#include <config.h>
 #include <eza/arch/types.h>
 #include <eza/arch/mbarrier.h>
 #include <eza/arch/bitwise.h>
