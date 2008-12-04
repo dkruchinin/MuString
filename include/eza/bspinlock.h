@@ -7,28 +7,28 @@
 #include <eza/arch/scheduler.h>
 #include <eza/arch/bspinlock.h>
 
-#define binded_spinlock_initialize(b,cpu)       \
+#define bound_spinlock_initialize(b,cpu)       \
   do {                                          \
     (b)->__lock=__SPIN_LOCK_UNLOCKED;           \
     (b)->__cpu=cpu;                             \
   } while(0)
 
-#define binded_spinlock_lock_cpu(b,cpu)         \
-  arch_binded_spinlock_lock_cpu(b,cpu)
+#define bound_spinlock_lock_cpu(b,cpu)         \
+  arch_bound_spinlock_lock_cpu(b,cpu)
 
-#define binded_spinlock_unlock_cpu(b,cpu)       \
-  arch_binded_spinlock_unlock_cpu(b,cpu)
+#define bound_spinlock_unlock_cpu(b,cpu)       \
+  arch_bound_spinlock_unlock_cpu(b,cpu)
 
-#define binded_spinlock_lock(b)                 \
-  binded_spinlock_lock_cpu(b,cpu_id())
+#define bound_spinlock_lock(b)                 \
+  bound_spinlock_lock_cpu(b,cpu_id())
 
-#define binded_spinlock_unlock(b)               \
-  binded_spinlock_unlock_cpu(b,cpu_id())
+#define bound_spinlock_unlock(b)               \
+  bound_spinlock_unlock_cpu(b,cpu_id())
 
-#define binded_spinlock_trylock_cpu(b,cpu)      \
-  arch_binded_spinlock_trylock_cpu(b,cpu)
+#define bound_spinlock_trylock_cpu(b,cpu)      \
+  arch_bound_spinlock_trylock_cpu(b,cpu)
 
-#define binded_spinlock_trylock(b)              \
-  binded_spinlock_trylock_cpu(b,cpu_id())
+#define bound_spinlock_trylock(b)              \
+  bound_spinlock_trylock_cpu(b,cpu_id())
 
 #endif

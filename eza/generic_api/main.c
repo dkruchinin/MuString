@@ -54,7 +54,7 @@
 #include <eza/gc.h>
 #include <eza/arch/mm.h>
 
-#include <eza/bspinlock.h>
+//#include <eza/bspinlock.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
@@ -107,13 +107,14 @@ static void lock_test()
 {
   bool locked;
 
-  binded_spinlock_initialize(&block, cpu_id());
+  bound_spinlock_initialize(&block, 1);
 
   kprintf( "* Locking the lock.\n" );
-  //binded_spinlock_lock(&block);
+  block.__lock=1;
+//  binded_spinlock_lock(&block);
   kprintf( "    * Done ! Lock=0x%X\n",block.__lock );
 
-  locked=binded_spinlock_trylock(&block);
+  locked=bound_spinlock_trylock_cpu(&block,cpu_id());
   kprintf( "* Trying to lock: %d\n",locked);
 
   if( locked ) {
