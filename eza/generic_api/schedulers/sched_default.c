@@ -816,15 +816,10 @@ static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
     list_init_node(&t.l);
     event_set_task(&t.e,current_task());
 
-    kprintf( "++ Moving task: %p\n",task );
     stop_task(task);
-    kprintf( "++ Done !\n" );
 
     schedule_task_migration(&t,cpu);
-    kprintf( "++ Migration task: %p, CPU: %d\n",
-             migration_thread(cpu),cpu );
     activate_task(migration_thread(cpu));
-    kprintf( "++ Migration task activated.\n" );
     event_yield(&t.e);
   }
 

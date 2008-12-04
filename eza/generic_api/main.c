@@ -84,7 +84,7 @@ static void main_routine_stage1(void)
    * receive interrups from the other CPUs via LAPIC upon unleashing
    * the other CPUs.
    */
-  for(;;);
+
   interrupts_enable();
   initialize_swks();
   swks_add_version_info();
@@ -98,18 +98,6 @@ static void main_routine_stage1(void)
            current_task(), cpu_id() );
 
   idle_loop();
-}
-
-bound_spinlock_t block;
-
-void lock_test(void)
-{
-  bound_spinlock_initialize(&block,1);
-  kprintf( "* LOCK: cpu=%d, lock:0x%X\n",block.__cpu,block.__lock);
-  kprintf( "* Trying to lock: %d\n",
-           bound_spinlock_trylock_cpu(&block,1) );
-  kprintf( "* LOCK: cpu=%d, lock:0x%X\n",block.__cpu,block.__lock);
-  for(;;);
 }
 
 void main_routine(void) /* this function called from boostrap assembler code */

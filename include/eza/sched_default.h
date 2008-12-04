@@ -164,10 +164,6 @@ static inline task_t *__get_most_prioritized_task(eza_sched_cpudata_t *sched_dat
 static inline eza_sched_cpudata_t *get_task_sched_data_locked(task_t *task,
                                                               ulong_t *is,bool cyclic)
 {
-  kprintf( "> Locking data for %d (CPU: %d). Lock CPU: %d, My CPU: %d, Lock: 0x%X\n",
-           task->pid,task->cpu,
-           sched_cpu_data[task->cpu]->__lock.__cpu,
-           cpu_id(),sched_cpu_data[task->cpu]->__lock.__lock);
   do {
     ulong_t cpu=task->cpu;
     eza_sched_cpudata_t *cdata=sched_cpu_data[cpu];
@@ -175,8 +171,6 @@ static inline eza_sched_cpudata_t *get_task_sched_data_locked(task_t *task,
     interrupts_save_and_disable(*is);
     if( bound_spinlock_trylock_cpu(&cdata->__lock,cpu_id() ) ) {
       if( task->cpu == cpu ) {
-          kprintf( "   > Data for %d (CPU: %d) was locked.\n",
-                   task->pid,task->cpu);
         return cdata;
       } else {
         /* No luck: someone has changed task's CPU concurrently. */
