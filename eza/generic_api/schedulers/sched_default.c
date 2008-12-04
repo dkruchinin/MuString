@@ -542,23 +542,6 @@ out_unlock:
   return r;
 }
 
-static inline eza_sched_cpudata_t *__task_cpu_data_locked(task_t *t,
-                                                          ulong_t *is)
-{
-  while(1) {
-    cpu_id_t cpu=t->cpu;
-    eza_sched_cpudata_t *d=sched_cpu_data[cpu];
-
-    interrupts_save_and_disable(*is);
-    spinlock_lock(&d->lock);
-    if( t->cpu == cpu ) {
-      return d;
-    }
-    spinlock_unlock(&d->lock);
-    interrupts_restore(*is);
-  }
-}
-
 static inline void __reschedule_task(task_t *t)
 {
   set_task_need_resched(t);
@@ -580,7 +563,7 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
     h=NULL;
   }
 
-  sched_data=__task_cpu_data_locked(task,&is);
+  sched_data=get_task_sched_data_locked(task,&is,true);
   if( h != NULL && !h(data) ) {
     kprintf( "[*] Breaking lazy scheduling loop.\n" );
     goto out_unlock;
@@ -633,7 +616,7 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
   }
 
 out_unlock:
-  UNLOCK_CPU_SCHED_DATA(sched_data);
+  __UNLOCK_CPU_SCHED_DATA(sched_data);
   interrupts_restore(is);
   cond_reschedule();
   return r;
@@ -833,9 +816,15 @@ static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
     list_init_node(&t.l);
     event_set_task(&t.e,current_task());
 
+    kprintf( "++ Moving task: %p\n",task );
     stop_task(task);
+    kprintf( "++ Done !\n" );
+
     schedule_task_migration(&t,cpu);
+    kprintf( "++ Migration task: %p, CPU: %d\n",
+             migration_thread(cpu),cpu );
     activate_task(migration_thread(cpu));
+    kprintf( "++ Migration task activated.\n" );
     event_yield(&t.e);
   }
 

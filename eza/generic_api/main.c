@@ -54,8 +54,6 @@
 #include <eza/gc.h>
 #include <eza/arch/mm.h>
 
-//#include <eza/bspinlock.h>
-
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
 };
@@ -86,6 +84,7 @@ static void main_routine_stage1(void)
    * receive interrups from the other CPUs via LAPIC upon unleashing
    * the other CPUs.
    */
+  for(;;);
   interrupts_enable();
   initialize_swks();
   swks_add_version_info();
@@ -101,30 +100,15 @@ static void main_routine_stage1(void)
   idle_loop();
 }
 
-static binded_spinlock_t block;
+bound_spinlock_t block;
 
-static void lock_test()
+void lock_test(void)
 {
-  bool locked;
-
-  bound_spinlock_initialize(&block, 1);
-
-  kprintf( "* Locking the lock.\n" );
-  block.__lock=1;
-//  binded_spinlock_lock(&block);
-  kprintf( "    * Done ! Lock=0x%X\n",block.__lock );
-
-  locked=bound_spinlock_trylock_cpu(&block,cpu_id());
-  kprintf( "* Trying to lock: %d\n",locked);
-
-  if( locked ) {
-    kprintf( "    * Done ! Lock=0x%X\n",block.__lock );
-//    kprintf( "* Locking the lock one more time.\n" );
-//    binded_spinlock_lock(&block);
-//    kprintf( "    * Done ! Lock=0x%X\n",block.__lock );
-  }
-
-  kprintf( "------ FINISHED !\n" );
+  bound_spinlock_initialize(&block,1);
+  kprintf( "* LOCK: cpu=%d, lock:0x%X\n",block.__cpu,block.__lock);
+  kprintf( "* Trying to lock: %d\n",
+           bound_spinlock_trylock_cpu(&block,1) );
+  kprintf( "* LOCK: cpu=%d, lock:0x%X\n",block.__cpu,block.__lock);
   for(;;);
 }
 
@@ -145,8 +129,6 @@ void main_routine(void) /* this function called from boostrap assembler code */
   kprintf("[LW] Initialized CPU vectors.\n");
 
   mm_init();
-
-  lock_test();
 
   slab_allocator_init();
 
@@ -177,6 +159,7 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
   sched_add_cpu(cpu);
 
   interrupts_enable();
+
   spawn_percpu_threads();
 
   /* Entering idle loop. */

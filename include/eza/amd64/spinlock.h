@@ -149,14 +149,14 @@ static inline void __arch_bound_spinlock_lock_cpu(bound_spinlock_t *l,
                                                   ulong_t cpu)
 {
   __asm__ __volatile__(
-    "cmpq %0,%2\n"
+    "cmp %0,%2\n"
     "jne 101f\n"
     /* Owner is accessing the lock. */
-    __LOCK_PREFIX "incq %1\n"
+    __LOCK_PREFIX "add $1,%1\n"
     "11:" __LOCK_PREFIX "bts $15,%1\n"
     "jc 11b\n"
     /* Lock is successfully granted */
-    __LOCK_PREFIX "decq %1\n"
+    __LOCK_PREFIX "sub $1,%1\n"
     "jmp 1000f\n"
 
     /* Not owner is accessing the lock. */
@@ -173,8 +173,8 @@ static inline void __arch_bound_spinlock_lock_cpu(bound_spinlock_t *l,
 
     /* No pending owners - the lock is granted. */
     "1000: \n"
-    :: "r"(cpu),"m"(l->__lock),
-     "r"(l->__cpu),"r"(0):
+    :: "r"((lock_t)cpu),"m"((lock_t)l->__lock),
+     "r"((lock_t)l->__cpu),"r"((lock_t)0):
      "memory" );
 }
 
@@ -182,7 +182,7 @@ static inline void __arch_bound_spinlock_unlock_cpu(bound_spinlock_t *l)
 {
    __asm__ __volatile__(
      __LOCK_PREFIX "btr $15,%0\n"
-     :: "m"(l->__lock)
+     :: "m"((lock_t)l->__lock)
      :
      "memory" );
 }
@@ -194,7 +194,7 @@ static inline bool __arch_bound_spinlock_trylock_cpu(bound_spinlock_t *l,
 
   __asm__ __volatile__(
     "xor %4,%4\n"
-    "cmpq %0,%2\n"
+    "cmp %0,%2\n"
     "jne 101f\n"
     /* Owner is trying to access the lock.*/
     __LOCK_PREFIX "bts $15,%1\n"
@@ -217,8 +217,8 @@ static inline bool __arch_bound_spinlock_trylock_cpu(bound_spinlock_t *l,
     __LOCK_PREFIX "btr $15,%1\n"
     "1000: mov %4,%3\n"
     "\n"
-    :: "r"(cpu),"m"(l->__lock),"r"(l->__cpu),
-     "m"(locked),"r"(0): "memory" );
+    :: "r"((lock_t)cpu),"m"((lock_t)l->__lock),"r"((lock_t)l->__cpu),
+     "m"(locked),"r"((lock_t)0): "memory" );
 
   return !locked;
 }
