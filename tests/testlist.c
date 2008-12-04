@@ -8,7 +8,7 @@ extern testcase_t ipc_testcase;
 extern testcase_t sched_testcase;
 
 static testcase_t *known_testcases[] = {
-//  &ipc_testcase,
+  &ipc_testcase,
   &sched_testcase,
   NULL,
 };
