@@ -597,6 +597,7 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
       break;
     case TASK_STATE_STOPPED:
     case TASK_STATE_SLEEPING:
+    case TASK_STATE_SUSPENDED:
       if( task->state == TASK_STATE_RUNNABLE
           || task->state == TASK_STATE_RUNNING ) {
 
@@ -812,15 +813,18 @@ static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
 
   if( cpu != cpu_id() ) {
     t.task=task;
+    t.status=-EINTR;
     event_initialize(&t.e);
     list_init_node(&t.l);
     event_set_task(&t.e,current_task());
 
-    stop_task(task);
+    suspend_task(task);
 
     schedule_task_migration(&t,cpu);
     activate_task(migration_thread(cpu));
+
     event_yield(&t.e);
+    return t.status;
   }
 
   return 0;

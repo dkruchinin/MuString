@@ -137,6 +137,7 @@ typedef struct __migration_action_t {
   task_t *task;
   event_t e;
   list_node_t l;
+  status_t status;
 } migration_action_t;
 
 #define CPU_TASK_REBALANCE_DELAY  HZ
@@ -157,6 +158,7 @@ static inline void release_task_struct(task_t *t)
 
 #define activate_task(t) sched_change_task_state(t,TASK_STATE_RUNNABLE)
 #define stop_task(t) sched_change_task_state(t,TASK_STATE_STOPPED)
+#define suspend_task(t) sched_change_task_state(t,TASK_STATE_SUSPENDED)
 
 #endif
 

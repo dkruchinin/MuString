@@ -76,6 +76,7 @@ typedef enum __task_state {
   TASK_STATE_SLEEPING = 3,
   TASK_STATE_STOPPED = 4,
   TASK_STATE_ZOMBIE = 5,
+  TASK_STATE_SUSPENDED = 6,
 } task_state_t;
 
 typedef uint32_t cpu_array_t;

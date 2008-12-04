@@ -365,31 +365,85 @@ void do_smp_scheduler_interrupt_handler(void)
 {
 }
 
-static status_t __move_task_to_cpu(task_t *t,cpu_id_t cpu)
+static status_t __move_task_to_this_cpu(task_t *t)
 {
   eza_sched_cpudata_t *src_cpu,*dst_cpu;
   eza_sched_taskdata_t *tdata = EZA_TASK_SCHED_DATA(t);
   status_t r;
+  ulong_t is,is2,my_cpu=cpu_id();
 
-  src_cpu=sched_cpu_data[t->cpu];
-  LOCK_CPU_SCHED_DATA(src_cpu);
-
-  if( t->state != TASK_STATE_STOPPED ) {
-    r=-EBUSY;
-    goto unlock_src;
+lock_cpus_data:
+  src_cpu=NULL;
+  /* Always lock from from lower CPU numbers to higher. */
+  if( my_cpu <= t->cpu ) {
+    dst_cpu=sched_cpu_data[my_cpu];
+    while(true) {
+      interrupts_save_and_disable(is2);
+      if( try_to_lock_sched_data(dst_cpu) ) {
+        break;
+      }
+      interrupts_restore(is2);
+    }
+  } else {
+    dst_cpu=NULL;
   }
 
-  dst_cpu=sched_cpu_data[cpu_id()];
-  LOCK_CPU_SCHED_DATA(dst_cpu);
+  if( t->state != TASK_STATE_SUSPENDED || tdata->array != NULL ) {
+    r=-EBUSY;
+    goto unlock;
+  }
 
-  __add_task_to_array(&dst_cpu->active_array,t);
-  dst_cpu->stats->active_tasks++;
-  t->cpu=cpu_id();
+  if( t->cpu == my_cpu ) {
+    r=0;
+    goto unlock;
+  }
 
+  if( dst_cpu != NULL ) {
+    /* Destination CPU is already ours. */
+    src_cpu=get_task_sched_data_locked(t,&is,false);
+    if( !src_cpu ) {
+      /* No luck - do locking one more time. */
+      __UNLOCK_CPU_SCHED_DATA(dst_cpu);
+      interrupts_enable();
+      goto lock_cpus_data;
+    }
+    /* Ok, go ahead. */
+    goto transfer_task;
+  } else {
+    /* No locks were locked, so lock first task's CPU, than our CPU. */
+    src_cpu=get_task_sched_data_locked(t,&is,true);
+    dst_cpu=sched_cpu_data[my_cpu];    
+
+    if( !try_to_lock_sched_data(dst_cpu) ) {
+      /* Someone else holds the lock, so repeat the procedure. */
+      __UNLOCK_CPU_SCHED_DATA(src_cpu);
+      interrupts_enable();
+      goto lock_cpus_data;
+    }
+  }
+
+transfer_task:
+  /* All CPUs are seem to be locked. So migrate the task. */
+  if(t->state != TASK_STATE_SUSPENDED || tdata->array != NULL ) {
+    r=-EBUSY;
+    goto unlock;
+  }
+  src_cpu->stats->sleeping_tasks--;
+  dst_cpu->stats->sleeping_tasks++;
+  t->cpu=my_cpu;
   r=0;
-  UNLOCK_CPU_SCHED_DATA(dst_cpu);
-unlock_src:
-  UNLOCK_CPU_SCHED_DATA(src_cpu);
+
+unlock:
+  if( src_cpu ) {
+    __UNLOCK_CPU_SCHED_DATA(src_cpu);
+  }
+
+  if( dst_cpu ) {
+    __UNLOCK_CPU_SCHED_DATA(dst_cpu);
+  }
+
+  interrupts_enable();
+  cond_reschedule();
 
   if( !r ) {
     activate_task(t);
@@ -417,14 +471,15 @@ void migration_thread(void *data)
         migration_action_t *action=container_of(n,migration_action_t,l);
 
         list_del(n);
-        __move_task_to_cpu(action->task,cpu_id() );
+        action->status=__move_task_to_this_cpu(action->task );
         event_raise(&action->e);
       }
     } else {
       spinlock_unlock(&migration_locks[cpu]);
     }
+    kprintf( "[CPU #%d]: Migration thread is goint to sleep ...\n",cpu_id() );
     sched_change_task_state(current_task(),TASK_STATE_SLEEPING);
-    kprintf( "CPU%d: Migration thread got woken up !\n",cpu_id() );
+    kprintf( "[CPU #%d]: Migration thread got woken up !\n",cpu_id() );
   }
 }
 

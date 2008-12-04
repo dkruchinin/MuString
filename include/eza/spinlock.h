@@ -112,14 +112,19 @@
     (b)->__cpu=cpu;                             \
   } while(0)
 
-#define bound_spinlock_lock_cpu(b,cpu)         \
+#define bound_spinlock_lock_cpu(b,cpu)          \
+  preempt_disable();                            \
   arch_bound_spinlock_lock_cpu((b),cpu)
 
 #define bound_spinlock_unlock(b)                \
-  arch_bound_spinlock_unlock((b))
+  arch_bound_spinlock_unlock((b));              \
+  preempt_enable()
 
-#define bound_spinlock_trylock_cpu(b,cpu)      \
-  arch_bound_spinlock_trylock_cpu((b),cpu)
+#define bound_spinlock_trylock_cpu(b,cpu)               \
+  ({bool is_ok;preempt_disable();                       \
+  is_ok=arch_bound_spinlock_trylock_cpu((b),cpu);       \
+  if(!is_ok) {preempt_enable();}                        \
+  is_ok; })
 
 #else
 

@@ -161,6 +161,9 @@ static inline task_t *__get_most_prioritized_task(eza_sched_cpudata_t *sched_dat
 #define __LOCK_CPU_SCHED_DATA(d)  bound_spinlock_lock_cpu(&(d)->__lock,cpu_id())
 #define __UNLOCK_CPU_SCHED_DATA(d)  bound_spinlock_unlock(&(d)->__lock)
 
+#define try_to_lock_sched_data(sd)              \
+  bound_spinlock_trylock_cpu(&(sd)->__lock,cpu_id())
+
 static inline eza_sched_cpudata_t *get_task_sched_data_locked(task_t *task,
                                                               ulong_t *is,bool cyclic)
 {
