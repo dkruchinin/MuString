@@ -25,6 +25,7 @@
 #include <ipc/port.h>
 #include <eza/task.h>
 #include <eza/errno.h>
+#include <eza/mutex.h>
 #include <mm/pfalloc.h>
 #include <mm/page.h>
 #include <ds/linked_array.h>

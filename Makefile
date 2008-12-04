@@ -126,6 +126,7 @@ $(ODIR)/rmap.bin: collect_objects $(ODIR)/kernel.ld
 	$(Q)$(GMAP) $(addprefix $(ODIR)/, mui.pre.map mui.objdump rmap.bin)
 
 bootimage: vmuielf
+ifneq ($(NOBUILDIMG),y) 
 # Creates a 20 MB bootable FAT HD image: 44 tracks, 16 heads, 63 sectors
 	@dd if=/dev/zero of=boot.img count=44352 bs=512
 	@echo "drive c: file=\"`pwd`/boot.img\" partition=1" > ~/.mtoolsrc
@@ -150,13 +151,16 @@ bootimage: vmuielf
 	@echo " ata0-master: type=disk, path=boot.img, mode=flat, cylinders=44, heads=16, spt=63"
 	@echo " boot: disk"
 	@echo "*********************************************************************************"
+endif
 
 config:
+	$(Q)$(MKDIR) -p $(BUILD_ROOT)/include/config
 	$(Q)$(MAKE) -C kbuild conf BUILD_ROOT=$(BUILD_ROOT)
 	$(Q)$(BUILD_ROOT)/kbuild/conf $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
 	$(Q)$(ECHO) "ARCH=$(arch)" >> .config
 
 menuconfig: host
+	$(Q)$(MKDIR) -p $(BUILD_ROOT)/include/config
 	$(Q)$(MAKE) -C kbuild BUILD_ROOT=$(BUILD_ROOT)
 	$(Q)$(BUILD_ROOT)/kbuild/mconf $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
 	$(Q)$(BUILD_ROOT)/kbuild/conf -s $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
@@ -169,6 +173,7 @@ help:
 	$(Q)$(ECHO) "      VERBOSE=[y/n]       Enable/disable verbose mode (default: disabled)"
 	$(Q)$(ECHO) "      target=<dir>        Specify building directory"
 	$(Q)$(ECHO) "      TOOLCHAIN=<prefix>  Specify toolchain prefix"
+	$(Q)$(ECHO) "      NOBUILDIMG=[y/n]    Toggle image building"
 	$(Q)$(ECHO) "    Customizible variables:"
 	$(Q)$(ECHO) "      CFLAGS, LDFLAGS, INCLUDE, HOSTCC, HOSTCFLAGS, HOSTLDFLAGS"
 	$(Q)$(ECHO) "    Available actions:"

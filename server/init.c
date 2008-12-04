@@ -190,14 +190,10 @@ void server_run_tasks(void)
   status_t r;
   kconsole_t *kconsole=default_console();
 
-  if( i<=0 ) {
-		/* After creating the NameServer we should spawn all per-cpu threads. */
-    /* spawn_percpu_threads(); */
-		return;
-	}
-
-  kprintf("[SRV] Starting servers: %d ... \n",i);
-  kconsole->disable(); /* shut off console */
+	if (i > 0)
+		kprintf("[SRV] Starting servers: %d ... \n",i);
+  
+	kconsole->disable(); /* shut off console */
 
   for(a=0;a<i;a++) {
     r=create_task(current_task(),0,TPL_USER,&server);

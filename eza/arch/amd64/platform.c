@@ -40,7 +40,7 @@
 #include <eza/actbl.h>
 
 extern volatile uint32_t local_apic_base;
-extern volatile uint8_t local_apic_ids[NR_CPUS];
+extern volatile uint8_t local_apic_ids[CONFIG_NRCPUS];
 
 #ifdef CONFIG_APIC
 
@@ -53,7 +53,7 @@ void arch_specific_init(void)
 	
 	kprintf("[HW] Init arch specific ...\n");
 	
-	r = get_acpi_lapic_info(&apic_base, local_apic_ids, NR_CPUS, &n);
+	r = get_acpi_lapic_info(&apic_base, local_apic_ids, CONFIG_NRCPUS, &n);
 	if (apic_base)
 		local_apic_base = apic_base;
 	

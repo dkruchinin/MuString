@@ -51,7 +51,7 @@
 
 volatile struct __local_apic_t *local_apic; 
 volatile uint32_t local_apic_base = DEFAULT_APIC_BASE;
-volatile uint8_t local_apic_ids[NR_CPUS];
+volatile uint8_t local_apic_ids[CONFIG_NRCPUS];
 static int __apics_number;
 
 static int __map_apic_page(void)
