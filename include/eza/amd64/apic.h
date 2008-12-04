@@ -29,10 +29,34 @@
 #include <eza/arch/types.h>
 
 #define DEFAULT_APIC_BASE    0xfee00000
-
 #define APIC_INT_EOI  0x0
 
-#define INVALID_APIC_ID
+/* delivery modes (TX) */
+#define TXMODE_FIXED	0x0
+#define TXMODE_LOWPRI	0x1
+#define TXMODE_SMI	0x2
+#define TXMODE_NMI	0x4
+#define TXMODE_INIT	0x5
+#define TXMODE_STARTUP	0x6
+#define TXMODE_EXTINT	0x7
+
+/* destination modes */
+#define DMODE_LOGIC  0x1
+#define DMODE_PHY    0x0
+
+/* short hand modes */
+#define SHORTHAND_NIL       0x0 /* none nobody */
+#define SHORTHAND_SELF      0x1 /* self only */
+#define SHORTHAND_ALLABS    0x2 /* absolutely all */
+#define SHORTHAND_ALLEXS    0x3 /* all exclude ipi */
+
+/* level modes*/
+#define LEVEL_ASSERT  0x0
+#define LEVEL_DEASSERT  0x1
+
+/* trigger modes */
+#define TRIG_EDGE   0x0
+#define TRIG_LEVEL  0x1
 
 struct __local_apic_timerst_t { /* LVT timers stuff */
   uint32_t count;
@@ -333,10 +357,16 @@ extern void fake_apic_init(void);
 void local_apic_send_eoi(void);
 void apic_timer_hack(void);
 
+/*
+ * Disable handling of some interrupts by setting the task priority
+ * if 'prio' is not null the vectors from 0 upto prio*16 will be masked
+ */
+void apic_set_task_priority(uint8_t prio);
+
 #ifdef CONFIG_SMP
 
 int apic_send_ipi_init(int cpu);
-int apic_send_vector(int cpu, uint8_t vector);
+int apic_send_ipi_vector(int cpu, uint8_t vector);
 int apic_broadcast_ipi_vector(uint8_t vector);
 int local_ap_apic_init(void);
 

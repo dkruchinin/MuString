@@ -41,6 +41,7 @@
 #include <eza/uinterrupt.h>
 #include <ipc/poll.h>
 #include <eza/gc.h>
+#include <eza/arch/apic.h>
 
 task_t *idle_tasks[MAX_CPUS];
 
@@ -572,12 +573,13 @@ void idle_loop(void)
       }*/
 
   for( ;; ) {
-    /*if( swks.system_ticks_64 >= target_tick ) {
+    if( swks.system_ticks_64 >= target_tick ) {
       kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d), SYSCALLS: %d\n",
                cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic(),
                syscall_counter );
+
       target_tick += STEP;
-    }*/
+    }
 
     /*
     if( cpu_id() && swks.system_ticks_64 > 400 && !flag ) {

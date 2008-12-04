@@ -190,7 +190,8 @@ void server_run_tasks(void)
   kconsole_t *kconsole=default_console();
 
   if( i<=0 ) {
-    // spawn_percpu_threads();
+		/* After creating the NameServer we should spawn all per-cpu threads. */
+    /* spawn_percpu_threads(); */
     return;
   }
 
