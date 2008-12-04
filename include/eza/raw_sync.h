@@ -6,8 +6,8 @@
 #define __SPIN_LOCK_UNLOCKED  0
 
 /* Binded spinlock. */
-typedef struct __binded_spinlock_t {
+typedef struct __bound_spinlock_t {
   ulong_t __lock,__cpu;
-} binded_spinlock_t;
+} bound_spinlock_t;
 
 #endif

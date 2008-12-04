@@ -151,6 +151,7 @@ static void initialize_cpu_sched_data(eza_sched_cpudata_t *cpudata, cpu_id_t cpu
   }
 
   spinlock_initialize(&cpudata->lock);
+  bound_spinlock_initialize(&cpudata->__lock,cpu);
   cpudata->active_array = &cpudata->arrays[0];
   cpudata->expired_array = &cpudata->arrays[1];
 

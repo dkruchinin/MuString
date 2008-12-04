@@ -32,7 +32,6 @@
 #include <eza/bits.h>
 #include <eza/arch/bits.h>
 #include <eza/spinlock.h>
-#include <eza/bspinlock.h>
 
 #define eza_sched_type_t uint64_t
 #define EZA_SCHED_PRIO_GRANULARITY 64
@@ -95,6 +94,7 @@ typedef struct __eze_sched_taskdata {
 
 typedef struct __eza_sched_cpudata {
   spinlock_t lock;
+  bound_spinlock_t __lock;
   scheduler_cpu_stats_t *stats;
   eza_sched_prio_array_t *active_array,*expired_array;
   eza_sched_prio_array_t arrays[EZA_SCHED_NUM_ARRAYS];
@@ -154,11 +154,31 @@ static inline task_t *__get_most_prioritized_task(eza_sched_cpudata_t *sched_dat
     spinlock_lock(&d->lock)
 
 #define UNLOCK_CPU_SCHED_DATA(d)                \
-    spinlock_unlock(&d->lock)
+  spinlock_unlock(&d->lock)
 
 #define EZA_TASK_SCHED_DATA(t) ((eza_sched_taskdata_t *)t->sched_data)
 
-#define __LOCK_CPU_SCHED_DATA(d)  binded_spinlock_lock(d)
-#define __UNLOCK_CPU_SCHED_DATA(d)  binded_spinlock_unlock(d)
+#define __LOCK_CPU_SCHED_DATA(d)  bound_spinlock_lock_cpu(&(d)->__lock,cpu_id())
+#define __UNLOCK_CPU_SCHED_DATA(d)  bound_spinlock_unlock(&(d)->__lock)
+
+static inline eza_sched_cpudata_t *get_task_sched_data_locked(task_t *task,
+                                                              ulong_t *is)
+{
+  while(1) {
+    ulong_t cpu=task->cpu;
+    eza_sched_cpudata_t *cdata=sched_cpu_data[cpu];
+
+    interrupts_save_and_disable(*is);
+    if( bound_spinlock_trylock_cpu(&cdata->__lock,cpu_id() ) ) {
+      if( task->cpu == cpu ) {
+        return cdata;
+      } else {
+        /* No luck: someone has changed task's CPU concurrently. */
+        bound_spinlock_unlock(&cdata->__lock);
+      }
+    }
+    interrupts_restore(*is);
+  }
+}
 
 #endif

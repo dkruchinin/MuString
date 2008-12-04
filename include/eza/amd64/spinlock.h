@@ -145,7 +145,7 @@ static always_inline void arch_spinlock_unlock_write(rw_spinlock_t *lock)
 }
 
 /* CPU-bound spinlocks. */
-static inline void __arch_bound_spinlock_lock_cpu(binded_spinlock_t *l,
+static inline void __arch_bound_spinlock_lock_cpu(bound_spinlock_t *l,
                                                   ulong_t cpu)
 {
   __asm__ __volatile__(
@@ -178,8 +178,7 @@ static inline void __arch_bound_spinlock_lock_cpu(binded_spinlock_t *l,
      "memory" );
 }
 
-static inline void __arch_bound_spinlock_unlock_cpu(binded_spinlock_t *l,
-                                                    ulong_t cpu)
+static inline void __arch_bound_spinlock_unlock_cpu(bound_spinlock_t *l)
 {
    __asm__ __volatile__(
      __LOCK_PREFIX "btr $15,%0\n"
@@ -188,7 +187,7 @@ static inline void __arch_bound_spinlock_unlock_cpu(binded_spinlock_t *l,
      "memory" );
 }
 
-static inline bool __arch_bound_spinlock_trylock_cpu(binded_spinlock_t *l,
+static inline bool __arch_bound_spinlock_trylock_cpu(bound_spinlock_t *l,
                                                      ulong_t cpu)
 {
   ulong_t locked;
@@ -225,13 +224,13 @@ static inline bool __arch_bound_spinlock_trylock_cpu(binded_spinlock_t *l,
 }
 
 #define arch_bound_spinlock_lock_cpu(b,cpu)   \
-  __arch_bound_spinlock_lock_cpu(b,cpu)
+  __arch_bound_spinlock_lock_cpu((b),cpu)
 
-#define arch_bound_spinlock_unlock_cpu(b,cpu) \
-  __arch_bound_spinlock_unlock_cpu(b,cpu)
+#define arch_bound_spinlock_unlock(b) \
+  __arch_bound_spinlock_unlock_cpu((b))
 
 #define arch_bound_spinlock_trylock_cpu(b,cpu) \
-  __arch_bound_spinlock_trylock_cpu(b,cpu)
+  __arch_bound_spinlock_trylock_cpu((b),cpu)
 
 
 /* TODO DK: implement trylock and is_locked form RW spinlocks */
