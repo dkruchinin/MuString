@@ -29,7 +29,6 @@
 #include <eza/arch/types.h>
 #include <eza/arch/asm.h>
 #include <eza/arch/apic.h>
-#include <eza/arch/ioapic.h>
 #include <eza/arch/mm_types.h>
 #include <eza/arch/interrupt.h>
 #include <eza/arch/gdt.h>
@@ -38,6 +37,9 @@
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 #include <mlibc/string.h>
+#include <mlibc/bitwise.h>
+#include <eza/arch/interrupt.h>
+#include <eza/arch/smp.h>
 
 /*
  * Black mages from intel and amd wrote that
@@ -47,9 +49,29 @@
  * abstraction not being implemented.
  */
 
-volatile struct __local_apic_t *local_apic = DEFAULT_APIC_BASE;
-static int apics_number;
-static uint8_t local_apic_ids[NR_CPUS];
+volatile struct __local_apic_t *local_apic; 
+volatile uint32_t local_apic_base = DEFAULT_APIC_BASE;
+volatile uint8_t local_apic_ids[NR_CPUS];
+static int __apics_number;
+
+static int __map_apic_page(void)
+{
+  int32_t res;
+  uintptr_t apic_vaddr;
+
+  apic_vaddr=(uintptr_t)idalloc_allocate_vregion(1);
+  if( !apic_vaddr ) {
+    panic( "[MM] Can't allocate memory range for mapping APIC !\n" );
+  }
+
+  res = mmap_kern(apic_vaddr, local_apic_base >> PAGE_WIDTH, 1, MAP_RW | MAP_DONTCACHE | MAP_EXEC);
+  if(res<0) {
+    panic("[MM] Cannot map IO page for APIC.\n");
+  }
+
+  local_apic=(struct __local_apic_t *)apic_vaddr;
+  return 0;
+}
 
 /*
  * default functions to access APIC (local APIC)
@@ -111,6 +133,11 @@ void apic_shootout(void)
   __disable_apic();
 }
 
+void apic_set_task_priority(uint8_t prio)
+{
+	local_apic->tpr.reg = prio; 
+}
+
 static void __local_apic_clear(void)
 {
   uint32_t max_lvt;
@@ -151,12 +178,12 @@ static int __local_apic_chkerr(void)
 
   esr=local_apic->esr;
 
-  if(esr.rx_cs_err){i++;kprintf("[LA] Receive checksum failed.\n");}
-  if(esr.tx_accept_err){i++;kprintf("[LA] Transfer failed.\n");}
-  if(esr.rx_accept_err){i++;kprintf("[LA] IPI is not accepted by any CPU.\n");}
-  if(esr.tx_illegal_vector){i++;kprintf("[LA] Illegal transfer vector.\n");}
-  if(esr.rx_illegal_vector){kprintf("[LA] Illegal receive vector.\n");}
-  if(esr.reg_illegal_addr){i++;kprintf("[LA] Illegal register address.\n");}
+  if (esr.rx_cs_err) { i++; kprintf("[LA] Receive checksum failed.\n"); }
+  if (esr.tx_accept_err) { i++; kprintf("[LA] Transfer failed.\n"); }
+  if (esr.rx_accept_err) { i++; kprintf("[LA] IPI is not accepted by any CPU.\n"); }
+  if (esr.tx_illegal_vector) { i++; kprintf("[LA] Illegal transfer vector.\n"); }
+  if (esr.rx_illegal_vector) { kprintf("[LA] Illegal receive vector.\n"); }
+  if (esr.reg_illegal_addr){ i++; kprintf("[LA] Illegal register address.\n"); }
 
   return i;
 }
@@ -238,14 +265,14 @@ extern void io_apic_bsp_init(void);
 extern void io_apic_enable_irq(uint32_t virq);
 extern void io_apic_enable_all();
 
-static int __local_apic_init(void)
+static int __local_apic_init(bool msgout)
 {
 	uint32_t v;
   int i=0,l;
   apic_lvt_lint_t lvt_lint;
   apic_icr1_t icr1;
 
-	if (!apics_number) {
+	if (msgout) {
 		kprintf("[LW] Checking APIC is present ... ");
 		if(__local_apic_check()<0) {
 			kprintf("FAIL\n");
@@ -253,11 +280,11 @@ static int __local_apic_init(void)
 		} else
 			kprintf("OK\n");
 	}
-
+	
   enable_l_apic_in_msr(); 
 
   v=get_apic_version();
-	if (!apics_number)
+	if (msgout)
 		kprintf("[HW] APIC version: %d\n",v);
 
   /* first we're need to clear APIC to avoid magical results */
@@ -265,11 +292,10 @@ static int __local_apic_init(void)
   __disable_apic();
 
   set_apic_dfr_mode(0xf); 
-  set_apic_ldr_logdest(1 << (apics_number & 7));
-	apics_number++;
+  set_apic_ldr_logdest(1 << (__apics_number & 7));
+	__apics_number++;
 
-  /* set 0 task priority, i. e. handle all interrupts */ 
-  local_apic->tpr.reg = 0; 
+  apic_set_task_priority(0);
 
   /* clear bits for interrupts - can be filled up to other os */
   for(i=7;i>=0;i--){
@@ -290,16 +316,16 @@ static int __local_apic_init(void)
   lvt_lint.tx_mode=0x7;
   lvt_lint.mask=1;
   lvt_lint.tx_status = 0x0;
-  lvt_lint.polarity = 0x0; 
-  lvt_lint.trigger = 0;
+  lvt_lint.polarity = LEVEL_DEASSERT; 
+  lvt_lint.trigger = TRIG_EDGE;
   local_apic->lvt_lint0.reg=lvt_lint.reg;
   /*set mode#4 NMI for lint1*/
   lvt_lint=local_apic->lvt_lint1;
   lvt_lint.tx_mode=0x4;
   lvt_lint.mask=1;
   lvt_lint.tx_status = 0x0;
-  lvt_lint.polarity = 0x0; 
-  lvt_lint.trigger = 0;
+  lvt_lint.polarity = LEVEL_DEASSERT; 
+  lvt_lint.trigger = TRIG_EDGE;
   local_apic->lvt_lint1.reg=lvt_lint.reg;
 
   /* ok, now we're need to set esr vector to 0xfe */
@@ -343,7 +369,7 @@ static void __unmask_extint(void)
 int local_bsp_apic_init(void)
 {
 	__map_apic_page();
-	if (__local_apic_init())
+	if (__local_apic_init(true))
 		 return -1;
 
 	local_apic_timer_init(LOCAL_TIMER_CPU_IRQ_VEC);
@@ -549,8 +575,8 @@ int apic_broadcast_ipi_vector(uint8_t vector)
 
   icr1.tx_mode=TXMODE_FIXED;
   icr1.rx_mode=DMODE_PHY;
-  icr1.level=LEVEL_ASSERT;
-  icr1.trigger=TRIG_LEVEL; /* trigger mode -> level */
+  icr1.level=LEVEL_DEASSERT;
+  icr1.trigger=TRIG_EDGE; /* trigger mode -> edge */
   icr1.shorthand=SHORTHAND_ALLEXS; /* all exclude ipi */
   icr1.vector=vector;
   local_apic->icr1.reg=icr1.reg;  
@@ -561,13 +587,36 @@ int apic_broadcast_ipi_vector(uint8_t vector)
 	return ret;
 }
 
-int apic_send_vector(int cpu, uint8_t vector)
+int apic_send_ipi_vector(int cpu, uint8_t vector)
 {
+	int ret = 0;
+
+  apic_icr1_t icr1;
+	apic_icr2_t icr2;
+	
+	do {
+		icr1=local_apic->icr1;
+	} while (icr1.tx_status);
+
+  icr1.tx_mode=TXMODE_FIXED;
+  icr1.rx_mode=DMODE_PHY;
+  icr1.level=LEVEL_DEASSERT;
+  icr1.trigger=TRIG_EDGE; /* trigger mode -> edge */
+  icr1.shorthand=SHORTHAND_NIL;
+  icr1.vector=vector;
+	icr2.dest = local_apic_ids[cpu];
+	local_apic->icr2.reg=icr2.reg;
+  local_apic->icr1.reg=icr1.reg;  
+
+  if (__local_apic_chkerr())
+		ret = -1;
+	
+	return ret;
 }
 
 int local_ap_apic_init(void)
 {
-	if (__local_apic_init())
+	if (__local_apic_init(false))
 		return -1;
 
 	local_apic_timer_ap_init(LOCAL_TIMER_CPU_IRQ_VEC);

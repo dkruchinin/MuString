@@ -16,7 +16,8 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2005,2008 Tirra <tirra.newly@gmail.com>
- * (C) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2008 Dmitry Gromada <gromada@jarios.org>
  *
  * /eza/amd64/asm.S: low level assembler functions specific for amd64
  *                   architecture
@@ -91,6 +92,9 @@ resume_userspace:
     RESTORE_ALL
     jmp userspace_ret_from_int
 
+/* Declare table containing matches of interrupt vectors with irqs */
+.comm vector_irq_table, 256
+
 /* Initialize low-level IRQ stubs. Thank Linux team for a very good approach !
  */
 .global irq_entrypoints_array 
@@ -105,7 +109,8 @@ low_irq_stubs:
 
 .rept 256
 1:  pushq %rax
-    movq $v,%rax
+    xor %rax,%rax
+		movb (vector_irq_table + v),%al
     jmp common_interrupt
 
 .data

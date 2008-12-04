@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
+ * (c) Copyright 2008 Dmitry Gromada <gromada@jarios.org>
  *
  * eza/amd64/smp.c: SMP support on amd64 architecture.
  *
@@ -28,7 +29,6 @@
 #include <eza/arch/types.h>
 #include <eza/arch/asm.h>
 #include <eza/arch/apic.h>
-#include <eza/arch/ioapic.h>
 #include <eza/arch/mm_types.h>
 #include <eza/arch/interrupt.h>
 #include <eza/arch/gdt.h>
@@ -46,9 +46,8 @@ void arch_smp_init(int ncpus)
   int i=1,r=0;
 
   /* set BIOS area to don't make a POST on INIT signal */
-    /*  outb(0x70, 0xf); 
-      outb(0x71, 0xa); */
-
+  outb(0x70, 0xf); 
+  outb(0x71, 0xa);
 
   /* ok setup new gdt */
   while(i<ncpus) {

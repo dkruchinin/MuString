@@ -29,7 +29,6 @@
 #include <eza/arch/apic.h>
 #include <eza/arch/mm_types.h>
 #include <eza/arch/interrupt.h>
-#include <eza/arch/ioapic.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 
@@ -41,13 +40,12 @@
 
 static void fake_apic_enable_all(void)
 {
-  /*local_apic_timer_enable();
-    apic_timer_hack();*/
+  /*dummy*/
 }
 
 static void fake_apic_disable_all(void)
 {
-  /*local_apic_timer_disable();*/
+  /*dummy*/
 }
 
 static void fake_apic_enable_irq(uint32_t irq)

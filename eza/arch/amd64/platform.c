@@ -26,7 +26,6 @@
 #include <ds/iterator.h>
 #include <eza/arch/types.h>
 #include <eza/arch/apic.h>
-#include <eza/arch/ioapic.h>
 #include <eza/interrupt.h>
 #include <eza/timer.h>
 #include <mm/mm.h>
@@ -60,7 +59,7 @@ void arch_specific_init(void)
 	
 	local_apic_bsp_switch(); 
 	if (local_bsp_apic_init() == -1)
-		panic("[HW] APIC is not found!\n");
+		panic("Local APIC is not detected!\n");
 
 #ifdef CONFIG_SMP
 	if (r > 0) {
@@ -76,7 +75,7 @@ void arch_specific_init(void)
 			local_apic_ids[0] = id;
 		}
 		
-		kprintf("Launch other cpus");
+		kprintf("[HW] Launch other cpus");
 		if (r < n)
 			kprintf(", found CPUs: %d, being launched CPUs: %d\n", n - 1, r - 1);
 		else

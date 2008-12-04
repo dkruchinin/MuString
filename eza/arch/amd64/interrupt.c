@@ -26,7 +26,6 @@
 #include <eza/interrupt.h>
 #include <eza/time.h>
 #include <eza/arch/8259.h>
-#include <eza/arch/ioapic.h>
 #include <eza/arch/apic.h>
 #include <eza/arch/mm_types.h>
 #include <eza/kernel.h>
@@ -79,7 +78,8 @@ void arch_initialize_irqs(void)
   base=idt->first_available_vector();
 
   for(idx=0;idx<idt->vectors_available();idx++) {
-    r=idt->install_handler((idt_handler_t)irq_entrypoints_array[idx],idx+base);
+    vector_irq_table[idx] = idx;
+		r=idt->install_handler((idt_handler_t)irq_entrypoints_array[idx],idx+base);
     if( r != 0 ) {
       panic( "Can't install IDT slot for IRQ #%d\n", idx );
     }
