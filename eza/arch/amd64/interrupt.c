@@ -37,10 +37,12 @@
 
 extern void timer_interrupt_handler(void *data);
 
+#if 0 /* [DEACTIVATED] */
 static void install_generic_irq_handlers(void)
 {
   register_irq(0, timer_interrupt_handler, NULL, 0 );
 }
+#endif
 
 #ifdef CONFIG_SMP
 static void install_smp_irq_handlers(void)

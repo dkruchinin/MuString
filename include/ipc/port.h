@@ -45,7 +45,7 @@ typedef struct __ipc_port_messsage_t {
   ulong_t data_size,reply_size,id;
   long replied_size;
   void *send_buffer,*receive_buffer;
-  list_node_t l;
+  list_node_t l,messages_list;
   event_t event;
   struct __ipc_port_t *port;
   ipc_user_buffer_t snd_buf, rcv_buf;
@@ -62,12 +62,13 @@ typedef struct __ipc_port_t {
   list_head_t messages;
   ipc_port_message_t **message_ptrs;
   task_t *owner;
-  wait_queue_t waitqueue;
+  wqueue_t waitqueue;
 } ipc_port_t;
 
 typedef struct __port_msg_info {
-  uint16_t msg_id,msg_len;
+  uint16_t msg_id;
   pid_t sender_pid;
+  uint32_t msg_len;
 } port_msg_info_t;
 
 #define IPC_LOCK_PORT(p) spinlock_lock(&p->lock)
@@ -78,20 +79,20 @@ typedef struct __port_msg_info {
 
 void initialize_ipc(void);
 
-void ipc_shutdown_port(ipc_port_t *port);
-void ipc_put_port(ipc_port_t *p);
-status_t ipc_get_port(task_t *task,ulong_t port,ipc_port_t **out_port);
-void ipc_port_add_poller(ipc_port_t *port,task_t *poller, wait_queue_task_t *w);
-void ipc_port_remove_poller(ipc_port_t *port,wait_queue_task_t *w);
-poll_event_t ipc_port_get_pending_events(ipc_port_t *port);
+//void ipc_shutdown_port(ipc_port_t *port);
+//void ipc_put_port(ipc_port_t *p);
+//status_t ipc_get_port(task_t *task,ulong_t port,ipc_port_t **out_port);
+//void ipc_port_add_poller(ipc_port_t *port,task_t *poller, wait_queue_task_t *w);
+//void ipc_port_remove_poller(ipc_port_t *port,wait_queue_task_t *w);
+//poll_event_t ipc_port_get_pending_events(ipc_port_t *port);
 
-status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size);
-status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
-                       ulong_t snd_size,uintptr_t rcv_buf,ulong_t rcv_size);
-status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
-                          ulong_t recv_buf,ulong_t recv_len,
-                          port_msg_info_t *msg_info);
-status_t ipc_port_reply(task_t *owner, ulong_t port, ulong_t msg_id,
-                        ulong_t reply_buf,ulong_t reply_len);
+//status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size);
+//status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
+//                       ulong_t snd_size,uintptr_t rcv_buf,ulong_t rcv_size);
+//status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
+//                          ulong_t recv_buf,ulong_t recv_len,
+//                          port_msg_info_t *msg_info);
+//status_t ipc_port_reply(task_t *owner, ulong_t port, ulong_t msg_id,
+//                        ulong_t reply_buf,ulong_t reply_len);
 
 #endif

@@ -1,0 +1,1 @@
+obj-y += $(ARCH)/memcpy.o $(ARCH)/memset.o

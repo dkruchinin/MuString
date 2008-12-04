@@ -81,6 +81,13 @@ void initialize_task_subsystem(void)
            idle );
   }
 
+#ifdef CONFIG_TEST
+  /* To avoid kernel panic when exiting the first test task (its PID will
+   * almost always be 1), we reserve PID 1.
+   */
+  __allocate_pid();
+#endif
+
   task_cache = create_memcache( "Task struct memcache", sizeof(task_t),
                                 2, SMCF_PGEN);
   if( !task_cache ) {
@@ -167,11 +174,13 @@ static void __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
     task->ppid=0;
   }
 }
-
+ 
+#if 0 /* [DEACTIVATED] */
 static void __free_task_struct(task_t *task)
 {
   memfree(task);
 }
+#endif 
 
 void cleanup_thread_data(void *t,ulong_t arg)
 {
@@ -210,13 +219,19 @@ static task_t *__allocate_task_struct(void)
 
 static status_t __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
 {
+  status_t r;
+
   if( flags & CLONE_IPC ) {
     if( !parent->ipc ) {
       return -EINVAL;
     }
-    get_task_ipc(parent);
     task->ipc=parent->ipc;
-    return setup_task_ipc(task);
+    r=setup_task_ipc(task);
+    if( !r ) {
+      get_task_ipc(parent);
+      dup_task_ipc_resources(task->ipc);
+    }
+    return r;
   } else {
     task->ipc=NULL;
     return setup_task_ipc(task);

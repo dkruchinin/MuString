@@ -26,6 +26,8 @@ typedef struct __event_t {
   event_checker_t ev_checker;
 } event_t;
 
+#define event_is_active(e)  ((e)->task != NULL)
+
 static inline void event_initialize(event_t *event)
 {
   spinlock_initialize(&event->__lock);
@@ -51,7 +53,7 @@ static inline void event_set_task(event_t *event,task_t *task)
   UNLOCK_EVENT(event);
 }
 
-static bool event_lazy_sched_handler(void *data)
+static bool event_defered_sched_handler(void *data)
 {
   event_t *t = (event_t*)data;
 
@@ -70,13 +72,13 @@ static inline void event_yield(event_t *event)
   t = event->task;
   UNLOCK_EVENT(event);
 
-  if( t != NULL ) {
+  if( t != NULL ) {    
       event_checker_t ec=event->ev_checker;
 
       if(!ec) {
-        ec=event_lazy_sched_handler;
+        ec=event_defered_sched_handler;
       }
-      sched_change_task_state_lazy(t,TASK_STATE_SLEEPING,ec,event);
+      sched_change_task_state_deferred(t,TASK_STATE_SLEEPING,ec,event);
 
       if( !event->ev_checker ) {
         event->flags &= ~EVENT_OCCURED;

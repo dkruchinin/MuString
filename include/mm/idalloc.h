@@ -66,7 +66,7 @@ extern idalloc_meminfo_t idalloc_meminfo; /**< Global structure containing all i
 
 /**
  * @brief Enable init-data allocator
- * IDALLOC_PAGES will be cutted from @a pool. (if available)
+ * CONFIG_IDALLOC_PAGES will be cutted from @a pool. (if available)
  *
  * @param pool - Memory pool idalloc may cut pages from.
  * @see mm_pool_t

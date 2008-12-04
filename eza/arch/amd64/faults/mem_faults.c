@@ -96,8 +96,8 @@ kernel_fault:
     goto out;
   }
 
-  kprintf( "[!!!] Unhandled kernel PF exception ! Stopping (CODE: %d, See page 225). Address: %p\n",
-           stack_frame->error_code, invalid_address);
+  kprintf( "[!!!] Unhandled kernel PF exception ! Stopping (CODE: %d, See page 225). Address: %p\nRIP: %p\n",
+           stack_frame->error_code, invalid_address, stack_frame->rip);
   l1: goto l1;
 out:
   return;

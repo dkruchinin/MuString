@@ -11,9 +11,9 @@
 #include <eza/scheduler.h>
 
 static memcache_t *gc_actions_cache;
-static list_head_t gc_tasklists[NR_CPUS];
+static list_head_t gc_tasklists[CONFIG_NRCPUS];
 static spinlock_t tasklist_lock;
-task_t *gc_threads[NR_CPUS][NUM_PERCPU_THREADS];
+task_t *gc_threads[CONFIG_NRCPUS][NUM_PERCPU_THREADS];
 
 #define get_gc_tasklist() &gc_tasklists[cpu_id()]
 
@@ -33,7 +33,7 @@ void initialize_gc(void)
 {
   int i;
 
-  for( i=0;i<NR_CPUS;i++ ) {
+  for( i=0;i<CONFIG_NRCPUS;i++ ) {
     list_init_head(&gc_tasklists[i]);
   }
 
@@ -85,7 +85,7 @@ void spawn_percpu_threads(void)
   task_t **ts;
 
   kprintf( "++++++++ NUM_PERCPU_THREADS: %d\n", NUM_PERCPU_THREADS );
-  for(i=0;i<NR_CPUS;i++) {
+  for(i=0;i<CONFIG_NRCPUS;i++) {
     /* First, create a set of threads on this CPU. */
     ts=&gc_threads[i][0];
 
@@ -140,5 +140,9 @@ void gc_schedule_action(gc_action_t *action)
   list_add2tail(alist,&action->l);
   UNLOCK_TASKLIST();
 
-  sched_change_task_state(gc_threads[cpu_id()][GC_THREAD_IDX], TASK_STATE_RUNNABLE);
+  if( gc_threads[cpu_id()][GC_THREAD_IDX] ) {
+    sched_change_task_state(gc_threads[cpu_id()][GC_THREAD_IDX], TASK_STATE_RUNNABLE);
+  } else {
+    kprintf( KO_WARNING "gc_schedule_action(): scheduling GC action without GC thread !\n" );
+  }
 }

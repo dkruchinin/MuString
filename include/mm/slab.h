@@ -40,7 +40,7 @@
 #include <eza/arch/types.h>
 
 /* Max number of empty slabs one memory cache may have. */
-#define SLAB_EMPTYSLABS_MAX  (NR_CPUS)
+#define SLAB_EMPTYSLABS_MAX  (CONFIG_NRCPUS)
 /* End address of objects list */
 #define SLAB_OBJLIST_END     ((char *)0xF00BAAF)
 /* Quantity of pages per slab for generic caches */
@@ -161,9 +161,9 @@ typedef uint8_t memcache_flags_t;
  * @see memcache_flags_t
  */
 struct __memcache {
-  list_head_t inuse_slabs;         /**< List of active and full slabs */
-  list_head_t available_slabs;     /**< List of empty and partial slabs */
-  slab_t *active_slabs[NR_CPUS];   /**< Active slabs(there may be only one active slab if SMCF_SHARED was set) */
+  list_head_t inuse_slabs;               /**< List of active and full slabs */
+  list_head_t available_slabs;           /**< List of empty and partial slabs */
+  slab_t *active_slabs[CONFIG_NRCPUS];   /**< Active slabs(there may be only one active slab if SMCF_SHARED was set) */
 #ifdef DEBUG_SLAB
   struct memcache_debug_info dbg; 
 #endif /* DEBUG_SLAB */

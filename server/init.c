@@ -49,7 +49,6 @@ static status_t __create_task_mm(task_t *task, int num)
   elf_head_t ehead;
   elf_pr_t epr;
   elf_sh_t esh;
-  page_idx_t idx;
   uintptr_t data_bss,bss_virt;
   size_t real_code_size=0,real_data_size=0;
   size_t last_data_size,real_data_offset=0;
@@ -182,6 +181,8 @@ static status_t __create_task_mm(task_t *task, int num)
   return 0;
 }
 
+#ifndef CONFIG_TEST
+
 void server_run_tasks(void)
 {
   int i=server_get_num(),a;
@@ -192,8 +193,8 @@ void server_run_tasks(void)
   if( i<=0 ) {
 		/* After creating the NameServer we should spawn all per-cpu threads. */
     /* spawn_percpu_threads(); */
-    return;
-  }
+		return;
+	}
 
   kprintf("[SRV] Starting servers: %d ... \n",i);
   kconsole->disable(); /* shut off console */
@@ -232,3 +233,12 @@ void server_run_tasks(void)
 
   return;
 }
+
+#else
+
+void server_run_tasks(void)
+{
+  //spawn_percpu_threads();
+}
+
+#endif /* !CONFIG_TEST */

@@ -124,7 +124,7 @@ struct __tss { /* TSS definion structure */
 typedef struct __tss tss_t;
 
 /* external functions and global vars(pmm.c) */
-extern descriptor_t gdt[NR_CPUS][GDT_ITEMS];
+extern descriptor_t gdt[CONFIG_NRCPUS][GDT_ITEMS];
 extern idescriptor_t idt[];
 extern ptr_16_64_t gdtr;
 extern ptr_16_32_t boot_gdt; /* GDT during boot */

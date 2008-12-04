@@ -33,6 +33,10 @@ static void __exit_ipc(task_t *exiter) {
   task_ipc_t *ipc;
   task_ipc_priv_t *p;  
 
+  if( exiter->ipc ) {
+    close_ipc_resources(exiter->ipc);
+  }
+
   LOCK_TASK_MEMBERS(exiter);
   ipc=exiter->ipc;
   p=exiter->ipc_priv;
@@ -43,6 +47,7 @@ static void __exit_ipc(task_t *exiter) {
   if( ipc ) {
     release_task_ipc(ipc);
   }
+
   if( p ) {
     release_task_ipc_priv(p);
   }

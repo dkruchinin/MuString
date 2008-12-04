@@ -1,6 +1,7 @@
 #ifndef __GC_H__
 #define  __GC_H__
 
+#include <config.h>
 #include <eza/arch/types.h>
 #include <ds/list.h>
 #include <eza/task.h>
@@ -17,12 +18,12 @@
 #endif
 
 
-task_t *gc_threads[NR_CPUS][NUM_PERCPU_THREADS];
+task_t *gc_threads[CONFIG_NRCPUS][NUM_PERCPU_THREADS];
 
 struct __gc_action;
 
 typedef void (*gc_action_dtor_t)(struct __gc_action *action);
-typedef void (*gc_actor_t)(void *data,ulong_t data_arg);
+typedef void (*gc_actor_t)(void *data, ulong_t data_arg);
 
 typedef struct __gc_action {
   ulong_t type;
