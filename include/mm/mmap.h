@@ -30,6 +30,8 @@
 #include <eza/arch/ptable.h>
 #include <eza/arch/types.h>
 
+typedef page_frame_t * page_directory_t;
+
 /**
  * @typedef uint8_t mmap_flags_t
  * Memory mapping flags.
@@ -44,15 +46,15 @@ typedef uint8_t mmap_flags_t;
 #define MAP_EXEC      0x08 /**< Mapped page may be executed */
 #define MAP_DONTCACHE 0x10 /**< Prevent caching of mapped page */
 
-extern page_frame_t *kernel_root_pagedir;
+extern page_directory_t kernel_root_pagedir;
 extern bool map_verbose;
 
-typedef struct __mmap_info {
-  page_frame_iterator_t pfi;
+typedef struct __mmapper {
+  page_frame_iterator_t *pfi;
   uintptr_t va_from;
   uintptr_t va_to;
-  mmap_flags_t flags;
-} mmap_info_t;
+  mmap_flags_t flags;  
+} mmapper_t;
 
 #define mmap_pages(root_dir, minfo)             \
   __mmap_pages(root_dir, minfo, PTABLE_LEVEL_LAST)
@@ -62,15 +64,51 @@ typedef struct __mmap_info {
   mmap(kernel_root_pagedir, va, first_page, npages, flags)
 #define mm_virt_addr_is_mapped(root_dir, va)       \
   (mm_pin_virt_addr(root_dir, (uintptr_t)(va)) >= 0)
-#define mm_create_root_pagedir()                \
-  pgt_create_pagedir(NULL, PTABLE_LEVEL_LAST)
 
-int __mmap_pages(page_frame_t *dir, mmap_info_t *minfo, pdir_level_t level);
-int mmap(page_frame_t *root_dir, uintptr_t va, page_idx_t first_page, int npages, mmap_flags_t flags);
+/*
+ * low level mapping functions
+ */
+#define pagedir_get_level(pagedir)              \
+  ((*(pagedir))->level)
+#define pagedir_set_level(pagedir, new_level)       \
+  ((*(pagedir))->level = (new_level))
+#define pagedir_get_entries(pagedir)            \
+  (*(pagedir)->entries)
+#define pagedir_set_entries(pagedir, newval)    \
+  (*(pagedir)->entries = (newval))
+#define mm_init_root_pagedir(pagedir)           \
+  mm_pagedir_initialize(pagedir, PTABLE_LEVEL_LAST)
+
+static inline page_frame_t *pagedir_create(pdir_level_t level)
+{
+  page_frame_t *dir = pgt_allocate_pagedir(level);
+
+  if (!dir)
+    return NULL;
+  
+  pagedir_set_level(dir, level);
+  pagedir_set_entries(dir, 0);
+  return dir;
+}
+
+static inline void pagedir_free(page_frame_t *dir)
+{
+  pagedir_set_level(dir, 0);
+  pagedir_set_entries(dir, 0);
+  pgt_free_pagedir(dir);
+}
+
+status_t pagedir_populate(pde_t *pde, pde_flags_t flags);
+status_t pagedir_depopulate(pde_t *pde);
+status_t pagedir_map_entries(pde_t *pde_start, pde_idx_t entries,
+                             page_frame_iterator_t *pfi, pde_flags_t flags);
+status_t pagedir_unmap_entries(pde_t *pde_start, pde_idx_t entries);
+
+int __mmap_pages(page_directory_t *dir, mmapper_t *mapper, pdir_level_t level);
+int mmap(page_directory_t *root_dir, uintptr_t va, page_idx_t first_page, int npages, mmap_flags_t flags);
 int mm_populate_pagedir(pde_t *pde, pde_flags_t flags);
 int mm_map_entries(pde_t *pde_start, pde_idx_t entries,
                    page_frame_iterator_t *pfi, pde_flags_t flags);
-page_idx_t mm_pin_virt_addr(page_frame_t *dir, uintptr_t va);
-void mm_pagedir_initialize(page_frame_t *new_dir, page_frame_t *parent, pdir_level_t level);
+page_idx_t mm_pin_virt_addr(page_directory_t *dir, uintptr_t va);
 
 #endif /* __MMAP_H__ */

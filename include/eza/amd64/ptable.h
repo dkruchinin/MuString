@@ -61,12 +61,18 @@ typedef struct __pde {
 #define PTABLE_DIR_ENTRIES 0x200
 #define PTABLE_DIR_MASK    0x1FF
 
+#define pgt_allocate_pagedir()                  \
+  alloc_page(AF_ZERO | AF_PGEN)
+#define pgt_free_pagedir(pagedir)               \
+  free_page(pagedir)
+
 #define pgt_pde_flags(pde) ((pde)->flags | ((pde)->nx << 9))
 #define pgt_pde_page_idx(pde) ((pde)->base_0_19 | ((pde)->base_20_39 << 20))
 
 #define pgt_pde_is_mapped(pde) ((pde)->flags & PDE_PRESENT)
-#define pgt_get_pde_dir(pde) (virt_to_pframe((void *)(pde)))
-#define pgt_get_pde_subdir(pde) (pframe_by_number(pgt_pde_page_idx(pde)))
+#define pgt_pde2pagedir(pde) (virt_to_pframe((void *)(pde)))
+#define pgt_pagedir2pde(pagedir) (pframe_to_virt(pagedir))
+#define pgt_pde_fetch_subdir(pde) (pframe_by_number(pgt_pde_page_idx(pde)))
 
 #define pgt_pde_set_flags(pde, pde_flags)       \
   do {                                          \
@@ -80,10 +86,34 @@ typedef struct __pde {
     (pde)->base_20_39 = (page_idx) >> 20;       \
   } while (0)
 
+static inline char *pgt_level_name(pdir_level_t level)
+{
+  switch (level) {
+      case PDT_AMD64_PML4:
+        return "PML4";
+      case PDT_AMD64_PDP:
+        return "PDP";
+      case PDT_AMD64_PD:
+        return "PD";
+      case PDT_AMD64_PT:
+        return "PT"
+      default:
+        return "Unknown";
+  }
+}
+
 static inline pde_t *pgt_fetch_entry(page_frame_t *dir, page_idx_t eidx)
 {
   return ((pde_t *)pframe_to_virt(dir) + eidx);
 }
+
+static inline pde_idx_t pgt_pde2idx(pde_t *pde)
+{
+  return (pde - (pde_t *)align_down((uintptr_t)pde, PAGE_SIZE));
+}
+
+#define pgt_pde_delete(pde)                     \
+  pgt_pde_set_flags(pde, 0);
 
 static inline void pgt_pde_save(pde_t *pde, page_idx_t page_idx, pde_flags_t flags)
 {

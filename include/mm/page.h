@@ -88,8 +88,8 @@ typedef struct __page_frame {
   uint32_t _private;   /**< Private data that may be used by internal page frame allocator */  
 } page_frame_t;
 
-#define PF_ITER_UNDEF_VAL (-0xf)
 
+#define PF_ITER_UNDEF_VAL (-0xf)
 
 /**
  * @struct page_frame_iterator_t

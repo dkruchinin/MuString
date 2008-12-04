@@ -42,6 +42,7 @@
 #define ENOSYS          35      /* Not implemented system functionality. */
 #define EWOULDBLOCK     36      /* Call would block. */
 #define EDEADLOCK       37      /* Deadlock detected. */
+#define EALREADY        38      /* Connection already in progress. */
 
 #endif
 
