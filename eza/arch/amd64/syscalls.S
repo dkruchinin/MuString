@@ -60,7 +60,7 @@ syscall_point:
 	/* Local interrupts are disabled upon entering the entrypoint.
 	 */
 	cmp $NUM_OF_SYSCALLS,%rax
-	jb good_syscall_number
+	jbe good_syscall_number
 
 	movq $-ENOSYS,%rax
         sysretq
