@@ -96,7 +96,7 @@ static inline char *pgt_level_name(pdir_level_t level)
       case PDT_AMD64_PD:
         return "PD";
       case PDT_AMD64_PT:
-        return "PT"
+        return "PT";
       default:
         return "Unknown";
   }

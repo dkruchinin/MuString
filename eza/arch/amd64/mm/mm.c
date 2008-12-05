@@ -297,3 +297,20 @@ void arch_smp_mm_init(int cpu)
 {  
   load_cr3(_k2p((uintptr_t)pframe_to_virt(kernel_root_pagedir)), 1, 1);
 }
+
+pde_flags_t mmap_flags2ptable_flags(unsigned int mmap_flags)
+{
+  pde_flags_t flags = 0;
+
+  CT_ASSERT(sizeof(mmap_flags) >= sizeof(mmap_flags_t));
+  if (mmap_flags & MAP_USER)
+    flags |= PDE_US;
+  if (mmap_flags & MAP_WRITE)
+    flags |= PDE_RW;
+  if (mmap_flags & MAP_DONTCACHE)
+    flags |= PDE_PCD;
+  if (!(mmap_flags & MAP_EXEC))
+    flags |= PDE_NX;
+
+  return flags;
+}

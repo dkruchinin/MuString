@@ -1,1 +1,1 @@
-obj-y += init.o mm.o ptable.o
+obj-y += init.o mm.o

@@ -22,7 +22,7 @@ LN := ln
 RM := rm
 CP := cp
 MKDIR := mkdir
-ECHO := echo
+ECHO := /bin/echo
 
 ifeq ($(VERBOSE),y)
 Q := 
@@ -157,7 +157,7 @@ config:
 	$(Q)$(ECHO) "ARCH=$(arch)" >> .config
 
 menuconfig: host
-	$(Q)$(MAKE) -C kbuild BUILD_ROOT=$(BUILD_ROOT)
+	$(Q)$(MAKE) mconf -C kbuild BUILD_ROOT=$(BUILD_ROOT)
 	$(Q)$(BUILD_ROOT)/kbuild/mconf $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
 	$(Q)$(BUILD_ROOT)/kbuild/conf -s $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
 	$(Q)$(ECHO) "ARCH=$(arch)" >> .config

@@ -28,16 +28,17 @@
 #include <mm/page.h>
 #include <mm/mmap.h>
 #include <mm/pfalloc.h>
+#include <eza/mutex.h>
 #include <eza/spinlock.h>
 #include <eza/errno.h>
 #include <eza/arch/page.h>
+#include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
 #include <eza/arch/types.h>
 
 #define DEFAULT_MAPDIR_FLAGS (MAP_RW | MAP_EXEC | MAP_USER)
 
-page_frame_t *kernel_root_pagedir = NULL;
-static RW_SPINLOCK_DEFINE(tmp_lock);
+root_pagedir_t kernel_root_pagedir;
 
 static inline pde_idx_t __number_of_entries(uitptr_t va_diff, pde_idx_t start_idx, pdir_level_t level)
 {
@@ -54,22 +55,139 @@ static inline void __check_entires_range(page_frame_t *dir, pde_t *pde)
   ASSERT(pagedir_get_entries(dir) <= PTABLE_DIR_ENTRIES);
 }
 
-page_idx_t mm_pin_virt_addr(page_frame_t *dir, uintptr_t va)
+static status_t __check_va(root_directory_t *rood_dir, uintptr_t va, /* OUT */uintptr_t *entry_addr)
 {
   pdir_level_t level;
   page_frame_t *cur_dir = dir;
   pde_t *pde;
 
+  entry_addr = NULL;
   for (level = PTABLE_LEVEL_LAST; level > PTABLE_LEVEL_FIRST; level--) {
     pde = pgt_fetch_entry(cur_dir, pgt_vaddr2idx(va, level));    
-    if (!pgt_pde_is_mapped(pde))
-      return -1;
+    if (!pgt_pde_is_mapped(pde)) {
+      *entry_addr = (uintptr_t)pde;
+      return -EADDRNOTAVAIL;
+    }
 
     cur_dir = pgt_get_pde_subdir(pde);
   }
 
   pde = pgt_fetch_entry(cur_dir, pgt_vaddr2idx(va, PTABLE_LEVEL_FIRST));
-  return (pgt_pde_is_mapped(pde) ? pgt_pde_page_idx(pde) : -1);
+  *entry_addr = (uintptr_t)pde;
+  if (!pgt_pde_is_mapped(pde))
+    return -EADDRNOTAVAIL;
+
+
+  return 0;
+}
+
+void root_pagedir_initialize(root_pagedir_t *rpd, root_pagedir_type_t rpd_type)
+{
+  rpd->dir = pagedir_create(PTABLE_LEVEL_LAST);
+  if (!rpd->dir)
+    panic("root_pagedir_initialize: Can't create root page directory(type = %d): ENOMEM", rpd_type);
+  switch (rpd_type) {
+      case RPD_KERENL:
+        rw_spinlock_initialize(&rpd->dir_spinlock);
+        break;
+      case RPD_USER:
+        mutex_initialize(&rpd->mutex);
+        break;
+      default:
+        panic("root_pagedir_initialize: Unknown page directory type: %d", rpd_type);
+  }
+
+  rpd->type = rpd_type;
+  rpd->pin_type = 0;
+}
+
+void pin_root_pagedir(root_pagedir_t *rpd, int how)
+{
+  rpd->pin_type = how;
+  switch (how) {
+      case RPD_PIN_RW:
+        if (rpd->type == RPD_KERNEL)
+          spinlock_lock_write(&rpd->dir_spinlock);
+        else if (rpd->type == RPD_USER)
+          mutex_lock(&rpd->dir_mutex);
+        else          
+          panic("pin_root_page: Unknown root page directory type: %d", prd->type);
+        
+        break;
+      case RPD_PIN_RDONLY:
+        if (rpd->type == RPD_KERNEL)
+          spinlock_lock_read(&rpd->dir_spinlock);
+        else if (rpd->type == RPD_USER)
+          mutex_lock(&rpd->dir_mutex);
+        else
+          panic("pin_root_page: Unknown root page directory type: %d", prd->type);
+
+        break;
+      default:
+        panic("pin_root_pagedir: Unknown type of lock operation: %d", how);
+  }
+}
+
+status_t mm_check_va_range(root_pagedir_t *root_dir, uintptr_t va_from,
+                           uitptr_t va_to, /* OUT */uintptr_t *entry_addr)
+{
+  uintptr_t va;
+  status_t ret = 0;
+
+  pin_root_pagedir(root_dir, RPD_PIN_RDONLY);
+  for (va = PAGE_ALIGN_DOWN(va_from), va < va_to, va += PAGE_SIZE) {
+    ret = __check_va(root_dir, va, entry_addr);
+    if (ret)
+      goto out;
+  }
+
+  out:
+  unpin_root_pagedir(root_dir);
+  return ret;
+}
+
+status_t mm_check_va(root_directory_t *rood_dir, uintptr_t va, /* OUT */uintptr_t *entry_addr)
+{
+  status_t ret;
+  
+  pin_root_pagedir(root_dir, RPD_PIN_RDONLY);
+  ret = __check_va(root_dir, va, entry_addr);
+  unpin_root_pagedir(root_dir);
+}
+
+void unpin_root_pagedir(root_pagedir_t *rpd)
+{
+  if (!rpd->pin_type) {
+    kprintf(KO_WARN "Attemtion to unping already unpinned root page directory %p.\n", rpd);
+    return;
+  }
+  else {
+    int pin_type = rpd->pin_type;
+
+    rpd->pin_type = 0;
+    switch (pin_type) {
+        case RPD_PIN_RDONLY:
+          if (rpd->type == RPD_KERNEL)
+            spinlock_unlock_read(&rpd->dir_spinlock);
+          else if (rpd->type == RPD_USER)
+            mutex_unlock(&prd->dir_mutex);
+          else
+            panic("unpin_root_pagedir: Unknown page directory type: %d", prd->type);
+          
+          break;
+        case RPD_PIN_RW:
+          if (rpd->type == RPD_KERNEL)
+            spinlock_unlock_write(&rpd->dir_spinlock);
+          else if (rpd->type == RPD_USER)
+            mutex_unlock(&rpd->dir_mutex);
+          else
+            panic("unpin_root_pagedir: Unknown page directory type: %d", prd->type);
+          
+          break;
+        default:
+          panic("unpin_root_pagedir: Unknown pin type: %d", pin_type);
+    }
+  }
 }
 
 status_t pagedir_populate(pde_t *parent_pde, pde_flags_t flags)
@@ -159,51 +277,58 @@ void pagedir_unmap_entries(pde_t *pde_start, pde_idx_t entries)
   }
 }
 
-int mmap(page_frame_t *root_dir, uintptr_t va, page_idx_t first_page, int npages, mmap_flags_t flags)
+status_t mmap(root_pagedir_t *root_dir, uintptr_t va, page_idx_t first_page, int npages, mmap_flags_t flags)
 {  
   page_idx_t idx;
   mmapper_t mapper;
-  int ret;
+  status_t ret;
   page_frame_iterator_t pfi;
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
-
-  idx = virt_to_pframe_id((void *)va);
-  mapper.va_from = va;
-  mapper.va_to = va + ((npages - 1) << PAGE_WIDTH);
+  
+  mapper.va_from = PAGE_ALIGN(va);
+  idx = virt_to_pframe_id((void *)mapper.va_from);
+  mapper.va_to = mapper.va_from + ((npages - 1) << PAGE_WIDTH);
   mapper.flags = flags;
   mm_init_pfiter_index(&pfi, &pfi_index_ctx, first_page, first_page + npages - 1);
   mapper.pfi = &pfi;
 
-  /* TODO: DK replace this ugly spinlock to counter or binary semaphore (RW?) */
-  spinlock_lock_write(&tmp_lock);
-  ret = mmap_pages(root_dir, &mapper);
-  spinlock_unlock_write(&tmp_lock);
+  pin_root_pagedir(root_dir, RPD_PIN_RW);
+  ret = mmap_pages(root_dir->dir, &mapper);
+  unpin_root_pagedir(root_dir);
+  
   return ret;
 }
 
 int __mmap_pages(page_frame_t *dir, mmapper_t *mapper, pdir_level_t level)
 {
-  pde_idx_t idx, entries, idx_start;
+  pde_idx_t idx, entries;
   int ret = 0;
   uintptr_t va_from_saved = mapper->va_from;
+  pde_t *pde;
   
-  idx_start = idx = pgt_vaddr2idx(mapper->va_from, level);
+  idx = pgt_vaddr2idx(mapper->va_from, level);
   entries = __number_of_entries(mapper->va_to - mapper->va_from, level);
   if (level == PTABLE_LEVEL_FIRST) {
-    ret = mm_map_entries(pgt_fetch_entry(dir, idx), entries, mapper->pfi, pgt_translate_flags(mapper->flags));
+    ret = pagedir_map_entries(pgt_fetch_entry(dir, idx), entries, mapper->pfi, mmap_flags2ptable_flags(mapper->flags));
     if (!ret)
       mapper->va_from += (pgt_get_range(level) - pgt_idx2vaddr(idx, level));
   }
   else {
-    pde_flags_t _flags = pgt_translate_flags(DEFAULT_MAPDIR_FLAGS);
+    pde_flags_t _flags = mmap_flags2ptable_flags(DEFAULT_MAPDIR_FLAGS);
     
     do {
-      pde_t *pde = pgt_fetch_entry(dir, idx++);
-      
+      pde = pgt_fetch_entry(dir, idx++);
+
       if (!pgt_pde_is_mapped(pde)) {
-        ret = mm_populate_pagedir(pde, _flags);
-        if (ret < 0)
-          goto unmap;
+        ret = -EALREADY;
+        pde = NULL;
+        goto unmap;
+      }
+
+      ret = pagedir_populate(pde, _flags);
+      if (ret < 0) {
+        pde = NULL;
+        goto unmap;
       }
       
       ret = __mmap_pages(pgt_get_pde_subdir(pde), mapper, level - 1);
@@ -215,41 +340,45 @@ int __mmap_pages(page_frame_t *dir, mmapper_t *mapper, pdir_level_t level)
 
   return ret;
   unmap:
-  if (idx_start != idx) {
-    while (idx >= idx_from) {
-      pde_t *pde = pgt_fetch_entry(dir, idx--);
-      
-      if (!pgt_pde_is_mapped(pde))
-        continue;
-      
-    }
+  if (pde) {
+    if (!pageidr_get_entries(pgt_pde2pagedir(pde)))
+      pagedir_depopulate(pde);
   }
+  if (level == PTABLE_LEVEL_LAST)
+    __unmap_pages(dir, va_from_saved, minfo->va_from, PTABLE_LEVEL_LAST);
+  
+  return ret;
+
+  panic:
+  panic("__mmap: Can't map virtual region (%p, %p). ERROR = %d\n", va_from_saved, minfo->va_to, ret);
 }
 
-status_t __unmap(page_frame_t *dir, uintptr_t va_from, uitptr_t va_to, pdir_level_t level)
+void __unmap_pages(page_frame_t *dir, uintptr_t va_from, uitptr_t va_to, pdir_level_t level)
 {
   pde_idx_t idx, entries;
   status_t ret = 0;
 
   idx = pgt_vaddr2idx(va_from, level);
   entries = __number_of_entries(va_to - va_from, level);  
-  if (level == PTABLE_LEVEL_FIRST) {
-    ret = mm_unmap_entries(dir, entries);
-    goto panic;
-  }
+  if (level == PTABLE_LEVEL_FIRST)
+    pagedir_unmap_entries(dir, entries);
   else {
     while (entries--) {
       pde_t *pde = pgt_fetch_entry(dir, idx);
 
-      if (!pgt_pde_is_mapped(pde))
-        continue;
-
-      ret = __unmap(pgt_pde_fetch_subdir(pde), va_from + pgt_get_range(level) - pgt_idx2vaddr(idx++, level),
+      if (!pgt_pde_is_mapped(pde)) {
+        ret = -EALREADY;
+        goto panic;
+      }
+      
+      __unmap_pages(pgt_pde_fetch_subdir(pde), va_from + pgt_get_range(level) - pgt_idx2vaddr(idx, level),
                     va_to, level - 1);
-      if (ret == -EALREADY)
-        goto unmap;
-      if (!pagedir_get_entries(pgt_get_pde_dir(pde)))
-        mm_depopulate_pagedir(pde);
+      idx++;
+      if (!pagedir_get_entries(pgt_get_pde_dir(pde))) {
+        ret = mm_depopulate_pagedir(pde);
+        if (ret)
+          goto panic;
+      }
     }
   }
 
@@ -257,3 +386,59 @@ status_t __unmap(page_frame_t *dir, uintptr_t va_from, uitptr_t va_to, pdir_leve
   panic:
   panic("__unmap: Can't unmap virtual region: %p - %p. ERROR = %d\n", va_from, va_to, ret);
 }
+
+#ifdef CONFIG_DEBUG_MM
+static status_t __verify_mapping(root_pagedir_t *rpd, mmapper_t *mapper, /* OUT */mapping_dbg_info_t *minfo)
+{
+  uintptr_t va;
+  status_t ret = 0;
+
+  for (va = PAGE_ALIGN_DOWN(mapper->va_from); va < mapper->va_tol va += PAGE_SIZE) {
+    page_idx_t idx;
+    
+    ret = __check_va(rpd, va, &minfo->address);
+    if (ret)
+      goto out;
+
+    iter_next(mapper->pfi);
+    ASSERT(iter_isrunning(mapper->pfi));
+    minfo->idx = pgt_pde_page_idx((pde_t *)(*entry_addr));
+    if (minfo->idx != pfi->idx)
+      return -EFAULT;
+  }
+
+  return ret;
+}
+
+status_t __mm_verify_mapping(root_pagedir_t *rpd, mapper_t *mapper, /* OUT */mapping_dbg_info_t *minfo)
+{
+  status_t ret;
+  
+  pin_root_pagedir(rpd, RPD_PIN_RDONLY);
+  ret = __verify_mapping(rpd, mapper, minfo);
+  unpin_root_pagedir(rpd);
+
+  return ret;
+}
+
+status_t mm_verify_mapping(root_pagedir_t *rpd, uintptr_t va, page_idx_t first_page,
+                           int npages, /* OUT */mapping_dbg_info_t *minfo)
+{
+  page_frame_iterator_t pfi;
+  ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
+  status_t ret;
+  mmapper_t mapper;
+
+  mapper.va_from = PAGE_ALIGN_DOWN(va);
+  idx = virt_to_pframe_idx((void *)mapper.va_from);
+  mapper.va_to = mapper.va_from + ((npages - 1) << PAGE_WIDTH);
+  mm_init_pfiter_index(&pfi, &pfi_index_ctx, first_page, first_page + npages - 1);
+  mapper.pfi = &pfi;
+
+  pin_root_pagedir(rpd, RPD_PIN_RDONLY);
+  ret = __verify_mapping(rpd, mapper, minfo);
+  unpin_root_pagedir(rpd);
+
+  return ret;
+}
+#endif /* CONFIG_DEBUG_MM */

@@ -113,6 +113,7 @@ DEFINE_ITERATOR_TYPES(page_frame,
 extern page_frame_t *page_frames_array;
 
 #define PAGE_ALIGN(addr) align_up((uintptr_t)(addr), PAGE_SIZE)
+#define PAGE_ALIGN_DOWN(addr) align_down((uintptr_t)(addr), PAGE_SIZE);
 #define pframe_pool_type(page) (__pool_type((page)->flags & PAGE_POOLS_MASK))
 
 static inline void *pframe_to_virt(page_frame_t *frame)

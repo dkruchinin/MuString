@@ -26,11 +26,12 @@
 
 #include <mlibc/string.h>
 #include <mm/page.h>
+#include <eza/kernel.h>
+#include <eza/mutex.h>
+#include <eza/spinlock.h>
 #include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
 #include <eza/arch/types.h>
-
-typedef page_frame_t * page_directory_t;
 
 /**
  * @typedef uint8_t mmap_flags_t
@@ -46,9 +47,6 @@ typedef uint8_t mmap_flags_t;
 #define MAP_EXEC      0x08 /**< Mapped page may be executed */
 #define MAP_DONTCACHE 0x10 /**< Prevent caching of mapped page */
 
-extern page_directory_t kernel_root_pagedir;
-extern bool map_verbose;
-
 typedef struct __mmapper {
   page_frame_iterator_t *pfi;
   uintptr_t va_from;
@@ -56,14 +54,36 @@ typedef struct __mmapper {
   mmap_flags_t flags;  
 } mmapper_t;
 
-#define mmap_pages(root_dir, minfo)             \
-  __mmap_pages(root_dir, minfo, PTABLE_LEVEL_LAST)
-#define mmap_kern_pages(minfo)                  \
-  mmap_pages(kernel_root_pagedir, minfo)
-#define mmap_kern(va, first_page, npages, flags)            \
-  mmap(kernel_root_pagedir, va, first_page, npages, flags)
-#define mm_virt_addr_is_mapped(root_dir, va)       \
-  (mm_pin_virt_addr(root_dir, (uintptr_t)(va)) >= 0)
+typedef enum __rpd_kind {
+  RPD_KERNEL,
+  RPD_USER,
+} root_pagedir_type_t;
+
+typedef struct __root_pagedir {
+  page_frame_t *dir;  
+  union {
+    struct {
+      rw_spinlock_t dir_spinlock;
+    };
+    struct {
+      mutex_t dir_mutex;
+    };
+  };
+  
+  int pin_type;
+  root_pagedir_type_t type;
+} root_pagedir_t;
+
+enum {
+  RPD_PIN_RDONLY = 1,
+  RPD_PIN_RW,
+};
+
+extern root_pagedir_t kernel_root_pagedir;
+
+void root_pagedir_initialize(root_pagedir_t *rpd, root_pagedir_type_t rpd_type);
+void pin_root_pagedir(root_pagedir_t *rpd);
+void unpin_root_pagedir(root_pagedir_t *rpd);
 
 /*
  * low level mapping functions
@@ -102,13 +122,58 @@ status_t pagedir_populate(pde_t *pde, pde_flags_t flags);
 status_t pagedir_depopulate(pde_t *pde);
 status_t pagedir_map_entries(pde_t *pde_start, pde_idx_t entries,
                              page_frame_iterator_t *pfi, pde_flags_t flags);
-status_t pagedir_unmap_entries(pde_t *pde_start, pde_idx_t entries);
+void pagedir_unmap_entries(pde_t *pde_start, pde_idx_t entries);
 
-int __mmap_pages(page_directory_t *dir, mmapper_t *mapper, pdir_level_t level);
-int mmap(page_directory_t *root_dir, uintptr_t va, page_idx_t first_page, int npages, mmap_flags_t flags);
-int mm_populate_pagedir(pde_t *pde, pde_flags_t flags);
-int mm_map_entries(pde_t *pde_start, pde_idx_t entries,
-                   page_frame_iterator_t *pfi, pde_flags_t flags);
+/* middle-level mapping functions */
+status_t __mmap_pages(page_frame_t *dir, mmapper_t *mapper, pdir_level_t level);
+void __unmap_pages(page_frame_t *dir, uintptr_t va_from, uintptr_t va_to, pdir_level_t level);
+
+/* high-level mapping functions */
+#define mmap_kern(va, first_page, npages, flags)            \
+  mmap(kernel_root_pagedir, va, first_page, npages, flags)
+#define mmap_kern_pages(minfo)                  \
+  mmap_pages(kernel_root_pagedir, minfo)
+#define unmap_kern(va, npages)                  \
+  unmap(kernel_root_pagedir, va, npages)
+
+status_t mmap(root_pagedir_t *root_dir, uintptr_t va, page_idx_t first_page, int npages, mmap_flags_t flags);
+
+static inline void unmap(root_pagedir_t *root_dir, uintptr_t va, int npages)
+{
+  uintptr_t _va = PAGE_ALIGN(va);
+  
+  pin_root_pagedir(root_dir, RPD_PIN_RW);
+  __unmap_pages(rood_dir->dir, _va, _va + (npages << PAGE_WIDTH), PTABLE_LEVEL_LAST);
+  unpin_root_pagedir(root_dir);
+}
+
+static inline status_t mmap_pages(root_pagedir_t *root_dir, mmapper_t *minfo)
+{
+  minfo->va_from = PAGE_ALIGN(minfo->va_from);
+  minfo->va_to = PAGE_ALIGN(minfo->va_to);
+  pin_root_pagedir(root_dir, RPD_PIN_RW);
+  __mmap_pages(root_dir->dir, minfo, PTABLE_LEVEL_LAST);
+  unpin_root_pagedir(root_dir);
+}
+
+#define mm_virt_addr_is_mapped(root_dir, va)       \
+  (mm_pin_virt_addr(root_dir, (uintptr_t)(va)) >= 0)
+
 page_idx_t mm_pin_virt_addr(page_directory_t *dir, uintptr_t va);
+
+#ifdef CONFIG_DEBUG_MM
+typedef struct __mapping_dbg_info {
+  uintptr_t address;
+  page_idx_t idx;
+} mapping_dbg_info_t;
+
+status_t mm_verify_mapping(root_pagedir_t *rpd, uintptr_t va,
+                           page_idx_t first_page, int npages, mapping_dbg_info_t *minfo);
+status_t __mm_verify_mapping(root_pagedir_t *rpd, mapper_t *mapper, mapping_dbg_info_t *minfo);
+#else
+typedef struct __unused__  __mapping_info_dbg {} mapping_info_dbg_t;
+#define mm_verify_mapping(rpd, va, first_page, npages, minfo)
+#define __mm_verify_mapping(rpd, mapper, minfo)
+#endif /* CONFIG_DEBUG_MM */
 
 #endif /* __MMAP_H__ */
