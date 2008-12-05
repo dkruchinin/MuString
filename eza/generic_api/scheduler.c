@@ -483,9 +483,7 @@ void migration_thread(void *data)
     } else {
       spinlock_unlock(&migration_locks[cpu]);
     }
-    kprintf( "[CPU #%d]: Migration thread is goint to sleep ...\n",cpu_id() );
     sched_change_task_state(current_task(),TASK_STATE_SLEEPING);
-    kprintf( "[CPU #%d]: Migration thread got woken up !\n",cpu_id() );
   }
 }
 

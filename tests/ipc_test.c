@@ -443,6 +443,7 @@ static void __server_thread(void *ctx)
   for(i=0;i<TEST_ROUNDS;i++) {
     r=sys_port_receive(i,IPC_BLOCKED_ACCESS,(ulong_t)__server_rcv_buf,
                        sizeof(__server_rcv_buf),&msg_info);
+    tf->printf(SERVER_THREAD "Got a message !\n");
     if( r ) {
       tf->printf(SERVER_THREAD "Insufficient return value during 'sys_port_receive': %d\n",
                  r);

@@ -181,15 +181,12 @@ static inline status_t waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t d
   wqueue_t *wq = wq_task->q;
   status_t ret;
 
-  spinlock_lock(&wq->q_lock);
-  if (!wq) {
-     ret = 0;
-     goto out;
+  if( !wq ) {
+    return 0;
   }
-   
-  ret = __waitqueue_delete(wq_task, dop);
-   
-out:
+
+  spinlock_lock(&wq->q_lock);
+  ret=__waitqueue_delete(wq_task, dop);
   spinlock_unlock(&wq->q_lock);
   return ret;
 }

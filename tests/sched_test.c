@@ -1,3 +1,4 @@
+#include <config.h>
 #include <eza/kernel.h>
 #include <mlibc/kprintf.h>
 #include <eza/smp.h>
@@ -74,7 +75,7 @@ static void __migration_test(void *d)
 {
   sched_test_ctx_t *tctx=(sched_test_ctx_t*)d;
   test_framework_t *tf=tctx->tf;
-  sched_thread_data_t *thread_data[NR_CPUS-1];
+  sched_thread_data_t *thread_data[CONFIG_NRCPUS-1];
   int i,r;
 
   if( do_scheduler_control(current_task(),SYS_SCHED_CTL_SET_POLICY,
@@ -83,7 +84,7 @@ static void __migration_test(void *d)
     tf->abort();
   }
 
-  for(i=0;i<NR_CPUS-1;i++) {
+  for(i=0;i<CONFIG_NRCPUS-1;i++) {
     sched_thread_data_t *td=memalloc(sizeof(*td));
     task_t *t;
 
@@ -119,7 +120,7 @@ static void __migration_test(void *d)
 
   /* Now change state for all remote tasks. */
   tf->printf(SERVER_ID "Now put all remote tasks into sleep.\n");
-  for( i=0;i<NR_CPUS-1;i++ ) {
+  for( i=0;i<CONFIG_NRCPUS-1;i++ ) {
     tf->printf(SERVER_ID "Putting into sleep task %d (CPU: %d)\n",
                thread_data[i]->task->pid,
                thread_data[i]->target_cpu);
@@ -138,7 +139,7 @@ static void __migration_test(void *d)
 
   /* Now restore state for all remote tasks. */
   tf->printf(SERVER_ID "Now wake up all remote tasks.\n");
-  for( i=0;i<NR_CPUS-1;i++ ) {
+  for( i=0;i<CONFIG_NRCPUS-1;i++ ) {
     tf->printf(SERVER_ID "Waking up task %d (CPU: %d)\n",
                thread_data[i]->task->pid,
                thread_data[i]->target_cpu);
@@ -154,7 +155,7 @@ static void __migration_test(void *d)
   }
 
   /* Resource cleanup */
-  for(i=0;i<NR_CPUS-1;i++) {
+  for(i=0;i<CONFIG_NRCPUS-1;i++) {
     memfree(thread_data[i]);
   }
 }

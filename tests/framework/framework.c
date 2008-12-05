@@ -1,3 +1,4 @@
+#include <config.h>
 #include <eza/kernel.h>
 #include <mlibc/kprintf.h>
 #include <eza/smp.h>
@@ -36,6 +37,8 @@ static void __def_failed(void)
 {
   kprintf( "\n  FAILED\n\n" );
   num_failed++;
+
+
   __check_for_spin();
 }
 
@@ -91,7 +94,12 @@ void run_tests(void)
   kprintf( " %d testcase(s) found.\n",
            tc->get_num_testcases(tc_ctx));
 
+#ifdef CONFIG_TEST_IGNORE_FAILS
+  tf->set_first_fault_hit(false);
+#else
   tf->set_first_fault_hit(true);
+#endif
+
   tc->run(tf,tc_ctx);
 
   kprintf( "\n\nDone ! %d of %d testcases executed.\n",
