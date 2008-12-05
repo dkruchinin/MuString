@@ -40,7 +40,7 @@
 
 typedef struct __poll_kitem {
   wqueue_task_t qtask;
-  ipc_port_t *port;
+  ipc_gen_port_t *port;
   poll_event_t events,revents;
 } poll_kitem_t;
 

@@ -106,8 +106,7 @@ status_t sys_port_send(ulong_t channel,ulong_t flags,
     return -EINVAL;
   }
 
-  if( !valid_user_address_range((ulong_t)snd_buf,snd_size) ||
-      !valid_user_address_range(rcv_buf,rcv_size) ) {
+  if( !valid_user_address_range((ulong_t)snd_buf,snd_size) ) {
     return -EFAULT;
   }
 
@@ -129,6 +128,10 @@ status_t sys_port_send(ulong_t channel,ulong_t flags,
   }
 
   if( flags & IPC_BLOCKED_ACCESS ) {
+    if( !valid_user_address_range(rcv_buf,rcv_size) ) {
+      r=-EFAULT;
+      goto put_port;
+    }
     msg=ipc_setup_task_port_message(caller,port,snd_buf,snd_size,
                                     rcv_buf,rcv_size);
   } else {
@@ -141,6 +144,7 @@ status_t sys_port_send(ulong_t channel,ulong_t flags,
     r=__ipc_port_send(port,msg,flags,rcv_buf,rcv_size);
   }
 
+put_port:
   __ipc_put_port(port);
   put_channel:
   ipc_put_channel(c);

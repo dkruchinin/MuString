@@ -37,7 +37,7 @@
 
 struct __ipc_port_t;
 
-#define IPC_BUFFERED_PORT_LENGTH  1024
+#define IPC_BUFFERED_PORT_LENGTH  PAGE_SIZE
 
 #define IPC_PORT_SHUTDOWN  0x800
 

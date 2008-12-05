@@ -128,9 +128,8 @@ status_t waitqueue_insert(wqueue_t *wq, wqueue_task_t *wq_task, wqueue_insop_t i
   if (iop == WQ_INSERT_SLEEP) {
       ret = sched_change_task_state_deferred(wq_task->task, TASK_STATE_SLEEPING,
                                              wq->acts.sleep_if_needful, wq_task);
-      ret = sched_change_task_state(wq_task->task, TASK_STATE_SLEEPING);
   }
-    
+
   return ret;
 }
 
@@ -141,10 +140,10 @@ status_t waitqueue_pop(wqueue_t *wq, task_t **task)
   
   spinlock_lock(&wq->q_lock);
   if (waitqueue_is_empty(wq)) {
-    ret = -EINVAL;
+    ret = -ENOENT;
     goto out;
   }
-
+   
   wq_t = list_entry(list_node_first(&wq->waiters), wqueue_task_t, node);
   if (task)
     *task = wq_t->task;
@@ -152,7 +151,6 @@ status_t waitqueue_pop(wqueue_t *wq, task_t **task)
   ret = __waitqueue_delete(wq_t, WQ_DELETE_WAKEUP);
   out:
   spinlock_unlock(&wq->q_lock);
-  waitqueue_dump(wq);
   return ret;
 }
 

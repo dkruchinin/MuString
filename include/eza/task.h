@@ -77,6 +77,7 @@ typedef enum __task_state {
   TASK_STATE_SLEEPING = 3,
   TASK_STATE_STOPPED = 4,
   TASK_STATE_ZOMBIE = 5,
+  TASK_STATE_SUSPENDED = 6,
 } task_state_t;
 
 typedef uint32_t priority_t;
@@ -236,9 +237,13 @@ void free_task_struct(task_t *task);
 
 #define is_thread(task)  ((task)->group_leader && (task)->group_leader != (task))
 
+#define task_is_migrable(t) (!list_node_is_bound(&(t)->migration_list))
+
 void cleanup_thread_data(void *t,ulong_t arg);
 
 /* Default kernel threads flags. */
 #define KERNEL_THREAD_FLAGS  (CLONE_MM)
+
+#define TASK_INIT   0x80000000   /* This task is the NameServer i.e. 'init' */
 
 #endif

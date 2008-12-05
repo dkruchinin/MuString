@@ -190,13 +190,19 @@ void server_run_tasks(void)
   status_t r;
   kconsole_t *kconsole=default_console();
 
-	if (i > 0)
-		kprintf("[SRV] Starting servers: %d ... \n",i);
-  
-	kconsole->disable(); /* shut off console */
+  if( i > 0 ) {
+    kprintf("[SRV] Starting servers: %d ... \n",i);
+    kconsole->disable();
+  }
 
   for(a=0;a<i;a++) {
-    r=create_task(current_task(),0,TPL_USER,&server);
+    ulong_t flags=0;
+
+    if( !a ) { /* Init */
+      flags |= TASK_INIT;
+    }
+
+    r=create_task(current_task(),flags,TPL_USER,&server);
     if( r ) {
       panic( "server_run_tasks(): Can't create task N %d !\n",
              a+1);
@@ -212,29 +218,22 @@ void server_run_tasks(void)
 
     r=__create_task_mm(server,a);
     if( r ) {
-      panic( "server_run_tasks(): Can't create memory space for task N %d\n",
+      panic( "server_run_tasks(): Can't create memory space for core task N %d\n",
              a+1);
     }
 
-    /* After creating the NameServer we should spawn all per-cpu threads. */
-    /*if( !a ) {
-      spawn_percpu_threads();
-    }*/
-
     r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
     if( r ) {
-      panic( "server_run_tasks(): Can't launch task N%d !\n",a+1);
+      panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);
     }
   }
-
-  return;
 }
 
 #else
 
 void server_run_tasks(void)
 {
-  //spawn_percpu_threads();
+  /* In test mode we do nothing. */
 }
 
 #endif /* !CONFIG_TEST */

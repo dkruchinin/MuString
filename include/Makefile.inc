@@ -1,5 +1,5 @@
 define colored
-$(if $(NOCOLOR),$(1),$(1)$(2)\e[0m)
+$(if $(NOCOLOR),$(2),$(1)$(2)\e[0m)
 endef
 
 define echo-header

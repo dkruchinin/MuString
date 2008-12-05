@@ -22,7 +22,7 @@ LN := ln
 RM := rm
 CP := cp
 MKDIR := mkdir
-ECHO := echo
+ECHO ?= echo
 
 ifeq ($(VERBOSE),y)
 Q := 

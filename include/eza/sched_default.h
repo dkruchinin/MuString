@@ -57,7 +57,7 @@
 #define EZA_SCHED_DEF_NONRT_PRIO (EZA_SCHED_NONRT_MIN_PRIO + EZA_SCHED_NONRT_PRIOS/2)
 
 #define EZA_SCHED_CPUS CONFIG_NRCPUS
-#define EZA_SCHED_NUM_ARRAYS 1
+#define EZA_SCHED_NUM_ARRAYS 2
 #define EZA_SCHED_BITMAP_PATTERN 0x00
 
 #define EZA_SCHED_INITIAL_TASK_PRIORITY EZA_SCHED_DEF_NONRT_PRIO
@@ -72,15 +72,10 @@
 #define FIND_FIRST_BITMAP_BIT(array) \
   find_first_bit_mem_64(&array->bitmap[0],EZA_SCHED_TOTAL_WIDTH)
 
-typedef enum __sched_discipline {
-  SCHED_RR = 0,  /* Round-robin discipline. */
-  SCHED_FIFO = 1, /* FIFO discipline. */
-  SCHED_ADAPTIVE = 2, /* Default 'O(1)-like' discipline. */
-} sched_discipline_t;
-
 typedef struct __eza_sched_prio_array {
   eza_sched_type_t bitmap[EZA_SCHED_TOTAL_WIDTH];
   list_head_t queues[EZA_SCHED_TOTAL_PRIOS];
+  ulong_t num_tasks;
 } eza_sched_prio_array_t;
 
 typedef struct __eze_sched_taskdata {
@@ -94,20 +89,20 @@ typedef struct __eze_sched_taskdata {
   eza_sched_prio_array_t *array;
 } eza_sched_taskdata_t;
 
+#define is_rt_task(t) (((t)->sched_discipline == SCHED_RR) ||   \
+                       ((t)->sched_discipline) == SCHED_FIFO)
+
 typedef struct __eza_sched_cpudata {
   spinlock_t lock;
+  bound_spinlock_t __lock;
   scheduler_cpu_stats_t *stats;
-  eza_sched_prio_array_t *active_array;
+  eza_sched_prio_array_t *active_array,*expired_array;
   eza_sched_prio_array_t arrays[EZA_SCHED_NUM_ARRAYS];
+  task_t *running_task;
   cpu_id_t cpu_id;
 } eza_sched_cpudata_t;
 
-static eza_sched_taskdata_t *allocate_task_sched_data(void);
-static void free_task_sched_data(eza_sched_taskdata_t *data);
-static eza_sched_cpudata_t *allocate_cpu_sched_data(cpu_id_t cpu);
-static void free_cpu_sched_data(eza_sched_cpudata_t *data);
-static status_t setup_new_task(task_t *task);
-static void initialize_cpu_sched_data(eza_sched_cpudata_t *queue, cpu_id_t cpu);
+extern eza_sched_cpudata_t *sched_cpu_data[EZA_SCHED_CPUS];
 
 /* Array must be locked prior to calling this function !
  */
@@ -119,6 +114,7 @@ static inline void __add_task_to_array(eza_sched_prio_array_t *array,task_t *tas
   sched_data->array = array;
   SET_BITMAP_BIT(array,prio);
   list_add2tail(&array->queues[prio],&sched_data->runlist);
+  array->num_tasks++;
 }
 
 /* NOTE: Array mus be locked !
@@ -130,7 +126,8 @@ static inline void __remove_task_from_array(eza_sched_prio_array_t *array,task_t
 
   list_del(&sched_data->runlist);
   sched_data->array = NULL;
-
+  array->num_tasks--;
+  
   if( list_is_empty( &array->queues[prio] ) ) {
     RESET_BITMAP_BIT(array,prio);
   }
@@ -150,6 +147,41 @@ static inline task_t *__get_most_prioritized_task(eza_sched_cpudata_t *sched_dat
       RESET_BITMAP_BIT(array,idx);
     }
   }
+  return NULL;
+}
+
+#define LOCK_CPU_SCHED_DATA(d)                  \
+    spinlock_lock(&d->lock)
+
+#define UNLOCK_CPU_SCHED_DATA(d)                \
+  spinlock_unlock(&d->lock)
+
+#define EZA_TASK_SCHED_DATA(t) ((eza_sched_taskdata_t *)t->sched_data)
+
+#define __LOCK_CPU_SCHED_DATA(d)  bound_spinlock_lock_cpu(&(d)->__lock,cpu_id())
+#define __UNLOCK_CPU_SCHED_DATA(d)  bound_spinlock_unlock(&(d)->__lock)
+
+#define try_to_lock_sched_data(sd)              \
+  bound_spinlock_trylock_cpu(&(sd)->__lock,cpu_id())
+
+static inline eza_sched_cpudata_t *get_task_sched_data_locked(task_t *task,
+                                                              ulong_t *is,bool cyclic)
+{
+  do {
+    ulong_t cpu=task->cpu;
+    eza_sched_cpudata_t *cdata=sched_cpu_data[cpu];
+
+    interrupts_save_and_disable(*is);
+    if( bound_spinlock_trylock_cpu(&cdata->__lock,cpu_id() ) ) {
+      if( task->cpu == cpu ) {
+        return cdata;
+      } else {
+        /* No luck: someone has changed task's CPU concurrently. */
+        bound_spinlock_unlock(&cdata->__lock);
+      }
+    }
+    interrupts_restore(*is);
+  } while(cyclic);
   return NULL;
 }
 

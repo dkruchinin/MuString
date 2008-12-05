@@ -155,6 +155,8 @@ void waitqueue_initialize(wqueue_t *wq);
  */
 void waitqueue_prepare_task(wqueue_task_t *wq_task, task_t *task);
 
+#define waitqueue_is_empty(wq) !((wq)->num_waiters)
+
 /**
  * @brief Insert new task into the wait queue
  * @param wq      - A wait queue task will be inserted to
@@ -179,10 +181,13 @@ static inline status_t waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t d
   wqueue_t *wq = wq_task->q;
   status_t ret;
 
-  spinlock_lock(&wq->q_lock);  
-  ret = __waitqueue_delete(wq_task, dop);
-  spinlock_unlock(&wq->q_lock);
+  if( !wq ) {
+    return 0;
+  }
 
+  spinlock_lock(&wq->q_lock);
+  ret=__waitqueue_delete(wq_task, dop);
+  spinlock_unlock(&wq->q_lock);
   return ret;
 }
 

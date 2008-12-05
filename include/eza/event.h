@@ -4,7 +4,6 @@
 #include <eza/arch/types.h>
 #include <eza/spinlock.h>
 #include <eza/task.h>
-#include <eza/scheduler.h>
 
 #define EVENT_OCCURED  0x1
 
@@ -17,6 +16,11 @@
     interrupts_enable();
 
 typedef bool (*event_checker_t)(void *priv);
+
+extern status_t sched_change_task_state(task_t *task,task_state_t state);
+extern status_t sched_change_task_state_deferred(task_t *task,task_state_t state,
+                                                 bool (*handler)(void *data),
+                                                 void *data);
 
 typedef struct __event_t {
   spinlock_t __lock;

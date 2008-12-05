@@ -84,15 +84,16 @@ static void main_routine_stage1(void)
    * receive interrups from the other CPUs via LAPIC upon unleashing
    * the other CPUs.
    */
+
   interrupts_enable();
   initialize_swks();
   //swks_add_version_info();
 
   /* OK, we can proceed. */
+  spawn_percpu_threads();
   server_run_tasks();
 
   /* Enter idle loop. */
-
   kprintf( "CPU #0 is entering idle loop. Current task: %p, CPU ID: %d\n",
            current_task(), cpu_id() );
 
@@ -116,6 +117,7 @@ void main_routine(void) /* this function called from boostrap assembler code */
   kprintf("[LW] Initialized CPU vectors.\n");
 
   mm_init();
+
   slab_allocator_init();
 
   initialize_scheduler();
@@ -145,6 +147,8 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
   sched_add_cpu(cpu);
 
   interrupts_enable();
+
+  spawn_percpu_threads();
 
   /* Entering idle loop. */
   kprintf( "CPU #%d is entering idle loop. Current task: %p, CPU: %d, ATOM: %d\n",
