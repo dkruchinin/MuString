@@ -13,7 +13,7 @@
 #include <kernel/vm.h>
 
 /* TODO: [mt] Implement security checks for port-related syscalls ! */
-status_t sys_open_channel(pid_t pid,ulong_t port)
+status_t sys_open_channel(pid_t pid,ulong_t port,ulong_t flags)
 {
   task_t *task = pid_to_task(pid);
   status_t r;
@@ -22,7 +22,7 @@ status_t sys_open_channel(pid_t pid,ulong_t port)
     return -ESRCH;
   }
 
-  r=ipc_open_channel(current_task(),task,port);
+  r=ipc_open_channel(current_task(),task,port,flags);
   release_task_struct(task);
   return r;
 }
@@ -92,7 +92,7 @@ status_t sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
   return r;
 }
 
-status_t sys_port_send(ulong_t channel,ulong_t flags,
+status_t sys_port_send(ulong_t channel,
                        uintptr_t snd_buf,ulong_t snd_size,
                        uintptr_t rcv_buf,ulong_t rcv_size)
 {
@@ -101,6 +101,7 @@ status_t sys_port_send(ulong_t channel,ulong_t flags,
   ipc_gen_port_t *port;
   ipc_port_message_t *msg;
   status_t r=-EINVAL;
+  bool blocked;
 
   if( c == NULL ) {
     return -EINVAL;
@@ -110,24 +111,13 @@ status_t sys_port_send(ulong_t channel,ulong_t flags,
     return -EFAULT;
   }
 
-  if( !trusted_task(caller) ) {
-    if( (flags & UNTRUSTED_MANDATORY_FLAGS) != UNTRUSTED_MANDATORY_FLAGS ) {
-      return -EPERM;
-    }
-  }
-
-  LOCK_CHANNEL(c);
-  port=c->server_port;
-  if( port ) {
-    REF_IPC_ITEM(port);
-  }
-  UNLOCK_CHANNEL(c);
-
-  if( !port ) {
+  r=ipc_get_channel_port(c,&port);
+  if( r ) {
     goto put_channel;
   }
 
-  if( flags & IPC_BLOCKED_ACCESS ) {
+  blocked=channel_in_blocked_mode(c);
+  if( blocked ) {
     if( !valid_user_address_range(rcv_buf,rcv_size) ) {
       r=-EFAULT;
       goto put_port;
@@ -135,18 +125,80 @@ status_t sys_port_send(ulong_t channel,ulong_t flags,
     msg=ipc_setup_task_port_message(caller,port,snd_buf,snd_size,
                                     rcv_buf,rcv_size);
   } else {
-    msg=__ipc_create_nb_port_message(caller,snd_buf,snd_size);
+    msg=__ipc_create_nb_port_message(caller,snd_buf,snd_size,true);
   }
 
   if( !msg ) {
     r=-ENOMEM;
   } else {
-    r=__ipc_port_send(port,msg,flags,rcv_buf,rcv_size);
+    r=__ipc_port_send(port,msg,blocked,rcv_buf,rcv_size);
   }
 
 put_port:
   __ipc_put_port(port);
-  put_channel:
+put_channel:
   ipc_put_channel(c);
   return r;
+}
+
+status_t sys_port_send_iov(ulong_t channel,
+                           iovec_t iov[],ulong_t numvecs,
+                           uintptr_t rcv_buf,ulong_t rcv_size)
+{
+  status_t r;
+  iovec_t kiovecs[MAX_IOVECS];
+  ulong_t i,msg_size;
+  task_t *caller=current_task();
+  ipc_channel_t *c;
+  ipc_gen_port_t *port;
+  ipc_port_message_t *msg;
+  bool blocked;
+
+  if( !iov || !numvecs || numvecs >= MAX_IOVECS ) {
+    return -EINVAL;
+  }
+
+  if( copy_from_user( kiovecs,iov,numvecs*sizeof(iovec_t)) ) {
+    return -EFAULT;
+  }
+
+  for(msg_size=0,i=0;i<numvecs;i++) {
+    if( !valid_user_address_range(kiovecs[i].iov_base,
+                                  kiovecs[i].iov_len) ) {
+      return -EFAULT;
+    }
+    msg_size += kiovecs[i].iov_len;
+    if( msg_size > MAX_PORT_MSG_LENGTH ) {
+      return -EINVAL;
+    }
+  }
+
+  c=ipc_get_channel(caller,channel);
+  if( !c ) {
+    return -EINVAL;
+  }
+
+  r=ipc_get_channel_port(c,&port);
+  if( r ) {
+    goto put_channel;
+  }
+
+  blocked=channel_in_blocked_mode(c);
+  msg=ipc_create_port_message_iov(caller,kiovecs,numvecs,msg_size,
+                                  blocked);
+  if( !msg ) {
+    r=-ENOMEM;
+  } else {
+    r=__ipc_port_send(port,msg,blocked,rcv_buf,rcv_size);
+  }
+
+  __ipc_put_port(port);
+put_channel:
+  ipc_put_channel(c);
+  return r;
+}
+
+status_t sys_control_channel(ulong_t channel,ulong_t cmd,ulong_t arg)
+{
+  return ipc_channel_control(current_task(),channel,cmd,arg);
 }

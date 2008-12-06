@@ -191,7 +191,7 @@ status_t sys_create_port( ulong_t flags, ulong_t queue_size );
  *             b) message had insufficient size (currently only up to 2MB
  *                can be transferred via ports).
  */
-status_t sys_port_send(ulong_t channel,ulong_t flags,
+status_t sys_port_send(ulong_t channel,
                        uintptr_t snd_buf,ulong_t snd_size,
                        uintptr_t rcv_buf,ulong_t rcv_size);
 
@@ -205,10 +205,6 @@ status_t sys_port_send(ulong_t channel,ulong_t flags,
  * (until available messages appear) unless a special flag is specified.
  *
  * @param port Target port that belongs to the calling process.
- * @param flags Flags that control this operation. The following flags
- *    are currently supported:
- *       IPC_BLOCKED_ACCESS - put calling process into sleep until
- *                            new messages appear.
  * @param recv Output buffer where to put received data.
  * @param recv_len Size of output buffer.
  * @param msg_info Structure that will contain message details.
@@ -379,10 +375,12 @@ status_t sys_get_tid(void);
 
 void sys_exit(int code);
 
-status_t sys_open_channel(pid_t pid,ulong_t port);
+status_t sys_open_channel(pid_t pid,ulong_t port,ulong_t flags);
 
 status_t sys_close_channel(ulong_t channel);
 
 status_t sys_close_port(ulong_t port);
+
+status_t sys_control_channel(ulong_t channel,ulong_t cmd,ulong_t arg);
 
 #endif

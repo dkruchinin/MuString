@@ -11,13 +11,15 @@
 #include <ds/linked_array.h>
 #include <eza/errno.h>
 #include <mm/pfalloc.h>
+#include <eza/security.h>
+#include <ipc/ipc.h>
 
-static ipc_channel_t *__allocate_channel(ipc_gen_port_t *port)
+static ipc_channel_t *__allocate_channel(ipc_gen_port_t *port,ulong_t flags)
 {
   ipc_channel_t *channel=memalloc(sizeof(*channel));
 
   if( channel ) {
-    channel->flags=0;
+    channel->flags=flags;
     spinlock_initialize(&channel->lock);
     channel->server_port=port;
     list_init_node(&channel->ch_list);
@@ -104,7 +106,24 @@ status_t ipc_close_channel(task_t *owner,ulong_t ch_id)
   return r;
 }
 
-status_t ipc_open_channel(task_t *owner,task_t *server,ulong_t port)
+status_t __check_port_flags( ipc_gen_port_t *port,ulong_t flags)
+{
+  status_t i,r=0;
+
+  IPC_LOCK_PORT_W(port);
+  /* 1: Check blocking access. */
+  i=(port->flags & IPC_BLOCKED_ACCESS) | (flags & IPC_CHANNEL_FLAG_BLOCKED_MODE);
+  if( i ) {
+    if( !((port->flags & IPC_BLOCKED_ACCESS) && (flags & IPC_CHANNEL_FLAG_BLOCKED_MODE)) ) {
+      r=-EINVAL;
+    }
+  }
+  IPC_UNLOCK_PORT_W(port);
+  return r;
+}
+
+status_t ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
+                          ulong_t flags)
 {
   task_ipc_t *ipc=get_task_ipc(owner);
   status_t r;
@@ -128,6 +147,11 @@ status_t ipc_open_channel(task_t *owner,task_t *server,ulong_t port)
     goto out_unlock;
   }
 
+  if( __check_port_flags(server_port,flags) ) {
+    r=-EINVAL;
+    goto out_unlock;
+  }
+  
   /* First channel opened ? */
   if( !ipc->channels ) {
     r = -ENOMEM;
@@ -151,7 +175,7 @@ status_t ipc_open_channel(task_t *owner,task_t *server,ulong_t port)
     goto out_put_port;
   }
 
-  channel=__allocate_channel(server_port);
+  channel=__allocate_channel(server_port,flags);
   if( !channel ) {
     r=-ENOMEM;
     goto free_id;
@@ -178,5 +202,27 @@ out_put_port:
 out_unlock:
   UNLOCK_IPC(ipc);
   release_task_ipc(ipc);
+  return r;
+}
+
+status_t ipc_channel_control(task_t *caller,int channel,ulong_t cmd,ulong_t arg) {
+  ipc_channel_t *c=ipc_get_channel(caller,channel);
+  status_t r;
+
+  if( !c ) {
+    return -EINVAL;
+  }
+
+  switch( cmd ) {
+    case IPC_CHANNEL_CTL_GET_SYNC_MODE:
+      r= c->flags & IPC_CHANNEL_FLAG_BLOCKED_MODE ? 1 : 0;
+      break;
+    default:
+      r=-EINVAL;
+      break;
+  }
+
+put_channel:
+  ipc_put_channel(c);
   return r;
 }

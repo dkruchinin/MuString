@@ -97,18 +97,41 @@ static void __client_thread(void *ctx)
 
   tf->printf(CLIENT_THREAD "Opening %d channels.\n",SERVER_NUM_PORTS );
   for(i=0;i<SERVER_NUM_PORTS;i++) {
-    channels[i]=sys_open_channel(tctx->server_pid,i);
+    ulong_t flags;
+
+    if( i != NON_BLOCKED_PORT_ID ) {
+      flags |= IPC_CHANNEL_FLAG_BLOCKED_MODE;
+    } else {
+      flags = 0;
+    }
+
+    channels[i]=sys_open_channel(tctx->server_pid,i,
+                                 flags);
     if( channels[i] != i ) {
       tf->printf(CLIENT_THREAD "Channel number mismatch: %d instead of %d\n",
                  channels[i],i);
       tf->failed();
       goto exit_test;
     }
+
+    /* Now check if channel's flags macth. */
+    r=sys_control_channel(channels[i],IPC_CHANNEL_CTL_GET_SYNC_MODE,0);
+    if( r >= 0) {
+      status_t shouldbe=(i != NON_BLOCKED_PORT_ID) ? 1 : 0;
+      if( r != shouldbe ) {
+        tf->printf(CLIENT_THREAD "Synchronous mode flag mismatch for channel %d ! %d:%d\n",
+                   channels[i],r,shouldbe);
+        tf->failed();
+      }
+    } else {
+      tf->printf(CLIENT_THREAD"Can't read channel's sync mode: %d\n",r );
+    }
   }
   tf->passed();
 
   tf->printf(CLIENT_THREAD "Trying to open a channel to insufficient port number.\n" );
-  r=sys_open_channel(tctx->server_pid,SERVER_NUM_PORTS);
+  r=sys_open_channel(tctx->server_pid,SERVER_NUM_PORTS,
+                     IPC_CHANNEL_FLAG_BLOCKED_MODE);
   if( r == -EINVAL ) {
     tf->passed();
   } else {
@@ -120,7 +143,7 @@ static void __client_thread(void *ctx)
    ****************************************************************/
   tf->printf(CLIENT_THREAD "Sending messages in blocking mode.\n" );  
   for(i=0;i<TEST_ROUNDS;i++) {
-    r=sys_port_send(channels[i],IPC_BLOCKED_ACCESS,
+    r=sys_port_send(channels[i],
                     (ulong_t)patterns[i],strlen(patterns[i])+1,
                     (ulong_t)__client_rcv_buf,sizeof(__client_rcv_buf));
     if( r < 0 ) {
@@ -149,7 +172,7 @@ static void __client_thread(void *ctx)
    * Sending a big message in blocking mode.
    ****************************************************************/
   tf->printf(CLIENT_THREAD "Sending a big message in blocking mode.\n" );
-  r=sys_port_send(channels[BIG_MESSAGE_PORT_ID],IPC_BLOCKED_ACCESS,
+  r=sys_port_send(channels[BIG_MESSAGE_PORT_ID],
                   (ulong_t)__big_message_pattern,BIG_MESSAGE_SIZE,
                   (ulong_t)__big_message_client_buf,BIG_MESSAGE_SIZE);
   if( r < 0 ) {
@@ -180,19 +203,10 @@ static void __client_thread(void *ctx)
   /****************************************************************
    * Sending messages in non-blocking mode.
    ****************************************************************/
-  tf->printf(CLIENT_THREAD "Trying to send a non-blocking message to a blocking channel.\n" );
-  r=sys_port_send(channels[0],0,
-                  (ulong_t)patterns[0],strlen(patterns[0])+1,
-                  (ulong_t)__client_rcv_buf,sizeof(__client_rcv_buf));
-  if( r == -EINVAL ) {
-    tf->passed();
-  } else {
-    tf->failed();
-  }
-
-  tf->printf(CLIENT_THREAD "Sending messages in non-blocking mode.\n" );
+  tf->printf(CLIENT_THREAD "Sending messages in non-blocking mode (using channel N%d).\n",
+             channels[NON_BLOCKED_PORT_ID]);
   for( i=0; i<TEST_ROUNDS;i++ ) {
-    r=sys_port_send(channels[NON_BLOCKED_PORT_ID],0,
+    r=sys_port_send(channels[NON_BLOCKED_PORT_ID],
                     (ulong_t)patterns[i],strlen(patterns[i])+1,
                     0,0);
     if( r < 0 ) {
@@ -222,7 +236,7 @@ static void __poll_client(void *d)
   char client_rcv_buf[MAX_TEST_MESSAGE_SIZE];
 
   port=tp->port_id;
-  r=sys_open_channel(tp->server_pid,port);
+  r=sys_open_channel(tp->server_pid,port,IPC_CHANNEL_FLAG_BLOCKED_MODE);
   if( r < 0 ) {
     tf->printf(POLL_CLIENT "Can't open a channel to %d:%d ! r=%d\n",
                tp->server_pid,port,r);
@@ -233,7 +247,7 @@ static void __poll_client(void *d)
   msg_id=port % TEST_ROUNDS;
   for(i=0;i<TEST_ROUNDS;i++) {
     tf->printf(POLL_CLIENT "Sending message to port %d.\n",port );
-    r=sys_port_send(channel,IPC_BLOCKED_ACCESS,
+    r=sys_port_send(channel,
                     (ulong_t)patterns[msg_id],strlen(patterns[msg_id])+1,
                     (ulong_t)client_rcv_buf,sizeof(client_rcv_buf));
     tf->printf("ok\n");
@@ -261,7 +275,7 @@ static void __poll_client(void *d)
   /* Special case: test client wake up during port close. */
   if( port == 0 ) {
     tf->printf(POLL_CLIENT "Testing correct client wake-up on port closing...\n" );
-    r=sys_port_send(channel,IPC_BLOCKED_ACCESS,
+    r=sys_port_send(channel,
                     (ulong_t)patterns[msg_id],strlen(patterns[msg_id])+1,
                     (ulong_t)client_rcv_buf,sizeof(client_rcv_buf));
     if( r == -EPIPE ) {
@@ -472,6 +486,8 @@ static void __server_thread(void *ctx)
         }
       }
     }
+    tf->printf(SERVER_THREAD"Replying to %d with %d bytes of data\n",
+               i,strlen(patterns[i])+1);
     r=sys_port_reply(i,0,(ulong_t)patterns[i],strlen(patterns[i])+1);
     if( r ) {
       tf->printf(SERVER_THREAD "Insufficient return value during 'sys_port_reply': %d\n",
@@ -543,7 +559,7 @@ static void __server_thread(void *ctx)
           tf->printf( SERVER_THREAD "Message N %d mismatch.\n",i );
           tf->failed();
         } else {
-          tf->printf( SERVER_THREAD "Message N %d successfully transmitted.\n",i );
+          tf->printf( SERVER_THREAD "Non-blocking Message N %d successfully received.\n",i );
           tf->passed();
         }
       } else {

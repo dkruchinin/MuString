@@ -89,7 +89,7 @@ out:
 }
 
 ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf,
-                                                 ulong_t snd_size)
+                                                 ulong_t snd_size,bool copy_data)
 {
   if( snd_size <= IPC_NB_MESSAGE_MAXLEN && snd_size ) {
     ipc_port_message_t *msg=memalloc(sizeof(*msg)+snd_size);
@@ -105,14 +105,47 @@ ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf
       msg->reply_size=0;
       msg->sender=owner;
 
-      if( !copy_from_user(msg->send_buffer,(void *)snd_buf,snd_size) ) {
-        return msg;
+      if( copy_data ) {
+        if( !copy_from_user(msg->send_buffer,(void *)snd_buf,snd_size) ) {
+          return msg;
+        } else {
+          memfree(msg);
+        }
       } else {
-        memfree(msg);
+        return msg;
       }
     }
   }
   return NULL;
+}
+
+ipc_port_message_t *ipc_create_port_message_iov(task_t *owner,iovec_t *kiovecs,
+                                                ulong_t numvecs,ulong_t data_len,
+                                                bool blocked)
+{
+  ipc_port_message_t *msg=NULL;
+
+  if( blocked ) {
+    if( data_len <= IPC_NB_MESSAGE_MAXLEN ) {
+      msg=__ipc_create_nb_port_message(owner,0,0,false);
+      if( msg ) {
+        int i;
+        char *p=msg->send_buffer;
+
+        for(i=0;i<numvecs;i++) {
+          if( copy_from_user(p,kiovecs->iov_base,kiovecs->iov_len) ) {
+            put_ipc_port_message(msg);
+            msg=NULL;
+          }
+          p += kiovecs->iov_len;
+          kiovecs++;
+        }
+      }
+    }
+  } else {
+  }
+
+  return msg;
 }
 
 static void __notify_message_arrived(ipc_gen_port_t *port)
@@ -160,33 +193,36 @@ static status_t __transfer_reply_data(ipc_port_message_t *msg,
 }
 
 status_t __ipc_port_send(struct __ipc_gen_port *port,
-                         ipc_port_message_t *msg,ulong_t flags,
+                         ipc_port_message_t *msg,bool sync_send,
                          uintptr_t rcv_buf,ulong_t rcv_size)
 {
   ipc_port_msg_ops_t *msg_ops=port->msg_ops;
-  status_t r;
+  status_t r=0;
   task_t *sender=current_task();
 
   if( !msg_ops->insert_message ) {
     return -EINVAL;
   }
 
-  /* In case of blocking access both client and server must support
-   * this flag.
-   */
-  r=(port->flags & IPC_BLOCKED_ACCESS) | (flags & IPC_BLOCKED_ACCESS);
+  IPC_LOCK_PORT_W(port);
+  r=(port->flags & IPC_BLOCKED_ACCESS) | sync_send;
   if( r ) {
-    r=(port->flags & IPC_BLOCKED_ACCESS) & (flags & IPC_BLOCKED_ACCESS);
-    if( !r ) {
-      return -EINVAL;
+    /* In case of synchronous message passing both channel and port
+     * must be in synchronous mode.
+     */
+    if( !((port->flags & IPC_BLOCKED_ACCESS) && sync_send) ) {
+      r=-EINVAL;
+    } else {
+      r=0;
     }
   }
 
-  IPC_LOCK_PORT_W(port);
-  if( !(port->flags & IPC_PORT_SHUTDOWN ) ) {
-    r=msg_ops->insert_message(port,msg,flags);
-  } else {
-    r=-EPIPE;
+  if( !r ) {
+    if( !(port->flags & IPC_PORT_SHUTDOWN ) ) {
+      r=msg_ops->insert_message(port,msg);
+    } else {
+      r=-EPIPE;
+    }
   }
   IPC_UNLOCK_PORT_W(port);
 
@@ -197,7 +233,7 @@ status_t __ipc_port_send(struct __ipc_gen_port *port,
   __notify_message_arrived(port);
 
   /* Sender should wait for the reply, so put it into sleep here. */
-  if( flags & IPC_BLOCKED_ACCESS ) {
+  if( sync_send ) {
     IPC_TASK_ACCT_OPERATION(sender);
     event_yield( &msg->event );
     IPC_TASK_UNACCT_OPERATION(sender);

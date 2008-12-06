@@ -41,6 +41,11 @@
 
 #define MAX_PORT_MSG_LENGTH  MB(2)
 
+/* NOTE: This number is used for allocate temporary arrays on task's
+ * kernel stack. So please don't use huge numbers here.
+ */
+#define MAX_IOVECS  8
+
 #define REF_PORT(p)  atomic_inc(&p->use_count)
 #define UNREF_PORT(p)  atomic_dec(&p->use_count)
 
@@ -51,7 +56,7 @@ struct __ipc_gen_port;
 typedef struct __ipc_port_msg_ops {
   status_t (*init_data_storage)(struct __ipc_gen_port *port,task_t *owner);
   status_t (*insert_message)(struct __ipc_gen_port *port,
-                             ipc_port_message_t *msg,ulong_t flags);
+                             ipc_port_message_t *msg);
   ipc_port_message_t *(*extract_message)(struct __ipc_gen_port *port,
                                          ulong_t flags);
   void (*free_data_storage)(struct __ipc_gen_port *port);
@@ -72,11 +77,16 @@ typedef struct __ipc_gen_port {
   list_head_t channels;  
 } ipc_gen_port_t;
 
+typedef struct __iovec {
+  void *iov_base;
+  size_t iov_len;
+} iovec_t;
+
 ipc_port_message_t *ipc_setup_task_port_message(task_t *task,ipc_gen_port_t *p,
                                                 uintptr_t snd_buf,ulong_t snd_size,
                                                 uintptr_t rcv_buf,ulong_t rcv_size);
 status_t __ipc_port_send(ipc_gen_port_t *port,
-                         ipc_port_message_t *msg,ulong_t flags,
+                         ipc_port_message_t *msg,bool sync_send,
                          uintptr_t rcv_buf,ulong_t rcv_size);
 status_t __ipc_create_port(task_t *owner,ulong_t flags);
 status_t __ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
@@ -91,10 +101,13 @@ extern ipc_port_msg_ops_t def_port_msg_ops;
 /****************************************************************************/
 
 ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf,
-                                                 ulong_t snd_size);
+                                                 ulong_t snd_size,bool copy_data);
 poll_event_t ipc_port_get_pending_events(ipc_gen_port_t *port);
 void ipc_port_add_poller(ipc_gen_port_t *port,task_t *poller, wqueue_task_t *w);
 void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w);
+ipc_port_message_t *ipc_create_port_message_iov(task_t *owner,iovec_t *kiovecs,
+                                                ulong_t numvecs,ulong_t data_len,
+                                                bool blocked);
 
 #define IPC_NB_MESSAGE_MAXLEN  (512-sizeof(ipc_port_message_t))
 
@@ -102,5 +115,7 @@ void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w);
     event_initialize(&m->event);                \
     event_set_task(&m->event,t);                \
   } while(0)
+
+#define put_ipc_port_message(m)  memfree((m))
 
 #endif
