@@ -124,8 +124,10 @@ void schedule(void);
 #define SYS_SCHED_CTL_GET_MAX_TIMISLICE  0x9
 #define SYS_SCHED_CTL_GET_STATE 0xA
 #define SYS_SCHED_CTL_SET_STATE 0xB
+#define SYS_SCHED_CTL_GET_CPU   0xC
+#define SYS_SCHED_CTL_SET_CPU   0xD
 
-#define SCHEDULER_MAX_COMMON_IOCTL SYS_SCHED_CTL_SET_STATE
+#define SCHEDULER_MAX_COMMON_IOCTL SYS_SCHED_CTL_SET_CPU
 
 status_t sys_yield(void);
 status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
@@ -155,7 +157,23 @@ static inline void release_task_struct(task_t *t)
 {
 }
 
-#define cpu_affinity_ok(task,c) (task->cpu & (1<<c))
+static inline void set_cpu_online(cpu_id_t cpu, uint32_t online)
+{
+  cpu_id_t mask = 1 << cpu;
+
+  if( online ) {
+    online_cpus |= mask;
+  } else {
+    online_cpus &= ~mask;
+  }
+}
+
+static inline bool is_cpu_online(cpu_id_t cpu)
+{
+  return (online_cpus & (1 << cpu)) ? true : false;
+}
+
+#define cpu_affinity_ok(task,c) ( ((task)->cpu_affinity_mask & (1<<(c))) && is_cpu_online((c)) )
 
 #define activate_task(t) sched_change_task_state(t,TASK_STATE_RUNNABLE)
 #define stop_task(t) sched_change_task_state(t,TASK_STATE_STOPPED)

@@ -246,8 +246,6 @@ status_t sys_yield(void)
 
 status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
 {
-  ulong_t is;
-
   switch( cmd ) {
     case SYS_SCHED_CTL_GET_AFFINITY_MASK:
       return task->cpu_affinity_mask;
@@ -261,23 +259,30 @@ status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
       return -EINVAL;
 
     case SYS_SCHED_CTL_SET_AFFINITY_MASK:
+      if( !trusted_task(current_task()) ) {
+        return -EPERM;
+      }
+
       if( !arg || (arg & ~ONLINE_CPUS_MASK) ) {
         return -EINVAL;
       }
 
-      interrupts_save_and_disable(is);
-      LOCK_TASK_STRUCT(task);
-
       if( task->cpu_affinity_mask != arg ) {
         if( !(task->cpu_affinity_mask & (1 << cpu_id())) ) {
-          /* Schedule immediate migration. */
-          
         }
       }
-      UNLOCK_TASK_STRUCT(task);
-      interrupts_restore(is);
 
       return 0;
+    case SYS_SCHED_CTL_GET_CPU:
+      return task->cpu;
+    case SYS_SCHED_CTL_SET_CPU:
+      if( !trusted_task(current_task()) ) {
+        return -EPERM;
+      }
+      if( (arg >= CONFIG_NRCPUS) || !cpu_affinity_ok(task,arg) ) {
+        return -EINVAL;
+      }
+      return sched_move_task_to_cpu(task,arg);
     default:
       return task->scheduler->scheduler_control(task,cmd,arg);
   }

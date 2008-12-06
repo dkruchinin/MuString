@@ -106,17 +106,22 @@ static void __migration_test(void *d)
 
     tf->printf(SERVER_ID"Moving %d to CPU #%d\n",
                t->pid,td->target_cpu);
-    r=sched_move_task_to_cpu(t,td->target_cpu);
+    r=sys_scheduler_control(t->pid,SYS_SCHED_CTL_SET_CPU,td->target_cpu);
     if( r ) {
       tf->printf(SERVER_ID "Can't move task %d to CPU %d: r=%d\n",
                  t->pid,td->target_cpu,r);
       tf->failed();
     }
+    r=sys_scheduler_control(t->pid,SYS_SCHED_CTL_GET_CPU,0);
+    if( r != td->target_cpu ) {
+      tf->printf(SERVER_ID "CPU id mismatch after moving task ! %d:%d\n",
+                 r,td->target_cpu);
+    }
   }
 
   tf->printf(SERVER_ID "All threads we processed.\n");
-  for(;;);
   sleep(HZ/10);
+  return;
 
   /* Now change state for all remote tasks. */
   tf->printf(SERVER_ID "Now put all remote tasks into sleep.\n");
@@ -167,27 +172,13 @@ static void __priority_test(void *d)
 static void __test_thread(void *d)
 {
   sched_test_ctx_t *tctx=(sched_test_ctx_t*)d;
-  spinlock_t lock;
-
-  /*
-  spinlock_initialize(&lock);
-  tctx->tf->printf(SERVER_ID "Calling migration tests.\n");
-  spinlock_lock(&lock);
-  tctx->tf->printf( "spinlock_trylock() against locked spinlock: %d\n",
-                     spinlock_trylock(&lock) );
-  tctx->tf->printf( "Unlocking spinlock.\n" );
-  spinlock_unlock(&lock);
-  tctx->tf->printf( "spinlock_trylock() against unlocked spinlock: %d\n",
-                     spinlock_trylock(&lock) );
-  */
   
   __migration_test(tctx);
   tctx->tf->printf(SERVER_ID "Calling priority tests.\n");
-  //__priority_test(tctx);
+  __priority_test(tctx);
 
   tctx->tf->printf(SERVER_ID "All scheduler tests finished.\n");
-  for(;;);
-  //tctx->tests_finished=true;
+  tctx->tests_finished=true;
   sys_exit(0);
 }
 
