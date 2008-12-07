@@ -383,4 +383,8 @@ status_t sys_close_port(ulong_t port);
 
 status_t sys_control_channel(ulong_t channel,ulong_t cmd,ulong_t arg);
 
+status_t sys_port_send_iov(ulong_t channel,
+                           iovec_t iov[],ulong_t numvecs,
+                           uintptr_t rcv_buf,ulong_t rcv_size);
+
 #endif

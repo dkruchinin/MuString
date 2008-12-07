@@ -105,13 +105,15 @@ ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf
 poll_event_t ipc_port_get_pending_events(ipc_gen_port_t *port);
 void ipc_port_add_poller(ipc_gen_port_t *port,task_t *poller, wqueue_task_t *w);
 void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w);
-ipc_port_message_t *ipc_create_port_message_iov(task_t *owner,iovec_t *kiovecs,
-                                                ulong_t numvecs,ulong_t data_len,
-                                                bool blocked);
+ipc_port_message_t *ipc_create_port_message_iov(iovec_t *kiovecs,ulong_t numvecs,
+                                                ulong_t data_len,bool blocked,
+                                                uintptr_t rcv_buf,ulong_t rcv_size);
 
 #define IPC_NB_MESSAGE_MAXLEN  (512-sizeof(ipc_port_message_t))
 
 #define IPC_RESET_MESSAGE(m,t)   do {           \
+    list_init_node(&msg->l);                    \
+    list_init_node(&msg->messages_list);        \
     event_initialize(&m->event);                \
     event_set_task(&m->event,t);                \
   } while(0)

@@ -224,6 +224,55 @@ exit_test:
   sys_exit(0);
 }
 
+static ulong_t __v_2[]={10,57};
+static ulong_t __v_6[]={8,8,4,10,10,30};
+static ulong_t __v_4[]={2,10,10,39};
+
+void __setup_iovectors(ulong_t msg_id,iovec_t *iovecs,ulong_t *numvecs)
+{
+  char *p=patterns[msg_id];
+  ulong_t len=strlen(patterns[msg_id])+1;
+  ulong_t *lengths,chunks;
+
+  if( msg_id == 0 ) {
+    iovecs->iov_base=p;
+    iovecs->iov_len=len;
+    *numvecs=1;
+  } else {
+    int i;
+
+    switch( current_task()->pid % 3 ) {
+      case 0:
+        lengths=__v_2;
+        chunks=2;
+        break;
+      case 1:
+        lengths=__v_6;
+        chunks=6;
+        break;
+      case 2:
+        lengths=__v_4;
+        chunks=4;
+        break;
+    }
+
+    kprintf( "__iovecs(): msg len=%d, numvecs: %d\n",
+             len,chunks+1 );
+    for(i=0;i<chunks;i++) {
+      iovecs->iov_base=p;
+      iovecs->iov_len=lengths[i];
+
+      iovecs++;
+      len-=lengths[i];
+      p+=lengths[i];
+    }
+    /* Process the last chunk. */
+    iovecs->iov_base=p;
+    iovecs->iov_len=len;
+    *numvecs=chunks+1;
+  }
+}
+
 #define POLL_CLIENT "[POLL CLIENT] "
 static void __poll_client(void *d)
 {
@@ -234,6 +283,7 @@ static void __poll_client(void *d)
   status_t i,r;
   ulong_t msg_id;
   char client_rcv_buf[MAX_TEST_MESSAGE_SIZE];
+  iovec_t iovecs[MAX_IOVECS];
 
   port=tp->port_id;
   r=sys_open_channel(tp->server_pid,port,IPC_CHANNEL_FLAG_BLOCKED_MODE);
@@ -246,13 +296,26 @@ static void __poll_client(void *d)
 
   msg_id=port % TEST_ROUNDS;
   for(i=0;i<TEST_ROUNDS;i++) {
+    char *snd_type;
     tf->printf(POLL_CLIENT "Sending message to port %d.\n",port );
+
+    if( i & 0x1 ) {    
     r=sys_port_send(channel,
                     (ulong_t)patterns[msg_id],strlen(patterns[msg_id])+1,
                     (ulong_t)client_rcv_buf,sizeof(client_rcv_buf));
-    tf->printf("ok\n");
+    snd_type="sys_port_send()";
+    } else {
+      /* Sending a message using I/O vector array. */
+      ulong_t numvecs;
+
+      snd_type="sys_port_send_iov()";
+      __setup_iovectors(msg_id,iovecs,&numvecs);
+      r=sys_port_send_iov(channel,iovecs,numvecs,
+                    (ulong_t)client_rcv_buf,sizeof(client_rcv_buf));
+    }
     if( r < 0 ) {
-      tf->printf(POLL_CLIENT "Error occured while sending message: %d\n",r);
+      tf->printf(POLL_CLIENT "Error occured while sending message: %d via %s\n",
+                 r,snd_type);
       tf->failed();
     } else {
       if( r == strlen(patterns[msg_id])+1 ) {

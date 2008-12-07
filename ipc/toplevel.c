@@ -184,8 +184,8 @@ status_t sys_port_send_iov(ulong_t channel,
   }
 
   blocked=channel_in_blocked_mode(c);
-  msg=ipc_create_port_message_iov(caller,kiovecs,numvecs,msg_size,
-                                  blocked);
+  msg=ipc_create_port_message_iov(kiovecs,numvecs,msg_size,
+                                  blocked,rcv_buf,rcv_size);
   if( !msg ) {
     r=-ENOMEM;
   } else {
