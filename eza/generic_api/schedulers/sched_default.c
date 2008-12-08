@@ -636,33 +636,45 @@ static status_t def_change_task_state_deferred(task_t *task, task_state_t state,
 
 static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
   migration_action_t t;
+  status_t r;
 
   if(cpu >= EZA_SCHED_CPUS || !sched_cpu_data[cpu]) {
     return -EINVAL;
   }
 
-  if( cpu != cpu_id() ) {
+  /* Prevent target task from double migration. */
+  if( atomic_test_and_set_bit(&task->flags,__TF_UNDER_MIGRATION_BIT) ) {
+    return -EBUSY;
+  }
+
+  if( task->cpu != cpu ) {
     t.task=task;
     t.status=-EINTR;
 
     event_initialize(&t.e);
     list_init_node(&t.l);
+    event_set_task(&t.e,current_task());
 
     if( task != current_task() ) {
-      event_set_task(&t.e,current_task());
       suspend_task(task);
+      schedule_task_migration(&t,cpu);
+      activate_task(migration_thread(cpu));
+      event_yield(&t.e);
+      r=t.status;
     } else {
-      /* Bad doy ! Trying to move himself ! */
+      /* Bad boy - trying to migrate himself ! */
+      atomic_test_and_reset_bit(&task->flags,__TF_UNDER_MIGRATION_BIT);
+      r=-EINVAL;
     }
 
-    schedule_task_migration(&t,cpu);
-    activate_task(migration_thread(cpu));
-
-    event_yield(&t.e);
-    return t.status;
+    /* We don't reset __TF_UNDER_MIGRATION_BIT here since it will be cleared
+     * by the migration thread.
+     */
+  } else {
+    atomic_test_and_reset_bit(&task->flags,__TF_UNDER_MIGRATION_BIT);
   }
 
-  return 0;
+  return r;
 }
 
 static struct __scheduler eza_default_scheduler = {

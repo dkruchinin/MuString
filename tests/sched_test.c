@@ -50,10 +50,11 @@ static void __traveller_thread(void *d)
   sched_thread_data_t *td=(sched_thread_data_t*)d;
   test_framework_t *tf=td->tf;
   uint64_t target_tick=swks.system_ticks_64 + TRAVELLER_SLEEP_TICKS;
+  status_t r;
 
   tf->printf(TRAVELLER_ID "PID: %d, Starting on CPU %d, Target CPU: %d\n",
              current_task()->pid,cpu_id(),td->target_cpu);
-  
+
   if( cpu_id() != td->target_cpu ) {
     tf->failed();
   } else {
@@ -66,7 +67,14 @@ static void __traveller_thread(void *d)
   }
   tf->printf(TRAVELLER_ID "Leaving long busy-wait loop.\n");
 
-  for(;;);
+  tf->printf(TRAVELLER_ID "Moving back to CPU #0\n");
+  r=sys_scheduler_control(current_task()->pid,SYS_SCHED_CTL_SET_CPU,0);
+  if( r != -EINVAL ) {
+    tf->printf(TRAVELLER_ID "Can't move back to CPU #0: r=%d\n",r);
+    tf->failed();
+  } else {
+    tf->passed();
+  }
 
   sys_exit(0);
 }
@@ -172,13 +180,14 @@ static void __priority_test(void *d)
 static void __test_thread(void *d)
 {
   sched_test_ctx_t *tctx=(sched_test_ctx_t*)d;
-  
+
   __migration_test(tctx);
   tctx->tf->printf(SERVER_ID "Calling priority tests.\n");
   __priority_test(tctx);
 
   tctx->tf->printf(SERVER_ID "All scheduler tests finished.\n");
   tctx->tests_finished=true;
+
   sys_exit(0);
 }
 

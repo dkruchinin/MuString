@@ -87,7 +87,6 @@ void spawn_percpu_threads(void)
   cpu=cpu_id();
   ts=&gc_threads[cpu_id()][0];
 
-  kprintf( "[%d] ++++++++ NUM_PERCPU_THREADS: %d\n",cpu, NUM_PERCPU_THREADS );
   for(j=0;j<NUM_PERCPU_THREADS;j++) {
     if( kernel_thread(__percpu_threads[j],NULL, &ts[j]) || !ts[j] ) {
       panic( "Can't create system thread N %d for CPU %d !\n",

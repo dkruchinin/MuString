@@ -399,7 +399,7 @@ lock_cpus_data:
     dst_cpu=NULL;
   }
 
-  if( t->state != TASK_STATE_SUSPENDED || tdata->array != NULL ) {
+  if( !(t->flags & __TF_UNDER_MIGRATION_BIT) || tdata->array != NULL ) {
     r=-EBUSY;
     goto unlock;
   }
@@ -456,6 +456,8 @@ unlock:
   interrupts_enable();
   cond_reschedule();
 
+  /* Mark task as ready for another migrations. */
+  atomic_test_and_reset_bit(&t->flags,__TF_UNDER_MIGRATION_BIT);
   if( !r ) {
     activate_task(t);
   }
@@ -465,6 +467,11 @@ unlock:
 
 void migration_thread(void *data)
 {
+  if( do_scheduler_control(current_task(),SYS_SCHED_CTL_SET_PRIORITY,
+                           EZA_SCHED_NONRT_PRIO_BASE) ) {
+    panic( "CPU #%d: migration_thread() can't set its default priority !\n" );
+  }
+
   while(true) {
     list_head_t private, *mytasks;
     cpu_id_t cpu=cpu_id();
@@ -482,7 +489,7 @@ void migration_thread(void *data)
         migration_action_t *action=container_of(n,migration_action_t,l);
 
         list_del(n);
-        action->status=__move_task_to_this_cpu(action->task );
+        action->status=__move_task_to_this_cpu(action->task);
         event_raise(&action->e);
       }
     } else {

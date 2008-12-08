@@ -92,8 +92,12 @@ struct __task_ipc_priv;
 struct __task_mutex_locks;
 
 /* task flags */
+#define __TF_USPC_BLOCKED_BIT  0
+#define __TF_UNDER_MIGRATION_BIT  1
+
 typedef enum __task_flags {
-  TF_USPC_BLOCKED = 0x01, /**< Block facility to change task's static priority outside the kernel **/
+  TF_USPC_BLOCKED=(1<<__TF_USPC_BLOCKED_BIT), /**< Block facility to change task's static priority outside the kernel **/
+  TF_UNDER_MIGRATION=(1<<__TF_UNDER_MIGRATION_BIT) /**< Task is currently being migrated. Don't disturb. **/
 } task_flags_t;
 
 /* Abstract object for scheduling. */
