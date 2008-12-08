@@ -34,14 +34,14 @@ extern volatile cpu_id_t online_cpus;
 
 #ifdef CONFIG_SMP
 /* Real cpu_id() is defined in include/<arch>/scheduler.h  */
-#define __CPUS MAX_CPUS
+#define __CPUS CONFIG_NRCPUS
 #else
 #define cpu_id() 0
 #define __CPUS 1
 #endif /* CONFIG_SMP */
 
 #define PER_CPU_VAR(name)                       \
-  __percpu_var_##name[MAX_CPUS] __percpu__
+  __percpu_var_##name[CONFIG_NRCPUS] __percpu__
 
 #define raw_percpu_get_var(name,cpu)                    \
   ({ __percpu_var_##name + cpu; })
@@ -62,9 +62,9 @@ static bool is_cpu_online(cpu_id_t cpu);
 
 
 #define for_each_cpu(c)           \
-  for(c = 0; c < NR_CPUS; c++ )   \
+  for(c = 0; c < CONFIG_NRCPUS; c++ )   \
 
-#define ONLINE_CPUS_MASK  (online_cpus & ((1<<NR_CPUS)-1) )
+#define ONLINE_CPUS_MASK  (online_cpus & ((1<<CONFIG_NRCPUS)-1) )
 
 #endif /* __SMP_H__ */
 

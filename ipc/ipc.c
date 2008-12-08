@@ -40,7 +40,7 @@ static task_ipc_t *__allocate_task_ipc(void)
   /* TODO: [mt] allocate task_ipc_t via slabs ! */
 }
 
-static void __free_task_ipc(task_ipc_t *ipc)
+void free_task_ipc(task_ipc_t *ipc)
 {
   /* TODO:[mt] free IPC structure properly ! */
 }
@@ -111,56 +111,65 @@ free_ipc_priv:
   __free_ipc_private_data(ipc_priv);
 free_ipc:
   if(ipc) {
-    __free_task_ipc(ipc);
+    free_task_ipc(ipc);
   }
   return -ENOMEM;
 }
 
-task_ipc_t *get_task_ipc(task_t *t)
-{
-  LOCK_TASK_MEMBERS(t);
-  if( t->ipc ) {
-    atomic_inc(&t->ipc->use_count);
-  }
-  UNLOCK_TASK_MEMBERS(t);
-
-  return t->ipc;
-}
-
-void __deinitialize_task_ipc(task_ipc_t *ipc)
+void close_ipc_resources(task_ipc_t *ipc)
 {
   uint32_t i;
 
-  LOCK_IPC(ipc);
-
   /* Close all open ports. */
-  for(i=0;i<ipc->num_ports && ipc->ports;i++) {
-    ipc_port_t *port;
+  if( ipc->ports ) {
+    for(i=0;i<=ipc->max_port_num;i++) {
+      if( ipc->ports[i] ) {
+        ipc_close_port(current_task(),i);
+      }
+    }
+  }
 
-    IPC_LOCK_PORTS(ipc);
-    port=ipc->ports[i];
-    ipc->ports[i]=NULL;
-    IPC_UNLOCK_PORTS(ipc);
-
-    if( port ) {
-      ipc_shutdown_port(port);
-      ipc_put_port(port);
+  /* Close all channels. */
+  if( ipc->channels ) {
+    for(i=0;i<=ipc->max_channel_num;i++) {
+      if( ipc->channels[i] ) {
+        ipc_close_channel(current_task(),i);
+      }
     }
   }
 
   /* Close all buffers */
-
-  UNLOCK_IPC(ipc);
 }
 
-void release_task_ipc(task_ipc_t *ipc)
+void dup_task_ipc_resources(task_ipc_t *ipc)
 {
-  atomic_dec(&ipc->use_count);
-  if( !atomic_get(&ipc->use_count) ) {
-    /* Last reference, so clean it all up. */
-    __deinitialize_task_ipc(ipc);
-    __free_task_ipc(ipc);
+  int i;
+
+  LOCK_IPC(ipc);
+
+  /* Duplicate all open ports. */
+  if( ipc->ports ) {
+    for(i=0;i<=ipc->max_port_num;i++) {
+      IPC_LOCK_PORTS(ipc);
+      if( ipc->ports[i] ) {
+        atomic_inc(&ipc->ports[i]->own_count);
+      }
+      IPC_UNLOCK_PORTS(ipc);
+    }
   }
+
+  /* Duplicate all open channels. */
+  if( ipc->channels ) {
+    for(i=0;i<=ipc->max_channel_num;i++) {
+      IPC_LOCK_CHANNELS(ipc);
+      if( ipc->channels[i] ) {
+        atomic_inc(&ipc->channels[i]->use_count);
+      }
+      IPC_UNLOCK_CHANNELS(ipc);
+    }
+  }
+
+  UNLOCK_IPC(ipc);
 }
 
 void release_task_ipc_priv(task_ipc_priv_t *priv)

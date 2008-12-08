@@ -46,6 +46,7 @@
 static index_array_t pid_array;
 static spinlock_t pid_array_lock;
 static memcache_t *task_cache;
+static bool init_launched;
 
 /* Macros for dealing with PID array locks. */
 #define LOCK_PID_ARRAY spinlock_lock(&pid_array_lock)
@@ -75,9 +76,16 @@ void initialize_task_subsystem(void)
   /* Sanity check: allocate PID 0 for idle tasks, so the next available PID
    * will be 1 (init).
    */
-  idle = __allocate_pid();
+  idle=__allocate_pid();
   if(idle != 0) {
-    panic( "initialize_task_subsystem(): Can't allocate PID for idle tasks ! (%d returned)",
+    panic( "initialize_task_subsystem(): Can't allocate PID for idle task ! (%d returned)\n",
+           idle );
+  }
+
+  /* Reserve a PID for the init task. */
+  idle=__allocate_pid();
+  if(idle != 1) {
+    panic( "initialize_task_subsystem(): Can't allocate PID for Init task ! (%d returned)\n",
            idle );
   }
 
@@ -87,6 +95,7 @@ void initialize_task_subsystem(void)
     panic( "initialize_task_subsystem(): Can't create the task struct memcache !" );
   }
 
+  init_launched=false;
   initialize_process_subsystem();
 }
 
@@ -121,6 +130,23 @@ static status_t __alloc_pid_and_tid(task_t *parent,ulong_t flags,
 {
   pid_t pid;
   tid_t tid;
+
+  /* Init task ? */
+  if( flags & TASK_INIT ) {
+    status_t r;
+
+    LOCK_PID_ARRAY;
+    if( !init_launched ) {
+      *ppid=1;
+      *ptid=1;
+      init_launched=true;
+      r=0;
+    } else {
+      r=-EINVAL;
+    }
+    UNLOCK_PID_ARRAY;
+    return r;
+  }
 
   if( (flags & CLONE_MM) && priv != TPL_KERNEL ) {
     pid=parent->pid;
@@ -167,11 +193,13 @@ static void __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
     task->ppid=0;
   }
 }
-
+ 
+#if 0 /* [DEACTIVATED] */
 static void __free_task_struct(task_t *task)
 {
   memfree(task);
 }
+#endif 
 
 void cleanup_thread_data(void *t,ulong_t arg)
 {
@@ -210,13 +238,19 @@ static task_t *__allocate_task_struct(void)
 
 static status_t __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
 {
+  status_t r;
+
   if( flags & CLONE_IPC ) {
     if( !parent->ipc ) {
       return -EINVAL;
     }
-    get_task_ipc(parent);
     task->ipc=parent->ipc;
-    return setup_task_ipc(task);
+    r=setup_task_ipc(task);
+    if( !r ) {
+      get_task_ipc(parent);
+      dup_task_ipc_resources(task->ipc);
+    }
+    return r;
   } else {
     task->ipc=NULL;
     return setup_task_ipc(task);
@@ -237,7 +271,7 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
   }
 
   /* TODO: [mt] Add memory limit check. */
-  /* goto task_create_fault; */  
+  /* goto task_create_fault; */
   r=__alloc_pid_and_tid(parent,flags,&pid,&tid,priv);
   if( r ) {
     goto task_create_fault;

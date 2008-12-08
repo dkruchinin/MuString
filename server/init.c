@@ -49,7 +49,6 @@ static status_t __create_task_mm(task_t *task, int num)
   elf_head_t ehead;
   elf_pr_t epr;
   elf_sh_t esh;
-  page_idx_t idx;
   uintptr_t data_bss,bss_virt;
   size_t real_code_size=0,real_data_size=0;
   size_t last_data_size,real_data_offset=0;
@@ -182,6 +181,8 @@ static status_t __create_task_mm(task_t *task, int num)
   return 0;
 }
 
+#ifndef CONFIG_TEST
+
 void server_run_tasks(void)
 {
   int i=server_get_num(),a;
@@ -189,16 +190,19 @@ void server_run_tasks(void)
   status_t r;
   kconsole_t *kconsole=default_console();
 
-  if( i<=0 ) {
-    spawn_percpu_threads();
-    return;
+  if( i > 0 ) {
+    kprintf("[SRV] Starting servers: %d ... \n",i);
+    kconsole->disable();
   }
 
-  kprintf("[SRV] Starting servers: %d ... \n",i);
-  kconsole->disable(); /* shut off console */
-
   for(a=0;a<i;a++) {
-    r=create_task(current_task(),0,TPL_USER,&server);
+    ulong_t flags=0;
+
+    if( !a ) { /* Init */
+      flags |= TASK_INIT;
+    }
+
+    r=create_task(current_task(),flags,TPL_USER,&server);
     if( r ) {
       panic( "server_run_tasks(): Can't create task N %d !\n",
              a+1);
@@ -214,24 +218,22 @@ void server_run_tasks(void)
 
     r=__create_task_mm(server,a);
     if( r ) {
-      panic( "server_run_tasks(): Can't create memory space for task N %d\n",
+      panic( "server_run_tasks(): Can't create memory space for core task N %d\n",
              a+1);
     }
 
-    /* After creating the NameServer we should spawn all per-cpu threads. */
-    /*
-     * FIXME [MT]: spawn_run_tasks panics if it can not move task from one CPU to another.
-     * This occurs if spawn_run_tasks runs *before* the second CPU was enabled.
-     */
-    /*if( !a ) {
-      spawn_percpu_threads();
-      }*/
-
     r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
     if( r ) {
-      panic( "server_run_tasks(): Can't launch task N%d !\n",a+1);
+      panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);
     }
   }
-
-  return;
 }
+
+#else
+
+void server_run_tasks(void)
+{
+  /* In test mode we do nothing. */
+}
+
+#endif /* !CONFIG_TEST */

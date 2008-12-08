@@ -1,0 +1,37 @@
+# main memory manager configuration
+
+config IDALLOC_PAGES
+       int "Numer of pages for init-data allocator"
+       range 1 8
+       default "2"
+       help
+         Init-data allocator is used for dynamic allocation of memory
+         that is not going to be freed by anybody. This is useful
+         when size of some intial object can not be strictly determined
+         and depends on various different options. If you don't want to deal
+         with wood of ifdef's, you may use idalloc which has limited memory pool.
+         Here you may specify size of this pool in pages.         
+
+choice
+        prompt "Select page allocator"
+        ---help---
+        Here you may select physical page frames allocator
+
+          
+config PFA_TLSF
+       bool "TLSF"
+
+endchoice
+
+config PFA_MAX_PAGES
+       int "Max quantity of page frames system may allocate dynamically"
+       range 32 2048
+       default "256"
+       help
+         Max number of pages given page allocator may allocate.
+
+config DEBUG_MM
+       bool "Enable memory manager main debugging"
+
+config DEBUG_SLAB
+       bool "Enable slab allocator debugging"

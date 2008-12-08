@@ -81,6 +81,13 @@ static inline void arch_sched_reset_current_need_resched(void)
   reset_css_task_flag(CPU_SCHED_NEED_RESCHED_F_IDX);
 }
 
+extern cpu_sched_stat_t __percpu_var_cpu_sched_stat[];
+
+static inline void arch_sched_set_cpu_need_resched(cpu_id_t cpu)
+{
+  __percpu_var_cpu_sched_stat[cpu].flags |= (1<< (CPU_SCHED_NEED_RESCHED_F_IDX));
+}
+
 static inline bool current_task_needs_resched(void)
 {
   uintptr_t ct;

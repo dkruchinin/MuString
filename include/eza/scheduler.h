@@ -25,6 +25,7 @@
 #ifndef __SCHEDULER_H__
 #define __SCHEDULER_H__ 
 
+#include <config.h>
 #include <eza/arch/types.h>
 #include <eza/resource.h>
 #include <eza/kstack.h>
@@ -33,13 +34,13 @@
 #include <ds/list.h>
 #include <eza/arch/preempt.h>
 #include <eza/task.h>
-
+#include <eza/event.h>
 
 /* Handler for extra check during the scheduling step.
  * If it returns true, target task will be rescheduled,
  * otherwise - it won't.
  */
-typedef bool (*lazy_sched_handler_t)(void *data);
+typedef bool (*deferred_sched_handler_t)(void *data);
 
 /* Abstract scheduler. */
 typedef struct __scheduler {
@@ -54,11 +55,18 @@ typedef struct __scheduler {
   void (*schedule)(void);
   void (*reset)(void);
   status_t (*change_task_state)(task_t *task,task_state_t state);
-  status_t (*change_task_state_lazy)(task_t *task,task_state_t state,
-                                     lazy_sched_handler_t handler,void *data);
+  status_t (*change_task_state_deferred)(task_t *task,task_state_t state,
+                                        deferred_sched_handler_t handler,void *data);
   status_t (*setup_idle_task)(task_t *task);
   status_t (*scheduler_control)(task_t *task, ulong_t cmd,ulong_t arg);
 } scheduler_t;
+
+/* Main scheduling policies. */
+typedef enum __sched_discipline {
+  SCHED_RR = 0,  /* Round-robin discipline. */
+  SCHED_FIFO = 1, /* FIFO discipline. */
+  SCHED_OTHER = 2, /* Default 'O(1)-like' discipline. */
+} sched_discipline_t;
 
 #define GRAB_SCHEDULER(s)
 #define RELEASE_SCHEDULER(s)
@@ -78,11 +86,11 @@ void sched_timer_tick(void);
 
 void idle_loop(void);
 
-extern task_t *idle_tasks[MAX_CPUS];
+extern task_t *idle_tasks[CONFIG_NRCPUS];
 
 status_t sched_change_task_state(task_t *task,task_state_t state);
-status_t sched_change_task_state_lazy(task_t *task,task_state_t state,
-                                      lazy_sched_handler_t handler,void *data);
+status_t sched_change_task_state_deferred(task_t *task,task_state_t state,
+                                         deferred_sched_handler_t handler,void *data);
 status_t sched_add_task(task_t *task);
 status_t sched_del_task(task_t *task);
 status_t sched_setup_idle_task(task_t *task);
@@ -95,11 +103,14 @@ extern scheduler_t *get_default_scheduler(void);
 void schedule(void);
 
 /* Macros that deal with resceduling needs. */
-extern void arch_sched_set_current_need_resched(void);
-extern void arch_sched_reset_current_need_resched(void);
+//extern void arch_sched_set_current_need_resched(void);
+//extern void arch_sched_reset_current_need_resched(void);
+//extern void arch_sched_set_cpu_need_resched(cpu_id_t cpu);
 
 #define sched_set_current_need_resched() arch_sched_set_current_need_resched()
 #define sched_reset_current_need_resched() arch_sched_reset_current_need_resched()
+
+#define set_task_need_resched(t)  arch_sched_set_cpu_need_resched((t)->cpu)
 
 #define SYS_SCHED_CTL_SET_POLICY  0x0
 #define SYS_SCHED_CTL_GET_POLICY  0x1
@@ -123,10 +134,16 @@ status_t sleep(ulong_t ticks);
 
 #ifdef CONFIG_SMP
 
+typedef struct __migration_action_t {
+  task_t *task;
+  event_t e;
+  list_node_t l;
+  status_t status;
+} migration_action_t;
+
 #define CPU_TASK_REBALANCE_DELAY  HZ
 void migration_thread(void *data);
-status_t schedule_migration(task_t *task,cpu_id_t cpu);
-status_t schedule_remote_task_state_change(task_t *task,ulong_t state);
+status_t schedule_task_migration(migration_action_t *a,cpu_id_t cpu);
 
 #endif
 
@@ -140,7 +157,9 @@ static inline void release_task_struct(task_t *t)
 
 #define cpu_affinity_ok(task,c) (task->cpu & (1<<c))
 
-
+#define activate_task(t) sched_change_task_state(t,TASK_STATE_RUNNABLE)
+#define stop_task(t) sched_change_task_state(t,TASK_STATE_STOPPED)
+#define suspend_task(t) sched_change_task_state(t,TASK_STATE_SUSPENDED)
 
 #endif
 

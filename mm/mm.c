@@ -41,7 +41,7 @@
 #include <eza/arch/ptable.h>
 
 #ifndef IDALLOC_VPAGES
-#define IDALLOC_VPAGES 2
+#define IDALLOC_VPAGES 64
 #endif
 
 /* An array of all physical pages */
@@ -86,14 +86,14 @@ void mm_init(void)
   /*
    * Now we may initialize "init data allocator"
    * Note: idalloc allocator will cut from general pool's
-   * pages no more than IDALLOC_PAGES. After initialization
+   * pages no more than CONFIG_IDALLOC_PAGES. After initialization
    * is done, idalloc must be explicitely disabled.
    */
   pool = mmpools_get_pool(POOL_GENERAL);
   ASSERT(pool->free_pages);
   idalloc_enable(pool);
   kprintf("[MM] Init-data memory allocator was initialized.\n");
-  kprintf(" idalloc available pages: %ld\n", idalloc_meminfo.npages);
+  kprintf(" idalloc available pages: %ld\n", idalloc_meminfo.npages);  
   for_each_active_mm_pool(pool) {
     char *name = mmpools_get_pool_name(pool->type);
     

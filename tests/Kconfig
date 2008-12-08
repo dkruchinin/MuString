@@ -1,0 +1,26 @@
+menuconfig TEST
+        bool "Make MuString with tests included"
+        default n
+
+if TEST
+config TEST_IGNORE_FAILS
+       bool "Ignore tescase fails"
+       default n
+       help
+	 Continue running testcases even if one of testscases fails.
+	 If this function is set to 'n', the test framework stops testing
+	 after the first fail occures.
+
+config TEST_IPC
+       bool "IPC test"
+       default n
+
+config TEST_WQ
+       bool "Wait queue test"
+       default n
+
+config TEST_SCHEDULER
+       bool "Scheduler test"
+       default n
+
+endif

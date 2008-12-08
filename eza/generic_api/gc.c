@@ -11,9 +11,9 @@
 #include <eza/scheduler.h>
 
 static memcache_t *gc_actions_cache;
-static list_head_t gc_tasklists[NR_CPUS];
+static list_head_t gc_tasklists[CONFIG_NRCPUS];
 static spinlock_t tasklist_lock;
-task_t *gc_threads[NR_CPUS][NUM_PERCPU_THREADS];
+task_t *gc_threads[CONFIG_NRCPUS][NUM_PERCPU_THREADS];
 
 #define get_gc_tasklist() &gc_tasklists[cpu_id()]
 
@@ -33,7 +33,7 @@ void initialize_gc(void)
 {
   int i;
 
-  for( i=0;i<NR_CPUS;i++ ) {
+  for( i=0;i<CONFIG_NRCPUS;i++ ) {
     list_init_head(&gc_tasklists[i]);
   }
 
@@ -65,47 +65,33 @@ static void __gc_thread_logic(void *arg)
       struct __gc_action *action=container_of(n,struct __gc_action,l);
 
       action->action(action->data,action->data_arg);
-      action->dtor(action);
+      if( action->dtor ) {
+        action->dtor(action);
+      }
     }
 
     sched_change_task_state(current_task(),TASK_STATE_SLEEPING);
   }
 }
 
-static gc_actor_t __percpu_threads[NUM_PERCPU_THREADS] = {
-  __gc_thread_logic,
-#ifdef CONFIG_SMP
+static actor_t __percpu_threads[NUM_PERCPU_THREADS] = {
   migration_thread,
-#endif
+  __gc_thread_logic,
 };
 
 void spawn_percpu_threads(void)
 {
-  int i,j;
+  int cpu,j;
   task_t **ts;
 
-  kprintf( "++++++++ NUM_PERCPU_THREADS: %d\n", NUM_PERCPU_THREADS );
-  for(i=0;i<NR_CPUS;i++) {
-    /* First, create a set of threads on this CPU. */
-    ts=&gc_threads[i][0];
+  cpu=cpu_id();
+  ts=&gc_threads[cpu_id()][0];
 
-    for(j=0;j<NUM_PERCPU_THREADS;j++) {
-      if( kernel_thread(__percpu_threads[j],NULL, &ts[j]) || !ts[j] ) {
-        panic( "Can't create a GC thread for CPU %d !\n", cpu_id() );
-      }
+  kprintf( "[%d] ++++++++ NUM_PERCPU_THREADS: %d\n",cpu, NUM_PERCPU_THREADS );
+  for(j=0;j<NUM_PERCPU_THREADS;j++) {
+    if( kernel_thread(__percpu_threads[j],NULL, &ts[j]) || !ts[j] ) {
+      panic( "Can't create a GC thread for CPU %d !\n", cpu_id() );
     }
-
-  #ifdef CONFIG_SMP
-    /* Move threads to their domestic CPU. */
-    if( i != cpu_id() ) {
-      for(j=0;j<NUM_PERCPU_THREADS;j++) {
-        if( sched_move_task_to_cpu(ts[j],i) ) {
-          panic( "Can't move GC thread N %d to CPU %d !\n",
-                 i,cpu_id() );
-        }
-      }
-    }
-  #endif
   }
 }
 
@@ -114,13 +100,8 @@ gc_action_t *gc_allocate_action(gc_actor_t actor, void *data,
 {
   gc_action_t *action=__alloc_gc_action();
   if( action ) {
-    action->action=actor;
-    action->data=data;
+    gc_init_action(action,actor,data,data_arg);
     action->dtor=__free_gc_action;
-    list_init_node(&action->l);
-    list_init_head(&action->data_list_head);
-    action->type=0;
-    action->data_arg=data_arg;
   }
   return action;
 }
@@ -140,5 +121,9 @@ void gc_schedule_action(gc_action_t *action)
   list_add2tail(alist,&action->l);
   UNLOCK_TASKLIST();
 
-  sched_change_task_state(gc_threads[cpu_id()][GC_THREAD_IDX], TASK_STATE_RUNNABLE);
+  if( gc_threads[cpu_id()][GC_THREAD_IDX] ) {
+    sched_change_task_state(gc_threads[cpu_id()][GC_THREAD_IDX], TASK_STATE_RUNNABLE);
+  } else {
+    kprintf( KO_WARNING "gc_schedule_action(): scheduling GC action without GC thread !\n" );
+  }
 }

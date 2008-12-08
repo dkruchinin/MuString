@@ -26,10 +26,12 @@
 #ifndef __AMD64_SPINLOCK_H__
 #define __AMD64_SPINLOCK_H__
 
+#include <config.h>
 #include <eza/arch/types.h>
 #include <eza/arch/mbarrier.h>
 #include <eza/arch/bitwise.h>
 #include <eza/arch/asm.h>
+#include <eza/raw_sync.h>
 
 #define __SPINLOCK_LOCKED_V   1
 #define __SPINLOCK_UNLOCKED_V 0
@@ -142,6 +144,95 @@ static always_inline void arch_spinlock_unlock_write(rw_spinlock_t *lock)
                         :: "m"(lock->__w)
                         : "memory" );
 }
+
+/* CPU-bound spinlocks. */
+static inline void __arch_bound_spinlock_lock_cpu(bound_spinlock_t *l,
+                                                  ulong_t cpu)
+{
+  __asm__ __volatile__(
+    "cmp %0,%2\n"
+    "jne 101f\n"
+    /* Owner is accessing the lock. */
+    __LOCK_PREFIX "add $1,%1\n"
+    "11:" __LOCK_PREFIX "bts $15,%1\n"
+    "jc 11b\n"
+    /* Lock is successfully granted */
+    __LOCK_PREFIX "sub $1,%1\n"
+    "jmp 1000f\n"
+
+    /* Not owner is accessing the lock. */
+    "101:" __LOCK_PREFIX "bts $15,%1\n"
+    "jc 101b\n"
+    /* Lock is granted, so check if there are pending owners. */
+    __LOCK_PREFIX "add $0,%1\n"
+    "mov %1,%3\n"
+    "cmp $32768,%3\n"
+    "je 1000f\n"
+    /* No luck - pending owner wants to access the lock. */
+    __LOCK_PREFIX "btr $15,%1\n"
+    "jmp 101b\n"
+
+    /* No pending owners - the lock is granted. */
+    "1000: \n"
+    :: "r"((lock_t)cpu),"m"((lock_t)l->__lock),
+     "r"((lock_t)l->__cpu),"r"((lock_t)0):
+     "memory" );
+}
+
+static inline void __arch_bound_spinlock_unlock_cpu(bound_spinlock_t *l)
+{
+   __asm__ __volatile__(
+     __LOCK_PREFIX "btr $15,%0\n"
+     :: "m"((lock_t)l->__lock)
+     :
+     "memory" );
+}
+
+static inline bool __arch_bound_spinlock_trylock_cpu(bound_spinlock_t *l,
+                                                     ulong_t cpu)
+{
+  ulong_t locked;
+
+  __asm__ __volatile__(
+    "xor %4,%4\n"
+    "cmp %0,%2\n"
+    "jne 101f\n"
+    /* Owner is trying to access the lock.*/
+    __LOCK_PREFIX "bts $15,%1\n"
+    "adc $0,%4\n"
+    "jmp 1000f\n"
+
+    /* Not owner is trying to grab the lock. */
+    "101: " __LOCK_PREFIX "bts $15,%1\n"
+    "adc $0,%4\n"
+    /* No luck - the lock is already locked. */
+    "jnz 1000f\n"
+    /* Lock is ours, so check for pending owners. */
+    __LOCK_PREFIX "add $0,%1\n"
+    "mov %1,%4\n"
+    "sub $32768,%4\n"
+    /* The lock is ours ! */
+    "jz 1000f\n"
+
+    /* No luck - pending owners detected. So release the lock. */
+    __LOCK_PREFIX "btr $15,%1\n"
+    "1000: mov %4,%3\n"
+    "\n"
+    :: "r"((lock_t)cpu),"m"((lock_t)l->__lock),"r"((lock_t)l->__cpu),
+     "m"(locked),"r"((lock_t)0): "memory" );
+
+  return !locked;
+}
+
+#define arch_bound_spinlock_lock_cpu(b,cpu)   \
+  __arch_bound_spinlock_lock_cpu((b),cpu)
+
+#define arch_bound_spinlock_unlock(b) \
+  __arch_bound_spinlock_unlock_cpu((b))
+
+#define arch_bound_spinlock_trylock_cpu(b,cpu) \
+  __arch_bound_spinlock_trylock_cpu((b),cpu)
+
 
 /* TODO DK: implement trylock and is_locked form RW spinlocks */
 #else /* !CONFIG_SMP */

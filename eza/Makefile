@@ -1,0 +1,1 @@
+obj-y += sync  generic_api arch/$(ARCH)

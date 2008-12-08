@@ -34,12 +34,11 @@
 
 #define MAX_POLL_OBJECTS  65535
 
-typedef uint16_t poll_event_t;
+typedef ulong_t poll_event_t;
 
 typedef struct __pollfd {
   ulong_t fd;
-  poll_event_t events;
-  poll_event_t revents;
+  poll_event_t events,revents;
 } pollfd_t;
 
 #endif

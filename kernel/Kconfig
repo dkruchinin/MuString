@@ -1,0 +1,12 @@
+menu "Common MuString settings"
+
+config ALWAYS_INLINE
+       bool "Enable always inline functions"
+       default y
+       help
+       Some functions in kernel marked as always inline. This means
+       that these functions will always be inline even if you disabled compiler
+       optimisation. Note: disabling of this option is not a very good idea, but in some
+       cases(for example for debugging) it may have a sense.
+
+endmenu

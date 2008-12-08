@@ -31,16 +31,16 @@
 #include <ipc/poll.h>
 #include <eza/time.h>
 #include <mm/slab.h>
-#include <eza/waitqueue.h>
 #include <eza/errno.h>
 #include <mm/pfalloc.h>
 #include <eza/arch/page.h>
 #include <eza/scheduler.h>
 #include <eza/arch/atomic.h>
+#include <ipc/gen_port.h>
 
 typedef struct __poll_kitem {
-  wait_queue_task_t qtask;
-  ipc_port_t *port;
+  wqueue_task_t qtask;
+  ipc_gen_port_t *port;
   poll_event_t events,revents;
 } poll_kitem_t;
 
@@ -49,7 +49,7 @@ struct __plazy_data {
   ulong_t nqueues;
 };
 
-static bool poll_lazy_sched_handler(void *data)
+static bool poll_deferred_sched_handler(void *data)
 {
   struct __plazy_data *p=(struct __plazy_data*)data;
   return atomic_get(&p->task->ipc_priv->pstats.active_queues)==p->nqueues;
@@ -59,7 +59,7 @@ status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
 {
   status_t nevents;
   task_t *caller=current_task();
-  ulong_t size=nfds*sizeof(wait_queue_task_t);
+  ulong_t size=nfds*sizeof(wqueue_task_t);
   poll_kitem_t *pkitems;
   bool use_slab=(size<=512);
   ulong_t i;
@@ -92,14 +92,15 @@ status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
   /* First, create the list of all IPC ports to be polled. */
   for(i=0;i<nfds;i++) {
     pollfd_t upfd;
-    ipc_port_t *port;
+    ipc_gen_port_t *port;
 
     if( copy_from_user(&upfd,&pfds[i],sizeof(upfd)) ) {
       nevents=-EFAULT;
       break;
     }
 
-    if( ipc_get_port(caller,upfd.fd,&port) ) {
+    port=__ipc_get_port(caller,upfd.fd);
+    if( !port ) {
       nevents=-EINVAL;
       break;
     }
@@ -129,8 +130,8 @@ status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
   /* Sleep a little bit. */
   ldata.task=caller;
   ldata.nqueues=nfds;
-  sched_change_task_state_lazy(caller,TASK_STATE_SLEEPING,
-                               poll_lazy_sched_handler,&ldata);
+  sched_change_task_state_deferred(caller,TASK_STATE_SLEEPING,
+                                  poll_deferred_sched_handler,&ldata);
 
   /* Count the resulting number of pending events. */
   nevents=0;
@@ -149,7 +150,7 @@ put_ports:
       ipc_port_remove_poller(pkitems[i].port,&pkitems[i].qtask);
       IPC_TASK_UNACCT_OPERATION(caller);
     }
-    ipc_put_port(pkitems[i].port);
+    __ipc_put_port(pkitems[i].port);
 
     /* Copy resulting events back to userspace. */
     if(nevents>0) {

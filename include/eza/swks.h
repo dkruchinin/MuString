@@ -53,7 +53,7 @@ typedef struct __swks {
 
   /* CPU-related statistics. */
   uint8_t nr_cpus;
-  cpu_stats_t cpu_stat[NR_CPUS];
+  cpu_stats_t cpu_stat[CONFIG_NRCPUS];
 
   /* Memory-related statistics. */
   page_idx_t mem_total_pages, mem_pages_in_use;

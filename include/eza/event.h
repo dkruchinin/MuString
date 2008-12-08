@@ -4,7 +4,6 @@
 #include <eza/arch/types.h>
 #include <eza/spinlock.h>
 #include <eza/task.h>
-#include <eza/scheduler.h>
 
 #define EVENT_OCCURED  0x1
 
@@ -18,6 +17,11 @@
 
 typedef bool (*event_checker_t)(void *priv);
 
+extern status_t sched_change_task_state(task_t *task,task_state_t state);
+extern status_t sched_change_task_state_deferred(task_t *task,task_state_t state,
+                                                 bool (*handler)(void *data),
+                                                 void *data);
+
 typedef struct __event_t {
   spinlock_t __lock;
   task_t *task;
@@ -25,6 +29,8 @@ typedef struct __event_t {
   void *private_data;
   event_checker_t ev_checker;
 } event_t;
+
+#define event_is_active(e)  ((e)->task != NULL)
 
 static inline void event_initialize(event_t *event)
 {
@@ -51,7 +57,7 @@ static inline void event_set_task(event_t *event,task_t *task)
   UNLOCK_EVENT(event);
 }
 
-static bool event_lazy_sched_handler(void *data)
+static bool event_defered_sched_handler(void *data)
 {
   event_t *t = (event_t*)data;
 
@@ -70,13 +76,13 @@ static inline void event_yield(event_t *event)
   t = event->task;
   UNLOCK_EVENT(event);
 
-  if( t != NULL ) {
+  if( t != NULL ) {    
       event_checker_t ec=event->ev_checker;
 
       if(!ec) {
-        ec=event_lazy_sched_handler;
+        ec=event_defered_sched_handler;
       }
-      sched_change_task_state_lazy(t,TASK_STATE_SLEEPING,ec,event);
+      sched_change_task_state_deferred(t,TASK_STATE_SLEEPING,ec,event);
 
       if( !event->ev_checker ) {
         event->flags &= ~EVENT_OCCURED;
