@@ -25,6 +25,7 @@
 #define __ARCH_PTABLE_H__
 
 #include <mm/page.h>
+#include <mm/pfalloc.h>
 #include <eza/arch/page.h>
 #include <eza/arch/types.h>
 
@@ -61,10 +62,10 @@ typedef struct __pde {
 #define PTABLE_DIR_ENTRIES 0x200
 #define PTABLE_DIR_MASK    0x1FF
 
-#define pgt_allocate_pagedir()                  \
+#define pgt_allocate_pagedir(level)             \
   alloc_page(AF_ZERO | AF_PGEN)
 #define pgt_free_pagedir(pagedir)               \
-  free_page(pagedir)
+  free_pages(pagedir)
 
 #define pgt_pde_flags(pde) ((pde)->flags | ((pde)->nx << 9))
 #define pgt_pde_page_idx(pde) ((pde)->base_0_19 | ((pde)->base_20_39 << 20))

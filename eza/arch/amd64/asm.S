@@ -26,7 +26,6 @@
 #include <eza/arch/context.h>
 #include <eza/arch/page.h>
 #include <eza/arch/current.h>
-#include <eza/errno.h>
 #include <eza/arch/cpu.h>
 
 .code64

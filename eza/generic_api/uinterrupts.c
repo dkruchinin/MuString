@@ -155,7 +155,6 @@ status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   task_t *caller;
   ulong_t i;
   irq_counter_handler_t *h;
-  page_idx_t idx;
   page_frame_t *pframe;
   ulong_t *kaddr;
 
@@ -174,9 +173,8 @@ status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   caller=current_task();
 
   LOCK_TASK_VM(caller);
-  idx=mm_pin_virt_addr(caller->page_dir,addr);
-  if(idx >= 0) {
-    pframe=pframe_by_number(idx);
+  pframe = mm_va_page(caller->page_dir, addr);
+  if(pframe) {
     get_page(pframe);
     kaddr=pframe_to_virt(pframe);
   }

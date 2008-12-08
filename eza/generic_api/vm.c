@@ -65,21 +65,22 @@ status_t vm_initialize_task_mm( task_t *orig, task_t *target,
 
   /* Idle task or kernel thread ? Use main kernel pagetable. */
   if(orig == NULL || priv == TPL_KERNEL) {
-    target->page_dir = kernel_root_pagedir;
+    target->page_dir = root_pagedir_mklink(&kernel_root_pagedir);
     return 0;
   }
 
   /* TODO: [mt] Add normal MM sharing on task cloning. */
   if(flags & CLONE_MM) {
     /* Initialize new page directory. */
-    target->page_dir = orig->page_dir;
+    target->page_dir = root_pagedir_mklink(orig->page_dir);
     /* TODO: [mt] Increment regerence counters for all pages on VM cloning. */
     r = 0;
   } else {
-    target->page_dir = mm_create_root_pagedir();
+    target->page_dir = root_pagedir_allocate();
     if (!target->page_dir)
       return -ENOMEM;
 
+    root_pagedir_initialize(target->page_dir);
     r = vm_map_mandatory_areas(target);
   }
 

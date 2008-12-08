@@ -64,8 +64,8 @@ static void ipc_put_buffer( ipc_user_buffer_t *buf )
 status_t ipc_setup_buffer_pages(task_t *owner,ipc_user_buffer_t *buf,
                                 uintptr_t start_addr, ulong_t size)
 {
-  page_frame_t *pd = owner->page_dir;
-  page_idx_t idx;
+  root_pagedir_t *pd = owner->page_dir;
+  page_frame_t *page;
   ulong_t chunk_num;
   status_t r=-EFAULT;
   uintptr_t adr;
@@ -79,8 +79,8 @@ status_t ipc_setup_buffer_pages(task_t *owner,ipc_user_buffer_t *buf,
   LOCK_TASK_VM(owner);
 
   /* Process the first chunk. */
-  idx = mm_pin_virt_addr(pd, start_addr);
-  if (idx < 0)
+  page = mm_va_page(pd, start_addr);
+  if (!page)
     goto out;
 
   pchunk = buf->chunks;
@@ -92,7 +92,7 @@ status_t ipc_setup_buffer_pages(task_t *owner,ipc_user_buffer_t *buf,
   }
 
   buf->first=first;
-  pchunk->kaddr=pframe_id_to_virt(idx)+(start_addr & ~PAGE_ADDR_MASK);
+  pchunk->kaddr=pframe_to_virt(page)+(start_addr & ~PAGE_ADDR_MASK);
 
   size-=first;
   start_addr+=first;
@@ -100,8 +100,8 @@ status_t ipc_setup_buffer_pages(task_t *owner,ipc_user_buffer_t *buf,
 
   /* Process the rest of chunks. */
   while( size ) {
-    idx = mm_pin_virt_addr(pd, start_addr);
-    if(idx < 0) {
+    page = mm_va_page(pd, start_addr);
+    if(!page) {
       goto out;
     }
     pchunk++;
@@ -113,7 +113,7 @@ status_t ipc_setup_buffer_pages(task_t *owner,ipc_user_buffer_t *buf,
       size-=PAGE_SIZE;
     }
 
-    pchunk->kaddr = pframe_id_to_virt(idx);
+    pchunk->kaddr = pframe_to_virt(page);
     start_addr+=PAGE_SIZE;
   }
 

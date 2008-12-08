@@ -133,7 +133,7 @@ typedef struct __slab {
 /* TODO DK: implement the following policies: SMCF_SHARED, SMCF_POISON, SMCF_MERGE */
 
 /* generic slabs default behaviour control flags */
-#define SLAB_GENERIC_FLAGS (SMCF_PDMA | SMCF_GENERIC)
+#define SLAB_GENERIC_FLAGS (SMCF_PGEN | SMCF_GENERIC)
 
 /**
  * @typedef uint8_t memcache_flags_t

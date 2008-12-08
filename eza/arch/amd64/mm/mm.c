@@ -35,6 +35,7 @@
 #include <mm/mmpool.h>
 #include <mm/mmap.h>
 #include <eza/kernel.h>
+#include <eza/errno.h>
 #include <eza/vm.h>
 #include <eza/swks.h>
 #include <eza/arch/mm.h>
@@ -51,38 +52,33 @@ static uint64_t min_phys_addr = 0, max_phys_addr = 0;
 static vm_range_t direct_mapping_area;
 uintptr_t kernel_min_vaddr;
 
-#ifdef DEBUG_MM
+#ifdef CONFIG_DEBUG_MM
 static void verify_mapping(const char *descr, uintptr_t start_addr,
                           page_idx_t num_pages, page_idx_t start_idx)
 {
-  page_idx_t i, t;
-  char *ptr = (char *)start_addr;
-  bool ok = true;
+  status_t ret;
+  mapping_dbg_info_t minfo;
 
   kprintf(" Verifying %s...", descr);
-  for( i = 0; i < num_pages; i++ ) {
-    t = mm_pin_virt_addr(kernel_root_pagedir, (uintptr_t)ptr);
-    if(t != start_idx) {
-      ok = false;
-      break;
-    }
-
-    start_idx++;
-    ptr += PAGE_SIZE;
-  }
-
-  if (ok) {
+  ret = mm_verify_mapping(&kernel_root_pagedir, start_addr, start_idx, num_pages, &minfo);
+  if (!ret) {
     kprintf(" %*s\n", strlen(descr) + 14, "[OK]");
     return;
   }
   
   kprintf(" %*s\n", 18 - strlen(descr), "[FAILED]");
-  panic("[!!!] 0x%X: page mismatch ! found idx: 0x%X, expected: 0x%X\n",
-        ptr, t, start_idx);
+  if (ret == -EADDRNOTAVAIL)
+    panic("verify_mapping: Address %p is not mapped!", minfo.address);
+  else if (ret == -EFAULT) {
+    panic("verify_mapping: Address %p has page index %#x, but %#x was expected!",
+          minfo.address, minfo.idx, minfo.expected_idx);
+  }
+  else
+    panic("verify_mapping: Error %d", ret);
 }
 #else
 #define verify_mapping(descr, start_addr, num_pages, start_idx)
-#endif /* DEBUG_MM */
+#endif /* CONFIG_DEBUG_MM */
 
 static void scan_phys_mem(void)
 {
@@ -284,8 +280,8 @@ status_t arch_vm_map_kernel_area(task_t *task)
   pde_t *src_pml4, *dst_pml4;
   pde_idx_t eidx = pgt_vaddr2idx(KERNEL_BASE, PTABLE_LEVEL_LAST);
 
-  src_pml4 = pgt_fetch_entry(kernel_root_pagedir, eidx);
-  dst_pml4 = pgt_fetch_entry(task->page_dir, eidx);
+  src_pml4 = pgt_fetch_entry(kernel_root_pagedir.dir, eidx);
+  dst_pml4 = pgt_fetch_entry(task->page_dir->dir, eidx);
 
   /* Just copy PML4 entry from kernel page directoy to user one. */
   *dst_pml4 = *src_pml4;
@@ -295,7 +291,7 @@ status_t arch_vm_map_kernel_area(task_t *task)
 
 void arch_smp_mm_init(int cpu)
 {  
-  load_cr3(_k2p((uintptr_t)pframe_to_virt(kernel_root_pagedir)), 1, 1);
+  load_cr3(_k2p((uintptr_t)pframe_to_virt(kernel_root_pagedir.dir)), 1, 1);
 }
 
 pde_flags_t mmap_flags2ptable_flags(unsigned int mmap_flags)

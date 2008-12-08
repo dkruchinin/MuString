@@ -104,10 +104,7 @@ void mm_init(void)
     mmpools_init_pool_allocator(pool);
   }
 
-  /* create and initialize kernel pagatable root directory */
-  kernel_root_pagedir = mm_create_root_pagedir();
-  if (!kernel_root_pagedir)
-      panic("Can't create kernel root page directory (ENOMEM)");
+  root_pagedir_initialize(&kernel_root_pagedir);
 
   /* Now we can remap memory */
   arch_mm_remap_pages();

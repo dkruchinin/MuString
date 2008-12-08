@@ -84,6 +84,7 @@ typedef uint32_t cpu_array_t;
 
 #define CPU_AFFINITY_ALL_CPUS 0
 
+struct __root_pagedir;
 struct __scheduler;
 struct __task_ipc;
 struct __userspace_events_data;
@@ -107,7 +108,7 @@ typedef struct __task_struct {
   priority_t static_priority, priority, orig_priority;
 
   kernel_stack_t kernel_stack;
-  page_frame_t *page_dir;
+  struct __root_pagedir *page_dir;
   list_node_t pid_list;
   task_flags_t flags;
 
