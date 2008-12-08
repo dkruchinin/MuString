@@ -452,45 +452,52 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
   }
 
   prev_state=task->state;
-  r=-EINVAL;
 
-  switch(new_state) {
-    case TASK_STATE_RUNNABLE:
-      r=0;
+  if( prev_state != new_state ) {
+    r=-EINVAL;
 
-      if( prev_state == TASK_STATE_RUNNABLE ||
-          prev_state == TASK_STATE_RUNNING ) {
-        break;
-      }
+    switch(new_state) {
+      case TASK_STATE_RUNNABLE:
+        r=0;
 
-      __recalculate_timeslice_and_priority(task);
-      task->state = TASK_STATE_RUNNABLE;
-      __add_task_to_array(sched_data->active_array,task);
-      sched_data->stats->active_tasks++;
+        if( prev_state == TASK_STATE_RUNNING ) {
+          break;
+        }
 
-      if( task->priority < sched_data->running_task->priority ) {
-        __reschedule_task(task);
-      }
-      break;
-    case TASK_STATE_STOPPED:
-    case TASK_STATE_SLEEPING:
-    case TASK_STATE_SUSPENDED:
-      if( task->state == TASK_STATE_RUNNABLE
-	  || task->state == TASK_STATE_RUNNING ) {
+        __recalculate_timeslice_and_priority(task);
+        task->state = TASK_STATE_RUNNABLE;
+        __add_task_to_array(sched_data->active_array,task);
+        sched_data->stats->active_tasks++;
 
-        __remove_task_from_array(tdata->array,task);
-        sched_data->stats->active_tasks--;
-        sched_data->stats->sleeping_tasks++;
-        task->state=new_state;
-
-        if( task == sched_data->running_task ) {
+        if( task->priority < sched_data->running_task->priority ) {
           __reschedule_task(task);
         }
-        r=0;
-      }
-      break;
-    default:
-      break;
+        break;
+      case TASK_STATE_STOPPED:
+      case TASK_STATE_SLEEPING:
+      case TASK_STATE_SUSPENDED:
+        if( task->state == TASK_STATE_RUNNABLE
+            || task->state == TASK_STATE_RUNNING ) {
+
+          __remove_task_from_array(tdata->array,task);
+          sched_data->stats->active_tasks--;
+          sched_data->stats->sleeping_tasks++;
+          task->state=new_state;
+
+          if( task == sched_data->running_task ) {
+            __reschedule_task(task);
+          }
+          r=0;
+        } else if( task->state == TASK_STATE_SLEEPING ) {
+          task->state=new_state;
+          r=0;
+        }
+        break;
+      default:
+        break;
+    }
+  } else {
+    r=0;
   }
 
 out_unlock:
@@ -634,7 +641,17 @@ static status_t def_change_task_state_deferred(task_t *task, task_state_t state,
   return __change_task_state(task,state,handler,data);
 }
 
-static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
+static void __self_move_gc_actor(void *data,ulong_t arg)
+{
+  task_t *task=(task_t *)data;
+  migration_action_t *t=(migration_action_t *)arg;
+
+  suspend_task(task);
+  schedule_task_migration(t,t->target_cpu);
+}
+
+static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu)
+{
   migration_action_t t;
   status_t r;
 
@@ -650,6 +667,7 @@ static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
   if( task->cpu != cpu ) {
     t.task=task;
     t.status=-EINTR;
+    t.target_cpu=cpu;
 
     event_initialize(&t.e);
     list_init_node(&t.l);
@@ -658,18 +676,21 @@ static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
     if( task != current_task() ) {
       suspend_task(task);
       schedule_task_migration(&t,cpu);
-      activate_task(migration_thread(cpu));
-      event_yield(&t.e);
-      r=t.status;
     } else {
-      /* Bad boy - trying to migrate himself ! */
-      atomic_test_and_reset_bit(&task->flags,__TF_UNDER_MIGRATION_BIT);
-      r=-EINVAL;
+      gc_action_t a;
+
+      /* Since we can't put ourself into sleep and than schedule our migration,
+       * we should ask the GC thread to migrate us.
+       */
+      gc_init_action(&a,__self_move_gc_actor,task,(long_t)&t);
+      gc_schedule_action(&a);
     }
 
     /* We don't reset __TF_UNDER_MIGRATION_BIT here since it will be cleared
-     * by the migration thread.
+     * by the migration thread just before raising the event.
      */
+    event_yield(&t.e);
+    r=t.status;
   } else {
     atomic_test_and_reset_bit(&task->flags,__TF_UNDER_MIGRATION_BIT);
   }

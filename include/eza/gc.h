@@ -54,6 +54,7 @@ static inline void gc_init_action(gc_action_t *action,gc_actor_t actor,
   list_init_head(&action->data_list_head);
   action->type=0;
   action->data_arg=data_arg;
+  action->dtor=NULL;
 }
 
 static inline void gc_put_action(gc_action_t *action)

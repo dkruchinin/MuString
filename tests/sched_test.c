@@ -31,7 +31,7 @@
 #define SERVER_ID "[Migration test] "
 #define TRAVELLER_ID "[CPU Traveller] "
 
-#define TRAVELLER_SLEEP_TICKS  1000
+#define TRAVELLER_SLEEP_TICKS  300
 
 typedef struct __sched_test_ctx {
   test_framework_t *tf;
@@ -51,6 +51,7 @@ static void __traveller_thread(void *d)
   test_framework_t *tf=td->tf;
   uint64_t target_tick=swks.system_ticks_64 + TRAVELLER_SLEEP_TICKS;
   status_t r;
+  ulong_t back_cpu=0;
 
   tf->printf(TRAVELLER_ID "PID: %d, Starting on CPU %d, Target CPU: %d\n",
              current_task()->pid,cpu_id(),td->target_cpu);
@@ -67,13 +68,23 @@ static void __traveller_thread(void *d)
   }
   tf->printf(TRAVELLER_ID "Leaving long busy-wait loop.\n");
 
-  tf->printf(TRAVELLER_ID "Moving back to CPU #0\n");
-  r=sys_scheduler_control(current_task()->pid,SYS_SCHED_CTL_SET_CPU,0);
-  if( r != -EINVAL ) {
-    tf->printf(TRAVELLER_ID "Can't move back to CPU #0: r=%d\n",r);
+  tf->printf(TRAVELLER_ID "Moving back to CPU #%d\n",back_cpu );
+  r=sys_scheduler_control(current_task()->pid,SYS_SCHED_CTL_SET_CPU,
+                          back_cpu);
+  if( r ) {
+    tf->printf(TRAVELLER_ID "Can't move back to CPU #%d: r=%d\n",
+               back_cpu,r);
     tf->failed();
   } else {
-    tf->passed();
+    r=sys_scheduler_control(current_task()->pid,SYS_SCHED_CTL_GET_CPU,
+                            0);
+    if( r == back_cpu ) {
+      tf->passed();
+    } else {
+      tf->printf(TRAVELLER_ID "CPU ID differs after migration ! %d:%d\n",
+                 r,back_cpu);
+      tf->failed();
+    }
   }
 
   sys_exit(0);
@@ -128,7 +139,7 @@ static void __migration_test(void *d)
   }
 
   tf->printf(SERVER_ID "All threads we processed.\n");
-  sleep(HZ/10);
+  sleep(HZ);
   return;
 
   /* Now change state for all remote tasks. */

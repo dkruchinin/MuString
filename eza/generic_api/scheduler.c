@@ -366,6 +366,7 @@ status_t schedule_task_migration(migration_action_t *a,cpu_id_t cpu)
     spinlock_lock(&migration_locks[cpu]);
     list_add2tail(&migration_actions[cpu], &a->l);
     spinlock_unlock(&migration_locks[cpu]);
+    activate_task(gc_threads[cpu][MIGRATION_THREAD_IDX]);
     return 0;
   } else {
     return -EINVAL;

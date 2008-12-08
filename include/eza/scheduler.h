@@ -141,6 +141,7 @@ typedef struct __migration_action_t {
   event_t e;
   list_node_t l;
   status_t status;
+  cpu_id_t target_cpu;
 } migration_action_t;
 
 #define CPU_TASK_REBALANCE_DELAY  HZ
