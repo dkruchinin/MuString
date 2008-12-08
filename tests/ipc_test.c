@@ -67,6 +67,8 @@ static char *patterns[TEST_ROUNDS]= {
   "55555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555",
 };
 
+#define BIG_MSG_ID  TEST_ROUNDS
+
 static bool __verify_message(ulong_t id,char *msg)
 {
   return !memcmp(patterns[id],msg,strlen(patterns[id])+1);
@@ -88,13 +90,76 @@ static bool __verify_big_message(uint8_t *buf,ulong_t *diff_offset)
   return true;
 }
 
+static ulong_t __v_2[]={10,57};
+static ulong_t __v_6[]={8,8,4,10,10,30};
+static ulong_t __v_4[]={2,10,10,39};
+
+static ulong_t __v_big_7[]={1156,32500,79000,217299,
+                            376415,121783,573200};
+
+void __setup_iovectors(ulong_t msg_id,iovec_t *iovecs,ulong_t *numvecs)
+{
+  uint8_t *p;
+  ulong_t len;
+  ulong_t *lengths,chunks;
+  int i;
+
+  if( msg_id != BIG_MSG_ID ) {
+    p=(uint8_t *)patterns[msg_id];
+    len=strlen(patterns[msg_id])+1;
+  }
+
+  if( msg_id == 0 ) {
+    iovecs->iov_base=p;
+    iovecs->iov_len=len;
+    *numvecs=1;
+    return;
+  } else if( msg_id == BIG_MSG_ID ) {
+    p=__big_message_pattern;
+    len=BIG_MESSAGE_SIZE;
+    lengths=__v_big_7;
+    chunks=7;
+  } else {
+
+    switch( current_task()->pid % 3 ) {
+      case 0:
+        lengths=__v_2;
+        chunks=2;
+        break;
+      case 1:
+        lengths=__v_6;
+        chunks=6;
+        break;
+      case 2:
+        lengths=__v_4;
+        chunks=4;
+        break;
+    }
+  }
+
+  for(i=0;i<chunks;i++) {
+    iovecs->iov_base=p;
+    iovecs->iov_len=lengths[i];
+
+    iovecs++;
+    len-=lengths[i];
+    p+=lengths[i];
+  }
+  /* Process the last chunk. */
+  iovecs->iov_base=p;
+  iovecs->iov_len=len;
+  *numvecs=chunks+1;
+}
+
 static void __client_thread(void *ctx)
 {
   DECLARE_TEST_CONTEXT;
   int i;
   int channels[SERVER_NUM_PORTS];
   status_t r;
-
+  iovec_t iovecs[MAX_IOVECS];
+  ulong_t numvecs;
+  
   tf->printf(CLIENT_THREAD "Opening %d channels.\n",SERVER_NUM_PORTS );
   for(i=0;i<SERVER_NUM_PORTS;i++) {
     ulong_t flags;
@@ -171,10 +236,12 @@ static void __client_thread(void *ctx)
   /****************************************************************
    * Sending a big message in blocking mode.
    ****************************************************************/
-  tf->printf(CLIENT_THREAD "Sending a big message in blocking mode.\n" );
-  r=sys_port_send(channels[BIG_MESSAGE_PORT_ID],
-                  (ulong_t)__big_message_pattern,BIG_MESSAGE_SIZE,
-                  (ulong_t)__big_message_client_buf,BIG_MESSAGE_SIZE);
+  tf->printf(CLIENT_THREAD "Sending a big message in blocking mode via I/O vectors.\n" );
+  __setup_iovectors(BIG_MSG_ID,iovecs,&numvecs);
+
+  r=sys_port_send_iov(channels[BIG_MESSAGE_PORT_ID],
+                      iovecs,numvecs,
+                      (ulong_t)__big_message_client_buf,BIG_MESSAGE_SIZE);
   if( r < 0 ) {
     tf->printf(CLIENT_THREAD "Error while sending a big message over channel N%d : %d\n",
                channels[BIG_MESSAGE_PORT_ID],r);
@@ -222,55 +289,6 @@ static void __client_thread(void *ctx)
   goto exit_test;
 exit_test:
   sys_exit(0);
-}
-
-static ulong_t __v_2[]={10,57};
-static ulong_t __v_6[]={8,8,4,10,10,30};
-static ulong_t __v_4[]={2,10,10,39};
-
-void __setup_iovectors(ulong_t msg_id,iovec_t *iovecs,ulong_t *numvecs)
-{
-  char *p=patterns[msg_id];
-  ulong_t len=strlen(patterns[msg_id])+1;
-  ulong_t *lengths,chunks;
-
-  if( msg_id == 0 ) {
-    iovecs->iov_base=p;
-    iovecs->iov_len=len;
-    *numvecs=1;
-  } else {
-    int i;
-
-    switch( current_task()->pid % 3 ) {
-      case 0:
-        lengths=__v_2;
-        chunks=2;
-        break;
-      case 1:
-        lengths=__v_6;
-        chunks=6;
-        break;
-      case 2:
-        lengths=__v_4;
-        chunks=4;
-        break;
-    }
-
-    kprintf( "__iovecs(): msg len=%d, numvecs: %d\n",
-             len,chunks+1 );
-    for(i=0;i<chunks;i++) {
-      iovecs->iov_base=p;
-      iovecs->iov_len=lengths[i];
-
-      iovecs++;
-      len-=lengths[i];
-      p+=lengths[i];
-    }
-    /* Process the last chunk. */
-    iovecs->iov_base=p;
-    iovecs->iov_len=len;
-    *numvecs=chunks+1;
-  }
 }
 
 #define POLL_CLIENT "[POLL CLIENT] "
@@ -357,17 +375,19 @@ static void __poll_client(void *d)
   sys_exit(0);
 }
 
+#define NUM_POLL_CLIENTS  SERVER_NUM_BLOCKED_PORTS
+
 static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
 {
   status_t i,r,j;
-  pollfd_t fds[SERVER_NUM_BLOCKED_PORTS];
-  thread_port_t poller_ports[SERVER_NUM_BLOCKED_PORTS];
+  pollfd_t fds[NUM_POLL_CLIENTS];
+  thread_port_t poller_ports[NUM_POLL_CLIENTS];
   test_framework_t *tf=tctx->tf;
   ulong_t polled_clients;
   port_msg_info_t msg_info;
   char server_rcv_buf[MAX_TEST_MESSAGE_SIZE];
-  
-  for(i=0;i<SERVER_NUM_BLOCKED_PORTS;i++) {
+
+  for(i=0;i<NUM_POLL_CLIENTS;i++) {
     poller_ports[i].port_id=ports[i];
     poller_ports[i].tctx=tctx;
     poller_ports[i].server_pid=current_task()->pid;
@@ -383,9 +403,9 @@ static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
   for(j=0;j<TEST_ROUNDS;j++) {
     ulong_t msg_id;
 
-    polled_clients=SERVER_NUM_BLOCKED_PORTS;
+    polled_clients=NUM_POLL_CLIENTS;
 
-    for(i=0;i<SERVER_NUM_BLOCKED_PORTS;i++) {
+    for(i=0;i<NUM_POLL_CLIENTS;i++) {
       fds[i].events=POLLIN | POLLRDNORM;
       fds[i].revents=0;
       fds[i].fd=ports[i];
@@ -393,7 +413,7 @@ static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
 
     while(polled_clients) {
       tf->printf( SERVER_THREAD "Polling ports (%d clients left) ...\n",polled_clients );
-      r=sys_ipc_port_poll(fds,SERVER_NUM_BLOCKED_PORTS,NULL);
+      r=sys_ipc_port_poll(fds,NUM_POLL_CLIENTS,NULL);
       if( r < 0 ) {
         tf->printf( SERVER_THREAD "Error occured while polling ports: %d\n",r );
         tf->failed();
@@ -405,7 +425,7 @@ static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
     tf->printf( SERVER_THREAD "All clients sent their messages.\n" );
 
     /* Process all pending events. */
-    for(i=0;i<SERVER_NUM_BLOCKED_PORTS;i++) {
+    for(i=0;i<NUM_POLL_CLIENTS;i++) {
       if( !fds[i].revents ) {
         tf->printf( SERVER_THREAD "Port N %d doesn't have any pending events \n",
                     fds[i].fd);
@@ -434,8 +454,8 @@ static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
         r=sys_port_reply(fds[i].fd,msg_info.msg_id,
                          (ulong_t)patterns[msg_id],strlen(patterns[msg_id])+1);
         if( r ) {
-          tf->printf(SERVER_THREAD "Error occured during replying via port %d. r=%d\n",
-                     fds[i].fd,r);
+          tf->printf(SERVER_THREAD "Error occured during replying message %d via port %d. r=%d\n",
+                     msg_info.msg_id,fds[i].fd,r);
           tf->abort();
         }
       }

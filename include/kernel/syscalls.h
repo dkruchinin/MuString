@@ -26,6 +26,7 @@
 #include <ipc/port.h>
 #include <eza/time.h>
 #include <ipc/poll.h>
+#include <ipc/gen_port.h>
 
 /* Syscalls identificators. */
 #define SC_GET_PID             0
@@ -48,6 +49,8 @@
 #define SC_OPEN_CHANNEL        17
 #define SC_CLOSE_CHANNEL       18
 #define SC_CLOSE_PORT          19
+#define SC_CONTROL_CHANNEL     20
+#define SC_PORT_SEND_IOV       21
 
 /**
  * @fn status_t sys_get_pid(void)

@@ -40,53 +40,7 @@
 #include <ipc/gen_port.h>
 #include <eza/event.h>
 
-ipc_port_message_t *ipc_setup_task_port_message(task_t *task,ipc_gen_port_t *p,
-                                                uintptr_t snd_buf,ulong_t snd_size,
-                                                uintptr_t rcv_buf,ulong_t rcv_size)
-{
-  ipc_port_message_t *msg = &task->ipc_priv->cached_data.cached_port_message;  
-  IPC_RESET_MESSAGE(msg,task);
-
-  status_t r=-EFAULT;
-  task_ipc_priv_t *ipc_priv = task->ipc_priv;
-
-  /* Process send buffer */
-  if( snd_size <= IPC_BUFFERED_PORT_LENGTH ) {
-    msg->send_buffer=ipc_priv->cached_data.cached_page1;
-    if( copy_from_user(msg->send_buffer,(void*)snd_buf,snd_size ) ) {
-      goto out;
-    }
-  } else {
-    msg->snd_buf.chunks=ipc_priv->cached_data.cached_page1;
-    r = ipc_setup_buffer_pages(task,&msg->snd_buf,snd_buf,snd_size);
-    if( r ) {
-      goto out;
-    }
-  }
-
-  /* Process receive buffer, if any. */
-  if( rcv_size >= 0 ) {
-    if( rcv_size <= IPC_BUFFERED_PORT_LENGTH ) {
-      msg->receive_buffer=ipc_priv->cached_data.cached_page2;
-    } else {
-      msg->rcv_buf.chunks=ipc_priv->cached_data.cached_page2;
-      r = ipc_setup_buffer_pages(task,&msg->rcv_buf,rcv_buf,rcv_size);
-      if( r ) {
-        goto out;
-      }
-    }
-  }
-
-  /* Setup this message. */
-  msg->data_size = snd_size;
-  msg->reply_size = rcv_size;
-  msg->sender=task;
-  return msg;
-out:
-  return NULL;
-}
-
-ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf,
+static ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf,
                                                  ulong_t snd_size,bool copy_data)
 {
   if( snd_size <= IPC_NB_MESSAGE_MAXLEN && snd_size ) {
@@ -122,7 +76,7 @@ ipc_port_message_t *ipc_create_port_message_iov(iovec_t *kiovecs,ulong_t numvecs
                                                 uintptr_t rcv_buf,ulong_t rcv_size)
 {
   ipc_port_message_t *msg;
-  int i;
+  int i,r;
   char *p;
   task_t *owner=current_task();
   task_ipc_priv_t *ipc_priv = owner->ipc_priv;
@@ -147,16 +101,38 @@ ipc_port_message_t *ipc_create_port_message_iov(iovec_t *kiovecs,ulong_t numvecs
     /* Prepare send buffer. */
     if( data_len <= IPC_BUFFERED_PORT_LENGTH ) {
       msg->send_buffer=ipc_priv->cached_data.cached_page1;
+      msg->num_send_bufs=0;
     } else {
-      return NULL;
+      /* Well, need to setup user buffers. */
+      r=ipc_setup_buffer_pages(owner,kiovecs,numvecs,
+                               (uintptr_t *)ipc_priv->cached_data.cached_page1,
+                               ipc_priv->cached_data.cached_send_buffers);
+      if( r ) {
+        goto free_message;
+      }
+      msg->num_send_bufs=numvecs;
+      msg->snd_buf=ipc_priv->cached_data.cached_send_buffers;
     }
 
     /* Prepare receive buffer. */
-    if( rcv_size >= 0 ) {
+    if( rcv_size ) {
       if( rcv_size <= IPC_BUFFERED_PORT_LENGTH ) {
         msg->receive_buffer=ipc_priv->cached_data.cached_page2;
       } else {
-        return NULL;
+        /* Well, need to setup user buffers. */
+        iovec_t iv;
+
+        iv.iov_base=(void *)rcv_buf;
+        iv.iov_len=rcv_size;
+
+        r=ipc_setup_buffer_pages(owner,&iv,1,
+                                 (uintptr_t *)ipc_priv->cached_data.cached_page2,
+                                 &ipc_priv->cached_data.recv_buffer);
+        if( !r ) {
+          msg->rcv_buf=&ipc_priv->cached_data.recv_buffer;
+          return msg;
+        }
+        goto free_message;
       }
     }
   }
@@ -173,7 +149,7 @@ ipc_port_message_t *ipc_create_port_message_iov(iovec_t *kiovecs,ulong_t numvecs
   }
   return msg;
 free_message:
-  if( blocked ) {
+  if( !blocked ) {
     put_ipc_port_message(msg);
   }
   return NULL;
@@ -202,8 +178,8 @@ static status_t __transfer_reply_data(ipc_port_message_t *msg,
     } else {
       /* Long message - process it via buffer. */
       if( from_server ) {
-        r=ipc_transfer_buffer_data(&msg->rcv_buf,0,reply_len,
-                                   (void *)reply_buf,from_server);
+        r=ipc_transfer_buffer_data(msg->rcv_buf,1,(void *)reply_buf,
+                                   reply_len,from_server);
       } else {
         r=0;
       }
@@ -231,7 +207,6 @@ status_t __ipc_port_send(struct __ipc_gen_port *port,
   status_t msg_size=0,r=0;
   task_t *sender=current_task();
 
-  kprintf( "__ipc_port_send(): message data size=%d\n",msg->data_size );
   if( !msg_ops->insert_message ) {
     return -EINVAL;
   }
@@ -269,10 +244,8 @@ status_t __ipc_port_send(struct __ipc_gen_port *port,
   /* Sender should wait for the reply, so put it into sleep here. */
   if( sync_send ) {
     IPC_TASK_ACCT_OPERATION(sender);
-    kprintf( "__ipc_port_send(): yielding event...\n" );
     event_yield( &msg->event );
     IPC_TASK_UNACCT_OPERATION(sender);
-    kprintf( "__ipc_port_send(): Got a reply ! %d\n",msg->replied_size );
 
     r=msg->replied_size;
     if( r > 0 ) {
@@ -484,8 +457,8 @@ static status_t __transfer_message_data_to_receiver(ipc_port_message_t *msg,
     r=copy_to_user((void *)recv_buf,msg->send_buffer,recv_len);
   } else {
     /* Long message - process it via buffer. */
-    r=ipc_transfer_buffer_data(&msg->snd_buf,0,recv_len,
-                               (void *)recv_buf,false);
+    r=ipc_transfer_buffer_data(msg->snd_buf,msg->num_send_bufs,
+                               (void *)recv_buf,recv_len,false);
   }
 
   if( !r ) {
@@ -637,6 +610,7 @@ status_t __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
   if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
     msg=port->msg_ops->remove_message(port,msg_id);
     if( !msg ) {
+      kprintf( "[5] Can't remove message %d\n",msg_id );
       r=-EINVAL;
     }
   } else {

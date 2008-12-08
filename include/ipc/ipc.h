@@ -17,7 +17,10 @@
 
 #define UNTRUSTED_MANDATORY_FLAGS  (IPC_BLOCKED_ACCESS)
 
-/* Send/receive flags. */
+/* NOTE: This number is used for allocate temporary arrays on task's
+ * kernel stack. So please don't use huge numbers here.
+ */
+#define MAX_IOVECS  8
 
 /* TODO: [mt] Changes IPC_DEFAULT_PORTS to a smoller value !!! */
 #define IPC_DEFAULT_PORTS  512
@@ -30,6 +33,8 @@
 typedef struct __ipc_cached_data {
   void *cached_page1, *cached_page2;
   ipc_port_message_t cached_port_message;
+  ipc_user_buffer_t cached_send_buffers[MAX_IOVECS];
+  ipc_user_buffer_t recv_buffer;
 } ipc_cached_data_t;
 
 typedef struct __ipc_pstats {
