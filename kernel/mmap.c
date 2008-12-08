@@ -70,7 +70,7 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
 #if 0
     kprintf("mmap() no fd\n");
 #endif
-    if(flags & MMAP_PHYS && offset) {
+    if(flags & MMAP_PHYS) {
       /* TODO: ak, check rights */
 #if 0
       kprintf("mmap() yummie fuck\n");
