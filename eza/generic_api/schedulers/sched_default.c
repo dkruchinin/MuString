@@ -644,11 +644,16 @@ static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
   if( cpu != cpu_id() ) {
     t.task=task;
     t.status=-EINTR;
+
     event_initialize(&t.e);
     list_init_node(&t.l);
-    event_set_task(&t.e,current_task());
 
-    suspend_task(task);
+    if( task != current_task() ) {
+      event_set_task(&t.e,current_task());
+      suspend_task(task);
+    } else {
+      /* Bad doy ! Trying to move himself ! */
+    }
 
     schedule_task_migration(&t,cpu);
     activate_task(migration_thread(cpu));
