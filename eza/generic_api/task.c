@@ -94,7 +94,7 @@ void initialize_task_subsystem(void)
   if( !task_cache ) {
     panic( "initialize_task_subsystem(): Can't create the task struct memcache !" );
   }
-
+  
   init_launched=false;
   initialize_process_subsystem();
 }
@@ -225,6 +225,9 @@ static task_t *__allocate_task_struct(void)
     list_init_head(&task->children);
     list_init_head(&task->threads);
 
+    list_init_head(&task->task_events.my_events);
+    list_init_head(&task->task_events.listeners);
+
     spinlock_initialize(&task->lock);
     spinlock_initialize(&task->child_lock);
     spinlock_initialize(&task->member_lock);
@@ -233,7 +236,7 @@ static task_t *__allocate_task_struct(void)
     task->group_leader=task;
     task->cpu_affinity_mask=ONLINE_CPUS_MASK;
   }
-  return task;  
+  return task;
 }
 
 static status_t __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)

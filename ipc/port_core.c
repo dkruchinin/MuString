@@ -547,7 +547,7 @@ recv_cycle:
       IPC_UNLOCK_PORT_W(port);
 
       if(free) {
-        memfree(msg);
+        put_ipc_port_message(msg);
       }
     }
   }

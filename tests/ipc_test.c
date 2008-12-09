@@ -23,6 +23,8 @@
 #include <test.h>
 #include <mm/slab.h>
 #include <eza/errno.h>
+#include <eza/tevent.h>
+#include <eza/process.h>
 
 #define TEST_ID  "IPC subsystem test"
 #define SERVER_THREAD  "[SERVER THREAD] "
@@ -500,6 +502,82 @@ static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
   tf->printf( SERVER_THREAD "All poll tests finished.\n" );
 }
 
+static void __notifier_thread(void *ctx)
+{
+  DECLARE_TEST_CONTEXT;
+  uint64_t target_tick=swks.system_ticks_64 + 200;
+
+  tf->printf( "[Notifier] Starting.\n" );
+
+  while(swks.system_ticks_64 < target_tick) {
+  }
+
+  tf->printf( "[Notifier] Exiting.\n" );
+  sys_exit(0);
+}
+
+static void __process_events_test(void *ctx)
+{
+  DECLARE_TEST_CONTEXT;
+  int port=sys_create_port(0,0);
+  task_t *task;
+  status_t r;
+  task_event_ctl_arg te_ctl;
+  task_event_descr_t ev_descr;
+  port_msg_info_t msg_info;
+
+  if( port < 0 ) {
+    tf->printf( "Can't create a port !\n" );
+  }
+
+  if( kernel_thread(__notifier_thread,ctx,&task) ) {
+    tf->printf("Can't create the Notifier !\n");
+    tf->abort();
+  }
+
+  te_ctl.ev_mask=TASK_EVENT_TERMINATION;
+  te_ctl.port=port;
+  r=sys_task_control(task->pid,SYS_PR_CTL_ADD_EVENT_LISTENER,
+                     &te_ctl);
+  if( r ) {
+    tf->printf("Can't set event listener: %d\n",r);
+    tf->failed();
+  }
+
+  tf->printf( "Check that no one can set more than one same listeners.\n" );
+  te_ctl.ev_mask=TASK_EVENT_TERMINATION;
+  te_ctl.port=port;
+  r=sys_task_control(task->pid,SYS_PR_CTL_ADD_EVENT_LISTENER,
+                     &te_ctl);
+  if( r != -EBUSY ) {
+    tf->printf("How did I manage to set the second listener ? %d\n",r);
+    tf->failed();
+  } else {
+    tf->passed();
+  }
+
+  memset(&ev_descr,0,sizeof(ev_descr));
+  r=sys_port_receive(port,IPC_BLOCKED_ACCESS,&ev_descr,
+                     sizeof(ev_descr),&msg_info);
+  if( r ) {
+    tf->printf("Error occured while waiting for tasl's events: %d !\n",
+               r);
+    tf->failed();
+  }
+
+  if( ev_descr.pid != task->pid || ev_descr.tid != task->tid ||
+      !(ev_descr.ev_mask & te_ctl.ev_mask) ) {
+    tf->printf( "Improper notification message received: PID: %d, TID: %d, EVENT: 0x%X\n",
+                ev_descr.pid,ev_descr.tid,ev_descr.ev_mask);
+    tf->failed();
+  }
+
+  tf->printf( "All process event tests passed.\n" );
+  tf->passed();
+
+  sys_close_port(port);
+}
+
 static void __server_thread(void *ctx)
 {
   DECLARE_TEST_CONTEXT;
@@ -508,6 +586,8 @@ static void __server_thread(void *ctx)
   ulong_t flags;
   status_t r;
   port_msg_info_t msg_info;
+
+  __process_events_test(ctx);
 
   for( i=0;i<SERVER_NUM_PORTS;i++) {
     if( i != NON_BLOCKED_PORT_ID ) {

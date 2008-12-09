@@ -30,6 +30,7 @@
 #include <mlibc/index_array.h>
 #include <mm/page.h>
 #include <eza/limits.h>
+#include <eza/tevent.h>
 
 #define INVALID_PID  ((pid_t)~0) 
 /* TODO: [mt] Manage NUM_PIDS properly ! */
@@ -137,14 +138,17 @@ typedef struct __task_struct {
 
   /* Limits-related stuff. */
   task_limits_t *limits;
-  
+
   /* Lock for protecting changing and outer access the following fields:
    *   ipc,ipc_priv,limits
    */
   spinlock_t member_lock;
 
   struct __userspace_events_data *uspace_events;
-    
+
+  /* Task state events */
+  task_events_t task_events;
+
   /* Arch-dependent context is located here */
   uint8_t arch_context[256];
 } task_t;

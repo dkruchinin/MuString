@@ -28,6 +28,7 @@
 #include <eza/task.h>
 #include <ipc/ipc.h>
 #include <eza/security.h>
+#include <eza/tevent.h>
 
 static void __exit_ipc(task_t *exiter) {
   task_ipc_t *ipc;
@@ -64,6 +65,8 @@ static void __exit_limits(task_t *exiter)
 
 static void __exit_resources(task_t *exiter)
 {
+  /* Remove all our listeners. */
+  exit_task_events(exiter);
 }
 
 void do_exit(int code)
@@ -88,13 +91,16 @@ void do_exit(int code)
   /* It's good to be undead ! */
   zombify_task(exiter);
 
-  __exit_ipc(exiter);
-  __exit_limits(exiter);
-  __exit_resources(exiter);
+  /* Notify all listeners that we're exiting. */
+  task_event_notify(TASK_EVENT_TERMINATION);
 
   if( !is_thread(exiter) ) {
     /* TODO: [mt] terminate all threads of this process. */
   }
+
+  __exit_ipc(exiter);
+  __exit_limits(exiter);
+  __exit_resources(exiter);
 
   __exit_scheduler(exiter);
 
