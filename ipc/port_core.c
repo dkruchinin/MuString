@@ -17,7 +17,7 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *
- * ipc/port.c: implementation of the 'port' IPC abstraction.
+ * ipc/port_core.c: implementation of core IPC ports logic.
  *
  */
 

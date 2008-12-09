@@ -1,3 +1,25 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ *
+ * eza/generic_api/tevent.c: implementation of functions related to task events.
+ */
+
 #include <eza/task.h>
 #include <eza/arch/types.h>
 #include <kernel/syscalls.h>
@@ -38,7 +60,6 @@ void task_event_notify(ulong_t events)
 
     e.pid=task->pid;
     e.tid=task->tid;
-    e.ev_mask;
 
     iov.iov_base=&e;
     iov.iov_len=sizeof(e);
@@ -91,6 +112,12 @@ status_t task_event_attach(task_t *target,task_t *listener,
 
   /* Make sure caller hasn't installed another listenersfor this process. */
   LOCK_TASK_EVENTS_W(target);
+  if( check_task_flags(target,TF_EXITING) ) {
+    /* Target task became a zombie ? */
+    r=-ESRCH;
+    goto dont_add;
+  }
+
   list_for_each(&target->task_events.listeners,n) {
     task_event_listener_t *tl=container_of(n,task_event_listener_t,llist);
 

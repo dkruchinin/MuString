@@ -1,3 +1,25 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ *
+ * include/eza/gc.h: prototypes and data structures for GC thread actions.
+ */
+
 #ifndef __GC_H__
 #define  __GC_H__
 
@@ -64,7 +86,7 @@ static inline void gc_put_action(gc_action_t *action)
   }
 }
 
-#define GC_THREAD_IDX  1
-#define MIGRATION_THREAD_IDX  0
+#define GC_THREAD_IDX  1 /**< Index of the GC thread in the array of per-CPU threads. **/
+#define MIGRATION_THREAD_IDX  0  /**< Index of the migration thread in the array of per-CPU threads. **/
 
 #endif

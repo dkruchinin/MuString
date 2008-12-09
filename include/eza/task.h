@@ -95,10 +95,12 @@ struct __task_mutex_locks;
 /* task flags */
 #define __TF_USPC_BLOCKED_BIT  0
 #define __TF_UNDER_MIGRATION_BIT  1
+#define __TF_EXITING_BIT  2
 
 typedef enum __task_flags {
-  TF_USPC_BLOCKED=(1<<__TF_USPC_BLOCKED_BIT), /**< Block facility to change task's static priority outside the kernel **/
-  TF_UNDER_MIGRATION=(1<<__TF_UNDER_MIGRATION_BIT) /**< Task is currently being migrated. Don't disturb. **/
+  TF_USPC_BLOCKED=(1<<__TF_USPC_BLOCKED_BIT),/**< Block facility to change task's static priority outside the kernel **/
+  TF_UNDER_MIGRATION=(1<<__TF_UNDER_MIGRATION_BIT), /**< Task is currently being migrated. Don't disturb. **/
+  TF_EXITING=(1<<__TF_EXITING_BIT) /**< Task is exiting to avoid faults during 'sys_exit()' **/
 } task_flags_t;
 
 /* Abstract object for scheduling. */
@@ -251,5 +253,8 @@ void cleanup_thread_data(void *t,ulong_t arg);
 #define KERNEL_THREAD_FLAGS  (CLONE_MM)
 
 #define TASK_INIT   0x80000000   /* This task is the NameServer i.e. 'init' */
+
+#define set_task_flags(t,f) ((t)->flags |= (f))
+#define check_task_flags(t,f) ((t)->flags & (f) )
 
 #endif

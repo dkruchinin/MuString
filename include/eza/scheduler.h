@@ -103,10 +103,6 @@ extern scheduler_t *get_default_scheduler(void);
 void schedule(void);
 
 /* Macros that deal with resceduling needs. */
-//extern void arch_sched_set_current_need_resched(void);
-//extern void arch_sched_reset_current_need_resched(void);
-//extern void arch_sched_set_cpu_need_resched(cpu_id_t cpu);
-
 #define sched_set_current_need_resched() arch_sched_set_current_need_resched()
 #define sched_reset_current_need_resched() arch_sched_reset_current_need_resched()
 

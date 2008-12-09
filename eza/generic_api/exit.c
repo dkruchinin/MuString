@@ -74,12 +74,12 @@ void do_exit(int code)
   task_t *exiter=current_task();
 
   if( !exiter->pid ) {
-    panic( "do_exit(): Exiting form the idle task on CPU N%d !\n",
+    panic( "do_exit(): Exiting from the idle task on CPU N%d !\n",
            cpu_id() );
   }
 
   if( exiter->pid == 1 && exiter->tid == 1 ) {
-    panic( "do_exit(): Exiting form the Name Server on CPU N%d !\n",
+    panic( "do_exit(): Exiting from the Name Server on CPU N%d !\n",
            cpu_id() );
   }
 
@@ -90,6 +90,7 @@ void do_exit(int code)
 
   /* It's good to be undead ! */
   zombify_task(exiter);
+  set_task_flags(exiter,TF_EXITING);
 
   /* Notify all listeners that we're exiting. */
   task_event_notify(TASK_EVENT_TERMINATION);
