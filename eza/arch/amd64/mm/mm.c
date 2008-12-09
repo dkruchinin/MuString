@@ -240,7 +240,7 @@ void arch_mm_remap_pages(void)
   int ret;
 
   /* Create identity mapping */
-  ret = mmap_kern(0x1000, 1, IDENT_MAP_PAGES - 1, MAP_RW);
+  ret = mmap_kern(0x1000, 1, IDENT_MAP_PAGES - 1, MAP_READ | MAP_WRITE);
   if (ret) {
     panic("arch_mm_remap_pages(): Can't create identity mapping (%p -> %p)! [errcode=%d]",
           0x1000, IDENT_MAP_PAGES << PAGE_WIDTH, ret);
@@ -249,7 +249,7 @@ void arch_mm_remap_pages(void)
   verify_mapping("identity mapping", 0x1000, IDENT_MAP_PAGES - 1, 1);
   
   /* Now we should remap all available physical memory starting at 'KERNEL_BASE'. */
-  ret = mmap_kern(KERNEL_BASE, 0, swks.mem_total_pages, MAP_RW | MAP_EXEC);
+  ret = mmap_kern(KERNEL_BASE, 0, swks.mem_total_pages, MAP_READ | MAP_WRITE | MAP_EXEC);
   if (ret)
     panic("arch_mm_remap_pages(): Can't remap physical pages !");
 
@@ -262,7 +262,7 @@ void arch_mm_remap_pages(void)
   direct_mapping_area.phys_addr=0x1000;
   direct_mapping_area.virt_addr=0x1000;
   direct_mapping_area.num_pages=IDENT_MAP_PAGES - 1;
-  direct_mapping_area.map_flags= MAP_USER | MAP_RW;
+  direct_mapping_area.map_flags= MAP_USER | MAP_READ | MAP_WRITE;
   vm_register_user_mandatory_area(&direct_mapping_area);
 
   /* TODO: [mt] redesign 'kernel_min_vaddr'. */
@@ -294,7 +294,7 @@ void arch_smp_mm_init(int cpu)
   load_cr3(_k2p((uintptr_t)pframe_to_virt(kernel_root_pagedir.dir)), 1, 1);
 }
 
-pde_flags_t mmap_flags2ptable_flags(unsigned int mmap_flags)
+pde_flags_t mmap_flags2ptable_flags(mmap_flags_t mmap_flags)
 {
   pde_flags_t flags = 0;
 
@@ -303,10 +303,30 @@ pde_flags_t mmap_flags2ptable_flags(unsigned int mmap_flags)
     flags |= PDE_US;
   if (mmap_flags & MAP_WRITE)
     flags |= PDE_RW;
-  if (mmap_flags & MAP_DONTCACHE)
+  if (mmap_flags & MAP_NOCACHE)
     flags |= PDE_PCD;
   if (!(mmap_flags & MAP_EXEC))
     flags |= PDE_NX;
+  if (mmap_flags & MAP_PHYS)
+    flags |= PDE_PHYS;
+
+  return flags;
+}
+
+mmap_flags_t ptable_flags2mmap_flags(pde_flags_t pde_flags)
+{
+  mmap_flags_t flags = 0;
+  
+  if (pde_flags & PDE_US)
+    flags |= MAP_USER;
+  if (pde_flags & PDE_RW)
+    flags |= (MAP_READ | MAP_WRITE);
+  if (pde_flags & PDE_PCD)
+    flags |= MAP_NOCACHE;
+  if (!(pde_flags & PDE_NX))
+    flags |= MAP_EXEC;
+  if (pde_flags & PDE_PHYS)
+    flags |= MAP_PHYS;
 
   return flags;
 }

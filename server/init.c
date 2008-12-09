@@ -157,15 +157,15 @@ static status_t __create_task_mm(task_t *task, int num)
   if (r)
     return r;
 
-  r = mmap(task->page_dir, real_data_offset, data_bss >> PAGE_WIDTH, data_size, MAP_USER | MAP_RW);  
+  r = mmap(task->page_dir, real_data_offset, data_bss >> PAGE_WIDTH, data_size, MAP_USER | MAP_READ | MAP_WRITE);  
   if (r)
     return r;
 
-  r = mmap(task->page_dir, bss_virt, pframe_number(bss), bss_size, MAP_USER | MAP_RW);
+  r = mmap(task->page_dir, bss_virt, pframe_number(bss), bss_size, MAP_USER | MAP_READ | MAP_WRITE);
   if (r)
     return r;
 
-  r = mmap(task->page_dir, USPACE_END-0x40000, pframe_number(stack), USER_STACK_SIZE, MAP_USER | MAP_RW);
+  r = mmap(task->page_dir, USPACE_END-0x40000, pframe_number(stack), USER_STACK_SIZE, MAP_USER | MAP_READ | MAP_WRITE);
   if (r)
     return r;
 
@@ -196,7 +196,7 @@ void server_run_tasks(void)
     }*/
 
   kprintf("[SRV] Starting servers: %d ... \n",i);
-  kconsole->disable(); /* shut off console */
+  //kconsole->disable(); /* shut off console */
 
   for(a=0;a<i;a++) {
     r=create_task(current_task(),0,TPL_USER,&server);

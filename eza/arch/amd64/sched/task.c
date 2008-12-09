@@ -40,6 +40,7 @@
 #include <eza/arch/current.h>
 #include <eza/process.h>
 #include <eza/arch/profile.h>
+#include <eza/arch/ptable.h>
 
 /* Located on 'amd64/asm.S' */
 extern void kthread_fork_path(void);
@@ -165,10 +166,9 @@ void initialize_idle_tasks(void)
     next_frame = NULL;
     mapper.va_from = task->kernel_stack.low_address;
     mapper.va_to = mapper.va_from + ((KERNEL_STACK_PAGES - 1) << PAGE_WIDTH);
-    mapper.flags = MAP_RW;
+    mapper.flags = MAP_READ | MAP_WRITE;
     mapper.pfi = &pfi;
-    r = mmap_pages(task->page_dir, &mapper);
-    
+    r = __mmap_pages(task->page_dir->dir, &mapper, PTABLE_LEVEL_LAST);
     if( r != 0 ) {
       panic( "initialize_idle_tasks(): Can't map kernel stack for idle task !" );
     }

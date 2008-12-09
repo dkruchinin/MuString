@@ -29,24 +29,25 @@
 #include <eza/kernel.h>
 #include <eza/mutex.h>
 #include <eza/spinlock.h>
-#include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
 #include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 
 /**
- * @typedef uint8_t mmap_flags_t
+ * @typedef unsigned int mmap_flags_t
  * Memory mapping flags.
  */
-typedef uint8_t mmap_flags_t;
+typedef unsigned int mmap_flags_t;
 
 /* flags for memory mapping */
-#define MAP_READ      0x01 /**< Mapped page may be readed */
-#define MAP_WRITE     0x02 /**< Mapped page may be written */
-#define MAP_RW        0x03 /**< Mapped page may be both readed and written */
-#define MAP_USER      0x04 /**< Mapped page is visible for user */
-#define MAP_EXEC      0x08 /**< Mapped page may be executed */
-#define MAP_DONTCACHE 0x10 /**< Prevent caching of mapped page */
+enum {
+  MAP_READ    = 0x01, /**< Mapped page may be readed */
+  MAP_WRITE   = 0x02, /**< Mapped page may be written */
+  MAP_USER    = 0x04, /**< Mapped page is visible for user */
+  MAP_EXEC    = 0x08, /**< Mapped page may be executed */
+  MAP_NOCACHE = 0x10, /**< Prevent caching of mapped page */
+  MAP_PHYS    = 0x20, /**< Physical address is required */
+};
 
 typedef struct __mmapper {
   page_frame_iterator_t *pfi;
@@ -54,18 +55,6 @@ typedef struct __mmapper {
   uintptr_t va_to;
   mmap_flags_t flags;  
 } mmapper_t;
-
-typedef struct __root_pagedir {
-  page_frame_t *dir;  
-  mutex_t lock;
-  atomic_t refcount;
-  int pin_type;  
-} root_pagedir_t;
-
-enum {
-  RPD_PIN_RDONLY = 1,
-  RPD_PIN_RW,
-};
 
 extern root_pagedir_t kernel_root_pagedir;
 
@@ -111,12 +100,6 @@ static inline void pagedir_free(page_frame_t *dir)
   pagedir_set_entries(dir, 0);
   pgt_free_pagedir(dir);
 }
-
-status_t pagedir_populate(pde_t *pde, pde_flags_t flags);
-status_t pagedir_depopulate(pde_t *pde);
-status_t pagedir_map_entries(pde_t *pde_start, pde_idx_t entries,
-                             page_frame_iterator_t *pfi, pde_flags_t flags);
-void pagedir_unmap_entries(pde_t *pde_start, pde_idx_t entries);
 
 /* middle-level mapping functions */
 status_t __mmap_pages(page_frame_t *dir, mmapper_t *mapper, pdir_level_t level);
@@ -166,12 +149,12 @@ status_t mm_check_va_range(root_pagedir_t *root_dir, uintptr_t va_from,
 
 static inline page_frame_t *mm_va_page(root_pagedir_t *root_dir, uintptr_t va)
 {
-  pde_t pde;
+  uintptr_t pde_addr;
 
-  if (mm_check_va(root_dir, va, (uintptr_t *)&pde))
+  if (mm_check_va(root_dir, va, &pde_addr))
     return NULL;
 
-  return pframe_by_number(pgt_pde_page_idx(&pde));
+  return pframe_by_number(pgt_pde_page_idx((pde_t *)pde_addr));
 }
 
 #ifdef CONFIG_DEBUG_MM

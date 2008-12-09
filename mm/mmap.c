@@ -37,7 +37,7 @@
 #include <eza/arch/ptable.h>
 #include <eza/arch/types.h>
 
-#define DEFAULT_MAPDIR_FLAGS (MAP_RW | MAP_EXEC | MAP_USER)
+#define DEFAULT_MAPDIR_FLAGS (MAP_READ | MAP_WRITE | MAP_EXEC | MAP_USER)
 
 root_pagedir_t kernel_root_pagedir;
 static memcache_t *__rpd_memcache = NULL;
@@ -212,11 +212,12 @@ status_t pagedir_depopulate(pde_t *pde)
 }
 
 status_t pagedir_map_entries(pde_t *pde_start, pde_idx_t entries,
-                            page_frame_iterator_t *pfi, pde_flags_t flags)
+                             page_frame_iterator_t *pfi, pde_flags_t flags)
 {
   page_frame_t *dir = pgt_pde2pagedir(pde_start), *page;
   pde_t *pde = pde_start;
   status_t ret = 0;
+  bool is_phys = (ptable_flags2mmap_flags(flags) & MAP_PHYS);
 
   __check_entries_range(dir, pde);
   
@@ -237,8 +238,10 @@ status_t pagedir_map_entries(pde_t *pde_start, pde_idx_t entries,
     iter_next(pfi);
     ASSERT(iter_isrunning(pfi));
     pgt_pde_save(pde++, pfi->pf_idx, flags);
-    page = pframe_by_number(pfi->pf_idx);
-    atomic_inc(&page->refcount);
+    if (!is_phys) {
+      page = pframe_by_number(pfi->pf_idx);
+      atomic_inc(&page->refcount);
+    }
   }
 
   return 0;
@@ -260,8 +263,10 @@ void pagedir_unmap_entries(pde_t *pde_start, pde_idx_t entries)
   __check_entries_range(dir, pde);
   for (pde = pde_start; entries--; pde++) {
     pgt_pde_delete(pde);
-    page = pframe_by_number(pgt_pde_page_idx(pde));
-    atomic_dec(&page->refcount);
+    if (!(ptable_flags2mmap_flags(pgt_pde_get_flags(pde)) & MAP_PHYS)) {
+      page = pframe_by_number(pgt_pde_page_idx(pde));
+      atomic_dec(&page->refcount);
+    }
   }
 }
 
@@ -306,17 +311,12 @@ int __mmap_pages(page_frame_t *dir, mmapper_t *mapper, pdir_level_t level)
     
     do {
       pde = pgt_fetch_entry(dir, idx++);
-
-      if (pgt_pde_is_mapped(pde)) {
-        ret = -EALREADY;
-        pde = NULL;
-        goto unmap;
-      }
-
-      ret = pagedir_populate(pde, _flags);
-      if (ret) {
-        pde = NULL;
-        goto unmap;
+      if (!pgt_pde_is_mapped(pde)) {
+        ret = pagedir_populate(pde, _flags);
+        if (ret) {
+          pde = NULL;
+          goto unmap;
+        }
       }
       
       ret = __mmap_pages(pgt_pde_fetch_subdir(pde), mapper, level - 1);
@@ -328,8 +328,6 @@ int __mmap_pages(page_frame_t *dir, mmapper_t *mapper, pdir_level_t level)
 
   return ret;
   unmap:
-  kprintf("ret = %d\n", ret);
-  for (;;);
   if (pde) {
     if (!pagedir_get_entries(pgt_pde2pagedir(pde)))
       pagedir_depopulate(pde);

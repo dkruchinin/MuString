@@ -128,7 +128,6 @@ status_t waitqueue_insert(wqueue_t *wq, wqueue_task_t *wq_task, wqueue_insop_t i
   if (iop == WQ_INSERT_SLEEP) {
       ret = sched_change_task_state_deferred(wq_task->task, TASK_STATE_SLEEPING,
                                              wq->acts.sleep_if_needful, wq_task);
-      ret = sched_change_task_state(wq_task->task, TASK_STATE_SLEEPING);
   }
     
   return ret;

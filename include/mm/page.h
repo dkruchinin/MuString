@@ -77,13 +77,7 @@ typedef struct __page_frame {
   list_head_t head;    /**< Obvious */
   list_node_t node;    /**< Obvious */
   page_idx_t idx;      /**< Page frame index in the pframe_pages_array */
-  union {
-    atomic_t refcount;   /**< Number of references to the physical page */
-    struct {
-      pdir_level_t level;
-      pde_idx_t entries;
-    };
-  };
+  atomic_t refcount;   /**< Number of references to the physical page */
   page_flags_t flags;  /**< Page flags */
   uint32_t _private;   /**< Private data that may be used by internal page frame allocator */  
 } page_frame_t;

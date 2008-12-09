@@ -28,6 +28,7 @@
 
 #include <ds/iterator.h>
 #include <mm/page.h>
+#include <mm/mmap.h>
 #include <eza/arch/ptable.h>
 #include <eza/arch/e820map.h>
 #include <eza/arch/boot.h>
@@ -64,7 +65,8 @@ void arch_mm_init(void);
 void arch_mm_remap_pages(void);
 void arch_mm_page_iter_init(page_frame_iterator_t *pfi, ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx);
 void arch_smp_mm_init(int cpu);
-pde_flags_t mmap_flags2ptable_flags(unsigned int mmap_flags);
+pde_flags_t mmap_flags2ptable_flags(mmap_flags_t mmap_flags);
+mmap_flags_t ptable_flags2mmap_flags(pde_flags_t pde_flags);
 
 #endif
 

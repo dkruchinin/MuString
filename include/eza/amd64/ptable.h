@@ -38,8 +38,6 @@
 #define PTABLE_LEVEL_FIRST PDT_AMD64_PT
 #define PTABLE_LEVEL_LAST  PDT_AMD64_PML4
 
-typedef uint16_t pde_flags_t;
-
 #define PDE_PRESENT  0x001
 #define PDE_RW       0x002
 #define PDE_US       0x004
@@ -51,6 +49,10 @@ typedef uint16_t pde_flags_t;
 #define PDE_GLOBAL   0x100
 #define PDE_NX       0x200
 
+typedef struct __root_pagedir {
+  page_frame_t *pml4;
+} root_pagedir_t;
+
 typedef struct __pde {
   unsigned flags      :12;
   unsigned base_0_19  :20;
@@ -58,6 +60,9 @@ typedef struct __pde {
   unsigned avail      :11;
   unsigned nx          :1;
 } __attribute__((packed)) pde_t;
+
+status_t ptable_map(root_pagedir_t *ptable, mmap_info_t *pctl);
+status_t ptable_unmap(root_pagedir_t *ptable, mmap_info_t *pctl);
 
 #define PTABLE_DIR_ENTRIES 0x200
 #define PTABLE_DIR_MASK    0x1FF
@@ -79,7 +84,11 @@ typedef struct __pde {
   do {                                          \
     (pde)->flags = (pde_flags) & 0x1FF;         \
     (pde)->nx = (pde_flags) >> 9;               \
+    (pde)->avail = (pde_flags) >> 10;           \
   } while (0)
+
+#define pgt_pde_get_flags(pde)                  \
+  ((pde)->flags | ((pde)->nx << 9) | ((pde->avail) << 10))
 
 #define pgt_pde_set_page_idx(pde, page_idx)     \
   do {                                          \
