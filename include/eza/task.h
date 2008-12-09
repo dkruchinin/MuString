@@ -74,10 +74,10 @@ typedef enum __task_state {
   TASK_STATE_JUST_BORN = 0,
   TASK_STATE_RUNNABLE = 1,
   TASK_STATE_RUNNING = 2,
-  TASK_STATE_SLEEPING = 3,
+  TASK_STATE_SLEEPING = 3,   /**< Interruptible sleep. **/
   TASK_STATE_STOPPED = 4,
   TASK_STATE_ZOMBIE = 5,
-  TASK_STATE_SUSPENDED = 6,
+  TASK_STATE_SUSPENDED = 6,  /**< Non-interruptible sleep. **/
 } task_state_t;
 
 typedef uint32_t priority_t;
@@ -240,8 +240,6 @@ status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
 void free_task_struct(task_t *task);
 
 #define is_thread(task)  ((task)->group_leader && (task)->group_leader != (task))
-
-#define task_is_migrable(t) (!list_node_is_bound(&(t)->migration_list))
 
 void cleanup_thread_data(void *t,ulong_t arg);
 
