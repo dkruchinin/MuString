@@ -91,6 +91,7 @@ struct __task_ipc;
 struct __userspace_events_data;
 struct __task_ipc_priv;
 struct __task_mutex_locks;
+struct __task_sync_data;
 
 /* task flags */
 #define __TF_USPC_BLOCKED_BIT  0
@@ -137,6 +138,8 @@ typedef struct __task_struct {
   struct __task_ipc_priv *ipc_priv;
 
   struct __task_mutex_locks *active_locks;
+
+  struct __task_sync_data *sync_data;
 
   /* Limits-related stuff. */
   task_limits_t *limits;

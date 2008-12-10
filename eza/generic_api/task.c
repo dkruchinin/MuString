@@ -41,6 +41,7 @@
 #include <ipc/ipc.h>
 #include <eza/uinterrupt.h>
 #include <mm/slab.h>
+#include <eza/sync.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
@@ -257,6 +258,22 @@ static status_t __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
   } else {
     task->ipc=NULL;
     return setup_task_ipc(task);
+  }
+}
+
+static status_t __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags)
+{
+  status_t r;
+
+  if( flags & CLONE_MM ) {
+    if( !parent->sync_data ) {
+      return -EINVAL;
+    }
+    task->sync_data=parent->sync_data;
+    return dup_task_sync_data(parent->sync_data);
+  } else {
+    task->sync_data=allocate_task_sync_data();
+    return task->sync_data ? 0 : -ENOMEM;
   }
 }
 
