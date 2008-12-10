@@ -43,12 +43,23 @@ static void __install_sync_object(task_t *task,kern_sync_object_t *obj,
                                   sync_id_t id)
 {
   obj->id=id;
+  task->sync_data->sync_objects[id]=obj;
+  task->sync_data->numobjs++;
 }
 
 static kern_sync_object_t *__lookup_sync(task_t *owner,sync_id_t id)
 {
-  kern_sync_object_t *t;
+  kern_sync_object_t *t=NULL;
+  task_sync_data_t *tsd=get_task_sync_data(owner);
 
+  if( id < MAX_PROCESS_SYNC_OBJS ) {
+    t=tsd->sync_objects[id];
+    if( t ) {
+      sync_get_object(t);
+    }
+  }
+
+  release_task_sync_data(tsd);
   return t;
 }
 
@@ -120,6 +131,11 @@ status_t dup_task_sync_data(task_sync_data_t *sync_data)
   LOCK_SYNC_DATA(sync_data);
 
   for(i=0;i<MAX_PROCESS_SYNC_OBJS;i++) {
+    kern_sync_object_t *kobj=sync_data->sync_objects[i];
+
+    if( kobj ) {
+      sync_get_object(kobj);
+    }
   }
 
   UNLOCK_SYNC_DATA(sync_data);

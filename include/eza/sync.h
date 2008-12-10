@@ -68,7 +68,7 @@ typedef struct __kern_sync_object {
 } kern_sync_object_t;
 
 /* Per-process sync info structure. */
-#define MAX_PROCESS_SYNC_OBJS  64
+#define MAX_PROCESS_SYNC_OBJS  48
 
 typedef struct __task_sync_data {
   atomic_t use_count;
@@ -86,7 +86,7 @@ static inline void sync_put_object(kern_sync_object_t *obj)
   }
 }
 
-#define sync_get_object(o)  atomic_inc(&(o)->use_count)
+#define sync_get_object(o)  atomic_inc(&(o)->refcount)
 
 static inline task_sync_data_t *get_task_sync_data(task_t *t)
 {
@@ -104,7 +104,7 @@ static inline task_sync_data_t *get_task_sync_data(task_t *t)
   return sync_data;
 }
 
-static inline void free_task_sync_data(task_sync_data_t *sync_data)
+static inline void __free_task_sync_data(task_sync_data_t *sync_data)
 {
   memfree(sync_data);
 }
@@ -112,7 +112,7 @@ static inline void free_task_sync_data(task_sync_data_t *sync_data)
 static inline void release_task_sync_data(task_sync_data_t *sync_data)
 {
   if( atomic_dec_and_test(&sync_data->use_count) ) {
-    free_task_sync_data(sync_data);
+    __free_task_sync_data(sync_data);
   }
 }
 

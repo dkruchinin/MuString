@@ -261,20 +261,21 @@ static status_t __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
   }
 }
 
-static status_t __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags)
+static status_t __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags,
+                                       task_privelege_t priv)
 {
-  status_t r;
-
   if( flags & CLONE_MM ) {
-    if( !parent->sync_data ) {
+    if( !parent->sync_data && (priv != TPL_KERNEL) ) {
       return -EINVAL;
     }
-    task->sync_data=parent->sync_data;
-    return dup_task_sync_data(parent->sync_data);
-  } else {
-    task->sync_data=allocate_task_sync_data();
-    return task->sync_data ? 0 : -ENOMEM;
+    if( parent->sync_data ) {
+      task->sync_data=parent->sync_data;
+      return dup_task_sync_data(parent->sync_data);
+    }
   }
+
+  task->sync_data=allocate_task_sync_data();
+  return task->sync_data ? 0 : -ENOMEM;
 }
 
 status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t)
@@ -345,10 +346,15 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
     goto free_limits;
   }
 
+  r=__setup_task_sync_data(task,parent,flags,priv);
+  if( r ) {
+    goto free_ipc;
+  }
+
   task->uspace_events=allocate_task_uspace_events_data();
   if( !task->uspace_events ) {
     r=-ENOMEM;
-    goto free_ipc;
+    goto free_sync_data;
   }
 
   /* Setup task's initial state. */
@@ -364,6 +370,8 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
 
   *t = task;
   return 0;
+free_sync_data:
+  /* TODO: [mt] Deallocate task's sync data. */
 free_ipc:
   /* TODO: [mt] deallocate task's IPC structure. */
 free_limits:

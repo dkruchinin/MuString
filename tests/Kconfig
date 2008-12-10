@@ -23,4 +23,8 @@ config TEST_SCHEDULER
        bool "Scheduler test"
        default n
 
+config TEST_USYNC
+       bool "Userspace synchronization test"
+       default n
+
 endif

@@ -56,6 +56,8 @@ syscall_table:
 	.quad   sys_close_port
 	.quad   sys_control_channel             /* 20  */
 	.quad   sys_port_send_iov
+	.quad   sys_sync_create_object
+	.quad   sys_sync_control
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \
