@@ -32,6 +32,7 @@
 
 #include <ds/iterator.h>
 #include <mm/page.h>
+#include <mm/pfalloc.h>
 #include <eza/arch/types.h>
 
 /**
@@ -59,6 +60,19 @@ DEFINE_ITERATOR_CTX(page_frame, PF_ITER_LIST,
 
 extern page_frame_t *page_frames_array; /**< An array of all available physical pages */
 extern uintptr_t kernel_min_vaddr; /**< The bottom address of kernel virtual memory space. */
+
+static inline void pin_page_frame(page_frame_t *pf)
+{
+  atomic_inc(&pf->refcount);
+}
+
+static inline void unpin_page_frame(page_frame_t *pf)
+{
+  ASSERT(atomic_get(&pf->refcount) != 0);
+  atomic_dec(&pf->refcount);
+  if (!atomic_get(&pf->refcount))
+    free_pages(pf);
+}
 
 /**
  * @brief Initialize mm internals

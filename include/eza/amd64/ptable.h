@@ -25,34 +25,45 @@
 #define __ARCH_PTABLE_H__
 
 #include <mm/page.h>
-#include <mm/pfalloc.h>
-#include <eza/arch/page.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 
-/* page-table related flags */
-#define PDT_AMD64_PML4 3
-#define PDT_AMD64_PDP  2
-#define PDT_AMD64_PD   1
-#define PDT_AMD64_PT   0
+enum {
+  PDE_PRESENT = 0x0001, /**< PDE is present. I.e. corresponding page content is holding in main memory */
+  PDE_RW      = 0x0002, /**< PDE is accessible for read and write operations */
+  PDE_US      = 0x0004, /**< User/suptervisor flag. If set, PDE is accessible from user-space. */
+  PDE_PWT     = 0x0008, /**< Page-Level Writethrough. When bit is set,
+                           page has writeback caching policy and writethrough otherwise */
+  PDE_PCD     = 0x0010, /**< Page-Level Cache Disable. When bit is set, page is not cacheable. */
+  PDE_ACC     = 0x0020, /**< This bit indicates whether the page-translation table or
+                          physical page to which this entry points has been accessed */
+  PDE_DIRTY   = 0x0040, /**< Indicates whether the page-translation table or physical page to which this
+                           entry points has been written. */
+  PDE_GLOBAL  = 0x0100, /**< The TLB entry for a global page (G=1) is not invalidated when CR3 is loaded */
+  PDE_PAT     = 0x1000, /**< Page-Attribute Table. See “Page-Attribute Table Mechanism” on page 193
+                           of AMD architecture programmers manual vol. 2 for more info. */
+  PDE_NX      = 0x2000, /**< When the NX bit is set to 1, code cannot be executed from the mapped
+                           physical pages. See “No Execute (NX) Bit” on page 143 of AMD architecture programmers
+                           manual vol. 2 for more info. */
+  PDE_PHYS    = 0x4000, /**< Given PDE has not associated with it page frame. */
+};
 
-#define PTABLE_LEVEL_FIRST PDT_AMD64_PT
-#define PTABLE_LEVEL_LAST  PDT_AMD64_PML4
-
-#define PDE_PRESENT  0x001
-#define PDE_RW       0x002
-#define PDE_US       0x004
-#define PDE_PWT      0x008
-#define PDE_PCD      0x010
-#define PDE_AVAIL    0x020
-#define PDE_DIRTY    0x040
-#define PDE_PAT      0x080
-#define PDE_GLOBAL   0x100
-#define PDE_NX       0x200
-
-typedef struct __root_pagedir {
+/**
+ * @struct rpd_t
+ * @brief Root page directory structures (AMD64-specific)
+ */
+typedef struct __rpd {
   page_frame_t *pml4;
-} root_pagedir_t;
+} rpd_t;
 
+/**
+ * @struct pde_t
+ * @brief AMD64-specific Page Directory Entry.
+ *
+ * PDE may be an entry of the lowest level of page table
+ * as well as an entry of any higher level directory(i.e. a subdirectory)
+ * Depending on what pde_t instance exactly is(lowest level entry or subdirectory),
+ * its flags are managed.
+ */
 typedef struct __pde {
   unsigned flags      :12;
   unsigned base_0_19  :20;
@@ -61,92 +72,202 @@ typedef struct __pde {
   unsigned nx          :1;
 } __attribute__((packed)) pde_t;
 
-status_t ptable_map(root_pagedir_t *ptable, mmap_info_t *pctl);
-status_t ptable_unmap(root_pagedir_t *ptable, mmap_info_t *pctl);
+#define PTABLE_DIR_ENTRIES 0x200 /**< Number of entries per page table directory */
+#define PTABLE_LEVEL_FIRST 1     /**< Level of the lowest pde */
+#define PTABLE_LEVEL_LAST  4     /**< Level of the highest pde */
 
-#define PTABLE_DIR_ENTRIES 0x200
-#define PTABLE_DIR_MASK    0x1FF
-
-#define pgt_allocate_pagedir(level)             \
-  alloc_page(AF_ZERO | AF_PGEN)
-#define pgt_free_pagedir(pagedir)               \
-  free_pages(pagedir)
-
-#define pgt_pde_flags(pde) ((pde)->flags | ((pde)->nx << 9))
-#define pgt_pde_page_idx(pde) ((pde)->base_0_19 | ((pde)->base_20_39 << 20))
-
-#define pgt_pde_is_mapped(pde) ((pde)->flags & PDE_PRESENT)
-#define pgt_pde2pagedir(pde) (virt_to_pframe((void *)(pde)))
-#define pgt_pagedir2pde(pagedir) (pframe_to_virt(pagedir))
-#define pgt_pde_fetch_subdir(pde) (pframe_by_number(pgt_pde_page_idx(pde)))
-
-#define pgt_pde_set_flags(pde, pde_flags)       \
-  do {                                          \
-    (pde)->flags = (pde_flags) & 0x1FF;         \
-    (pde)->nx = (pde_flags) >> 9;               \
-    (pde)->avail = (pde_flags) >> 10;           \
-  } while (0)
-
-#define pgt_pde_get_flags(pde)                  \
-  ((pde)->flags | ((pde)->nx << 9) | ((pde->avail) << 10))
-
-#define pgt_pde_set_page_idx(pde, page_idx)     \
-  do {                                          \
-    (pde)->base_0_19 = (page_idx);              \
-    (pde)->base_20_39 = (page_idx) >> 20;       \
-  } while (0)
-
-static inline char *pgt_level_name(pdir_level_t level)
+/**
+ * @brief Set PDE flags
+ * @param pde   - A pointer to pde
+ * @param flags - Flags that will be set
+ */
+static inline void pde_set_flags(pde_t *pde, uint_t flags)
 {
-  switch (level) {
-      case PDT_AMD64_PML4:
-        return "PML4";
-      case PDT_AMD64_PDP:
-        return "PDP";
-      case PDT_AMD64_PD:
-        return "PD";
-      case PDT_AMD64_PT:
-        return "PT";
-      default:
-        return "Unknown";
-  }
+  pde->flags = flags & 0x1FF;
+  pde->avail = flags >> 14;
+  pde->nx = flags >> 13;
 }
 
-static inline pde_t *pgt_fetch_entry(page_frame_t *dir, page_idx_t eidx)
+/**
+ * @brief Get PDE flags
+ * @param pde - A pointer to pde flags will be readed from
+ * @return PDE flags
+ */
+static inline uint_t pde_get_flags(pde_t *pde)
+{
+  return (pde->flags | (pde->nx << 13) | ((pde->avail & 0x01) << 14));
+}
+
+/**
+ * @brief Save page index to the PDE.
+ * @param pde - A pointer tp pde index will be saved to
+ * @param idx - Page index.
+ */
+static inline void pde_set_page_idx(pde_t *pde, page_idx_t idx)
+{
+  pde->base_0_19 = idx;
+  pde->base_20_39 = idx >> 20;
+}
+
+/**
+ * @brief Fetch page index from the PDE.
+ * @param pde - A pointer to pde index will be fetched from.
+ * @return Page index.
+ */
+static inline page_idx_t pde_fetch_page_idx(pde_t *pde)
+{
+  return (pde->base_0_19 | (pde->base_20_39 << 20));
+}
+
+/**
+ * @brief Fetch subdirectory("subPDE") from a given pde
+ * @param pde - A pointer to pde_t
+ * @return A pointer to page frame that is a subdirectory of @a pde.
+ */
+static inline page_frame_t *pde_fetch_subdir(pde_t *pde)
+{
+  return pframe_by_number(pde_fetch_page_idx(pde));
+}
+
+/**
+ * @brief Fetch PDE holding in a page directory by its index.
+ * @param dir  - A pointer to corresponding to parent PDE page directory
+ * @param eidx - Child PDE index in the page directory @a dir
+ * @return A pointer to child pde
+ */
+static inline pde_t *pde_fetch(page_frame_t *dir, int eidx)
 {
   return ((pde_t *)pframe_to_virt(dir) + eidx);
 }
 
-static inline pde_idx_t pgt_pde2idx(pde_t *pde)
+/**
+ * @brief Translate virtual address to PDE index.
+ * @param vaddr     - Virtual address
+ * @param pde_level - A level of pde.
+ * @return An index of PDE according to @a pde_level
+ * @see pde_idx2vaddr
+ */
+static inline int vaddr2pde_idx(uintptr_t vaddr, int pde_level)
 {
-  return (pde - (pde_t *)align_down((uintptr_t)pde, PAGE_SIZE));
+  return (int)((vaddr >> (PAGE_WIDTH + 9 * pde_level)) & PTABLE_DIR_MASK);
 }
 
-#define pgt_pde_delete(pde)                     \
-  pgt_pde_set_flags(pde, 0);
-
-static inline void pgt_pde_save(pde_t *pde, page_idx_t page_idx, pde_flags_t flags)
+/**
+ * @brief Translate PDE index to corresponding virtual address
+ * @param pde_idx   - An index of PDE.
+ * @param pde_level - A level of PDE.
+ * @return Virtual address of PDE according to @a pde_level.
+ * @see vaddr2pde_idx
+ */
+static inline uintptr_t pde_idx2vaddr(int pde_idx, int pde_level)
 {
-  pgt_pde_set_flags(pde, flags | PDE_PRESENT);
-  pgt_pde_set_page_idx(pde, page_idx);
+  return (((uintptr_t)pde_idx & PTABLE_DIR_MASK) << (PAGE_WIDTH + 9 * pde_level));
 }
 
-static inline pde_idx_t pgt_vaddr2idx(uintptr_t vaddr, pdir_level_t level)
-{
-  return (pde_idx_t)((vaddr >> (PAGE_WIDTH + 9 * level)) & PTABLE_DIR_MASK);
-}
-
-static inline uintptr_t pgt_idx2vaddr(pde_idx_t idx, pdir_level_t level)
-{
-  return (((uintptr_t)idx & PTABLE_DIR_MASK) << (PAGE_WIDTH + 9 * level));
-}
-
-static inline uintptr_t pgt_get_range(pdir_level_t level)
+/**
+ * @brief Get a virtual addresses range given PDE level can hold.
+ * @param pde_level - A level of PDE.
+ * @return A range PDE at level @a pde_level can hold.
+ */
+static inline uintptr_t pde_get_va_range(int pde_level)
 {
   return ((uintptr_t)PTABLE_DIR_ENTRIES << PAGE_WIDTH) << (9 * level);
 }
 
-page_frame_t *pgt_create_pagedir(page_frame_t *parent, pdir_level_t level);
-pde_flags_t pgt_translate_flags(unsigned int mmap_flags);
+/**
+ * @brief Translate mmap protocol and mmap flags to the arch dependent page table flags.
+ * @param mmap_prot  - MMAP protocol mask
+ * @param mmap_flags - MMAP flags mask
+ * @return Page table flags
+ */
+inline uint_t mpf2ptf(uint_t mmap_prot, uint_t mmap_flags);
+
+/**
+ * @brief Initialize root page table directory (PML4)
+ * @param rpd - A pointer to rpd_t
+ * @return 0 on success, -ENOMEM if page allocation failed.
+ * @see rpd_t
+ */
+status_t ptable_rpd_initialize(rpd_t *rpd);
+
+/**
+ * @brief Deinitialize root page table directory (PML4)
+ *
+ * Actually this function will free pml4's pages if
+ * it is not linked from any other places.
+ *
+ * @param rpd - A pointer to rpd_t
+ * @see rpd_t
+ */
+void ptable_rpd_deinitialize(rpd_t *rpd);
+
+/**
+ * @brief Clone some existing PML4
+ * @param clone - A pointer to root page directory that will become a clone
+ * @param src  -  A pointer to root page directory that will be cloned
+ */
+void ptable_rpd_clone(rpd_t *clone, rpd_t *src);
+
+/**
+ * @brief Map pages to the lowest level page direatory(PT)
+ * @param pde_start   - A pointer to pde mapping starts from
+ * @param num_entries - A number of entries to map
+ * @param pfi         - A pointer to page frame iterator containing at least @a num_entries items
+ * @param flags       - Page table flag
+ * @see page_frame_iterator_t
+ * @see pde_t
+ */
+void ptable_map_entries(pde_t *pde_start, int num_entries,
+                        page_frame_iterator_t *pfi, uint_t flags);
+
+/**
+ * @brief Unmap pages from the lowest level page directory(PT)
+ * @param pde_start   - A pointer to pde unmapping starts from
+ * @param num_entries - A number of entries to unmap
+ * @see pde_t
+ */
+void ptable_unmap_entries(pde_t *pde_start, int num_entries);
+
+/**
+ * @brief Populate page directory
+ *
+ * The following flags can not be used with page directories:
+ * PDE_GLOBAL, PDE_PAT and PDE_PHYS
+ *
+ * @param parent_pde - A pointer to parent pde
+ * @param flags      - Page direcotory flags
+ * @return 0 on success, -ENOMEM if page allocation failed.
+ * @see pde_t
+ */
+status_t ptable_populate_pagedir(pde_t *parent_pde, uint_t flags);
+
+/**
+ * @brief Depopulate page direcotry
+ * @param dir - A pointer to pde_t of directory to depopulate
+ * @see pde_t
+ */
+void ptable_depopulate_pagedir(pde_t *dir);
+
+struct mmap_info;
+
+/**
+ * @brief Map pages into the given root page directory.
+ * @param rpd   - A pointer to root page directory pages will be mapped to
+ * @param minfo - A pointer to mmap_info_t containing all necessary information.
+ * @return 0 on succes, -EINVAL or -ENOMEM on error.
+ * @see rpd_t
+ * @see mmap_info_t
+ */
+status_t ptable_map(rpd_t *prd, struct mmap_info *minfo);
+
+/**
+ * @brief Unmap pages from the given root page directory
+ * @param rpd     - A pointer to root page direcotory
+ * @param va_from - Virtual address pages will be unmapped from
+ * @param npages  - Number of pages to unmap.
+ * @return 0 on success, -EINVAL on error.
+ * @see rpd_t
+ */
+status_t ptable_unmap(rpd_t *rpd, uintptr_t va_from, int npages);
 
 #endif /* __ARCH_PTABLE_H__ */
