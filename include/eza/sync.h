@@ -67,6 +67,11 @@ typedef struct __kern_sync_object {
   atomic_t refcount;
 } kern_sync_object_t;
 
+enum {
+  PTHREAD_PROCESS_PRIVATE=0,  /**< Private primitive. **/
+  PTHREAD_PROCESS_SHARED=1    /**< Shared primitive. **/
+};
+
 /* Per-process sync info structure. */
 #define MAX_PROCESS_SYNC_OBJS  48
 
@@ -119,8 +124,28 @@ static inline void release_task_sync_data(task_sync_data_t *sync_data)
 task_sync_data_t *allocate_task_sync_data(void);
 status_t dup_task_sync_data(task_sync_data_t *sync_data);
 
-#define LOCK_SYNC_DATA(l)  mutex_lock(&(l)->mutex)
-#define UNLOCK_SYNC_DATA(l)  mutex_unlock(&(l)->mutex)
+#define LOCK_SYNC_DATA_R(l)  mutex_lock(&(l)->mutex)
+#define UNLOCK_SYNC_DATA_R(l)  mutex_unlock(&(l)->mutex)
+
+#define LOCK_SYNC_DATA_W(l)  mutex_lock(&(l)->mutex)
+#define UNLOCK_SYNC_DATA_W(l)  mutex_unlock(&(l)->mutex)
+
+
+/* Common control commands. */
+enum {
+  __SYNC_CMD_DESTROY_OBJECT=0x10,  /**< Destroy target primitive. **/
+};
+
+/* Common, well-known object attributes. */
+enum {
+  __SYNC_OBJ_ATTR_SHARED_BIT=0,
+};
+
+enum {
+  __SYNC_OBJ_ATTR_SHARED_MASK=(1<<__SYNC_OBJ_ATTR_SHARED_BIT),
+};
+
+#define shared_object(a) (((a) & __SYNC_OBJ_ATTR_SHARED_MASK ) ? true : false )
 
 /* Userspace mutexes-related stuff. */
 typedef struct __sync_umutex {
@@ -129,14 +154,24 @@ typedef struct __sync_umutex {
 } sync_umutex_t;
 
 typedef enum __umutex_commands {
-  __SYNC_CMD_MUTEX_LOCK=0x0,    /**< Lock target mutex. **/
-  __SYNC_CMD_MUTEX_UNLOCK=0x1,  /**< Unlock target mutex. **/
-  __SYNC_CMD_MUTEX_TRYLOCK=0x2, /**< Try to ock target mutex. **/
+  __SYNC_CMD_MUTEX_LOCK=0x100,    /**< Lock target mutex. **/
+  __SYNC_CMD_MUTEX_UNLOCK=0x101,  /**< Unlock target mutex. **/
+  __SYNC_CMD_MUTEX_TRYLOCK=0x102, /**< Try to lock target mutex. **/
 } umutex_commands_t;
+
+typedef struct __pthread_mutexattr {
+  uint8_t __type;
+} pthread_mutexattr_t;
+
+typedef struct {
+  sync_id_t __id;
+  pthread_mutexattr_t __attrs;
+} pthread_mutex_t;
 
 #define __UMUTEX_OBJ(ksync_obj) (container_of((ksync_obj),      \
                                               sync_umutex_t,k_syncobj))
 
-status_t sync_create_mutex(kern_sync_object_t **obj,ulong_t flags);
+status_t sync_create_mutex(kern_sync_object_t **obj,void *uobj,
+                           uint8_t *attrs,ulong_t flags);
 
 #endif

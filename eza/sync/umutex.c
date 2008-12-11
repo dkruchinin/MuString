@@ -29,6 +29,8 @@
 #include <eza/arch/atomic.h>
 #include <eza/mutex.h>
 
+static pthread_mutexattr_t __default_mutex_attrs={(PTHREAD_PROCESS_PRIVATE)};
+
 /* Mutex-related logic. */
 static status_t __mutex_control(void *obj,ulong_t cmd,ulong_t arg)
 {
@@ -77,14 +79,37 @@ static sync_umutex_t *__allocate_umutex(void)
   return umutex;
 }
 
-status_t sync_create_mutex(kern_sync_object_t **obj,ulong_t flags)
+status_t sync_create_mutex(kern_sync_object_t **obj,void *uobj,
+                           uint8_t *attrs,ulong_t flags)
 {
   sync_umutex_t *umutex=__allocate_umutex();
+  pthread_mutex_t *pum;
 
   if( !umutex ) {
     return -ENOMEM;
   }  
 
+  if( flags ) {
+    /* Create a locked mutex ? */
+    mutex_lock(&umutex->__kmutex);
+  }
+
+  /* Setup mutex attributes. */
+  pum=(pthread_mutex_t *)uobj;
+  if( !attrs ) {
+    attrs=(uint8_t*)&__default_mutex_attrs;
+    /* Process attributes here. */
+  }
+  if( copy_to_user(&pum->__attrs,attrs,sizeof(pthread_mutexattr_t)) ) {
+    goto out;
+  }
+
   *obj=(kern_sync_object_t*)umutex;
   return 0;
+out:
+  if( flags ) {
+    mutex_unlock(&umutex->__kmutex);
+  }
+  memfree(umutex);
+  return -EINVAL;
 }

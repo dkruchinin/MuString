@@ -27,7 +27,8 @@
 #include <eza/task.h>
 #include <mm/slab.h>
 
-static status_t __sync_allocate_id(struct __task_struct *task,sync_id_t *p_id)
+static status_t __sync_allocate_id(struct __task_struct *task,
+                                   bool shared_id,sync_id_t *p_id)
 {
   static sync_id_t __id=0;
 
@@ -52,6 +53,11 @@ static kern_sync_object_t *__lookup_sync(task_t *owner,sync_id_t id)
   kern_sync_object_t *t=NULL;
   task_sync_data_t *tsd=get_task_sync_data(owner);
 
+  if( !tsd ) {
+    return NULL;
+  }
+
+  LOCK_SYNC_DATA_R(tsd);
   if( id < MAX_PROCESS_SYNC_OBJS ) {
     t=tsd->sync_objects[id];
     if( t ) {
@@ -59,30 +65,53 @@ static kern_sync_object_t *__lookup_sync(task_t *owner,sync_id_t id)
     }
   }
 
+  UNLOCK_SYNC_DATA_R(tsd);
   release_task_sync_data(tsd);
   return t;
 }
 
 status_t sys_sync_create_object(sync_object_type_t obj_type,
+                                void *uobj,uint8_t *attrs,
                                 ulong_t flags)
 {
-  kern_sync_object_t *obj;
+  kern_sync_object_t *kobj=NULL;
   status_t r;
   sync_id_t id;
   task_t *caller=current_task();
+  uint8_t shared;
+  task_sync_data_t *sync_data;
 
-  if( obj_type > __SO_MAX_TYPE ) {
+  if( !uobj || obj_type > __SO_MAX_TYPE ) {
     return -EINVAL;
   }
 
-  r=__sync_allocate_id(caller,&id);
-  if( r ) {
-    return r;
+  if( !attrs ) {
+    shared=0;
+  } else {
+    if( get_user(shared,attrs) ) {
+      return -EINVAL;
+    }
+    if( shared != PTHREAD_PROCESS_PRIVATE &&
+        shared != PTHREAD_PROCESS_SHARED ) {
+      return -EINVAL;
+    }
   }
+
+  sync_data=get_task_sync_data(caller);
+  if( !sync_data ) {
+    return -EAGAIN;
+  }
+
+  LOCK_SYNC_DATA_W(sync_data);
+  r=__sync_allocate_id(caller,shared,&id);
+  if( r ) {
+    goto put_sync_data;
+  }
+  UNLOCK_SYNC_DATA_W(sync_data);
 
   switch( obj_type ) {
     case __SO_MUTEX:
-      r=sync_create_mutex(&obj,flags);
+      r=sync_create_mutex(&kobj,uobj,attrs,flags);
       break;
     case __SO_CONDVAR:
     case __SO_SEMAPHORE:
@@ -91,14 +120,29 @@ status_t sys_sync_create_object(sync_object_type_t obj_type,
       break;
   }
 
+  /* Copy ID to user without holding the lock for better performance. */
+  if( !r ) {
+    r=copy_to_user(uobj,&id,sizeof(id));
+  }
+
+  LOCK_SYNC_DATA_W(sync_data);
   if( r ) {
     goto put_id;
   }
+  __install_sync_object(caller,kobj,id);
+  UNLOCK_SYNC_DATA_W(sync_data);
 
-  __install_sync_object(caller,obj,id);
-  return obj->id;
+  return 0;
 put_id:
   __sync_free_id(caller,id);
+put_sync_data:
+  UNLOCK_SYNC_DATA_W(sync_data);
+
+  /* Free object, if any. */
+  if( kobj ) {
+    sync_put_object(kobj);
+  }
+  release_task_sync_data(sync_data);
   return r;
 }
 
@@ -117,6 +161,18 @@ status_t sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg)
   return r;
 }
 
+status_t sys_sync_destroy(sync_id_t id)
+{
+  task_t *caller=current_task();
+  kern_sync_object_t *kobj=__lookup_sync(caller,id);
+
+  if( !kobj ) {
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 status_t sys_sync_condvar_wait(sync_id_t ucondvar,
                                sync_id_t umutex)
 {
@@ -128,7 +184,7 @@ status_t dup_task_sync_data(task_sync_data_t *sync_data)
   ulong_t i;
 
   atomic_inc(&sync_data->use_count);
-  LOCK_SYNC_DATA(sync_data);
+  LOCK_SYNC_DATA_R(sync_data);
 
   for(i=0;i<MAX_PROCESS_SYNC_OBJS;i++) {
     kern_sync_object_t *kobj=sync_data->sync_objects[i];
@@ -138,7 +194,7 @@ status_t dup_task_sync_data(task_sync_data_t *sync_data)
     }
   }
 
-  UNLOCK_SYNC_DATA(sync_data);
+  UNLOCK_SYNC_DATA_R(sync_data);
   return 0;
 }
 

@@ -42,6 +42,9 @@
 status_t copy_to_user(void *dest,void *src,ulong_t size);
 status_t copy_from_user(void *dest,void *src,ulong_t size);
 
+#define get_user(a,_uptr)  copy_from_user(&(a),_uptr,sizeof((a)))
+#define put_user(a,_uptr)  copy_to_user(_uptr,&(a),sizeof((a)))
+
 #ifndef CONFIG_TEST
 static inline bool valid_user_address(uintptr_t addr)
 {
