@@ -394,6 +394,7 @@ status_t sys_port_send_iov(ulong_t channel,
                            uintptr_t rcv_buf,ulong_t rcv_size);
 
 status_t sys_sync_create_object(sync_object_type_t obj_type,
+                                void *uobj,uint8_t *attrs,
                                 ulong_t flags);
 
 status_t sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg);

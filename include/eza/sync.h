@@ -31,6 +31,8 @@
 #include <eza/task.h>
 #include <eza/mutex.h>
 #include <mm/slab.h>
+#include <ds/waitqueue.h>
+#include <eza/spinlock.h>
 
 #define SYNC_OBJS_PER_PROCESS   16384
 #define SYNC_ID_NOT_INITIALIZED 0
@@ -44,14 +46,18 @@ typedef ulong_t sync_id_t;
 typedef enum __sync_object_type {
   __SO_MUTEX=0,  /**< Userspace mutex **/
   __SO_SEMAPHORE=1, /**< Userspace semaphore **/
-  __SO_CONDVAR=2 /**< Userspace conditional variable **/
+  __SO_CONDVAR=2, /**< Userspace conditional variable **/
+
+  __SO_RAWEVENT=3, /**< Raw userspace event **/
   /* XXX: Update __SO_MAX_TYPE in case a new sync type appears. */
 } sync_object_type_t;
 
-#define __SO_MAX_TYPE  __SO_CONDVAR
+#define __SO_MAX_TYPE  __SO_RAWEVENT
+
+struct __kern_sync_object;
 
 typedef struct __sync_obj_ops {
-  status_t (*control)(void *obj,ulong_t cmd,ulong_t arg);
+  status_t (*control)(struct __kern_sync_object *obj,ulong_t cmd,ulong_t arg);
   void (*dtor)(void *obj);
 } sync_obj_ops_t;
 
@@ -147,6 +153,8 @@ enum {
 
 #define shared_object(a) (((a) & __SYNC_OBJ_ATTR_SHARED_MASK ) ? true : false )
 
+void sync_default_dtor(void *obj); /**< Default object destructor. **/
+
 /* Userspace mutexes-related stuff. */
 typedef struct __sync_umutex {
   kern_sync_object_t k_syncobj;
@@ -173,5 +181,24 @@ typedef struct {
 
 status_t sync_create_mutex(kern_sync_object_t **obj,void *uobj,
                            uint8_t *attrs,ulong_t flags);
+
+/* Userspace raw sync events - related stuff. */
+typedef struct __sync_uevent {
+  kern_sync_object_t k_syncobj;
+  wqueue_t __wq;
+  spinlock_t __lock;
+  ulong_t __ecount;
+} sync_uevent_t;
+
+status_t sync_create_uevent(kern_sync_object_t **obj,void *uobj,
+                            uint8_t *attrs,ulong_t flags);
+
+enum {
+  __SYNC_CMD_EVENT_WAIT=0x200,    /**< Wait for target event to arrive. **/
+  __SYNC_CMD_EVENT_SIGNAL=0x201,  /**< Signal target event. **/
+};
+
+#define __UEVENT_OBJ(ksync_obj) (container_of((ksync_obj),      \
+                                              sync_uevent_t,k_syncobj))
 
 #endif

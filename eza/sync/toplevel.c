@@ -113,6 +113,9 @@ status_t sys_sync_create_object(sync_object_type_t obj_type,
     case __SO_MUTEX:
       r=sync_create_mutex(&kobj,uobj,attrs,flags);
       break;
+    case __SO_RAWEVENT:
+      r=sync_create_uevent(&kobj,uobj,attrs,flags);
+      break;
     case __SO_CONDVAR:
     case __SO_SEMAPHORE:
     default:
@@ -209,4 +212,9 @@ task_sync_data_t *allocate_task_sync_data(void)
   }
 
   return s;
+}
+
+void sync_default_dtor(void *obj)
+{
+  memfree(obj);
 }

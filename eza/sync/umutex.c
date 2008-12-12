@@ -32,7 +32,7 @@
 static pthread_mutexattr_t __default_mutex_attrs={(PTHREAD_PROCESS_PRIVATE)};
 
 /* Mutex-related logic. */
-static status_t __mutex_control(void *obj,ulong_t cmd,ulong_t arg)
+static status_t __mutex_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
 {
   sync_umutex_t *umutex=__UMUTEX_OBJ(obj);
 
@@ -54,14 +54,9 @@ static status_t __mutex_control(void *obj,ulong_t cmd,ulong_t arg)
   }
 }
 
-static void __mutex_dtor(void *obj)
-{
-  memfree(obj);
-}
-
 static sync_obj_ops_t __mutex_ops = {
   .control=__mutex_control,
-  .dtor=__mutex_dtor,
+  .dtor=sync_default_dtor,
 };
 
 static sync_umutex_t *__allocate_umutex(void)
