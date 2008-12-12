@@ -35,6 +35,7 @@
 #include <eza/arch/interrupt.h>
 #include <eza/time.h>
 #include <eza/def_actions.h>
+#include <mlibc/types.h>
 
 /*spinlock*/
 static SPINLOCK_DEFINE(timer_lock);
@@ -158,7 +159,7 @@ void delete_timer(timer_t *timer)
   RELEASE_SW_TIMER_LOCK(l);
 }
 
-void adjust_timer(timer_t *timer,long_t delta)
+void adjust_timer(timer_t *timer,long delta)
 {
 }
 

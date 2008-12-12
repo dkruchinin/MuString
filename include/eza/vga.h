@@ -26,7 +26,8 @@
 #ifndef __EZA_VGA_H__
 #define __EZA_VGA_H__
 
-#include <eza/arch/types.h>
+#include <config.h>
+#include <mlibc/types.h>
 
 /* VGA memory base address */
 #define VGA_TM_BASE 0xB8000 /* text mode */

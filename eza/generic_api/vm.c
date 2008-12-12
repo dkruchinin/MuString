@@ -4,6 +4,7 @@
 #include <eza/vm.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
+#include <mm/vmm.h>
 #include <eza/spinlock.h>
 #include <mm/mmap.h>
 
@@ -43,8 +44,8 @@ status_t vm_map_mandatory_areas(task_t *task)
   list_for_each(&mand_list,it) {
     vm_range_t *area = list_entry(it,vm_range_t,l);
 
-    r = mmap(task->page_dir, area->virt_addr, area->phys_addr >> PAGE_WIDTH,
-             area->num_pages, area->map_flags);
+    r = mmap_kern(area->virt_addr, area->phys_addr >> PAGE_WIDTH,
+                  area->num_pages, area->map_proto, area->map_flags);
     if(r!=0) {
       break;
     }
@@ -65,22 +66,21 @@ status_t vm_initialize_task_mm( task_t *orig, task_t *target,
 
   /* Idle task or kernel thread ? Use main kernel pagetable. */
   if(orig == NULL || priv == TPL_KERNEL) {
-    target->page_dir = root_pagedir_mklink(&kernel_root_pagedir);
+    ptable_rpd_clone(&target->rpd, &kernel_rpd);
     return 0;
   }
 
   /* TODO: [mt] Add normal MM sharing on task cloning. */
   if(flags & CLONE_MM) {
     /* Initialize new page directory. */
-    target->page_dir = root_pagedir_mklink(orig->page_dir);
+    ptable_rpd_clone(&target->rpd, &orig->rpd);
     /* TODO: [mt] Increment regerence counters for all pages on VM cloning. */
     r = 0;
-  } else {
-    target->page_dir = root_pagedir_allocate();
-    if (!target->page_dir)
-      return -ENOMEM;
-
-    root_pagedir_initialize(target->page_dir);
+  } else {    
+    r = ptable_rpd_initialize(&target->rpd);
+    if (r)
+      return r;
+    
     r = vm_map_mandatory_areas(target);
   }
 

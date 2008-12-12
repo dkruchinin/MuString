@@ -24,16 +24,18 @@
 #ifndef __VMM_H__
 #define __VMM_H__
 
+#include <ds/iterator.h>
 #include <mm/page.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
+#include <eza/arch/mm_types.h>
 
 typedef struct __mmap_info {
   uintptr_t va_from;
   uintptr_t va_to;
   page_frame_iterator_t *pfi;
-  uint_t mmap_prot;
-  uint_t mmap_flags;
   uint_t ptable_flags;
 } mmap_info_t;
+
+rpd_t kernel_rpd;
 
 #endif /* __VMM_H__ */

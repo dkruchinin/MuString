@@ -12,6 +12,7 @@
 #include <mm/page.h>
 #include <kernel/vm.h>
 #include <mlibc/stddef.h>
+#include <eza/arch/mm.h>
 
 #define REF_BUFFER(b) atomic_inc(&b->use_count)
 #define UNREF_BUFFER(b) atomic_dec(&b->use_count)
@@ -64,8 +65,8 @@ static void ipc_put_buffer( ipc_user_buffer_t *buf )
 status_t ipc_setup_buffer_pages(task_t *owner,ipc_user_buffer_t *buf,
                                 uintptr_t start_addr, ulong_t size)
 {
-  root_pagedir_t *pd = owner->page_dir;
-  page_frame_t *page;
+  rpd_t *rpd = &owner->rpd;
+  page_idx_t pfn;
   ulong_t chunk_num;
   status_t r=-EFAULT;
   uintptr_t adr;
@@ -79,8 +80,8 @@ status_t ipc_setup_buffer_pages(task_t *owner,ipc_user_buffer_t *buf,
   LOCK_TASK_VM(owner);
 
   /* Process the first chunk. */
-  page = mm_va_page(pd, start_addr);
-  if (!page)
+  pfn = mm_vaddr2page_idx(rpd, start_addr);
+  if (pfn == PAGE_IDX_INVAL)
     goto out;
 
   pchunk = buf->chunks;
@@ -92,7 +93,7 @@ status_t ipc_setup_buffer_pages(task_t *owner,ipc_user_buffer_t *buf,
   }
 
   buf->first=first;
-  pchunk->kaddr=pframe_to_virt(page)+(start_addr & ~PAGE_ADDR_MASK);
+  pchunk->kaddr=pframe_id_to_virt(pfn)+(start_addr & ~PAGE_ADDR_MASK);
 
   size-=first;
   start_addr+=first;
@@ -100,8 +101,8 @@ status_t ipc_setup_buffer_pages(task_t *owner,ipc_user_buffer_t *buf,
 
   /* Process the rest of chunks. */
   while( size ) {
-    page = mm_va_page(pd, start_addr);
-    if(!page) {
+    pfn = mm_vaddr2page_idx(rpd, start_addr);
+    if(pfn == PAGE_IDX_INVAL) {
       goto out;
     }
     pchunk++;
@@ -113,7 +114,7 @@ status_t ipc_setup_buffer_pages(task_t *owner,ipc_user_buffer_t *buf,
       size-=PAGE_SIZE;
     }
 
-    pchunk->kaddr = pframe_to_virt(page);
+    pchunk->kaddr = pframe_id_to_virt(pfn);
     start_addr+=PAGE_SIZE;
   }
 

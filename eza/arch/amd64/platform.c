@@ -54,7 +54,8 @@ static int __map_apic_page(void)
   }
 
   res = mmap_kern(apic_vaddr, APIC_BASE >> PAGE_WIDTH, 1,
-                  MAP_READ | MAP_WRITE | MAP_NOCACHE | MAP_EXEC | MAP_PHYS);
+                  PROT_READ | PROT_WRITE | PROT_NOCACHE,
+                  MAP_FIXED | MAP_PHYS);
   if(res<0) {
     panic("[MM] Cannot map IO page for APIC.\n");
   }
@@ -68,7 +69,8 @@ static int __map_ioapic_page(void)
   uint32_t res;
 
   res = mmap_kern(IOAPIC_BASE, IOAPIC_BASE >> PAGE_WIDTH, 1,
-                  MAP_READ | MAP_WRITE | MAP_NOCACHE | MAP_PHYS);
+                  PROT_READ | PROT_WRITE | PROT_NOCACHE,
+                  MAP_FIXED | MAP_PHYS);
   if(res<0) {
     kprintf("[MM] Cannot map IO page for IO APIC.\n");
     return -1;

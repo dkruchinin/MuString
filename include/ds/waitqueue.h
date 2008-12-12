@@ -35,7 +35,7 @@
 #include <eza/task.h>
 #include <eza/spinlock.h>
 #include <eza/errno.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 
 /**
  * @struct wqueue_t

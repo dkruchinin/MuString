@@ -24,11 +24,12 @@
 #ifndef __TASK_H__
 #define __TASK_H__ 
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/kstack.h>
 #include <eza/arch/context.h>
 #include <mlibc/index_array.h>
 #include <mm/page.h>
+#include <eza/arch/mm_types.h>
 #include <eza/limits.h>
 
 #define INVALID_PID  ((pid_t)~0) 
@@ -84,7 +85,6 @@ typedef uint32_t cpu_array_t;
 
 #define CPU_AFFINITY_ALL_CPUS 0
 
-struct __root_pagedir;
 struct __scheduler;
 struct __task_ipc;
 struct __userspace_events_data;
@@ -108,7 +108,7 @@ typedef struct __task_struct {
   priority_t static_priority, priority, orig_priority;
 
   kernel_stack_t kernel_stack;
-  struct __root_pagedir *page_dir;
+  rpd_t rpd;
   list_node_t pid_list;
   task_flags_t flags;
 

@@ -1,4 +1,4 @@
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <ipc/port.h>
 #include <eza/task.h>
 #include <eza/interrupt.h>
@@ -14,6 +14,7 @@
 #include <mm/mmap.h>
 #include <eza/scheduler.h>
 #include <eza/kconsole.h>
+#include <eza/arch/mm.h>
 
 static SPINLOCK_DEFINE(descrs_lock);
 static uintr_descr_t descriptors[NUM_IRQS];
@@ -151,8 +152,9 @@ status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
 {
   status_t id;
   irq_counter_array_t *array;
+  page_idx_t pfn;
   ulong_t *ids;
-  task_t *caller;
+   task_t *caller;
   ulong_t i;
   irq_counter_handler_t *h;
   page_frame_t *pframe;
@@ -173,9 +175,10 @@ status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   caller=current_task();
 
   LOCK_TASK_VM(caller);
-  pframe = mm_va_page(caller->page_dir, addr);
-  if(pframe) {
-    get_page(pframe);
+  pfn = mm_vaddr2page_idx(&caller->rpd, addr);
+  if(pfn != PAGE_IDX_INVAL) {
+    pframe = pframe_by_number(pfn);
+    pin_page_frame(pframe);
     kaddr=pframe_to_virt(pframe);
   }
   UNLOCK_TASK_VM(caller);
@@ -258,7 +261,7 @@ out:
 unlock:
   UNLOCK_TASK_USPACE_IRQS(caller);
   if(pframe) {
-    put_page(pframe);
+    unpin_page_frame(pframe);
   }
   return id;
 }

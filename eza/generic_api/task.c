@@ -285,8 +285,8 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
     goto free_mm;
   }
 
-  r = mmap(task->page_dir, task->kernel_stack.low_address, pframe_number(stack_pages),
-           KERNEL_STACK_PAGES, MAP_READ | MAP_WRITE);
+  r = mmap_kern(task->kernel_stack.low_address, pframe_number(stack_pages), KERNEL_STACK_PAGES,
+                PROT_READ | PROT_WRITE, MAP_FIXED);
   if( r != 0 ) {
     goto free_stack_pages;
   }

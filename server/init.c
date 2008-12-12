@@ -39,6 +39,7 @@
 #include <mlibc/unistd.h>
 #include <eza/process.h>
 
+#if 0
 static status_t __create_task_mm(task_t *task, int num)
 {
   uintptr_t code;
@@ -180,11 +181,12 @@ static status_t __create_task_mm(task_t *task, int num)
 
   return 0;
 }
-
+#endif
 #ifndef CONFIG_TEST
 
 void server_run_tasks(void)
 {
+    #if 0
   int i=server_get_num(),a;
   task_t *server;
   status_t r;
@@ -235,6 +237,7 @@ void server_run_tasks(void)
   }
 
   return;
+  #endif
 }
 
 #else

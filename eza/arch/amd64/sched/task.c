@@ -30,6 +30,7 @@
 #include <mm/mm.h>
 #include <mm/page.h>
 #include <mm/mmap.h>
+#include <mm/vmm.h>
 #include <eza/errno.h>
 #include <mlibc/string.h>
 #include <eza/smp.h>
@@ -60,7 +61,7 @@ static void __arch_setup_ctx(task_t *newtask,uint64_t rsp)
   arch_context_t *ctx = (arch_context_t*)&(newtask->arch_context[0]);
 
   /* Setup CR3 */
-  ctx->cr3 = _k2p((uintptr_t)pframe_to_virt(newtask->page_dir->dir));
+  ctx->cr3 = _k2p((uintptr_t)pframe_to_virt(newtask->rpd.pml4));
   ctx->rsp = rsp;
   ctx->fs = USER_SELECTOR(UDATA_DES);
   ctx->es = USER_SELECTOR(UDATA_DES);
@@ -128,10 +129,10 @@ void initialize_idle_tasks(void)
   page_frame_t *ts_page;
   int r, cpu;
   cpu_sched_stat_t *sched_stat;
-  mmapper_t mapper;
+  mmap_info_t minfo;
   page_frame_iterator_t pfi;
 
-  memset(&mapper, 0, sizeof(mapper));  
+  memset(&minfo, 0, sizeof(minfo));
   init_pfiter_alloc(&pfi);
   for( cpu = 0; cpu < CONFIG_NRCPUS; cpu++ ) {
     ts_page = alloc_page(AF_PGEN | AF_ZERO);
@@ -153,7 +154,7 @@ void initialize_idle_tasks(void)
 
 
     /* Initialize page tables to default kernel page directory. */
-    task->page_dir = root_pagedir_mklink(&kernel_root_pagedir);
+    ptable_rpd_clone(&task->rpd, &kernel_rpd);
 
     /* Initialize kernel stack.
      * Since kernel stacks aren't properly initialized, we can't use standard
@@ -164,11 +165,11 @@ void initialize_idle_tasks(void)
     }
 
     next_frame = NULL;
-    mapper.va_from = task->kernel_stack.low_address;
-    mapper.va_to = mapper.va_from + ((KERNEL_STACK_PAGES - 1) << PAGE_WIDTH);
-    mapper.flags = MAP_READ | MAP_WRITE;
-    mapper.pfi = &pfi;
-    r = __mmap_pages(task->page_dir->dir, &mapper, PTABLE_LEVEL_LAST);
+    minfo.va_from = task->kernel_stack.low_address;
+    minfo.va_to = minfo.va_from + ((KERNEL_STACK_PAGES - 1) << PAGE_WIDTH);
+    minfo.ptable_flags = PDE_RW | PDE_NX;
+    minfo.pfi = &pfi;
+    r = ptable_map(&task->rpd, &minfo);
     if( r != 0 ) {
       panic( "initialize_idle_tasks(): Can't map kernel stack for idle task !" );
     }

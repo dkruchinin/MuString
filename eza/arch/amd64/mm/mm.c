@@ -30,16 +30,18 @@
 #include <mlibc/assert.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/string.h>
-#include <mm/mm.h>
 #include <mm/page.h>
+#include <mm/pfi.h>
 #include <mm/mmpool.h>
 #include <mm/mmap.h>
+#include <mm/vmm.h>
 #include <eza/kernel.h>
 #include <eza/errno.h>
 #include <eza/vm.h>
 #include <eza/swks.h>
 #include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
+#include <eza/arch/mm_types.h>
 
 /* Initial kernel top-level page directory record. */
 uintptr_t _kernel_extended_end;
@@ -134,6 +136,28 @@ static void __extend_kernel_end(void)
    _kernel_extended_end = (uintptr_t)PAGE_ALIGN(p2k_code(addr));
 }
 
+page_idx_t mm_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr)
+{
+  uintptr_t va = PAGE_ALIGN_DOWN(vaddr);
+  page_frame_t *cur_dir = rpd->pml4;
+  pde_t *pde;
+  int level;
+
+  for (level = PTABLE_LEVEL_LAST; level > PTABLE_LEVEL_FIRST; level--) {
+    pde = pde_fetch(cur_dir, vaddr2pde_idx(va, level));
+    if (!(pde->flags & PDE_PRESENT))
+      return PAGE_IDX_INVAL;
+
+    cur_dir = pde_fetch_subdir(pde);
+  }
+
+  pde = pde_fetch(cur_dir, vaddr2pde_idx(va, PTABLE_LEVEL_FIRST));
+  if (!(pde->flags & PDE_PRESENT))
+    return PAGE_IDX_INVAL;
+
+  return pde_fetch_page_idx(pde);
+}
+
 void arch_mm_init(void)
 {
   CT_ASSERT((sizeof(pdir_level_t) + sizeof(pde_idx_t)) <= sizeof(atomic_t));
@@ -196,11 +220,6 @@ static void __pfiter_first(page_frame_iterator_t *pfi)
   }
 }
 
-static void __pfiter_last(page_frame_iterator_t *pfi)
-{
-  panic("PF_ITER_ARCH doesn't support iteration to the last item of its set!");
-}
-
 static void __pfiter_next(page_frame_iterator_t *pfi)
 {
   ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx;
@@ -218,18 +237,15 @@ static void __pfiter_next(page_frame_iterator_t *pfi)
   }
 }
 
-static void __pfiter_prev(pfi)
-{
-  panic("PF_ITER_ARCH doesn't support iteration to the previous item of its set!");
-}
 
-void arch_mm_page_iter_init(page_frame_iterator_t *pfi, ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx)
+void pfi_arch_init(page_frame_iterator_t *pfi,
+                   ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx)
 {
   pfi->first = __pfiter_first;
-  pfi->last = __pfiter_last;
-  pfi->prev = __pfiter_prev;
   pfi->next = __pfiter_next;
-  pfi->pf_idx = PF_ITER_UNDEF_VAL;
+  pfi->last = pfi->prev = NULL;
+  pfi->pf_idx = PAGE_IDX_INVAL;
+  pfi->error = 0;
   iter_init(pfi, PF_ITER_ARCH);
   memset(ctx, 0, sizeof(*ctx));
   iter_set_ctx(pfi, ctx);
@@ -238,9 +254,17 @@ void arch_mm_page_iter_init(page_frame_iterator_t *pfi, ITERATOR_CTX(page_frame,
 void arch_mm_remap_pages(void)
 {
   int ret;
+  mmap_info_t minfo;
+  page_frame_iterator_t pfi;
+  ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
 
   /* Create identity mapping */
-  ret = mmap_kern(0x1000, 1, IDENT_MAP_PAGES - 1, MAP_READ | MAP_WRITE);
+  minfo.va_from = 0x1000;
+  minfo.va_to = minfo.va_from + ((IDENT_MAP_PAGES - 1) << PAGE_WIDTH);
+  minfo.ptable_flags = PDE_RW;
+  pfi_index_init(&pfi, &pfi_index_ctx, 1, IDENT_MAP_PAGES - 1);
+  minfo.pfi = &pfi;
+  ret = ptable_map(&kernel_rpd, &minfo);
   if (ret) {
     panic("arch_mm_remap_pages(): Can't create identity mapping (%p -> %p)! [errcode=%d]",
           0x1000, IDENT_MAP_PAGES << PAGE_WIDTH, ret);
@@ -249,7 +273,12 @@ void arch_mm_remap_pages(void)
   verify_mapping("identity mapping", 0x1000, IDENT_MAP_PAGES - 1, 1);
   
   /* Now we should remap all available physical memory starting at 'KERNEL_BASE'. */
-  ret = mmap_kern(KERNEL_BASE, 0, swks.mem_total_pages, MAP_READ | MAP_WRITE | MAP_EXEC);
+  minfo.va_from = KERNEL_BASE;
+  minfo.va_to = minfo.va_from + (swks.mem_total_pages << PAGE_WIDTH);
+  minfo.ptable_flags = PDE_RW;
+  pfi_index_init(&pfi, &pfi_index_ctx, 0, swks.mem_total_pages);
+  minfo.pfi = &pfi;
+  ret = ptable_map(&kernel_rpd, &minfo);
   if (ret)
     panic("arch_mm_remap_pages(): Can't remap physical pages !");
 
@@ -262,7 +291,8 @@ void arch_mm_remap_pages(void)
   direct_mapping_area.phys_addr=0x1000;
   direct_mapping_area.virt_addr=0x1000;
   direct_mapping_area.num_pages=IDENT_MAP_PAGES - 1;
-  direct_mapping_area.map_flags= MAP_USER | MAP_READ | MAP_WRITE;
+  direct_mapping_area.map_proto = PROT_READ | PROT_WRITE;
+  direct_mapping_area.map_flags= MAP_FIXED;
   vm_register_user_mandatory_area(&direct_mapping_area);
 
   /* TODO: [mt] redesign 'kernel_min_vaddr'. */
@@ -278,10 +308,10 @@ void arch_mm_remap_pages(void)
 status_t arch_vm_map_kernel_area(task_t *task)
 {
   pde_t *src_pml4, *dst_pml4;
-  pde_idx_t eidx = pgt_vaddr2idx(KERNEL_BASE, PTABLE_LEVEL_LAST);
+  pde_idx_t eidx = vaddr2pde_idx(KERNEL_BASE, PTABLE_LEVEL_LAST);
 
-  src_pml4 = pgt_fetch_entry(kernel_root_pagedir.dir, eidx);
-  dst_pml4 = pgt_fetch_entry(task->page_dir->dir, eidx);
+  src_pml4 = pde_fetch(kernel_rpd.pml4, eidx);
+  dst_pml4 = pde_fetch(task->rpd.pml4, eidx);
 
   /* Just copy PML4 entry from kernel page directoy to user one. */
   *dst_pml4 = *src_pml4;
@@ -291,42 +321,5 @@ status_t arch_vm_map_kernel_area(task_t *task)
 
 void arch_smp_mm_init(int cpu)
 {  
-  load_cr3(_k2p((uintptr_t)pframe_to_virt(kernel_root_pagedir.dir)), 1, 1);
-}
-
-pde_flags_t mmap_flags2ptable_flags(mmap_flags_t mmap_flags)
-{
-  pde_flags_t flags = 0;
-
-  CT_ASSERT(sizeof(mmap_flags) >= sizeof(mmap_flags_t));
-  if (mmap_flags & MAP_USER)
-    flags |= PDE_US;
-  if (mmap_flags & MAP_WRITE)
-    flags |= PDE_RW;
-  if (mmap_flags & MAP_NOCACHE)
-    flags |= PDE_PCD;
-  if (!(mmap_flags & MAP_EXEC))
-    flags |= PDE_NX;
-  if (mmap_flags & MAP_PHYS)
-    flags |= PDE_PHYS;
-
-  return flags;
-}
-
-mmap_flags_t ptable_flags2mmap_flags(pde_flags_t pde_flags)
-{
-  mmap_flags_t flags = 0;
-  
-  if (pde_flags & PDE_US)
-    flags |= MAP_USER;
-  if (pde_flags & PDE_RW)
-    flags |= (MAP_READ | MAP_WRITE);
-  if (pde_flags & PDE_PCD)
-    flags |= MAP_NOCACHE;
-  if (!(pde_flags & PDE_NX))
-    flags |= MAP_EXEC;
-  if (pde_flags & PDE_PHYS)
-    flags |= MAP_PHYS;
-
-  return flags;
+  load_cr3(_k2p((uintptr_t)pframe_to_virt(kernel_rpd.pml4)), 1, 1);
 }

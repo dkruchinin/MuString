@@ -379,7 +379,7 @@ void local_apic_timer_calibrate(uint32_t hz)
   kprintf("Calibrating lapic delay_loop ...");
 
   x1=local_apic->timer_ccr.count; /*get current counter*/
-  local_apic->timer_icr.count=fil; /*fillful initial counter */
+  local_apic->timer_icr.count=0xffffffff; /*fillful initial counter */
 
   kprintf("ccr %ld\n",local_apic->timer_ccr.count);
 

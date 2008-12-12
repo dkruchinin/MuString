@@ -24,7 +24,7 @@
  *
  */
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/arch/interrupt.h>
 #include <eza/arch/timer.h>
 #include <eza/swks.h>
@@ -60,7 +60,8 @@ void initialize_swks(void)
   swks_area.phys_addr=k2p(&swks) & PAGE_ADDR_MASK;
   swks_area.virt_addr=SWKS_VIRT_ADDR;
   swks_area.num_pages=SWKS_PAGES;
-  swks_area.map_flags=MAP_USER | MAP_READ | MAP_USER;
+  swks_area.map_proto = PROT_READ | PROT_WRITE;
+  swks_area.map_flags = MAP_FIXED;
 
   vm_register_user_mandatory_area(&swks_area);
 }

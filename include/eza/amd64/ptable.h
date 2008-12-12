@@ -25,7 +25,9 @@
 #define __ARCH_PTABLE_H__
 
 #include <mm/page.h>
+#include <mm/pfi.h>
 #include <mlibc/types.h>
+#include <eza/arch/mm_types.h>
 
 enum {
   PDE_PRESENT = 0x0001, /**< PDE is present. I.e. corresponding page content is holding in main memory */
@@ -46,14 +48,6 @@ enum {
                            manual vol. 2 for more info. */
   PDE_PHYS    = 0x4000, /**< Given PDE has not associated with it page frame. */
 };
-
-/**
- * @struct rpd_t
- * @brief Root page directory structures (AMD64-specific)
- */
-typedef struct __rpd {
-  page_frame_t *pml4;
-} rpd_t;
 
 /**
  * @struct pde_t
@@ -149,7 +143,7 @@ static inline pde_t *pde_fetch(page_frame_t *dir, int eidx)
  */
 static inline int vaddr2pde_idx(uintptr_t vaddr, int pde_level)
 {
-  return (int)((vaddr >> (PAGE_WIDTH + 9 * pde_level)) & PTABLE_DIR_MASK);
+  return (int)((vaddr >> (PAGE_WIDTH + 9 * pde_level)) & 0x1FF);
 }
 
 /**
@@ -161,7 +155,7 @@ static inline int vaddr2pde_idx(uintptr_t vaddr, int pde_level)
  */
 static inline uintptr_t pde_idx2vaddr(int pde_idx, int pde_level)
 {
-  return (((uintptr_t)pde_idx & PTABLE_DIR_MASK) << (PAGE_WIDTH + 9 * pde_level));
+  return (((uintptr_t)pde_idx & 0x1FF) << (PAGE_WIDTH + 9 * pde_level));
 }
 
 /**
@@ -171,7 +165,7 @@ static inline uintptr_t pde_idx2vaddr(int pde_idx, int pde_level)
  */
 static inline uintptr_t pde_get_va_range(int pde_level)
 {
-  return ((uintptr_t)PTABLE_DIR_ENTRIES << PAGE_WIDTH) << (9 * level);
+  return ((uintptr_t)PTABLE_DIR_ENTRIES << PAGE_WIDTH) << (9 * pde_level);
 }
 
 /**
@@ -248,7 +242,7 @@ status_t ptable_populate_pagedir(pde_t *parent_pde, uint_t flags);
  */
 void ptable_depopulate_pagedir(pde_t *dir);
 
-struct mmap_info;
+struct __mmap_info;
 
 /**
  * @brief Map pages into the given root page directory.
@@ -258,7 +252,7 @@ struct mmap_info;
  * @see rpd_t
  * @see mmap_info_t
  */
-status_t ptable_map(rpd_t *prd, struct mmap_info *minfo);
+status_t ptable_map(rpd_t *prd, struct __mmap_info *minfo);
 
 /**
  * @brief Unmap pages from the given root page directory

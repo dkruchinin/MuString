@@ -27,7 +27,7 @@
 #include <eza/task.h>
 #include <eza/spinlock.h>
 #include <eza/mutex.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 
 void mutex_initialize(mutex_t *mutex)
 {

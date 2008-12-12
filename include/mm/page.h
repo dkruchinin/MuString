@@ -33,11 +33,9 @@
 #include <ds/iterator.h>
 #include <ds/list.h>
 #include <mlibc/stddef.h>
-#include <eza/spinlock.h>
+#include <mlibc/types.h>
 #include <eza/arch/page.h>
 #include <eza/arch/atomic.h>
-#include <eza/arch/types.h>
-
 
 #define NOF_MM_POOLS 2 /**< Number of MM pools in system */
 
@@ -82,8 +80,12 @@ typedef struct __page_frame {
   uint32_t _private;   /**< Private data that may be used by internal page frame allocator */  
 } page_frame_t;
 
+extern page_frame_t *page_frames_array;
 
-#define PF_ITER_UNDEF_VAL (-0xf)
+#define PAGE_IDX_INVAL (~0U)
+#define PAGE_ALIGN(addr) align_up((uintptr_t)(addr), PAGE_SIZE)
+#define PAGE_ALIGN_DOWN(addr) align_down((uintptr_t)(addr), PAGE_SIZE)
+#define pframe_pool_type(page) (__pool_type((page)->flags & PAGE_POOLS_MASK))
 
 /**
  * @struct page_frame_iterator_t
@@ -91,6 +93,7 @@ typedef struct __page_frame {
  * @see DEFINE_ITERATOR
  */
 DEFINE_ITERATOR(page_frame,
+                status_t error;
                 page_idx_t pf_idx);
 
 /**
@@ -98,17 +101,12 @@ DEFINE_ITERATOR(page_frame,
  * @see DEFINE_ITERATOR_TYPES
  */
 DEFINE_ITERATOR_TYPES(page_frame,
-                      PF_ITER_ARCH,  /**< Architecture-dependent iterator used for page frames initialization */
-                      PF_ITER_INDEX, /**< Index-based iterator */
-                      PF_ITER_LIST,  /**< List-based iterator */
-                      PF_ITER_ALLOC  /**< Each next item of ALLOC iterator is dynamically allocated */
+                      PF_ITER_ARCH,   /**< Architecture-dependent iterator used for page frames initialization */
+                      PF_ITER_INDEX,  /**< Index-based iterator */
+                      PF_ITER_LIST,   /**< List-based iterator */
+                      PF_ITER_ALLOC,  /**< Each next item of ALLOC iterator is dynamically allocated */
+                      PF_ITER_PTABLE  /**< Page table iterator */
                       );
-
-extern page_frame_t *page_frames_array;
-
-#define PAGE_ALIGN(addr) align_up((uintptr_t)(addr), PAGE_SIZE)
-#define PAGE_ALIGN_DOWN(addr) align_down((uintptr_t)(addr), PAGE_SIZE)
-#define pframe_pool_type(page) (__pool_type((page)->flags & PAGE_POOLS_MASK))
 
 static inline void *pframe_to_virt(page_frame_t *frame)
 {

@@ -21,8 +21,8 @@
  *
  */
 
-#ifndef __AMD64__TYPES_H__
-#define __AMD64__TYPES_H__
+#ifndef __ARCH_TYPES_H__
+#define __ARCH_TYPES_H__
 
 /* Some macro to make life a bit easier. */
 #define KB(x) ((x)*1024)
@@ -41,7 +41,7 @@ typedef unsigned long long uint64_t;
 typedef unsigned long uintptr_t;
 typedef uint32_t pid_t;
 typedef uint16_t uid_t;
-typedef ulong_t tid_t;
+typedef uint64_t tid_t;
 typedef uint32_t usec_t;
 typedef int32_t status_t;
 typedef uint32_t shm_id_t;
@@ -51,7 +51,7 @@ typedef uint64_t unative_t;
 typedef uint64_t native_t;
 typedef uint64_t ipl_t;
 
-typedef ulong_t lock_t;
+typedef unsigned long lock_t;
 
 /* bit-related types. */
 typedef uint32_t bit_idx_t;

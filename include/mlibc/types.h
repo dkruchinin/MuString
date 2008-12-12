@@ -8,11 +8,11 @@
 #define true  1
 #define false 0
 
-typedef uchar_t unsigned char;
-typedef uint_t unsigned int;
-typedef ulong_t unsigned long;
+typedef unsigned char uchar_t;
+typedef unsigned int uint_t;
+typedef unsigned long ulong_t;
 typedef uint_t bool;
-typedef ulong size_t;
+typedef ulong_t size_t;
 
 #ifdef CONFIG_ALWAYS_INLINE
 #define always_inline inline __attribute__((always_inline))

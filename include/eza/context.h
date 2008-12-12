@@ -25,7 +25,7 @@
 #ifndef __EZA_CONTEXT_H__
 #define __EZA_CONTEXT_H__
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/arch/context.h>
 
 extern int arch_context_save(context_t *c);

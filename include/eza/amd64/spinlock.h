@@ -37,7 +37,7 @@
 
 #ifdef CONFIG_SMP
 typedef struct __spinlock_type {
-    long_t __spin_val;
+    lock_t __spin_val;
 } spinlock_t;
 
 typedef struct __rw_spinlock_type {

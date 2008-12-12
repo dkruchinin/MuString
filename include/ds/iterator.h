@@ -44,6 +44,7 @@
 #include <mlibc/string.h>
 #include <mlibc/assert.h>
 #include <eza/kernel.h>
+#include <mlibc/types.h>
 
 /**
  * @enum iter_state
@@ -88,9 +89,9 @@ enum iter_state {
         void (*last)(struct __iterator_##name *iter);       \
         void (*next)(struct __iterator_##name *iter);       \
         void (*prev)(struct __iterator_##name *iter);       \
-        uint8_t state;                                      \
-        unsigned int type;                                  \
+        uint_t type;                                        \
         void *__ctx;                                        \
+        uint8_t state;                                      \
     } name##_iterator_t
 
 /**
@@ -163,14 +164,23 @@ enum iter_state {
 #define ITERATOR_CTX(iter_name, ctx_type)       \
   struct __##iter_name##_##ctx_type
 
+#define __check_iter_method(method_name, method, type)                  \
+  do {                                                                  \
+    if (!(method)) {                                                    \
+      panic("Method %s is not supported by iterator with type %d",      \
+            method_name, type);                                         \
+    }                                                                   \
+  } while (0)
+
 /**
  * @def iter_first(iter)
  * Go to the first iterator member
  *
  * @param iter - A pointer to iterator
  */
-#define iter_first(iter)                        \
-  ((iter)->first(iter))
+#define iter_first(iter)                                             \
+  ({__check_iter_method("iter_first", (iter)->first, (iter)->type);  \
+    ((iter)->first(iter));})
 
 /**
  * @def iter_last(iter)
@@ -178,8 +188,9 @@ enum iter_state {
  *
  * @param iter - A pointer to iterator
  */
-#define iter_last(iter)                         \
-  ((iter)->last(iter))
+#define iter_last(iter)                                              \
+  ({__check_iter_method("iter_last", (iter)->last, (iter)->type);    \
+    (iter)->last(iter);})
 
 /**
  * @def iter_next(iter)
@@ -187,8 +198,9 @@ enum iter_state {
  *
  * @param iter - A pointer to iterator
  */
-#define iter_next(iter)                         \
-  ((iter)->next(iter))
+#define iter_next(iter)                                             \
+  ({__check_iter_method("iter_next", (iter)->next, (iter)->type);   \
+    (iter)->next(iter);})
 
 /**
  * @def iter_prev(iter)
@@ -196,8 +208,9 @@ enum iter_state {
  *
  * @param iter - A pointer to iterator
  */
-#define iter_prev(iter)                         \
-  ((iter)->prev(iter))
+#define iter_prev(iter)                                           \
+  ({__check_iter_method("iter_prev", (iter)->prev, (iter)->type); \
+    (iter)->prev(iter);})
 
 /**
  * @def iter_isrunning(iter)
@@ -253,10 +266,6 @@ enum iter_state {
   do {                                          \
     (iter)->type = (__type);                    \
     (iter)->state = ITER_STOP;                  \
-    ASSERT((iter)->next != NULL);               \
-    ASSERT((iter)->prev != NULL);               \
-    ASSERT((iter)->first != NULL);              \
-    ASSERT((iter)->last != NULL);               \
   } while (0)
 
 /**

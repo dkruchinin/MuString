@@ -22,8 +22,8 @@
  *
  */
 
-#ifndef __AMD64_PAGE_H__
-#define __AMD64_PAGE_H__
+#ifndef __ARCH_PAGE_H__
+#define __ARCH_PAGE_H__
 
 /* Paging on amd64 is a real big fucking deal
  * by default you have mapping - one for kernel space,
@@ -210,5 +210,5 @@ static inline uintptr_t _k2p(uintptr_t p)
 #define USER_SELECTOR(s) (gdtselector(s) | PL_USER)
 #define KERNEL_SELECTOR(s) gdtselector(s)
 
-#endif /* __AMD64_PAGE_H__ */
+#endif /* __ARCH_PAGE_H__ */
 

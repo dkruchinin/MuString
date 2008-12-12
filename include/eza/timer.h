@@ -26,7 +26,7 @@
 #define __EZA_TIMER_H__
 
 #include <ds/list.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/interrupt.h>
 
 typedef struct __hw_timer_type {
@@ -54,7 +54,7 @@ void init_timers(void);
 void init_timer(timer_t *t);
 bool add_timer(timer_t *t);
 void delete_timer(timer_t *t);
-void adjust_timer(timer_t *t,long_t delta);
+void adjust_timer(timer_t *t,long delta);
 void process_timers(void);
 
 #endif /*__EZA_TIMER_H__*/

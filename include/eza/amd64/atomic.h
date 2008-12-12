@@ -28,12 +28,12 @@
  * @author Dan Kruchinin
  */
 
-#ifndef __AMD64_ATOMIC_H__
-#define __AMD64_ATOMIC_H__
+#ifndef __ARCH_ATOMIC_H__
+#define __ARCH_ATOMIC_H__
 
 #include <config.h>
+#include <mlibc/types.h>
 #include <eza/arch/asm.h>
-#include <eza/arch/types.h>
 
 typedef volatile long atomic_t;
 
@@ -64,9 +64,9 @@ typedef volatile long atomic_t;
  */
 static always_inline void atomic_add(atomic_t *a, long add)
 {
-  __asm__ volatile ( __LOCK_PREFIX "addq %1, %0\n\t"
-                    : "+m" (*a)
-                    : "ir" (add));
+    __asm__ volatile (__LOCK_PREFIX "addq %1, %0\n\t"
+                      : "+m" (*a)
+                      : "ir" (add));
 }
 
 /**
@@ -126,4 +126,4 @@ static always_inline bool atomic_sub_and_test(atomic_t *a,long sub)
 }
 
 
-#endif /* __AMD64_ATOMIC_H__ */
+#endif /* __ARCH_ATOMIC_H__ */
