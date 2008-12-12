@@ -59,6 +59,7 @@ static inline bool valid_user_address_range(uintptr_t addr,ulong_t size)
   }
   return false;
 }
+
 #else /* CONFIG_TEST */
 
 /* If we're running tests, allow syscalls to work with kernel space. */

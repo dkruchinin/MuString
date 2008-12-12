@@ -653,7 +653,7 @@ static void __self_move_gc_actor(void *data,ulong_t arg)
 static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu)
 {
   migration_action_t t;
-  status_t r;
+  status_t r=0;
 
   if(cpu >= EZA_SCHED_CPUS || !sched_cpu_data[cpu]) {
     return -EINVAL;
