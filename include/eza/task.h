@@ -260,4 +260,7 @@ void cleanup_thread_data(void *t,ulong_t arg);
 #define set_task_flags(t,f) ((t)->flags |= (f))
 #define check_task_flags(t,f) ((t)->flags & (f) )
 
+#define set_task_signals_pending(t)             \
+  arch_set_task_signals_pending(((task_t*)(t))->arch_context)
+
 #endif

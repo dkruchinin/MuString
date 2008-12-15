@@ -144,18 +144,22 @@
 #define SP_DELTA  16
 
 /* Kernel-space task context related stuff. */
-#define ARCH_CTX_CR3_OFFSET   0x0
-#define ARCH_CTX_RSP_OFFSET   0x8
-#define ARCH_CTX_FS_OFFSET    0x10
-#define ARCH_CTX_GS_OFFSET    0x18
-#define ARCH_CTX_ES_OFFSET    0x20
-#define ARCH_CTX_DS_OFFSET    0x28
-#define ARCH_CTX_URSP_OFFSET  0x30
+#define ARCH_CTX_CR3_OFFSET     0x0
+#define ARCH_CTX_RSP_OFFSET     0x8
+#define ARCH_CTX_FS_OFFSET      0x10
+#define ARCH_CTX_GS_OFFSET      0x18
+#define ARCH_CTX_ES_OFFSET      0x20
+#define ARCH_CTX_DS_OFFSET      0x28
+#define ARCH_CTX_URSP_OFFSET    0x30
+#define ARCH_CTX_UWORKS_OFFSET  0x38
 
 #ifdef __ASM__
 
 /* extra bytes on the stack after CPU exception stack frame: %rax */
 #define INT_STACK_EXTRA_PUSHES  8
+
+/* Offset to CS selecetor in case full context is saved on the stack */
+#define INT_FULL_OFFSET_TO_CS (8+SAVED_GPR_SIZE+8+INT_STACK_FRAME_CS_OFFT)
 
 #include <eza/arch/current.h>
 #include <eza/arch/page.h>
@@ -203,10 +207,24 @@ typedef struct __context_t { /* others don't interesting... */
 } __attribute__ ((packed)) context_t;
 
 typedef struct __arch_context_t {
-    uintptr_t cr3, rsp, fs, gs, es, ds, user_rsp;
-    tss_t *tss;
-    uint16_t tss_limit;
+  uintptr_t cr3, rsp, fs, gs, es, ds, user_rsp;
+  uintptr_t uworks;
+  tss_t *tss;
+  uint16_t tss_limit;
 } arch_context_t;
+
+#define ARCH_CTX_UWORS_SIGNALS_BIT_IDX  0
+
+#define arch_set_task_signals_pending(ctx)              \
+  __asm__ __volatile__(                                 \
+  "bts %0,%1":: "r"(ARCH_CTX_UWORS_SIGNALS_BIT_IDX),    \
+  "m"(((arch_context_t *)(ctx))->uworks)  )
+
+#define arch_clear_task_signals_pending(ctx)              \
+  __asm__ __volatile__(                                   \
+    "btr %0,%1":: "r"(ARCH_CTX_UWORS_SIGNALS_BIT_IDX),    \
+    "m"(((arch_context_t *)(ctx))->uworks)  )
+
 
 /* Structure that represents GPRs on the stack upon entering
  * kernel mode during a system call.

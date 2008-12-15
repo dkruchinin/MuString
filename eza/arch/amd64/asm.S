@@ -156,6 +156,23 @@ return_from_common_interrupt:
   call schedule
 
 no_preemption_in_interrupt:
+  /* Now let's see if we need to check for userspace works. */
+  mov (%rsp), %rbx
+  add %rsp,%rbx
+  add $INT_FULL_OFFSET_TO_CS,%rbx
+  cmp $KERNEL_SELECTOR(KTEXT_DES),(%rbx)
+  je dont_check_int_works
+
+  /* Userspace interrupts, need to check for userspace works. */
+  mov %gs:CPU_SCHED_STAT_USER_WORKS_OFFT, %rbx
+  call handle_uworks
+
+  cli
+l123: jmp l123
+
+no_int_works:
+
+dont_check_int_works:
   RESTORE_ALL
   /* Now we can enable interrupts. */
   cmp $KERNEL_SELECTOR(KTEXT_DES),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)

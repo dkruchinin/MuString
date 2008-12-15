@@ -18,6 +18,7 @@ typedef struct __cpu_sched_stat {
   curtype_t irq_lock_count, kernel_ds, user_ds;
   curtype_t user_stack;
   curtype_t user_es,user_fs,user_gs;
+  curtype_t uspace_works;
 } cpu_sched_stat_t;
 
 #endif
@@ -36,6 +37,7 @@ typedef struct __cpu_sched_stat {
 #define CPU_SCHED_STAT_USER_ES_OFFT 0x50
 #define CPU_SCHED_STAT_USER_FS_OFFT 0x58
 #define CPU_SCHED_STAT_USER_GS_OFFT 0x60
+#define CPU_SCHED_STAT_USER_WORKS_OFFT 0x68  /* It's a pointer ! */
 
 /* Task flags indexes  */
 #define CPU_SCHED_NEED_RESCHED_F_IDX 0
