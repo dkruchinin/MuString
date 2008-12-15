@@ -59,6 +59,7 @@ syscall_table:
 	.quad   sys_sync_create_object
 	.quad   sys_sync_control
 	.quad   sys_sync_destroy
+	.quad   sys_kill                        /* 25 */
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

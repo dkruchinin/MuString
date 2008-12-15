@@ -218,7 +218,7 @@ typedef struct __arch_context_t {
 #define arch_set_task_signals_pending(ctx)              \
   __asm__ __volatile__(                                 \
   "bts %0,%1":: "r"(ARCH_CTX_UWORS_SIGNALS_BIT_IDX),    \
-  "m"(((arch_context_t *)(ctx))->uworks)  )
+  "m" (((arch_context_t *)(ctx))->uworks)  )
 
 #define arch_clear_task_signals_pending(ctx)              \
   __asm__ __volatile__(                                   \

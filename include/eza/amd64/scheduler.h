@@ -72,9 +72,10 @@ static inline void arch_activate_task(task_t *to)
   load_tss(to->cpu,tss,tss_limit);
 
   /* Let's jump ! */
-#ifdef CONFIG_TEST
-  kprintf( "******* ACTIVATING TASK: %d:%d (CPU: %d)\n", to->pid,to->tid,to->cpu );
-#endif
+//#ifdef CONFIG_TEST
+  kprintf( "******* ACTIVATING TASK: %d:%d (CPU: %d). WORKS: 0x%X\n",
+           to->pid,to->tid,to->cpu,to_ctx->uworks );
+//#endif
 
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
 }

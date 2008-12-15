@@ -52,8 +52,10 @@
 #define SC_CLOSE_PORT          19
 #define SC_CONTROL_CHANNEL     20
 #define SC_PORT_SEND_IOV       21
-#define SC_SYNC_CREATE_OBJECT  22
-#define SC_SYNC_CTRL_OBJECT    23
+#define SC_SYNC_CREATE         22
+#define SC_SYNC_CONTROL        23
+#define SC_SYNC_DESTROY        24
+#define SC_KILL                25
 
 /**
  * @fn status_t sys_get_pid(void)
@@ -398,5 +400,7 @@ status_t sys_sync_create_object(sync_object_type_t obj_type,
                                 ulong_t flags);
 
 status_t sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg);
+
+status_t sys_kill(pid_t pid,int sig);
 
 #endif

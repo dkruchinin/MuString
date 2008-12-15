@@ -165,12 +165,12 @@ no_preemption_in_interrupt:
 
   /* Userspace interrupts, need to check for userspace works. */
   mov %gs:CPU_SCHED_STAT_USER_WORKS_OFFT, %rbx
+  cmp $0, (%rbx)
+
+  je dont_check_int_works
+
+  /* Process deferred works */
   call handle_uworks
-
-  cli
-l123: jmp l123
-
-no_int_works:
 
 dont_check_int_works:
   RESTORE_ALL
