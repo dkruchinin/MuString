@@ -75,6 +75,7 @@ typedef struct __wqueue_task {
   wqueue_t *q;       /**< A pointer to parent wait queue */
   bool uspc_blocked; /**< Saved state of TF_USPC_BLOCKED flag */
   uint8_t eflags;    /**< Event flags. May be customized by user */ 
+  void *private;     /**< Task-specific data. **/
 } wqueue_task_t;
 
 /**

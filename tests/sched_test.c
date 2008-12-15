@@ -1,3 +1,25 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ *
+ * test/sched_test.c: tests for Muistring scheduler subsystem.
+ */
+
 #include <config.h>
 #include <eza/kernel.h>
 #include <mlibc/kprintf.h>
@@ -31,7 +53,7 @@
 #define SERVER_ID "[Migration test] "
 #define TRAVELLER_ID "[CPU Traveller] "
 
-#define TRAVELLER_SLEEP_TICKS  1000
+#define TRAVELLER_SLEEP_TICKS  300
 
 typedef struct __sched_test_ctx {
   test_framework_t *tf;
@@ -50,10 +72,12 @@ static void __traveller_thread(void *d)
   sched_thread_data_t *td=(sched_thread_data_t*)d;
   test_framework_t *tf=td->tf;
   uint64_t target_tick=swks.system_ticks_64 + TRAVELLER_SLEEP_TICKS;
+  status_t r;
+  ulong_t back_cpu=0;
 
   tf->printf(TRAVELLER_ID "PID: %d, Starting on CPU %d, Target CPU: %d\n",
              current_task()->pid,cpu_id(),td->target_cpu);
-  
+
   if( cpu_id() != td->target_cpu ) {
     tf->failed();
   } else {
@@ -66,7 +90,24 @@ static void __traveller_thread(void *d)
   }
   tf->printf(TRAVELLER_ID "Leaving long busy-wait loop.\n");
 
-  for(;;);
+  tf->printf(TRAVELLER_ID "Moving back to CPU #%d\n",back_cpu );
+  r=sys_scheduler_control(current_task()->pid,SYS_SCHED_CTL_SET_CPU,
+                          back_cpu);
+  if( r ) {
+    tf->printf(TRAVELLER_ID "Can't move back to CPU #%d: r=%d\n",
+               back_cpu,r);
+    tf->failed();
+  } else {
+    r=sys_scheduler_control(current_task()->pid,SYS_SCHED_CTL_GET_CPU,
+                            0);
+    if( r == back_cpu ) {
+      tf->passed();
+    } else {
+      tf->printf(TRAVELLER_ID "CPU ID differs after migration ! %d:%d\n",
+                 r,back_cpu);
+      tf->failed();
+    }
+  }
 
   sys_exit(0);
 }
@@ -106,17 +147,22 @@ static void __migration_test(void *d)
 
     tf->printf(SERVER_ID"Moving %d to CPU #%d\n",
                t->pid,td->target_cpu);
-    r=sched_move_task_to_cpu(t,td->target_cpu);
+    r=sys_scheduler_control(t->pid,SYS_SCHED_CTL_SET_CPU,td->target_cpu);
     if( r ) {
       tf->printf(SERVER_ID "Can't move task %d to CPU %d: r=%d\n",
                  t->pid,td->target_cpu,r);
       tf->failed();
     }
+    r=sys_scheduler_control(t->pid,SYS_SCHED_CTL_GET_CPU,0);
+    if( r != td->target_cpu ) {
+      tf->printf(SERVER_ID "CPU id mismatch after moving task ! %d:%d\n",
+                 r,td->target_cpu);
+    }
   }
 
   tf->printf(SERVER_ID "All threads we processed.\n");
-  for(;;);
-  sleep(HZ/10);
+  sleep(HZ);
+  return;
 
   /* Now change state for all remote tasks. */
   tf->printf(SERVER_ID "Now put all remote tasks into sleep.\n");
@@ -167,27 +213,14 @@ static void __priority_test(void *d)
 static void __test_thread(void *d)
 {
   sched_test_ctx_t *tctx=(sched_test_ctx_t*)d;
-  spinlock_t lock;
 
-  /*
-  spinlock_initialize(&lock);
-  tctx->tf->printf(SERVER_ID "Calling migration tests.\n");
-  spinlock_lock(&lock);
-  tctx->tf->printf( "spinlock_trylock() against locked spinlock: %d\n",
-                     spinlock_trylock(&lock) );
-  tctx->tf->printf( "Unlocking spinlock.\n" );
-  spinlock_unlock(&lock);
-  tctx->tf->printf( "spinlock_trylock() against unlocked spinlock: %d\n",
-                     spinlock_trylock(&lock) );
-  */
-  
   __migration_test(tctx);
   tctx->tf->printf(SERVER_ID "Calling priority tests.\n");
-  //__priority_test(tctx);
+  __priority_test(tctx);
 
   tctx->tf->printf(SERVER_ID "All scheduler tests finished.\n");
-  for(;;);
-  //tctx->tests_finished=true;
+  tctx->tests_finished=true;
+
   sys_exit(0);
 }
 

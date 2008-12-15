@@ -24,6 +24,7 @@
 #ifndef __ARCH_SCHEDULER_H__
 #define __ARCH_SCHEDULER_H__ 
 
+#include <config.h>
 #include <eza/arch/types.h>
 #include <eza/arch/page.h>
 #include <eza/scheduler.h>
@@ -32,22 +33,6 @@
 #include <eza/arch/current.h>
 #include <eza/smp.h>
 #include <eza/arch/mm_types.h>
-
-static inline void set_cpu_online(cpu_id_t cpu, uint32_t online)
-{
-  cpu_id_t mask = 1 << cpu;
-
-  if( online ) {
-    online_cpus |= mask;
-  } else {
-    online_cpus &= ~mask;
-  }
-}
-
-static inline bool is_cpu_online(cpu_id_t cpu)
-{
-  return (online_cpus & (1 << cpu)) ? true : false;
-}
 
 static inline cpu_id_t cpu_id(void)
 {
@@ -87,7 +72,10 @@ static inline void arch_activate_task(task_t *to)
   load_tss(to->cpu,tss,tss_limit);
 
   /* Let's jump ! */
+#ifdef CONFIG_TEST
   kprintf( "******* ACTIVATING TASK: %d:%d (CPU: %d)\n", to->pid,to->tid,to->cpu );
+#endif
+
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
 }
 

@@ -111,6 +111,7 @@ void waitqueue_prepare_task(wqueue_task_t *wq_task, task_t *task)
   list_init_head(&wq_task->head);
   wq_task->task = task;
   wq_task->q = NULL;
+  wq_task->eflags=0;
   spinlock_lock(&task->member_lock);
   wq_task->uspc_blocked = task->flags & TF_USPC_BLOCKED;
   task->flags |= TF_USPC_BLOCKED; /* block priority changing from user-space */

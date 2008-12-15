@@ -48,7 +48,7 @@
 /* Minimal allowed object size */
 #define SLAB_OBJECT_MIN_SIZE 8 
 /* Max allowed object size */
-#define SLAB_OBJECT_MAX_SIZE 512
+#define SLAB_OBJECT_MAX_SIZE 1024
 #define FIRST_GENSLABS_POW2  3
 #define LAST_GENSLABS_POW2   9
 /* number of generic memory caches(except memory caches for memcache_t and slab_t) */

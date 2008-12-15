@@ -41,6 +41,7 @@
 #include <ipc/ipc.h>
 #include <eza/uinterrupt.h>
 #include <mm/slab.h>
+#include <eza/sync.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
@@ -94,7 +95,7 @@ void initialize_task_subsystem(void)
   if( !task_cache ) {
     panic( "initialize_task_subsystem(): Can't create the task struct memcache !" );
   }
-
+  
   init_launched=false;
   initialize_process_subsystem();
 }
@@ -225,6 +226,9 @@ static task_t *__allocate_task_struct(void)
     list_init_head(&task->children);
     list_init_head(&task->threads);
 
+    list_init_head(&task->task_events.my_events);
+    list_init_head(&task->task_events.listeners);
+
     spinlock_initialize(&task->lock);
     spinlock_initialize(&task->child_lock);
     spinlock_initialize(&task->member_lock);
@@ -233,7 +237,7 @@ static task_t *__allocate_task_struct(void)
     task->group_leader=task;
     task->cpu_affinity_mask=ONLINE_CPUS_MASK;
   }
-  return task;  
+  return task;
 }
 
 static status_t __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
@@ -255,6 +259,23 @@ static status_t __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
     task->ipc=NULL;
     return setup_task_ipc(task);
   }
+}
+
+static status_t __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags,
+                                       task_privelege_t priv)
+{
+  if( flags & CLONE_MM ) {
+    if( !parent->sync_data && (priv != TPL_KERNEL) ) {
+      return -EINVAL;
+    }
+    if( parent->sync_data ) {
+      task->sync_data=parent->sync_data;
+      return dup_task_sync_data(parent->sync_data);
+    }
+  }
+
+  task->sync_data=allocate_task_sync_data();
+  return task->sync_data ? 0 : -ENOMEM;
 }
 
 status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t)
@@ -325,10 +346,15 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
     goto free_limits;
   }
 
+  r=__setup_task_sync_data(task,parent,flags,priv);
+  if( r ) {
+    goto free_ipc;
+  }
+
   task->uspace_events=allocate_task_uspace_events_data();
   if( !task->uspace_events ) {
     r=-ENOMEM;
-    goto free_ipc;
+    goto free_sync_data;
   }
 
   /* Setup task's initial state. */
@@ -344,6 +370,8 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
 
   *t = task;
   return 0;
+free_sync_data:
+  /* TODO: [mt] Deallocate task's sync data. */
 free_ipc:
   /* TODO: [mt] deallocate task's IPC structure. */
 free_limits:

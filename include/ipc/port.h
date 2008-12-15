@@ -48,7 +48,8 @@ typedef struct __ipc_port_messsage_t {
   list_node_t l,messages_list;
   event_t event;
   struct __ipc_port_t *port;
-  ipc_user_buffer_t snd_buf, rcv_buf;
+  ipc_user_buffer_t *snd_buf, *rcv_buf;
+  ulong_t num_send_bufs;
   task_t *receiver;  /* To handle 'reply()' properly. */
   task_t *sender;
 } ipc_port_message_t;

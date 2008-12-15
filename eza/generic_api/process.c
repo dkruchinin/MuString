@@ -39,6 +39,7 @@
 #include <kernel/syscalls.h>
 #include <kernel/vm.h>
 #include <eza/kconsole.h>
+#include <eza/tevent.h>
 
 typedef uint32_t hash_level_t;
 
@@ -168,6 +169,8 @@ status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
 
 status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
 {
+  task_event_ctl_arg te_ctl;
+
   switch( cmd ) {
     case SYS_PR_CTL_SET_ENTRYPOINT:
     case SYS_PR_CTL_SET_STACK:
@@ -184,6 +187,12 @@ status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       if( arg == 0 && target->state == TASK_STATE_JUST_BORN ) {
         return arch_process_context_control(target,cmd,arg);
       }
+      break;
+    case SYS_PR_CTL_ADD_EVENT_LISTENER:
+      if( copy_from_user(&te_ctl,arg,sizeof(te_ctl) ) ) {
+        return -EFAULT;
+      }
+      return task_event_attach(target,current_task(),&te_ctl);
   }
   return -EINVAL;
 }

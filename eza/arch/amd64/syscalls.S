@@ -43,7 +43,7 @@ syscall_table:
 	.quad   sys_port_receive
 	.quad   sys_port_reply
 	.quad   sys_allocate_ioports
-	.quad   sys_free_ioports
+	.quad	sys_free_ioports
 	.quad   sys_create_irq_counter_array	/* 10 */
 	.quad   sys_wait_on_irq_array
         .quad   sys_ipc_port_poll
@@ -54,6 +54,11 @@ syscall_table:
 	.quad   sys_open_channel
 	.quad   sys_close_channel
 	.quad   sys_close_port
+	.quad   sys_control_channel             /* 20  */
+	.quad   sys_port_send_iov
+	.quad   sys_sync_create_object
+	.quad   sys_sync_control
+	.quad   sys_sync_destroy
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

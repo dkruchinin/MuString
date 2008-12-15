@@ -246,8 +246,6 @@ status_t sys_yield(void)
 
 status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
 {
-  ulong_t is;
-
   switch( cmd ) {
     case SYS_SCHED_CTL_GET_AFFINITY_MASK:
       return task->cpu_affinity_mask;
@@ -261,23 +259,30 @@ status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
       return -EINVAL;
 
     case SYS_SCHED_CTL_SET_AFFINITY_MASK:
+      if( !trusted_task(current_task()) ) {
+        return -EPERM;
+      }
+
       if( !arg || (arg & ~ONLINE_CPUS_MASK) ) {
         return -EINVAL;
       }
 
-      interrupts_save_and_disable(is);
-      LOCK_TASK_STRUCT(task);
-
       if( task->cpu_affinity_mask != arg ) {
         if( !(task->cpu_affinity_mask & (1 << cpu_id())) ) {
-          /* Schedule immediate migration. */
-          
         }
       }
-      UNLOCK_TASK_STRUCT(task);
-      interrupts_restore(is);
 
       return 0;
+    case SYS_SCHED_CTL_GET_CPU:
+      return task->cpu;
+    case SYS_SCHED_CTL_SET_CPU:
+      if( !trusted_task(current_task()) ) {
+        return -EPERM;
+      }
+      if( (arg >= CONFIG_NRCPUS) || !cpu_affinity_ok(task,arg) ) {
+        return -EINVAL;
+      }
+      return sched_move_task_to_cpu(task,arg);
     default:
       return task->scheduler->scheduler_control(task,cmd,arg);
   }
@@ -361,6 +366,7 @@ status_t schedule_task_migration(migration_action_t *a,cpu_id_t cpu)
     spinlock_lock(&migration_locks[cpu]);
     list_add2tail(&migration_actions[cpu], &a->l);
     spinlock_unlock(&migration_locks[cpu]);
+    activate_task(gc_threads[cpu][MIGRATION_THREAD_IDX]);
     return 0;
   } else {
     return -EINVAL;
@@ -394,7 +400,7 @@ lock_cpus_data:
     dst_cpu=NULL;
   }
 
-  if( t->state != TASK_STATE_SUSPENDED || tdata->array != NULL ) {
+  if( !(t->flags & __TF_UNDER_MIGRATION_BIT) || tdata->array != NULL ) {
     r=-EBUSY;
     goto unlock;
   }
@@ -451,6 +457,8 @@ unlock:
   interrupts_enable();
   cond_reschedule();
 
+  /* Mark task as ready for another migrations. */
+  atomic_test_and_reset_bit(&t->flags,__TF_UNDER_MIGRATION_BIT);
   if( !r ) {
     activate_task(t);
   }
@@ -460,6 +468,11 @@ unlock:
 
 void migration_thread(void *data)
 {
+  if( do_scheduler_control(current_task(),SYS_SCHED_CTL_SET_PRIORITY,
+                           EZA_SCHED_NONRT_PRIO_BASE) ) {
+    panic( "CPU #%d: migration_thread() can't set its default priority !\n" );
+  }
+
   while(true) {
     list_head_t private, *mytasks;
     cpu_id_t cpu=cpu_id();
@@ -477,7 +490,7 @@ void migration_thread(void *data)
         migration_action_t *action=container_of(n,migration_action_t,l);
 
         list_del(n);
-        action->status=__move_task_to_this_cpu(action->task );
+        action->status=__move_task_to_this_cpu(action->task);
         event_raise(&action->e);
       }
     } else {

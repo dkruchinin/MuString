@@ -103,10 +103,6 @@ extern scheduler_t *get_default_scheduler(void);
 void schedule(void);
 
 /* Macros that deal with resceduling needs. */
-//extern void arch_sched_set_current_need_resched(void);
-//extern void arch_sched_reset_current_need_resched(void);
-//extern void arch_sched_set_cpu_need_resched(cpu_id_t cpu);
-
 #define sched_set_current_need_resched() arch_sched_set_current_need_resched()
 #define sched_reset_current_need_resched() arch_sched_reset_current_need_resched()
 
@@ -124,8 +120,10 @@ void schedule(void);
 #define SYS_SCHED_CTL_GET_MAX_TIMISLICE  0x9
 #define SYS_SCHED_CTL_GET_STATE 0xA
 #define SYS_SCHED_CTL_SET_STATE 0xB
+#define SYS_SCHED_CTL_GET_CPU   0xC
+#define SYS_SCHED_CTL_SET_CPU   0xD
 
-#define SCHEDULER_MAX_COMMON_IOCTL SYS_SCHED_CTL_SET_STATE
+#define SCHEDULER_MAX_COMMON_IOCTL SYS_SCHED_CTL_SET_CPU
 
 status_t sys_yield(void);
 status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
@@ -139,6 +137,7 @@ typedef struct __migration_action_t {
   event_t e;
   list_node_t l;
   status_t status;
+  cpu_id_t target_cpu;
 } migration_action_t;
 
 #define CPU_TASK_REBALANCE_DELAY  HZ
@@ -155,7 +154,23 @@ static inline void release_task_struct(task_t *t)
 {
 }
 
-#define cpu_affinity_ok(task,c) (task->cpu & (1<<c))
+static inline void set_cpu_online(cpu_id_t cpu, uint32_t online)
+{
+  cpu_id_t mask = 1 << cpu;
+
+  if( online ) {
+    online_cpus |= mask;
+  } else {
+    online_cpus &= ~mask;
+  }
+}
+
+static inline bool is_cpu_online(cpu_id_t cpu)
+{
+  return (online_cpus & (1 << cpu)) ? true : false;
+}
+
+#define cpu_affinity_ok(task,c) ( ((task)->cpu_affinity_mask & (1<<(c))) && is_cpu_online((c)) )
 
 #define activate_task(t) sched_change_task_state(t,TASK_STATE_RUNNABLE)
 #define stop_task(t) sched_change_task_state(t,TASK_STATE_STOPPED)

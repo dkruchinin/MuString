@@ -30,6 +30,7 @@
 #include <mlibc/index_array.h>
 #include <mm/page.h>
 #include <eza/limits.h>
+#include <eza/tevent.h>
 
 #define INVALID_PID  ((pid_t)~0) 
 /* TODO: [mt] Manage NUM_PIDS properly ! */
@@ -74,10 +75,10 @@ typedef enum __task_state {
   TASK_STATE_JUST_BORN = 0,
   TASK_STATE_RUNNABLE = 1,
   TASK_STATE_RUNNING = 2,
-  TASK_STATE_SLEEPING = 3,
+  TASK_STATE_SLEEPING = 3,   /**< Interruptible sleep. **/
   TASK_STATE_STOPPED = 4,
   TASK_STATE_ZOMBIE = 5,
-  TASK_STATE_SUSPENDED = 6,
+  TASK_STATE_SUSPENDED = 6,  /**< Non-interruptible sleep. **/
 } task_state_t;
 
 typedef uint32_t priority_t;
@@ -90,10 +91,17 @@ struct __task_ipc;
 struct __userspace_events_data;
 struct __task_ipc_priv;
 struct __task_mutex_locks;
+struct __task_sync_data;
 
 /* task flags */
+#define __TF_USPC_BLOCKED_BIT  0
+#define __TF_UNDER_MIGRATION_BIT  1
+#define __TF_EXITING_BIT  2
+
 typedef enum __task_flags {
-  TF_USPC_BLOCKED = 0x01, /**< Block facility to change task's static priority outside the kernel **/
+  TF_USPC_BLOCKED=(1<<__TF_USPC_BLOCKED_BIT),/**< Block facility to change task's static priority outside the kernel **/
+  TF_UNDER_MIGRATION=(1<<__TF_UNDER_MIGRATION_BIT), /**< Task is currently being migrated. Don't disturb. **/
+  TF_EXITING=(1<<__TF_EXITING_BIT) /**< Task is exiting to avoid faults during 'sys_exit()' **/
 } task_flags_t;
 
 /* Abstract object for scheduling. */
@@ -131,16 +139,21 @@ typedef struct __task_struct {
 
   struct __task_mutex_locks *active_locks;
 
+  struct __task_sync_data *sync_data;
+
   /* Limits-related stuff. */
   task_limits_t *limits;
-  
+
   /* Lock for protecting changing and outer access the following fields:
    *   ipc,ipc_priv,limits
    */
   spinlock_t member_lock;
 
   struct __userspace_events_data *uspace_events;
-    
+
+  /* Task state events */
+  task_events_t task_events;
+
   /* Arch-dependent context is located here */
   uint8_t arch_context[256];
 } task_t;
@@ -237,13 +250,14 @@ void free_task_struct(task_t *task);
 
 #define is_thread(task)  ((task)->group_leader && (task)->group_leader != (task))
 
-#define task_is_migrable(t) (!list_node_is_bound(&(t)->migration_list))
-
 void cleanup_thread_data(void *t,ulong_t arg);
 
 /* Default kernel threads flags. */
 #define KERNEL_THREAD_FLAGS  (CLONE_MM)
 
 #define TASK_INIT   0x80000000   /* This task is the NameServer i.e. 'init' */
+
+#define set_task_flags(t,f) ((t)->flags |= (f))
+#define check_task_flags(t,f) ((t)->flags & (f) )
 
 #endif

@@ -23,6 +23,8 @@
 #include <test.h>
 #include <mm/slab.h>
 #include <eza/errno.h>
+#include <eza/tevent.h>
+#include <eza/process.h>
 
 #define TEST_ID  "IPC subsystem test"
 #define SERVER_THREAD  "[SERVER THREAD] "
@@ -67,6 +69,8 @@ static char *patterns[TEST_ROUNDS]= {
   "55555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555",
 };
 
+#define BIG_MSG_ID  TEST_ROUNDS
+
 static bool __verify_message(ulong_t id,char *msg)
 {
   return !memcmp(patterns[id],msg,strlen(patterns[id])+1);
@@ -88,27 +92,113 @@ static bool __verify_big_message(uint8_t *buf,ulong_t *diff_offset)
   return true;
 }
 
+static ulong_t __v_2[]={10,57};
+static ulong_t __v_6[]={8,8,4,10,10,30};
+static ulong_t __v_4[]={2,10,10,39};
+
+static ulong_t __v_big_7[]={1156,32500,79000,217299,
+                            376415,121783,573200};
+
+void __setup_iovectors(ulong_t msg_id,iovec_t *iovecs,ulong_t *numvecs)
+{
+  uint8_t *p;
+  ulong_t len;
+  ulong_t *lengths,chunks;
+  int i;
+
+  if( msg_id != BIG_MSG_ID ) {
+    p=(uint8_t *)patterns[msg_id];
+    len=strlen(patterns[msg_id])+1;
+  }
+
+  if( msg_id == 0 ) {
+    iovecs->iov_base=p;
+    iovecs->iov_len=len;
+    *numvecs=1;
+    return;
+  } else if( msg_id == BIG_MSG_ID ) {
+    p=__big_message_pattern;
+    len=BIG_MESSAGE_SIZE;
+    lengths=__v_big_7;
+    chunks=7;
+  } else {
+
+    switch( current_task()->pid % 3 ) {
+      case 0:
+        lengths=__v_2;
+        chunks=2;
+        break;
+      case 1:
+        lengths=__v_6;
+        chunks=6;
+        break;
+      case 2:
+        lengths=__v_4;
+        chunks=4;
+        break;
+    }
+  }
+
+  for(i=0;i<chunks;i++) {
+    iovecs->iov_base=p;
+    iovecs->iov_len=lengths[i];
+
+    iovecs++;
+    len-=lengths[i];
+    p+=lengths[i];
+  }
+  /* Process the last chunk. */
+  iovecs->iov_base=p;
+  iovecs->iov_len=len;
+  *numvecs=chunks+1;
+}
+
 static void __client_thread(void *ctx)
 {
   DECLARE_TEST_CONTEXT;
   int i;
   int channels[SERVER_NUM_PORTS];
   status_t r;
-
+  iovec_t iovecs[MAX_IOVECS];
+  ulong_t numvecs;
+  
   tf->printf(CLIENT_THREAD "Opening %d channels.\n",SERVER_NUM_PORTS );
   for(i=0;i<SERVER_NUM_PORTS;i++) {
-    channels[i]=sys_open_channel(tctx->server_pid,i);
+    ulong_t flags;
+
+    if( i != NON_BLOCKED_PORT_ID ) {
+      flags |= IPC_CHANNEL_FLAG_BLOCKED_MODE;
+    } else {
+      flags = 0;
+    }
+
+    channels[i]=sys_open_channel(tctx->server_pid,i,
+                                 flags);
     if( channels[i] != i ) {
       tf->printf(CLIENT_THREAD "Channel number mismatch: %d instead of %d\n",
                  channels[i],i);
       tf->failed();
       goto exit_test;
     }
+
+    /* Now check if channel's flags macth. */
+    r=sys_control_channel(channels[i],IPC_CHANNEL_CTL_GET_SYNC_MODE,0);
+    if( r >= 0) {
+      status_t shouldbe=(i != NON_BLOCKED_PORT_ID) ? 1 : 0;
+      if( r != shouldbe ) {
+        tf->printf(CLIENT_THREAD "Synchronous mode flag mismatch for channel %d ! %d:%d\n",
+                   channels[i],r,shouldbe);
+        tf->failed();
+      }
+    } else {
+      tf->printf(CLIENT_THREAD"Can't read channel's sync mode: %d\n",r );
+    }
   }
   tf->passed();
 
   tf->printf(CLIENT_THREAD "Trying to open a channel to insufficient port number.\n" );
-  r=sys_open_channel(tctx->server_pid,SERVER_NUM_PORTS);
+  r=sys_open_channel(tctx->server_pid,SERVER_NUM_PORTS,
+                     IPC_CHANNEL_FLAG_BLOCKED_MODE);
   if( r == -EINVAL ) {
     tf->passed();
   } else {
@@ -120,7 +210,7 @@ static void __client_thread(void *ctx)
    ****************************************************************/
   tf->printf(CLIENT_THREAD "Sending messages in blocking mode.\n" );  
   for(i=0;i<TEST_ROUNDS;i++) {
-    r=sys_port_send(channels[i],IPC_BLOCKED_ACCESS,
+    r=sys_port_send(channels[i],
                     (ulong_t)patterns[i],strlen(patterns[i])+1,
                     (ulong_t)__client_rcv_buf,sizeof(__client_rcv_buf));
     if( r < 0 ) {
@@ -148,10 +238,12 @@ static void __client_thread(void *ctx)
   /****************************************************************
    * Sending a big message in blocking mode.
    ****************************************************************/
-  tf->printf(CLIENT_THREAD "Sending a big message in blocking mode.\n" );
-  r=sys_port_send(channels[BIG_MESSAGE_PORT_ID],IPC_BLOCKED_ACCESS,
-                  (ulong_t)__big_message_pattern,BIG_MESSAGE_SIZE,
-                  (ulong_t)__big_message_client_buf,BIG_MESSAGE_SIZE);
+  tf->printf(CLIENT_THREAD "Sending a big message in blocking mode via I/O vectors.\n" );
+  __setup_iovectors(BIG_MSG_ID,iovecs,&numvecs);
+
+  r=sys_port_send_iov(channels[BIG_MESSAGE_PORT_ID],
+                      iovecs,numvecs,
+                      (ulong_t)__big_message_client_buf,BIG_MESSAGE_SIZE);
   if( r < 0 ) {
     tf->printf(CLIENT_THREAD "Error while sending a big message over channel N%d : %d\n",
                channels[BIG_MESSAGE_PORT_ID],r);
@@ -180,19 +272,10 @@ static void __client_thread(void *ctx)
   /****************************************************************
    * Sending messages in non-blocking mode.
    ****************************************************************/
-  tf->printf(CLIENT_THREAD "Trying to send a non-blocking message to a blocking channel.\n" );
-  r=sys_port_send(channels[0],0,
-                  (ulong_t)patterns[0],strlen(patterns[0])+1,
-                  (ulong_t)__client_rcv_buf,sizeof(__client_rcv_buf));
-  if( r == -EINVAL ) {
-    tf->passed();
-  } else {
-    tf->failed();
-  }
-
-  tf->printf(CLIENT_THREAD "Sending messages in non-blocking mode.\n" );
+  tf->printf(CLIENT_THREAD "Sending messages in non-blocking mode (using channel N%d).\n",
+             channels[NON_BLOCKED_PORT_ID]);
   for( i=0; i<TEST_ROUNDS;i++ ) {
-    r=sys_port_send(channels[NON_BLOCKED_PORT_ID],0,
+    r=sys_port_send(channels[NON_BLOCKED_PORT_ID],
                     (ulong_t)patterns[i],strlen(patterns[i])+1,
                     0,0);
     if( r < 0 ) {
@@ -220,9 +303,10 @@ static void __poll_client(void *d)
   status_t i,r;
   ulong_t msg_id;
   char client_rcv_buf[MAX_TEST_MESSAGE_SIZE];
+  iovec_t iovecs[MAX_IOVECS];
 
   port=tp->port_id;
-  r=sys_open_channel(tp->server_pid,port);
+  r=sys_open_channel(tp->server_pid,port,IPC_CHANNEL_FLAG_BLOCKED_MODE);
   if( r < 0 ) {
     tf->printf(POLL_CLIENT "Can't open a channel to %d:%d ! r=%d\n",
                tp->server_pid,port,r);
@@ -232,13 +316,26 @@ static void __poll_client(void *d)
 
   msg_id=port % TEST_ROUNDS;
   for(i=0;i<TEST_ROUNDS;i++) {
+    char *snd_type;
     tf->printf(POLL_CLIENT "Sending message to port %d.\n",port );
-    r=sys_port_send(channel,IPC_BLOCKED_ACCESS,
+
+    if( i & 0x1 ) {    
+    r=sys_port_send(channel,
                     (ulong_t)patterns[msg_id],strlen(patterns[msg_id])+1,
                     (ulong_t)client_rcv_buf,sizeof(client_rcv_buf));
-    tf->printf("ok\n");
+    snd_type="sys_port_send()";
+    } else {
+      /* Sending a message using I/O vector array. */
+      ulong_t numvecs;
+
+      snd_type="sys_port_send_iov()";
+      __setup_iovectors(msg_id,iovecs,&numvecs);
+      r=sys_port_send_iov(channel,iovecs,numvecs,
+                    (ulong_t)client_rcv_buf,sizeof(client_rcv_buf));
+    }
     if( r < 0 ) {
-      tf->printf(POLL_CLIENT "Error occured while sending message: %d\n",r);
+      tf->printf(POLL_CLIENT "Error occured while sending message: %d via %s\n",
+                 r,snd_type);
       tf->failed();
     } else {
       if( r == strlen(patterns[msg_id])+1 ) {
@@ -261,7 +358,7 @@ static void __poll_client(void *d)
   /* Special case: test client wake up during port close. */
   if( port == 0 ) {
     tf->printf(POLL_CLIENT "Testing correct client wake-up on port closing...\n" );
-    r=sys_port_send(channel,IPC_BLOCKED_ACCESS,
+    r=sys_port_send(channel,
                     (ulong_t)patterns[msg_id],strlen(patterns[msg_id])+1,
                     (ulong_t)client_rcv_buf,sizeof(client_rcv_buf));
     if( r == -EPIPE ) {
@@ -280,17 +377,19 @@ static void __poll_client(void *d)
   sys_exit(0);
 }
 
+#define NUM_POLL_CLIENTS  SERVER_NUM_BLOCKED_PORTS
+
 static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
 {
   status_t i,r,j;
-  pollfd_t fds[SERVER_NUM_BLOCKED_PORTS];
-  thread_port_t poller_ports[SERVER_NUM_BLOCKED_PORTS];
+  pollfd_t fds[NUM_POLL_CLIENTS];
+  thread_port_t poller_ports[NUM_POLL_CLIENTS];
   test_framework_t *tf=tctx->tf;
   ulong_t polled_clients;
   port_msg_info_t msg_info;
   char server_rcv_buf[MAX_TEST_MESSAGE_SIZE];
-  
-  for(i=0;i<SERVER_NUM_BLOCKED_PORTS;i++) {
+
+  for(i=0;i<NUM_POLL_CLIENTS;i++) {
     poller_ports[i].port_id=ports[i];
     poller_ports[i].tctx=tctx;
     poller_ports[i].server_pid=current_task()->pid;
@@ -306,9 +405,9 @@ static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
   for(j=0;j<TEST_ROUNDS;j++) {
     ulong_t msg_id;
 
-    polled_clients=SERVER_NUM_BLOCKED_PORTS;
+    polled_clients=NUM_POLL_CLIENTS;
 
-    for(i=0;i<SERVER_NUM_BLOCKED_PORTS;i++) {
+    for(i=0;i<NUM_POLL_CLIENTS;i++) {
       fds[i].events=POLLIN | POLLRDNORM;
       fds[i].revents=0;
       fds[i].fd=ports[i];
@@ -316,7 +415,7 @@ static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
 
     while(polled_clients) {
       tf->printf( SERVER_THREAD "Polling ports (%d clients left) ...\n",polled_clients );
-      r=sys_ipc_port_poll(fds,SERVER_NUM_BLOCKED_PORTS,NULL);
+      r=sys_ipc_port_poll(fds,NUM_POLL_CLIENTS,NULL);
       if( r < 0 ) {
         tf->printf( SERVER_THREAD "Error occured while polling ports: %d\n",r );
         tf->failed();
@@ -328,7 +427,7 @@ static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
     tf->printf( SERVER_THREAD "All clients sent their messages.\n" );
 
     /* Process all pending events. */
-    for(i=0;i<SERVER_NUM_BLOCKED_PORTS;i++) {
+    for(i=0;i<NUM_POLL_CLIENTS;i++) {
       if( !fds[i].revents ) {
         tf->printf( SERVER_THREAD "Port N %d doesn't have any pending events \n",
                     fds[i].fd);
@@ -357,8 +456,8 @@ static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
         r=sys_port_reply(fds[i].fd,msg_info.msg_id,
                          (ulong_t)patterns[msg_id],strlen(patterns[msg_id])+1);
         if( r ) {
-          tf->printf(SERVER_THREAD "Error occured during replying via port %d. r=%d\n",
-                     fds[i].fd,r);
+          tf->printf(SERVER_THREAD "Error occured during replying message %d via port %d. r=%d\n",
+                     msg_info.msg_id,fds[i].fd,r);
           tf->abort();
         }
       }
@@ -403,6 +502,82 @@ static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
   tf->printf( SERVER_THREAD "All poll tests finished.\n" );
 }
 
+static void __notifier_thread(void *ctx)
+{
+  DECLARE_TEST_CONTEXT;
+  uint64_t target_tick=swks.system_ticks_64 + 200;
+
+  tf->printf( "[Notifier] Starting.\n" );
+
+  while(swks.system_ticks_64 < target_tick) {
+  }
+
+  tf->printf( "[Notifier] Exiting.\n" );
+  sys_exit(0);
+}
+
+static void __process_events_test(void *ctx)
+{
+  DECLARE_TEST_CONTEXT;
+  int port=sys_create_port(0,0);
+  task_t *task;
+  status_t r;
+  task_event_ctl_arg te_ctl;
+  task_event_descr_t ev_descr;
+  port_msg_info_t msg_info;
+
+  if( port < 0 ) {
+    tf->printf( "Can't create a port !\n" );
+  }
+
+  if( kernel_thread(__notifier_thread,ctx,&task) ) {
+    tf->printf("Can't create the Notifier !\n");
+    tf->abort();
+  }
+
+  te_ctl.ev_mask=TASK_EVENT_TERMINATION;
+  te_ctl.port=port;
+  r=sys_task_control(task->pid,SYS_PR_CTL_ADD_EVENT_LISTENER,
+                     &te_ctl);
+  if( r ) {
+    tf->printf("Can't set event listener: %d\n",r);
+    tf->failed();
+  }
+
+  tf->printf( "Check that no one can set more than one same listeners.\n" );
+  te_ctl.ev_mask=TASK_EVENT_TERMINATION;
+  te_ctl.port=port;
+  r=sys_task_control(task->pid,SYS_PR_CTL_ADD_EVENT_LISTENER,
+                     &te_ctl);
+  if( r != -EBUSY ) {
+    tf->printf("How did I manage to set the second listener ? %d\n",r);
+    tf->failed();
+  } else {
+    tf->passed();
+  }
+
+  memset(&ev_descr,0,sizeof(ev_descr));
+  r=sys_port_receive(port,IPC_BLOCKED_ACCESS,&ev_descr,
+                     sizeof(ev_descr),&msg_info);
+  if( r ) {
+    tf->printf("Error occured while waiting for tasl's events: %d !\n",
+               r);
+    tf->failed();
+  }
+
+  if( ev_descr.pid != task->pid || ev_descr.tid != task->tid ||
+      !(ev_descr.ev_mask & te_ctl.ev_mask) ) {
+    tf->printf( "Improper notification message received: PID: %d, TID: %d, EVENT: 0x%X\n",
+                ev_descr.pid,ev_descr.tid,ev_descr.ev_mask);
+    tf->failed();
+  }
+
+  tf->printf( "All process event tests passed.\n" );
+  tf->passed();
+
+  sys_close_port(port);
+}
+
 static void __server_thread(void *ctx)
 {
   DECLARE_TEST_CONTEXT;
@@ -411,6 +586,8 @@ static void __server_thread(void *ctx)
   ulong_t flags;
   status_t r;
   port_msg_info_t msg_info;
+
+  __process_events_test(ctx);
 
   for( i=0;i<SERVER_NUM_PORTS;i++) {
     if( i != NON_BLOCKED_PORT_ID ) {
@@ -472,6 +649,8 @@ static void __server_thread(void *ctx)
         }
       }
     }
+    tf->printf(SERVER_THREAD"Replying to %d with %d bytes of data\n",
+               i,strlen(patterns[i])+1);
     r=sys_port_reply(i,0,(ulong_t)patterns[i],strlen(patterns[i])+1);
     if( r ) {
       tf->printf(SERVER_THREAD "Insufficient return value during 'sys_port_reply': %d\n",
@@ -543,7 +722,7 @@ static void __server_thread(void *ctx)
           tf->printf( SERVER_THREAD "Message N %d mismatch.\n",i );
           tf->failed();
         } else {
-          tf->printf( SERVER_THREAD "Message N %d successfully transmitted.\n",i );
+          tf->printf( SERVER_THREAD "Non-blocking Message N %d successfully received.\n",i );
           tf->passed();
         }
       } else {
