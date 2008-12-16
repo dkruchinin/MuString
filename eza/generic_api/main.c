@@ -74,7 +74,7 @@ static void main_routine_stage1(void)
   initialize_gc();
 
   arch_initialize_irqs();
-  //arch_specific_init();
+  arch_specific_init();
 
   /* Initialize known hardware devices. */
   initialize_common_hardware();
@@ -86,9 +86,7 @@ static void main_routine_stage1(void)
    */
 
   kprintf( "Enabling interrupts ...\n" );
-  //interrupts_enable();
-  __asm__ __volatile__ ( "sti" );
-  for(;;);
+  interrupts_enable();
   initialize_swks();
   //swks_add_version_info();
 
@@ -148,8 +146,6 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
   /* We're online. */
   set_cpu_online(cpu,1);
   sched_add_cpu(cpu);
-
-  for(;;);
 
   interrupts_enable();
 
