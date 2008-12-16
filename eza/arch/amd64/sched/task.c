@@ -269,17 +269,10 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   /* Now reserve space for storing XMM context since it requires
    * the address to be 512-bytes aligned.
    */
-  fsave -= reg_size;
-
-  /* Calculate offset to the nearest 512-bytes boundary. */
-  t2 = fsave & 0xfffffffffffffe00;
-  delta = fsave - t2;
-
-  /* After this we will be 100% able to store 512-bytes XMM context. */
-  delta += 512;
-
-  /* Now prepare XMM context. */
-  fsave -= delta;
+  fsave-=reg_size;
+  delta=fsave;
+  fsave-=512;
+  fsave &= 0xfffffffffffffff0;
 
   memset( (char *)fsave, 0, 512 );
   /* Save size of this context for further use in RESTORE_ALL. */

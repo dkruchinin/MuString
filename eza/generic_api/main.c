@@ -91,7 +91,7 @@ static void main_routine_stage1(void)
   //swks_add_version_info();
 
   /* OK, we can proceed. */
-//  spawn_percpu_threads();
+  spawn_percpu_threads();
 //  server_run_tasks();
 
   /* Enter idle loop. */
@@ -149,7 +149,7 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
 
   interrupts_enable();
 
-  spawn_percpu_threads();
+  //spawn_percpu_threads();
 
   /* Entering idle loop. */
   kprintf( "CPU #%d is entering idle loop. Current task: %p, CPU: %d, ATOM: %d\n",
