@@ -74,7 +74,7 @@ static void main_routine_stage1(void)
   initialize_gc();
 
   arch_initialize_irqs();
-  arch_specific_init();
+  //arch_specific_init();
 
   /* Initialize known hardware devices. */
   initialize_common_hardware();
@@ -85,13 +85,16 @@ static void main_routine_stage1(void)
    * the other CPUs.
    */
 
-  interrupts_enable();
+  kprintf( "Enabling interrupts ...\n" );
+  //interrupts_enable();
+  __asm__ __volatile__ ( "sti" );
+  for(;;);
   initialize_swks();
   //swks_add_version_info();
 
   /* OK, we can proceed. */
-  spawn_percpu_threads();
-  server_run_tasks();
+//  spawn_percpu_threads();
+//  server_run_tasks();
 
   /* Enter idle loop. */
   kprintf( "CPU #0 is entering idle loop. Current task: %p, CPU ID: %d\n",
@@ -145,6 +148,8 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
   /* We're online. */
   set_cpu_online(cpu,1);
   sched_add_cpu(cpu);
+
+  for(;;);
 
   interrupts_enable();
 

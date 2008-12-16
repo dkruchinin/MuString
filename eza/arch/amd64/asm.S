@@ -157,20 +157,19 @@ return_from_common_interrupt:
 
 no_preemption_in_interrupt:
   /* Now let's see if we need to check for userspace works. */
-  mov (%rsp), %rbx
-  add %rsp,%rbx
-  add $INT_FULL_OFFSET_TO_CS,%rbx
-  cmp $KERNEL_SELECTOR(KTEXT_DES),(%rbx)
-  je dont_check_int_works
+//  mov (%rsp), %rbx
+//  add %rsp,%rbx
+//  add $INT_FULL_OFFSET_TO_CS,%rbx
+//  cmp $KERNEL_SELECTOR(KTEXT_DES),(%rbx)
+//  je dont_check_int_works
 
   /* Userspace interrupts, need to check for userspace works. */
-  mov %gs:CPU_SCHED_STAT_USER_WORKS_OFFT, %rbx
-  cmp $0, (%rbx)
+//  mov %gs:CPU_SCHED_STAT_USER_WORKS_OFFT, %rbx
+//  cmp $0, (%rbx)
+//  je dont_check_int_works
 
-  je dont_check_int_works
-
-  /* Process deferred works */
-  call handle_uworks
+  /* Process deff  */
+//  call handle_uworks
 
 dont_check_int_works:
   RESTORE_ALL

@@ -401,6 +401,4 @@ status_t sys_sync_create_object(sync_object_type_t obj_type,
 
 status_t sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg);
 
-status_t sys_kill(pid_t pid,int sig);
-
 #endif

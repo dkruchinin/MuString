@@ -50,6 +50,8 @@
 #define TID_TO_PIDBASE(tid)  ((tid)>>TID_SHIFT)
 #define TID(tid) ((tid) & ~(MAX_THREADS_PER_PROCESS-1))
 
+#define is_tid(t)  ((t) >= (1<<TID_SHIFT))
+
 /* Macros for locking task structure. */
 #define LOCK_TASK_STRUCT(t) spinlock_lock(&t->lock)
 #define UNLOCK_TASK_STRUCT(t) spinlock_unlock(&t->lock)
@@ -65,8 +67,9 @@
 typedef uint32_t time_slice_t;
 
 typedef enum __task_creation_flag_t {
-  CLONE_MM = 0x1,
-  CLONE_IPC = 0x2,  
+  CLONE_MM=0x1,
+  CLONE_IPC=0x2,
+  CLONE_SIGINFO=0x4,
 } task_creation_flags_t;
 
 #define TASK_FLAG_UNDER_STATE_CHANGE  0x1
@@ -92,6 +95,7 @@ struct __userspace_events_data;
 struct __task_ipc_priv;
 struct __task_mutex_locks;
 struct __task_sync_data;
+struct __signal_struct;
 
 /* task flags */
 #define __TF_USPC_BLOCKED_BIT  0
@@ -108,6 +112,7 @@ typedef enum __task_flags {
 typedef struct __task_struct {
   pid_t pid, ppid;
   tid_t tid;
+  uid_t uid;
 
   /* Scheduler-related stuff. */
   cpu_id_t cpu;
@@ -153,6 +158,9 @@ typedef struct __task_struct {
 
   /* Task state events */
   task_events_t task_events;
+
+  /* Signal-related stuff. */
+  struct __signal_struct *siginfo;
 
   /* Arch-dependent context is located here */
   uint8_t arch_context[256];

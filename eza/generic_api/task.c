@@ -42,6 +42,7 @@
 #include <eza/uinterrupt.h>
 #include <mm/slab.h>
 #include <eza/sync.h>
+#include <eza/signal.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
@@ -278,6 +279,53 @@ static status_t __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags
   return task->sync_data ? 0 : -ENOMEM;
 }
 
+static status_t __setup_signals(task_t *task,task_t *parent,ulong_t flags,
+                                task_privelege_t priv)
+{
+  sighandlers_t *shandlers=NULL;
+  sigset_t blocked=0,ignored=0;
+
+  if( flags & CLONE_SIGINFO ) {
+    if( !parent->siginfo && (priv != TPL_KERNEL) ) {
+      return -EINVAL;
+    }
+    if( parent->siginfo ) {
+      shandlers=parent->siginfo->handlers;
+      atomic_inc(&shandlers->use_count);
+      blocked=parent->siginfo->blocked;
+      ignored=parent->siginfo->ignored;
+    }
+  }
+
+  /* Every task has its own signal sets. */
+  task->siginfo=allocate_siginfo();
+  if( !task->siginfo ) {
+    goto nomem;
+  }
+
+  if( !shandlers ) {
+    shandlers=allocate_signal_handlers();
+    if( !shandlers ) {
+      goto nomem;
+    }
+  }
+
+  task->siginfo->blocked=blocked;
+  task->siginfo->ignored=ignored;
+  task->siginfo->pending=0;
+  task->siginfo->handlers=shandlers;
+  return 0;
+nomem:
+  if( shandlers ) {
+    put_signal_handlers(shandlers);
+  }
+
+  if( task->siginfo ) {
+    put_siginfo(task->siginfo);
+  }
+  return -ENOMEM;
+}
+
 status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t)
 {
   task_t *task;
@@ -357,6 +405,11 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
     goto free_sync_data;
   }
 
+  r=__setup_signals(task,parent,flags,priv);
+  if( r ) {
+    goto free_uevents;
+  }
+
   /* Setup task's initial state. */
   task->state = TASK_STATE_JUST_BORN;
   task->cpu = cpu_id();
@@ -370,6 +423,8 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
 
   *t = task;
   return 0;
+free_uevents:
+  /* TODO: [mt] Free userspace events properly. */
 free_sync_data:
   /* TODO: [mt] Deallocate task's sync data. */
 free_ipc:

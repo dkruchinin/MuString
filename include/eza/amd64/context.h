@@ -79,20 +79,16 @@
  * to point just after saved GPRs area.
  */
 #define SAVE_MM \
-  mov %rsp, %r13; \
-  mov %rsp, %r10; \
-  and $0xfffffffffffffe00, %r13; \
-  mov %rsp, %r14; \
-  sub %r13, %r14; \
-  add $512, %r14; \
-  sub %r14, %rsp; \
-  fxsave (%rsp); \
-  pushq %r14; \
+  mov %rsp, %r10;                               \
+  sub $512,%rsp;                                \
+  and $0xfffffffffffffff0, %rsp;                \
+  fxsave (%rsp);                                \
+  pushq %r10
 
 #define RESTORE_MM \
   popq %r10; \
   fxrstor (%rsp); \
-  add %r10, %rsp;
+  movq %r10, %rsp;
 
 /* NOTE: SAVE_MM initializes %rsi so that it points to iterrupt/exception stack frame. */
 #define SAVE_ALL \
@@ -218,7 +214,7 @@ typedef struct __arch_context_t {
 #define arch_set_task_signals_pending(ctx)              \
   __asm__ __volatile__(                                 \
   "bts %0,%1":: "r"(ARCH_CTX_UWORS_SIGNALS_BIT_IDX),    \
-  "m" (((arch_context_t *)(ctx))->uworks)  )
+  "m" ((((arch_context_t *)(ctx))->uworks))  )
 
 #define arch_clear_task_signals_pending(ctx)              \
   __asm__ __volatile__(                                   \

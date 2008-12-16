@@ -57,7 +57,7 @@ typedef uint64_t size_t;
 typedef uint64_t count_t;
 typedef uint64_t index_t;
 typedef unsigned long uintptr_t;
-typedef uint32_t pid_t;
+typedef int32_t pid_t;
 typedef uint16_t uid_t;
 typedef ulong_t tid_t;
 typedef uint32_t usec_t;
