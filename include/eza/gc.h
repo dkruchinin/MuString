@@ -89,4 +89,18 @@ static inline void gc_put_action(gc_action_t *action)
 #define GC_THREAD_IDX  1 /**< Index of the GC thread in the array of per-CPU threads. **/
 #define MIGRATION_THREAD_IDX  0  /**< Index of the migration thread in the array of per-CPU threads. **/
 
+#ifdef CONFIG_SMP
+
+typedef struct __migration_action_t {
+  task_t *task;
+  event_t e;
+  list_node_t l;
+  status_t status;
+  cpu_id_t target_cpu;
+} migration_action_t;
+
+status_t schedule_task_migration(migration_action_t *a,cpu_id_t cpu);
+
+#endif
+
 #endif

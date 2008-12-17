@@ -507,7 +507,7 @@ out_unlock:
   return r;
 }
 
-status_t def_change_task_state(task_t *task,task_state_t new_state)
+status_t def_change_task_state(task_t *task,task_state_t new_state,ulong_t mask)
 {
   return __change_task_state(task,new_state,NULL,NULL);
 }
@@ -629,14 +629,14 @@ static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
       }
       return -EINVAL;
     case SYS_SCHED_CTL_SET_STATE:
-      return def_change_task_state(target,arg);
+      return def_change_task_state(target,arg,__ALL_TASK_STATE_MASK);
   }
   return -EINVAL;
 }
 
 static status_t def_change_task_state_deferred(task_t *task, task_state_t state,
                                               deferred_sched_handler_t handler,
-                                              void *data)
+                                               void *data,ulong_t mask)
 {
   return __change_task_state(task,state,handler,data);
 }

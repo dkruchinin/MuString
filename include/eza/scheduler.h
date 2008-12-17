@@ -34,7 +34,6 @@
 #include <ds/list.h>
 #include <eza/arch/preempt.h>
 #include <eza/task.h>
-#include <eza/event.h>
 
 /* Handler for extra check during the scheduling step.
  * If it returns true, target task will be rescheduled,
@@ -54,9 +53,10 @@ typedef struct __scheduler {
   status_t (*move_task_to_cpu)(task_t *task,cpu_id_t cpu);
   void (*schedule)(void);
   void (*reset)(void);
-  status_t (*change_task_state)(task_t *task,task_state_t state);
+  status_t (*change_task_state)(task_t *task,task_state_t state,ulong_t mask);
   status_t (*change_task_state_deferred)(task_t *task,task_state_t state,
-                                        deferred_sched_handler_t handler,void *data);
+                                         deferred_sched_handler_t handler,
+                                         void *data,ulong_t mask);
   status_t (*setup_idle_task)(task_t *task);
   status_t (*scheduler_control)(task_t *task, ulong_t cmd,ulong_t arg);
 } scheduler_t;
@@ -88,9 +88,19 @@ void idle_loop(void);
 
 extern task_t *idle_tasks[CONFIG_NRCPUS];
 
-status_t sched_change_task_state(task_t *task,task_state_t state);
-status_t sched_change_task_state_deferred(task_t *task,task_state_t state,
-                                         deferred_sched_handler_t handler,void *data);
+status_t sched_change_task_state_mask(task_t *task,task_state_t state,
+                                      ulong_t mask);
+status_t sched_change_task_state_deferred_mask(task_t *task,task_state_t state,
+                                               deferred_sched_handler_t handler,void *data,
+                                               ulong_t appl_state);
+
+#define sched_change_task_state(task,state)     \
+  sched_change_task_state_mask((task),(state),__ALL_TASK_STATE_MASK)
+
+#define sched_change_task_state_deferred(task,state,hander,data)        \
+  sched_change_task_state_deferred_mask((task),(state),(hander),(data),      \
+                                        __ALL_TASK_STATE_MASK)
+
 status_t sched_add_task(task_t *task);
 status_t sched_del_task(task_t *task);
 status_t sched_setup_idle_task(task_t *task);
@@ -132,17 +142,8 @@ status_t sleep(ulong_t ticks);
 
 #ifdef CONFIG_SMP
 
-typedef struct __migration_action_t {
-  task_t *task;
-  event_t e;
-  list_node_t l;
-  status_t status;
-  cpu_id_t target_cpu;
-} migration_action_t;
-
 #define CPU_TASK_REBALANCE_DELAY  HZ
 void migration_thread(void *data);
-status_t schedule_task_migration(migration_action_t *a,cpu_id_t cpu);
 
 #endif
 

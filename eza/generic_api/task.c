@@ -279,51 +279,39 @@ static status_t __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags
   return task->sync_data ? 0 : -ENOMEM;
 }
 
-static status_t __setup_signals(task_t *task,task_t *parent,ulong_t flags,
-                                task_privelege_t priv)
+static status_t __setup_signals(task_t *task,task_t *parent,ulong_t flags)
 {
   sighandlers_t *shandlers=NULL;
-  sigset_t blocked=0,ignored=0;
+  sigset_t blocked=0,ignored=DEFAULT_IGNORED_SIGNALS;
 
   if( flags & CLONE_SIGINFO ) {
-    if( !parent->siginfo && (priv != TPL_KERNEL) ) {
+    if( !parent->siginfo.handlers ) {
       return -EINVAL;
     }
-    if( parent->siginfo ) {
-      shandlers=parent->siginfo->handlers;
-      atomic_inc(&shandlers->use_count);
-      blocked=parent->siginfo->blocked;
-      ignored=parent->siginfo->ignored;
-    }
-  }
+    shandlers=parent->siginfo.handlers;
+    atomic_inc(&shandlers->use_count);
 
-  /* Every task has its own signal sets. */
-  task->siginfo=allocate_siginfo();
-  if( !task->siginfo ) {
-    goto nomem;
+    blocked=parent->siginfo.blocked;
+    ignored=parent->siginfo.ignored;
   }
 
   if( !shandlers ) {
     shandlers=allocate_signal_handlers();
     if( !shandlers ) {
-      goto nomem;
+      return -ENOMEM;
     }
   }
 
-  task->siginfo->blocked=blocked;
-  task->siginfo->ignored=ignored;
-  task->siginfo->pending=0;
-  task->siginfo->handlers=shandlers;
-  return 0;
-nomem:
-  if( shandlers ) {
-    put_signal_handlers(shandlers);
-  }
+  task->siginfo.blocked=blocked;
+  task->siginfo.ignored=ignored;
+  task->siginfo.pending=0;
+  task->siginfo.handlers=shandlers;
 
-  if( task->siginfo ) {
-    put_siginfo(task->siginfo);
-  }
-  return -ENOMEM;
+  list_init_head(&task->siginfo.sigqueue);
+  atomic_set(&task->siginfo.num_pending,1);
+  spinlock_initialize(&task->siginfo.lock);
+
+  return 0;
 }
 
 status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t)
@@ -405,7 +393,7 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
     goto free_sync_data;
   }
 
-  r=__setup_signals(task,parent,flags,priv);
+  r=__setup_signals(task,parent,flags);
   if( r ) {
     goto free_uevents;
   }

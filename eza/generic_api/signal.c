@@ -8,62 +8,99 @@
 #include <mm/slab.h>
 #include <mm/pfalloc.h>
 
+static memcache_t *sigq_cache;
+
 /* Default actions for POSIX signals. */
 static sa_sigaction_t __def_actions[NUM_POSIX_SIGNALS]= {
-  __SA_TERMINATE,      /* Not supported signal */
-  __SA_TERMINATE,      /* SIGHUP */
-  __SA_TERMINATE,      /* SIGINT */
+  SIG_IGN,      /* Not supported signal */
+  SIG_DFL,      /* SIGHUP */
+  SIG_DFL,      /* SIGINT */
 };
 
-static status_t __send_siginfo_to_single_task(task_t *task,
-                                              siginfo_t *info)
+#define __alloc_sigqueue_item()  alloc_from_memcache(sigq_cache)
+#define __free_sigqueue_item(i)  memfree((i))
+
+void initialize_signals(void)
 {
+  sigq_cache = create_memcache( "Sigqueue item memcache", sizeof(sigq_item_t),
+                                2, SMCF_PGEN);
+  if( !sigq_cache ) {
+    panic( "initialize_signals(): Can't create the sigqueue item memcache !" );
+  }
+}
+
+status_t send_task_siginfo(task_t *task,siginfo_t *info)
+{
+  int sig=info->si_signo;
+  bool wakeup=false;
+  status_t r;
+
+  kprintf( ">>>> [%d] IGNORED: 0x%X\n", sizeof(*info),task->siginfo.ignored );
+
+  LOCK_TASK_SIGNALS(task);
+  if( !signal_matches(&task->siginfo.ignored,sig) ) {
+    sigq_item_t *qitem=__alloc_sigqueue_item();
+
+    if( qitem ) {
+      list_init_node(&qitem->l);
+      qitem->info=*info;
+
+      list_add2tail(&task->siginfo.sigqueue,&qitem->l);
+      atomic_inc(&task->siginfo.num_pending);
+
+      set_signal(&task->siginfo.pending,sig);
+      wakeup=!signal_matches(&task->siginfo.blocked,sig);
+      r=0;
+    } else {
+      r=-ENOMEM;
+    }
+  }
+  UNLOCK_TASK_SIGNALS(task);
+
+  if( wakeup ) {
+  }
+
   return 0;
 }
 
-static status_t __send_siginfo(siginfo_t *info,pid_t pid,bool force_delivery)
+status_t static __send_pid_siginfo(siginfo_t *info,pid_t pid)
 {
-  task_t *task;
   task_t *caller=current_task();
-  signal_struct_t *siginfo;
+  task_t *task;
   int sig=info->si_signo;
   status_t r;
 
   if( !pid ) {
+    return -2;
   } else if ( pid > 0 ) {
-    if( is_tid(pid) ) {
+    if( is_tid(pid) ) { /* Send signal to a separate thread. */
       /* Make sure target thread belongs to our process. */
       if( caller->pid != TID_TO_PIDBASE(pid) ) {
         return -EINVAL;
       }
-      /* Send signal to a separate thread. */
       task=pid_to_task(pid);
       if( !task ) {
         return -ESRCH;
       }
-      siginfo=get_task_siginfo(task);
-      if( !siginfo ) {
-        goto put_task;
+      if( !process_wide_signal(sig) ) {
+        /* OK, send signal to target thread. */
+        r=send_task_siginfo(task,info);
+        release_task_struct(task);
+        return r;
+      } else {
+        /* Trying to send a process-wide signal, so fall-through. */
+        release_task_struct(task);
       }
-      
-    } else {
-      /* Send signal to a whole process. */
     }
+    /* Send signal to a whole process. */
+    return -5;
   } else {
+    return -10;
   }
-
-out:
-  put_siginfo(siginfo);
-  release_task_struct(task);
-  return 0;
-put_task:
-  release_task_struct(task);
-  return -ESRCH;
 }
 
 status_t sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
 {
-  pid_t receiver;
   status_t r;
   siginfo_t k_siginfo;
 
@@ -86,22 +123,10 @@ status_t sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
   k_siginfo.si_uid=current_task()->uid;
   k_siginfo.si_code=SI_USER;
 
-//  r=__send_siginfo(&k_siginfo,receiver,false);
-  r=0;
-  kprintf( "sending signal to %d : %d\n",
+  r=__send_pid_siginfo(&k_siginfo,pid);
+  kprintf( ">> sending signal to %d : %d\n",
            pid,r);
   return r;
-}
-
-signal_struct_t *allocate_siginfo(void)
-{
-  signal_struct_t *s=memalloc(sizeof(*s));
-
-  if( s ) {
-    memset(s,0,sizeof(*s));
-    atomic_set(&s->use_count,1);
-  }
-  return s;
 }
 
 sighandlers_t *allocate_signal_handlers(void)

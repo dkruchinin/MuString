@@ -53,6 +53,7 @@
 #include <eza/arch/interrupt.h>
 #include <eza/gc.h>
 #include <eza/arch/mm.h>
+#include <eza/signal.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
    .c=0
@@ -71,6 +72,7 @@ static void main_routine_stage1(void)
   sched_add_cpu(0);
 
   initialize_ipc();
+  initialize_signals();
   initialize_gc();
 
   arch_initialize_irqs();
@@ -87,6 +89,7 @@ static void main_routine_stage1(void)
 
   kprintf( "Enabling interrupts ...\n" );
   interrupts_enable();
+
   initialize_swks();
   //swks_add_version_info();
 

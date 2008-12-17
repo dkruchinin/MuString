@@ -64,6 +64,8 @@ typedef uint32_t usec_t;
 typedef int32_t status_t;
 typedef uint32_t shm_id_t;
 
+typedef uint64_t sigset_t;
+
 /* abstraction typedef */
 typedef uint64_t unative_t;
 typedef uint64_t native_t;

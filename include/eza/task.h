@@ -75,14 +75,16 @@ typedef enum __task_creation_flag_t {
 #define TASK_FLAG_UNDER_STATE_CHANGE  0x1
 
 typedef enum __task_state {
-  TASK_STATE_JUST_BORN = 0,
-  TASK_STATE_RUNNABLE = 1,
-  TASK_STATE_RUNNING = 2,
-  TASK_STATE_SLEEPING = 3,   /**< Interruptible sleep. **/
-  TASK_STATE_STOPPED = 4,
-  TASK_STATE_ZOMBIE = 5,
-  TASK_STATE_SUSPENDED = 6,  /**< Non-interruptible sleep. **/
+  TASK_STATE_RUNNING = 0,
+  TASK_STATE_RUNNABLE = 0x1,
+  TASK_STATE_JUST_BORN = 0x2,
+  TASK_STATE_SLEEPING = 0x4,   /**< Interruptible sleep. **/
+  TASK_STATE_STOPPED = 0x8,
+  TASK_STATE_ZOMBIE = 0x10,
+  TASK_STATE_SUSPENDED = 0x20,  /**< Non-interruptible sleep. **/
 } task_state_t;
+
+#define __ALL_TASK_STATE_MASK  0x3F  /**< All possible task states. */
 
 typedef uint32_t priority_t;
 typedef uint32_t cpu_array_t;
@@ -95,7 +97,16 @@ struct __userspace_events_data;
 struct __task_ipc_priv;
 struct __task_mutex_locks;
 struct __task_sync_data;
-struct __signal_struct;
+
+/* Per-task signal descriptors. */
+struct __sighandlers;
+typedef struct __signal_struct {
+  spinlock_t lock;
+  atomic_t num_pending;
+  list_head_t sigqueue;
+  sigset_t blocked,ignored,pending;
+  struct __sighandlers *handlers;
+} signal_struct_t;
 
 /* task flags */
 #define __TF_USPC_BLOCKED_BIT  0
@@ -160,11 +171,14 @@ typedef struct __task_struct {
   task_events_t task_events;
 
   /* Signal-related stuff. */
-  struct __signal_struct *siginfo;
+  signal_struct_t siginfo;
 
   /* Arch-dependent context is located here */
   uint8_t arch_context[256];
 } task_t;
+
+#define LOCK_TASK_SIGNALS(t)  spinlock_lock(&(t)->siginfo.lock)
+#define UNLOCK_TASK_SIGNALS(t)  spinlock_unlock(&(t)->siginfo.lock)
 
 /**
  * @fn void initialize_task_subsystem(void)
