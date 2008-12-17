@@ -75,16 +75,16 @@ typedef enum __task_creation_flag_t {
 #define TASK_FLAG_UNDER_STATE_CHANGE  0x1
 
 typedef enum __task_state {
-  TASK_STATE_RUNNING = 0,
-  TASK_STATE_RUNNABLE = 0x1,
-  TASK_STATE_JUST_BORN = 0x2,
-  TASK_STATE_SLEEPING = 0x4,   /**< Interruptible sleep. **/
-  TASK_STATE_STOPPED = 0x8,
-  TASK_STATE_ZOMBIE = 0x10,
-  TASK_STATE_SUSPENDED = 0x20,  /**< Non-interruptible sleep. **/
+  TASK_STATE_RUNNING = 0x1,
+  TASK_STATE_RUNNABLE = 0x2,
+  TASK_STATE_JUST_BORN = 0x4,
+  TASK_STATE_SLEEPING = 0x8,   /**< Interruptible sleep. **/
+  TASK_STATE_STOPPED = 0x10,
+  TASK_STATE_ZOMBIE = 0x20,
+  TASK_STATE_SUSPENDED = 0x40,  /**< Non-interruptible sleep. **/
 } task_state_t;
 
-#define __ALL_TASK_STATE_MASK  0x3F  /**< All possible task states. */
+#define __ALL_TASK_STATE_MASK  0x7F  /**< All possible task states. */
 
 typedef uint32_t priority_t;
 typedef uint32_t cpu_array_t;
