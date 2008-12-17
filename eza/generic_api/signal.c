@@ -11,13 +11,6 @@
 
 static memcache_t *sigq_cache;
 
-/* Default actions for POSIX signals. */
-static sa_sigaction_t __def_actions[NUM_POSIX_SIGNALS]= {
-  SIG_IGN,      /* Not supported signal */
-  SIG_DFL,      /* SIGHUP */
-  SIG_DFL,      /* SIGINT */
-};
-
 #define __alloc_sigqueue_item()  alloc_from_memcache(sigq_cache)
 #define __free_sigqueue_item(i)  memfree((i))
 
@@ -41,6 +34,26 @@ void initialize_signals(void)
   }
 }
 
+static bool __update_pending_signals(task_t *task)
+{
+  signal_struct_t *siginfo=&task->siginfo;
+  bool delivery_needed;
+
+  if( deliverable_signals_present(siginfo) ) {
+    set_task_signals_pending(task);
+    delivery_needed=true;
+  } else {
+    clear_task_signals_pending(task);
+    delivery_needed=false;
+  }
+  return delivery_needed;
+}
+
+static void __remove_signal_from_queue(signal_struct_t *siginfo,int sig,
+                                       list_head_t *removed_signals)
+{
+}
+
 status_t send_task_siginfo(task_t *task,siginfo_t *info)
 {
   int sig=info->si_signo;
@@ -58,18 +71,19 @@ status_t send_task_siginfo(task_t *task,siginfo_t *info)
       list_add2tail(&task->siginfo.sigqueue,&qitem->l);
       atomic_inc(&task->siginfo.num_pending);
 
-      set_signal(&task->siginfo.pending,sig);
-      set_task_signals_pending(task);
-
-      wakeup=!signal_matches(&task->siginfo.blocked,sig);
+      sigaddset(&task->siginfo.pending,sig);
+      wakeup=__update_pending_signals(task);
       r=0;
     } else {
       r=-ENOMEM;
     }
+  } else {
+    kprintf( "send_task_siginfo(): Ignoring signal %d for %d=%d\n",
+             sig,task->pid,task->tid);
   }
   UNLOCK_TASK_SIGNALS(task);
 
-  if( wakeup ) {
+  if( wakeup && task != current_task() ) {
     /* Need to wake up the receiver. */
     struct __def_sig_data sd;
     ulong_t state=TASK_STATE_SLEEPING | TASK_STATE_STOPPED;
@@ -154,6 +168,57 @@ status_t sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
   return r;
 }
 
+static status_t sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
+                          int sig) {
+  task_t *caller=current_task();
+  kern_sigaction_t *sa=&caller->siginfo.handlers->actions[sig];
+  sa_sigaction_t s=sact->a.sa_sigaction;
+  list_head_t removed_signals;
+
+  if( !valid_signal(sig) ) {
+    return -EINVAL;
+  }
+
+  list_init_head(&removed_signals);
+
+  /* Remove signals that can't be blocked. */
+  sa->sa_mask &= ~UNTOUCHABLE_SIGNALS;
+
+  LOCK_TASK_SIGNALS(caller);
+  *oact=*sa;
+  *sa=*sact;
+
+  /* POSIX 3.3.1.3 */
+  if( s == SIG_IGN || (s == SIG_DFL && def_ignorable(sig)) ) {
+    sigaddset(&caller->siginfo.ignored,sig);
+    sigdelset(&caller->siginfo.pending,sig);
+
+    __remove_signal_from_queue(&caller->siginfo,sig,&removed_signals);
+    __update_pending_signals(caller);
+  } else {
+    sigdelset(&caller->siginfo.ignored,sig);
+  }
+  UNLOCK_TASK_SIGNALS(caller);
+
+  /* Now we can sefely remove queue items. */
+  if( !list_is_empty(&removed_signals) ) {
+  }
+  return 0;
+}
+
+sa_sigaction_t sys_signal(int sig,sa_handler_t handler)
+{
+  kern_sigaction_t act,oact;
+  status_t r;
+
+  act.a.sa_handler=handler;
+  act.sa_flags=SA_RESETHAND | SA_NODEFER;
+  sigemptyset(act.sa_mask);
+
+  r=sigaction(&act,&oact,sig);
+  return !r ? oact.a.sa_sigaction : SIG_ERR;
+}
+
 sighandlers_t *allocate_signal_handlers(void)
 {
   sighandlers_t *sh=alloc_pages_addr(1,AF_PGEN);
@@ -167,7 +232,7 @@ sighandlers_t *allocate_signal_handlers(void)
 
     /* Now setup default signal actions. */
     for(i=0;i<NUM_POSIX_SIGNALS;i++) {
-      sh->actions[i].sa_handler=__def_actions[i];
+      sh->actions[i].a.sa_sigaction=(_BM(i) & DEFAULT_IGNORED_SIGNALS) ? SIG_IGN : SIG_DFL;
     }
   }
   return sh;

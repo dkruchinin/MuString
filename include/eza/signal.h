@@ -51,8 +51,21 @@ typedef struct __sigaction {
   void     (*sa_restorer)(void);
 } sigaction_t;
 
+#define SA_NOCLDSTOP  0x1
+#define SA_NOCLDWAIT  0x2
+#define SA_RESETHAND  0x4
+#define SA_ONSTACK    0x8
+#define SA_RESTART    0x10
+#define SA_NODEFER    0x20
+#define SA_SIGINFO    0x40
+
+#define sigemptyset(s) ((s)=0)
+
 typedef struct __kern_sigaction {
-  sa_sigaction_t sa_handler;
+  union {
+    sa_sigaction_t sa_sigaction;
+    sa_handler_t sa_handler;
+  } a;
   sigset_t sa_mask;
   int sa_flags;
 } kern_sigaction_t;
@@ -75,6 +88,7 @@ static inline void put_signal_handlers(sighandlers_t *s)
 
 #define SIG_IGN  ((sa_sigaction_t)0)
 #define SIG_DFL  ((sa_sigaction_t)1)
+#define SIG_ERR  ((sa_sigaction_t)-1)
 
 #define SIGHUP     1
 #define SIGINT     2
@@ -113,6 +127,11 @@ static inline void put_signal_handlers(sighandlers_t *s)
 #define process_wide_signal(s)  ((s) & (_BM(SIGTERM) | _BM(SIGSTOP)) )
 
 #define DEFAULT_IGNORED_SIGNALS (_BM(SIGCHLD) | _BM(SIGURG) | _BM(SIGWINCH))
+#define UNTOUCHABLE_SIGNALS (_BM(SIGKILL) | _BM(SIGSTOP))
+
+#define def_ignorable(s) (_BM(s) & DEFAULT_IGNORED_SIGNALS)
+
+#define deliverable_signals_present(s) ((s)->pending & ~((s)->blocked))
 
 typedef struct __sigq_item {
   list_node_t l;

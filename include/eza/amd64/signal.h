@@ -6,8 +6,8 @@
 
 #define signal_matches(m,s) arch_bit_test((m),(s))
 
-#define set_signal(m,s)  arch_bit_set((m),(s))
+#define sigdelset(m,s)  arch_bit_clear((m),(s))
 
-#define clear_signal(m,s)  arch_bit_clear((m),(s))
+#define sigaddset(m,s)  arch_bit_set((m),(s))
 
 #endif
