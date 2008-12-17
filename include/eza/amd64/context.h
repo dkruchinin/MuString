@@ -155,7 +155,7 @@
 #define INT_STACK_EXTRA_PUSHES  8
 
 /* Offset to CS selecetor in case full context is saved on the stack */
-#define INT_FULL_OFFSET_TO_CS (8+SAVED_GPR_SIZE+8+INT_STACK_FRAME_CS_OFFT)
+#define INT_FULL_OFFSET_TO_CS (SAVED_GPR_SIZE+8+INT_STACK_FRAME_CS_OFFT)
 
 #include <eza/arch/current.h>
 #include <eza/arch/page.h>
