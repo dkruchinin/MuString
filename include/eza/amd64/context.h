@@ -79,21 +79,20 @@
  * to point just after saved GPRs area.
  */
 #define SAVE_MM \
-  mov %rsp, %r10;                               \
+  mov %rsp, %r12;                               \
   sub $512,%rsp;                                \
   and $0xfffffffffffffff0, %rsp;                \
   fxsave (%rsp);                                \
-  pushq %r10
+  pushq %r12
 
 #define RESTORE_MM \
-  popq %r10; \
+  popq %r12; \
   fxrstor (%rsp); \
-  movq %r10, %rsp;
+  movq %r12, %rsp;
 
 /* NOTE: SAVE_MM initializes %rsi so that it points to iterrupt/exception stack frame. */
 #define SAVE_ALL \
   SAVE_GPR \
-  cli; \
   SAVE_MM \
 
 
@@ -106,6 +105,9 @@
 
 /* Offsets to parts of CPU exception stack frames. */
 #define INT_STACK_FRAME_CS_OFFT 8
+
+#define __SYCALL_UWORK  0  /**< Syscall-related works **/
+#define __INT_UWORK     1  /**< Interrupt-related works **/
 
 /* assembler macros for save and restore context */
 #ifdef __ASM__

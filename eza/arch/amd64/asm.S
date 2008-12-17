@@ -169,6 +169,8 @@ no_preemption_in_interrupt:
   je dont_check_int_works
 
   /* Process deff  */
+  movq $__INT_UWORK, %rdi
+  xorq %rsi, %rsi
   call handle_uworks
 
 dont_check_int_works:
@@ -202,8 +204,20 @@ ret_from_int:
   iretq
 
 return_from_syscall:
-  RESTORE_GPR
+  /* Before returning from syscall we should check for pending works.
+   * Note that %rax contains return code.
+   */
+  mov %gs:CPU_SCHED_STAT_USER_WORKS_OFFT, %rbx
 
+  cmp $0, (%rbx)
+  je no_works_after_syscall
+
+  movq $__SYCALL_UWORK, %rdi
+  movq %rax, %rsi
+  call handle_uworks
+
+no_works_after_syscall:
+  RESTORE_ALL
   cli
   /* Restore back user stack pointer. Interrupts will be
    * restored after performing the SYSRET command.
@@ -224,9 +238,9 @@ common_exception_path:
   /* No we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to
    * skip %rax on the stack since we saved it before calling SAVE_ALL
-   * %r10 contains the value of %rsp before aligning for saving XMM data.
+   * %r12 contains the value of %rsp before aligning for saving XMM data.
    */
-  mov %r10, %rdi;
+  mov %r12, %rdi;
   add $SAVED_GPR_SIZE + 8, %rdi 
 
   /* Now we call call the handler. */
@@ -240,9 +254,9 @@ error_code_exception_path:
   /* No we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to
    * skip %rax on the stack since we saved it before calling SAVE_ALL
-   * %r10 contains the value of %rsp before aligning for saving XMM data.
+   * %r12 contains the value of %rsp before aligning for saving XMM data.
    */
-  mov %r10, %rdi;
+  mov %r12, %rdi;
   add $SAVED_GPR_SIZE + 8, %rdi
 
   /* Now we call call the handler. */
