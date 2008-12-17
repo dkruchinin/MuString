@@ -67,8 +67,8 @@ typedef struct __pde {
 } __attribute__((packed)) pde_t;
 
 #define PTABLE_DIR_ENTRIES 0x200 /**< Number of entries per page table directory */
-#define PTABLE_LEVEL_FIRST 1     /**< Level of the lowest pde */
-#define PTABLE_LEVEL_LAST  4     /**< Level of the highest pde */
+#define PTABLE_LEVEL_FIRST 0     /**< Level of the lowest pde */
+#define PTABLE_LEVEL_LAST  3     /**< Level of the highest pde */
 
 /**
  * @brief Set PDE flags

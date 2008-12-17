@@ -52,7 +52,8 @@
  */
 enum iter_state {
   ITER_RUN = 1, /**< Iterator is in "running" state. This means iteration can be continued */
-  ITER_STOP     /**< Iterator was stopped. This means either iteration wasn't started or was finished */
+  ITER_STOP,    /**< Iterator was stopped. This means either iteration wasn't started or was finished */
+  ITER_LIE,     /**< Iterator is not both stopped and runned. This means that no one iterator method was called */
 };
 
 /**
@@ -89,9 +90,9 @@ enum iter_state {
         void (*last)(struct __iterator_##name *iter);       \
         void (*next)(struct __iterator_##name *iter);       \
         void (*prev)(struct __iterator_##name *iter);       \
-        uint_t type;                                        \
         void *__ctx;                                        \
         uint8_t state;                                      \
+        uint_t type;                                        \
     } name##_iterator_t
 
 /**
@@ -179,8 +180,10 @@ enum iter_state {
  * @param iter - A pointer to iterator
  */
 #define iter_first(iter)                                             \
-  ({__check_iter_method("iter_first", (iter)->first, (iter)->type);  \
-    ((iter)->first(iter));})
+    ((iter)->first(iter))
+
+/*({__check_iter_method("iter_first", (iter)->first, (iter)->type); \
+  ((iter)->first(iter));})*/
 
 /**
  * @def iter_last(iter)
@@ -198,9 +201,11 @@ enum iter_state {
  *
  * @param iter - A pointer to iterator
  */
-#define iter_next(iter)                                             \
-  ({__check_iter_method("iter_next", (iter)->next, (iter)->type);   \
-    (iter)->next(iter);})
+#define iter_next(iter)                         \
+    ((iter)->next(iter))
+
+/*({__check_iter_method("iter_next", (iter)->next, (iter)->type);   \
+    (iter)->next(iter);})*/
 
 /**
  * @def iter_prev(iter)
@@ -220,6 +225,7 @@ enum iter_state {
  * @return Boolean
  *
  * @see iter_isstopped
+ * @see iter_islying
  * @see iter_state
  */
 #define iter_isrunning(iter)                    \
@@ -233,9 +239,23 @@ enum iter_state {
  * @return Boolean
  *
  * @see iter_isrunning
+ * @see iter_islying
  * @see iter_state
  */
 #define iter_isstopped(iter) ((iter)->state == ITER_STOP)
+
+/**
+ * @def iter_islying(iter)
+ * Determines if no one iterator method hasn't been called.
+ *
+ * @param iter - A pointer to iterator.
+ * @return Boolean
+ *
+ * @see iter_isrunning
+ * @see iter_isstopped
+ * @see iter_state
+ */
+#define iter_islyign(iter) ((iter)->state == ITER_LIE)
 
 /**
  * @def iter_fetch_ctx(iter)

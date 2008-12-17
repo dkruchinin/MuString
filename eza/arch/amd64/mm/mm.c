@@ -58,25 +58,28 @@ uintptr_t kernel_min_vaddr;
 static void verify_mapping(const char *descr, uintptr_t start_addr,
                           page_idx_t num_pages, page_idx_t start_idx)
 {
-  status_t ret;
-  mapping_dbg_info_t minfo;
+  page_frame_iterator_t pfi;
+  ITERATOR_CTX(page_frame, PF_ITER_PTABLE) pfi_ptable_ctx;
 
+  pfi_ptable_init(&pfi, &pfi_ptable_ctx, &kernel_rpd, start_addr, num_pages);
   kprintf(" Verifying %s...", descr);
-  ret = mm_verify_mapping(&kernel_root_pagedir, start_addr, start_idx, num_pages, &minfo);
-  if (!ret) {
-    kprintf(" %*s\n", strlen(descr) + 14, "[OK]");
-    return;
+  iterate_forward(&pfi) {
+    if (pfi.pf_idx != start_idx)
+      goto failed;
+
+    start_idx++;
   }
+  if (pfi.error)
+    goto failed;
   
+  kprintf(" %*s\n", strlen(descr) + 14, "[OK]");
+  return;
+
+  failed:
   kprintf(" %*s\n", 18 - strlen(descr), "[FAILED]");
-  if (ret == -EADDRNOTAVAIL)
-    panic("verify_mapping: Address %p is not mapped!", minfo.address);
-  else if (ret == -EFAULT) {
-    panic("verify_mapping: Address %p has page index %#x, but %#x was expected!",
-          minfo.address, minfo.idx, minfo.expected_idx);
-  }
-  else
-    panic("verify_mapping: Error %d", ret);
+  panic("verify_mapping: Range: %p - %p. Got idx %u, but %u was expected. ERROR = %d",
+        start_addr, start_addr + ((num_pages - 1) << PAGE_WIDTH),
+        pfi.pf_idx, start_idx, pfi.error);
 }
 #else
 #define verify_mapping(descr, start_addr, num_pages, start_idx)
@@ -241,6 +244,12 @@ static void __pfiter_next(page_frame_iterator_t *pfi)
 void pfi_arch_init(page_frame_iterator_t *pfi,
                    ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx)
 {
+  static bool __arch_iterator_init = false;
+
+  if (__arch_iterator_init) {
+    panic("pfi_arch_init: Platform-specific page frame iterator may be initialized only one time!");
+  }
+  
   pfi->first = __pfiter_first;
   pfi->next = __pfiter_next;
   pfi->last = pfi->prev = NULL;
@@ -249,6 +258,7 @@ void pfi_arch_init(page_frame_iterator_t *pfi,
   iter_init(pfi, PF_ITER_ARCH);
   memset(ctx, 0, sizeof(*ctx));
   iter_set_ctx(pfi, ctx);
+  __arch_iterator_init = true;
 }
 
 void arch_mm_remap_pages(void)

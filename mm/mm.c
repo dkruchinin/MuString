@@ -124,11 +124,12 @@ void mm_init(void)
 static void __pfiter_idx_first(page_frame_iterator_t *pfi)
 {
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
-
+  
   ASSERT(pfi->type == PF_ITER_INDEX);
   ctx = iter_fetch_ctx(pfi);
   pfi->pf_idx = ctx->first;
-  pfi->state = ITER_RUN;
+  pfi->state = (pfi->pf_idx != ctx->last) ?
+    ITER_RUN : ITER_STOP;
 }
 
 static void __pfiter_idx_last(page_frame_iterator_t *pfi)
@@ -138,44 +139,41 @@ static void __pfiter_idx_last(page_frame_iterator_t *pfi)
   ASSERT(pfi->type == PF_ITER_INDEX);  
   ctx = iter_fetch_ctx(pfi);
   pfi->pf_idx = ctx->last;
-  pfi->state = ITER_RUN;
+  pfi->state = (pfi->pf_idx != ctx->first) ?
+    ITER_RUN : ITER_STOP;
 }
 
 static void __pfiter_idx_next(page_frame_iterator_t *pfi)
 {  
   ASSERT(pfi->type == PF_ITER_INDEX);    
-  if (pfi->pf_idx == PAGE_IDX_INVAL)
+  if (!iter_isrunning(pfi))
     iter_first(pfi);
   else {
     ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
 
     ctx = iter_fetch_ctx(pfi);
-    if (pfi->pf_idx > ctx->last) {
+    if (++pfi->pf_idx >= ctx->last) {
       pfi->state = ITER_STOP;
-      pfi->pf_idx = PAGE_IDX_INVAL;
       return;
     }
-
-    pfi->pf_idx++;
   }
 }
 
 static void __pfiter_idx_prev(page_frame_iterator_t *pfi)
 {  
   ASSERT(pfi->type == PF_ITER_INDEX);  
-  if (pfi->pf_idx == PAGE_IDX_INVAL)
+  if (!iter_isrunning(pfi))
     iter_last(pfi);
   else {
     ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
 
     ctx = iter_fetch_ctx(pfi);
-    if (pfi->pf_idx < ctx->first) {
+    if (pfi->pf_idx)
+      pfi->pf_idx--;
+    if (pfi->pf_idx <= ctx->first) {
       pfi->state = ITER_STOP;
-      pfi->pf_idx = PAGE_IDX_INVAL;
       return;
     }
-
-    pfi->pf_idx--;
   }
 }
 
@@ -192,6 +190,7 @@ void pfi_index_init(page_frame_iterator_t *pfi,
   ctx->first = start_pfi;
   ctx->last = end_pfi;
   pfi->pf_idx = PAGE_IDX_INVAL;
+  pfi->state = ITER_LIE;
   pfi->error = 0;
   iter_set_ctx(pfi, ctx);
 }
@@ -205,7 +204,8 @@ static void __pfiter_list_first(page_frame_iterator_t *pfi)
   ctx->cur = ctx->first_node;
   pfi->pf_idx =
     pframe_number(list_entry(ctx->cur, page_frame_t, node));
-  pfi->state = ITER_RUN;
+  pfi->state = (ctx->cur != ctx->last_node) ?
+    ITER_RUN : ITER_STOP;
 }
 
 static void __pfiter_list_last(page_frame_iterator_t *pfi)
@@ -217,45 +217,41 @@ static void __pfiter_list_last(page_frame_iterator_t *pfi)
   ctx->cur = ctx->last_node;
   pfi->pf_idx =
     pframe_number(list_entry(ctx->cur, page_frame_t, node));
-  pfi->state = ITER_RUN;
+  pfi->state = (ctx->cur != ctx->first_node) ?
+    ITER_RUN : ITER_STOP;
 }
 
 static void __pfiter_list_next(page_frame_iterator_t *pfi)
 {
   ASSERT(pfi->type == PF_ITER_LIST);
-  if (pfi->pf_idx == PAGE_IDX_INVAL)
+  if (!iter_isrunning(pfi))
     iter_first(pfi);
   else {
     ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
 
     ctx = iter_fetch_ctx(pfi);
-    if (ctx->cur == ctx->last_node) {
-      pfi->state = ITER_STOP;
-      pfi->pf_idx = PAGE_IDX_INVAL;
-      return;
-    }
-
     ctx->cur = ctx->cur->next;
-    pfi->pf_idx = pframe_number(list_entry(ctx->cur, page_frame_t, node));
+    pfi->pf_idx =
+      pframe_number(list_entry(ctx->cur, page_frame_t, node));
+    if (unlikely(ctx->cur == ctx->last_node))
+      pfi->state = ITER_STOP;
   }
 }
 
 static void __pfiter_list_prev(page_frame_iterator_t *pfi)
 {
   ASSERT(pfi->type == PF_ITER_LIST);
-  if (pfi->pf_idx == PAGE_IDX_INVAL)
+  if (!iter_isrunning(pfi))
     iter_last(pfi);
   else {
     ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
 
     ctx = iter_fetch_ctx(pfi);
-    if (ctx->cur == ctx->first_node) {
-      pfi->state = ITER_STOP;
-      pfi->pf_idx = PAGE_IDX_INVAL;
-    }
-
     ctx->cur = ctx->cur->prev;
-    pfi->pf_idx = pframe_number(list_entry(ctx->cur, page_frame_t, node));
+    pfi->pf_idx =
+      pframe_number(list_entry(ctx->cur, page_frame_t, node));
+    if (ctx->cur == ctx->first_node)
+      pfi->state = ITER_STOP;
   }
 }
 
@@ -272,6 +268,7 @@ void pfi_list_init(page_frame_iterator_t *pfi,
   ctx->first_node = first_node;
   ctx->last_node = last_node;
   pfi->pf_idx = PAGE_IDX_INVAL;
+  pfi->state = ITER_LIE;
   pfi->error = 0;
   iter_set_ctx(pfi, ctx);
 }

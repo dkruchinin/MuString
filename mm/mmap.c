@@ -165,5 +165,6 @@ status_t mmap_kern(uintptr_t va, page_idx_t first_page, int npages,
   minfo.va_to = minfo.va_from + ((npages - 1) << PAGE_WIDTH);
   minfo.ptable_flags = mpf2ptf(proto, flags);
   pfi_index_init(&pfi, &pf_idx_ctx, first_page, first_page + npages - 1);
+  minfo.pfi = &pfi;
   return ptable_map(&kernel_rpd, &minfo);
 }
