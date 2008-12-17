@@ -34,7 +34,7 @@ void initialize_signals(void)
   }
 }
 
-static bool __update_pending_signals(task_t *task)
+bool update_pending_signals(task_t *task)
 {
   signal_struct_t *siginfo=&task->siginfo;
   bool delivery_needed;
@@ -54,13 +54,17 @@ static void __remove_signal_from_queue(signal_struct_t *siginfo,int sig,
 {
 }
 
-status_t send_task_siginfo(task_t *task,siginfo_t *info)
+/* NOTE: Caller must hold the signal lock !
+ * Return codes:
+ *   0: signal was successfully queued.
+ *   1: signal wasn't queued since it is ignored.
+ * -ENOMEM: no memory for a new queue item.
+ */
+static status_t __send_task_siginfo(task_t *task,siginfo_t *info)
 {
   int sig=info->si_signo;
-  bool wakeup=false;
   status_t r;
 
-  LOCK_TASK_SIGNALS(task);
   if( !signal_matches(&task->siginfo.ignored,sig) ) {
     sigq_item_t *qitem=__alloc_sigqueue_item();
 
@@ -72,30 +76,51 @@ status_t send_task_siginfo(task_t *task,siginfo_t *info)
       atomic_inc(&task->siginfo.num_pending);
 
       sigaddset(&task->siginfo.pending,sig);
-      wakeup=__update_pending_signals(task);
       r=0;
     } else {
       r=-ENOMEM;
     }
   } else {
-    kprintf( "send_task_siginfo(): Ignoring signal %d for %d=%d\n",
-             sig,task->pid,task->tid);
+    r=1;
   }
-  UNLOCK_TASK_SIGNALS(task);
+  return r;
+}
 
-  if( wakeup && task != current_task() ) {
+/* NOTE: Called must hold the signal lock ! */
+static void __send_siginfo_postlogic(task_t *task,siginfo_t *info)
+{
+  if( update_pending_signals(task) && task != current_task() ) {
     /* Need to wake up the receiver. */
     struct __def_sig_data sd;
     ulong_t state=TASK_STATE_SLEEPING | TASK_STATE_STOPPED;
 
     sd.blocked=&task->siginfo.blocked;
-    sd.sig=sig;
-
+    sd.sig=info->si_signo;
     sched_change_task_state_deferred_mask(task,TASK_STATE_RUNNABLE,
                                           __deferred_sig_check,&sd,
                                           state);
   }
-  return 0;
+}
+
+status_t send_task_siginfo_forced(task_t *task,siginfo_t *info)
+{
+}
+
+status_t send_task_siginfo(task_t *task,siginfo_t *info)
+{
+  status_t r;
+
+  LOCK_TASK_SIGNALS(task);
+  r=__send_task_siginfo(task,info);
+  UNLOCK_TASK_SIGNALS(task);
+
+  if( !r ) {
+    __send_siginfo_postlogic(task,info);
+  } else if( r == 1 ) {
+    kprintf( "send_task_siginfo(): Ignoring signal %d for %d=%d\n",
+             info->si_signo,task->pid,task->tid);
+  }
+  return r < 0 ? r : 0;
 }
 
 status_t static __send_pid_siginfo(siginfo_t *info,pid_t pid)
@@ -194,7 +219,7 @@ static status_t sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
     sigdelset(&caller->siginfo.pending,sig);
 
     __remove_signal_from_queue(&caller->siginfo,sig,&removed_signals);
-    __update_pending_signals(caller);
+    update_pending_signals(caller);
   } else {
     sigdelset(&caller->siginfo.ignored,sig);
   }

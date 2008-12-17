@@ -20,6 +20,8 @@
 #ifndef __K_SYSCALLS_H__
 #define __K_SYSCALLS_H__
 
+#ifndef __ASM__
+
 #include <eza/arch/types.h>
 #include <ipc/port.h>
 #include <eza/task.h>
@@ -28,6 +30,8 @@
 #include <ipc/poll.h>
 #include <ipc/gen_port.h>
 #include <eza/sync.h>
+
+#endif
 
 /* Syscalls identificators. */
 #define SC_GET_PID             0
@@ -56,6 +60,10 @@
 #define SC_SYNC_CONTROL        23
 #define SC_SYNC_DESTROY        24
 #define SC_KILL                25
+#define SC_SIGNAL              26
+#define SC_SIGRETURN           27
+
+#ifndef __ASM__
 
 /**
  * @fn status_t sys_get_pid(void)
@@ -400,5 +408,7 @@ status_t sys_sync_create_object(sync_object_type_t obj_type,
                                 ulong_t flags);
 
 status_t sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg);
+
+#endif
 
 #endif

@@ -78,7 +78,11 @@ typedef struct __sighandlers {
 
 #define SIGNAL_PENDING(set,sig)  arch_bit_test((set),sig)
 
+bool update_pending_signals(task_t *task);
+status_t send_task_siginfo(task_t *task,siginfo_t *info);
+status_t send_task_siginfo_forced(task_t *task,siginfo_t *info);
 sighandlers_t * allocate_signal_handlers(void);
+
 static inline void put_signal_handlers(sighandlers_t *s)
 {
   if( atomic_dec_and_test(&s->use_count ) ) {

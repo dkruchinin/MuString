@@ -26,6 +26,9 @@
 #ifndef __ARCH_CONTEXT_H__
 #define __ARCH_CONTEXT_H__ /* there are several context.h(es) */
 
+#define __SYCALL_UWORK  0  /**< Syscall-related works **/
+#define __INT_UWORK     1  /**< Interrupt-related works **/
+
 #define OFFSET_SP   0x0
 #define OFFSET_PC   0x8
 #define OFFSET_RBX  0x10
@@ -105,9 +108,6 @@
 
 /* Offsets to parts of CPU exception stack frames. */
 #define INT_STACK_FRAME_CS_OFFT 8
-
-#define __SYCALL_UWORK  0  /**< Syscall-related works **/
-#define __INT_UWORK     1  /**< Interrupt-related works **/
 
 /* assembler macros for save and restore context */
 #ifdef __ASM__
