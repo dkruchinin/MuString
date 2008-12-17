@@ -121,4 +121,6 @@ typedef struct __sigq_item {
 
 void initialize_signals(void);
 
+#define pending_signals_present(t) ((t)->siginfo.pending != 0)
+
 #endif

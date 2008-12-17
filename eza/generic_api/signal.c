@@ -7,6 +7,7 @@
 #include <eza/signal.h>
 #include <mm/slab.h>
 #include <mm/pfalloc.h>
+#include <eza/security.h>
 
 static memcache_t *sigq_cache;
 
@@ -19,6 +20,17 @@ static sa_sigaction_t __def_actions[NUM_POSIX_SIGNALS]= {
 
 #define __alloc_sigqueue_item()  alloc_from_memcache(sigq_cache)
 #define __free_sigqueue_item(i)  memfree((i))
+
+struct __def_sig_data {
+  sigset_t *blocked;
+  int sig;
+};
+
+static bool __deferred_sig_check(void *d)
+{
+  struct __def_sig_data *sd=(struct __def_sig_data *)d;
+  return !signal_matches(sd->blocked,sd->sig);
+}
 
 void initialize_signals(void)
 {
@@ -35,8 +47,6 @@ status_t send_task_siginfo(task_t *task,siginfo_t *info)
   bool wakeup=false;
   status_t r;
 
-  kprintf( ">>>> [%d] IGNORED: 0x%X\n", sizeof(*info),task->siginfo.ignored );
-
   LOCK_TASK_SIGNALS(task);
   if( !signal_matches(&task->siginfo.ignored,sig) ) {
     sigq_item_t *qitem=__alloc_sigqueue_item();
@@ -49,6 +59,8 @@ status_t send_task_siginfo(task_t *task,siginfo_t *info)
       atomic_inc(&task->siginfo.num_pending);
 
       set_signal(&task->siginfo.pending,sig);
+      set_task_signals_pending(task);
+
       wakeup=!signal_matches(&task->siginfo.blocked,sig);
       r=0;
     } else {
@@ -58,8 +70,17 @@ status_t send_task_siginfo(task_t *task,siginfo_t *info)
   UNLOCK_TASK_SIGNALS(task);
 
   if( wakeup ) {
-  }
+    /* Need to wake up the receiver. */
+    struct __def_sig_data sd;
+    ulong_t state=TASK_STATE_SLEEPING | TASK_STATE_STOPPED;
 
+    sd.blocked=&task->siginfo.blocked;
+    sd.sig=sig;
+
+    sched_change_task_state_deferred_mask(task,TASK_STATE_RUNNABLE,
+                                          __deferred_sig_check,&sd,
+                                          state);
+  }
   return 0;
 }
 
@@ -110,6 +131,10 @@ status_t sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
   }
 
   if( sinfo ) {
+    if( !trusted_task(current_task()) ) {
+      return -EPERM;
+    }
+
     if( copy_from_user(&k_siginfo,sinfo,sizeof(k_siginfo)) ) {
       return -EFAULT;
     }
