@@ -39,6 +39,8 @@
 
 #define USER_STACK_SIZE  4
 
+#define __user
+
 status_t copy_to_user(void *dest,void *src,ulong_t size);
 status_t copy_from_user(void *dest,void *src,ulong_t size);
 

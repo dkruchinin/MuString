@@ -171,6 +171,7 @@ no_preemption_in_interrupt:
   /* Process deff  */
   movq $__INT_UWORK, %rdi
   xorq %rsi, %rsi
+  movq %rsp, %rdx
   call handle_uworks
 
 dont_check_int_works:
@@ -214,6 +215,7 @@ return_from_syscall:
 
   movq $__SYCALL_UWORK, %rdi
   movq %rax, %rsi
+  movq %rsp, %rdx
   call handle_uworks
 
 no_works_after_syscall:

@@ -143,6 +143,8 @@ typedef struct __sigq_item {
 } sigq_item_t;
 
 void initialize_signals(void);
+#define free_sigqueue_item(i)  memfree((i))
+sigq_item_t *extract_one_signal_from_queue(task_t *task);
 
 #define pending_signals_present(t) ((t)->siginfo.pending != 0)
 

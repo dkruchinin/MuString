@@ -13,7 +13,7 @@ trampoline_sighandler_invoker:
 	callq (%rsp)
 
 	/* Restore context. */
-	movq (%rsp),%rdi
+	movq %rsp,%rdi
 	movq $SC_SIGRETURN,%rax
 	syscall
 

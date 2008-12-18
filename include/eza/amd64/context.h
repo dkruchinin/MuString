@@ -227,12 +227,16 @@ typedef struct __arch_context_t {
 /* Structure that represents GPRs on the stack upon entering
  * kernel mode during a system call.
  */
-typedef struct __regs {
-  /* Kernel-saved registers. */
+struct __gpr_regs {
   uint64_t rbp, rsi, rdi, rdx, rcx, rbx;
   uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
+};
+
+typedef struct __regs {
+  /* Kernel-saved registers. */
+  struct __gpr_regs gpr_regs;
   uint64_t rax;
-    
+
   /* CPU-saved registers. */
   uint64_t rip, cs, rflags, old_rsp, old_ss;
 } regs_t;

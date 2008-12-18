@@ -67,7 +67,8 @@ static void __dump_regs(char *sp)
 {
   regs_t *r=(regs_t *)sp;
    kprintf("rax=%p,rdi=%p,rsi=%p\nrdx=%p,rcx=%p\n",
-	   r->rax,r->rdi,r->rsi,r->rdx,r->rcx);
+	   r->rax,r->gpr_regs.rdi,r->gpr_regs.rsi,
+           r->gpr_regs.rdx,r->gpr_regs.rcx);
    return;
 }
 

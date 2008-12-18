@@ -12,7 +12,6 @@
 static memcache_t *sigq_cache;
 
 #define __alloc_sigqueue_item()  alloc_from_memcache(sigq_cache)
-#define __free_sigqueue_item(i)  memfree((i))
 
 struct __def_sig_data {
   sigset_t *blocked;
@@ -104,6 +103,7 @@ static void __send_siginfo_postlogic(task_t *task,siginfo_t *info)
 
 status_t send_task_siginfo_forced(task_t *task,siginfo_t *info)
 {
+  return 0;
 }
 
 status_t send_task_siginfo(task_t *task,siginfo_t *info)
@@ -261,4 +261,24 @@ sighandlers_t *allocate_signal_handlers(void)
     }
   }
   return sh;
+}
+
+sigq_item_t *extract_one_signal_from_queue(task_t *task)
+{
+  list_node_t *n;
+
+  LOCK_TASK_SIGNALS(task);
+  if( !list_is_empty(&task->siginfo.sigqueue) ) {
+    n=list_node_first(&task->siginfo.sigqueue);
+    list_del(n);
+    atomic_dec(&task->siginfo.num_pending);
+  } else {
+    n=NULL;
+  }
+  UNLOCK_TASK_SIGNALS(task);
+
+  if( n ) {
+    return container_of(n,sigq_item_t,l);
+  }
+  return NULL;
 }

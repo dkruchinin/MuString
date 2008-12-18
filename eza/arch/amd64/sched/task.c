@@ -199,8 +199,8 @@ status_t kernel_thread(void (*fn)(void *), void *data, task_t **out_task)
      * But we should setup 'fn' and 'data' as parameters for 'kernel_thread_helper()'. */
      regs_t *regs = (regs_t *)(newtask->kernel_stack.high_address - sizeof(regs_t));
 
-     regs->rdi = (uint64_t)fn;
-     regs->rsi = (uint64_t)data;
+     regs->gpr_regs.rdi = (uint64_t)fn;
+     regs->gpr_regs.rsi = (uint64_t)data;
 
      /* Start this task. */
      sched_change_task_state(newtask,TASK_STATE_RUNNABLE);
