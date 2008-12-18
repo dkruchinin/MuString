@@ -6,6 +6,7 @@
 #include <eza/signal.h>
 #include <kernel/vm.h>
 #include <eza/errno.h>
+#include <eza/arch/current.h>
 
 #define XMM_CTX_SIZE  512
 
@@ -26,11 +27,6 @@ struct __signal_context {
   siginfo_t siginfo;
   uint64_t retcode;
 };
-
-static void __setup_retaddr_syscall(struct __gpr_regs *gpr)
-{
-  gpr->rcx=USERSPACE_SIGNAL_INVOKER;
-}
 
 static void __setup_retaddr_int(struct __gpr_regs *gpr)
 {
@@ -79,6 +75,11 @@ static status_t __setup_trampoline_ctx(struct __signal_context * __user ctx,
   return 0;
 }
 
+static void __perform_default_action(int sig)
+{
+  kprintf( ">>>>>>> DEFAULT ACTION FOR %d\n",sig );
+}
+
 static void __handle_pending_signals(int reason, uint64_t retcode,
                                      uintptr_t kstack)
 {
@@ -100,20 +101,15 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
   act=caller->siginfo.handlers->actions[sigitem->info.si_signo].a.sa_sigaction;
   UNLOCK_TASK_STRUCT(caller);
 
-  kprintf( "=====> SIGNAL ACTION: 0x%X\n",act );
-  if( act == SIG_IGN ) { /* Someone has suddenly disabled the signal. */
-
-    return;
-  } else if( act == SIG_DFL ) { /* Perform default action. */
-    kprintf( ">>>>>>> DEFAULT ACTION FOR %d\n",sigitem->info.si_signo );
-
-  } else { /* Perform user-specific action. */
-    /* Now we can save signal context in user stack. So read the top
-     of userspace stack. */
-    __asm__ __volatile__( "movq %%gs:(%1), %0"
-                          :"=r"(ustack)
-                          : "R"((uint64_t)CPU_SCHED_STAT_USTACK_OFFT),
-                            "R"((uint64_t)0) );
+  if( act == SIG_IGN ) {
+    /* Someone has suddenly disabled the signal. */
+    goto out;
+  } else if( act == SIG_DFL ) {
+    /* Perform default action. */
+    __perform_default_action(sigitem->info.si_signo);
+  } else {
+    /* Perform user-specific action. First, save signal context in user stack.*/
+    ustack=get_userspace_stack_pointer();
 
     /* Allocate signal context using user's stack area. */
     ctx=(struct __signal_context *)(ustack-sizeof(struct __signal_context));
@@ -121,52 +117,92 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
     if( __setup_general_ctx(&ctx->gen_ctx,kstack,&kpregs) ) {
       goto bad_memory;
     }
-    kprintf( "GENERAL CTX CREATED.\n" );
 
     if( __setup_trampoline_ctx(ctx,&sigitem->info,act) ) {
       goto bad_memory;
     }
-    kprintf( "TRAMPLONE CTX CREATED.\n" );
 
     if( copy_to_user(&ctx->retcode,&retcode,sizeof(retcode)) ) {
       goto bad_memory;
     }
-    kprintf( "RETCODE SAVED.\n" );
 
     /* Update user's stack to point at our context frame. */
-    __asm__ __volatile__( "movq %0, %%gs:(%1)"
-                          :: "R"(ctx), "R"((uint64_t)CPU_SCHED_STAT_USTACK_OFFT) );  
+    set_userspace_stack_pointer(ctx);
 
     /* OK, it's time to setup return addresses to invoke the handler. */
     switch( reason ) {
       case __SYCALL_UWORK:
-        __setup_retaddr_syscall(kpregs);
-        kprintf( "RETADDR UPDATED.\n" );
+        kpregs->rcx=USERSPACE_SIGNAL_INVOKER;
         break;
       default:
         __setup_retaddr_int(kpregs);
         break;
     }
+
+    /* We must apply the mask of blocked signals according to user's settings */
   }
 
   clear_task_signals_pending(current_task());
   free_sigqueue_item(sigitem);
-  kprintf("[UWORKS]: %d/%d. Processing works for %d:%d, STACK: %p, KSTACK: %p\n",
-          reason,retcode,
-          current_task()->pid,current_task()->tid,
-          ustack,kstack);
-  kprintf("[UWORKS]: Pending signals: 0x%X\n",
-          current_task()->siginfo.pending);
+out:
+  return;
 bad_memory:
   return;
 }
 
-
 void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
 {
+  kprintf("[UWORKS]: %d/%d. Processing works for %d:%d, KSTACK: %p\n",
+          reason,retcode,
+          current_task()->pid,current_task()->tid,
+          kstack);
+  kprintf("[UWORKS]: Pending signals: 0x%X\n",
+          current_task()->siginfo.pending);
+
   __handle_pending_signals(reason,retcode,kstack);
 }
 
-status_t sys_sigreturn(void *ctx) {
-  return 0;
+status_t sys_sigreturn(uintptr_t ctx)
+{
+  struct __signal_context *uctx=(struct __signal_context *)ctx;
+  status_t retcode;
+  task_t *caller=current_task();
+  uintptr_t kctx=caller->kernel_stack.high_address-sizeof(struct __gpr_regs);
+  uintptr_t skctx=kctx;
+
+  if( !valid_user_address_range(ctx,sizeof(struct __signal_context)) ) {
+    goto bad_ctx;
+  }
+
+  /* Restore GPRs. */
+  if( copy_from_user(kctx,&uctx->gen_ctx.gpr_regs,sizeof(struct __gpr_regs) ) ) {
+    goto bad_ctx;
+  }
+
+  /* Make sure user has valid return address. */
+  if( !valid_user_address(((struct __gpr_regs *)kctx)->rcx) ) {
+    goto bad_ctx;
+  }
+
+  /* Area for saving XMM context must be 16-bytes aligned. */
+  kctx-=XMM_CTX_SIZE;
+  kctx &= 0xfffffffffffffff0;
+
+  /* Restore XMM context. */
+  if( copy_from_user(kctx,uctx->gen_ctx.xmm,XMM_CTX_SIZE) ) {
+    goto bad_ctx;
+  }
+
+  /* Save location of saved GPR frame. */
+  *((uintptr_t *)(kctx-sizeof(uintptr_t)))=skctx;
+
+  /* Finally, restore retcode. */
+  if( !copy_from_user(&retcode,&uctx->retcode,sizeof(retcode)) ) {
+    set_userspace_stack_pointer(ctx+sizeof(struct __signal_context));
+    return retcode;
+  }
+
+bad_ctx:
+  for(;;);
+  return -1;
 }

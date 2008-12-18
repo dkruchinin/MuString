@@ -106,7 +106,24 @@ static inline struct __task_struct *current_task(void)
   return (struct __task_struct*)ct;
 }
 
-#endif
+#define set_userspace_stack_pointer(s)          \
+  __asm__ __volatile__( "movq %0, %%gs:(%1)"    \
+                        :: "R"((uintptr_t)(s)), \
+                         "R"((uintptr_t)CPU_SCHED_STAT_USTACK_OFFT) );
+
+static inline uintptr_t get_userspace_stack_pointer(void)
+{
+  uintptr_t s;
+
+  __asm__ __volatile__( "movq %%gs:(%1), %0"
+                        :"=r"(s)
+                        : "R"((uintptr_t)CPU_SCHED_STAT_USTACK_OFFT),
+                        "R"((uintptr_t)0) );
+  return s;
+}
+
+
+#endif   /* !__ASM__ */
 
 #endif
 

@@ -64,6 +64,11 @@ static status_t __send_task_siginfo(task_t *task,siginfo_t *info)
   int sig=info->si_signo;
   status_t r;
 
+  /* Make sure only one instance of a non-RT signal is present. */
+  if( !rt_signal(sig) && signal_matches(&task->siginfo.pending,sig) ) {
+    return 0;
+  }
+
   if( !signal_matches(&task->siginfo.ignored,sig) ) {
     sigq_item_t *qitem=__alloc_sigqueue_item();
 
