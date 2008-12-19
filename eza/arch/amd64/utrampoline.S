@@ -24,11 +24,12 @@
 #include <kernel/syscalls.h>
 #include <eza/arch/page.h>
 
-.global sighandler_invoker
+.global trampoline_sighandler_invoker_sys
+.global trampoline_sighandler_invoker_int
 
 	.align PAGE_SIZE
 
-trampoline_sighandler_invoker:
+trampoline_sighandler_invoker_syscall:
 	/* Prepare arguments for signal handler. */
 	movq 0x8(%rsp),%rdi
 	movq 0x10(%rsp),%rsi
@@ -40,4 +41,18 @@ trampoline_sighandler_invoker:
 	movq $SC_SIGRETURN,%rax
 	syscall
 
-	
+trampoline_sighandler_invoker_int:
+	/* Prepare arguments for signal handler. */
+	movq 0x8(%rsp),%rdi
+	movq 0x10(%rsp),%rsi
+	movq 0x18(%rsp),%rdx
+	callq (%rsp)
+
+	/* Restore context. */
+	movq %rsp,%rdi
+	movq $SC_SIGRETURN,%rax
+	syscall
+
+	/* Since %rcx is used by 'syscall' instruction, we must restore it. */
+	popq %rcx
+	retq

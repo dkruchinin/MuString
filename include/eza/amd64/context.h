@@ -232,13 +232,17 @@ struct __gpr_regs {
   uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
 };
 
+struct __int_stackframe {
+  uint64_t rip, cs, rflags, old_rsp, old_ss;
+};
+
 typedef struct __regs {
   /* Kernel-saved registers. */
   struct __gpr_regs gpr_regs;
   uint64_t rax;
 
   /* CPU-saved registers. */
-  uint64_t rip, cs, rflags, old_rsp, old_ss;
+  struct __int_stackframe int_frame;
 } regs_t;
 
 #endif /* __ASM__ */

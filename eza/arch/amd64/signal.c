@@ -33,6 +33,7 @@
 #define XMM_CTX_SIZE  512
 
 #define USERSPACE_SIGNAL_INVOKER  0x1003000
+#define USERSPACE_SIGNAL_INVOKER_INT  0x1003000
 
 struct __trampoline_ctx {
   uint64_t handler,arg1,arg2,arg3;
@@ -49,10 +50,6 @@ struct __signal_context {
   siginfo_t siginfo;
   uint64_t retcode;
 };
-
-static void __setup_retaddr_int(struct __gpr_regs *gpr)
-{
-}
 
 static status_t __setup_general_ctx(struct __gen_ctx * __user ctx,
                                     uintptr_t kstack,
@@ -105,12 +102,13 @@ static void __perform_default_action(int sig)
 static void __handle_pending_signals(int reason, uint64_t retcode,
                                      uintptr_t kstack)
 {
-  uint64_t ustack;
+  uintptr_t ustack,rcx;
   struct __signal_context *ctx;
   sigq_item_t *sigitem;
   struct __gpr_regs *kpregs;
   sa_sigaction_t act;
   task_t *caller=current_task();
+  struct __int_stackframe *int_frame;
 
   sigitem=extract_one_signal_from_queue(current_task());
   if( !sigitem ) {
@@ -156,9 +154,19 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
       case __SYCALL_UWORK:
         kpregs->rcx=USERSPACE_SIGNAL_INVOKER;
         break;
-      default:
-        __setup_retaddr_int(kpregs);
+      case __INT_UWORK:
+        ustack=(uintptr_t)(kpregs++);
+        /* OK, now we're pointing at saved interrupt number (see asm.S).
+         * So skip it.
+         */
+        ustack += 8;
+        /* Now we can access hardware interrupt stackframe. */
+        int_frame=( struct __int_stackframe *)ustack;
+        int_frame->rip=USERSPACE_SIGNAL_INVOKER_INT;
         break;
+      default:
+        panic( "Unknown userspace work type: %d in task (%d:%d)\n",
+               reason,caller->pid,caller->tid);
     }
 
     /* We must apply the mask of blocked signals according to user's settings */

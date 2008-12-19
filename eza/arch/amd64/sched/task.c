@@ -225,15 +225,15 @@ static uint64_t __setup_kernel_task_context(task_t *task)
   memset( regs, 0, sizeof(regs_t) );
 
   /* Now setup selectors so them reflect kernel space. */
-  regs->cs = KERNEL_SELECTOR(KTEXT_DES);
-  regs->old_ss = KERNEL_SELECTOR(KDATA_DES);
-  regs->rip = (uint64_t)kernel_thread_helper;
+  regs->int_frame.cs = KERNEL_SELECTOR(KTEXT_DES);
+  regs->int_frame.old_ss = KERNEL_SELECTOR(KDATA_DES);
+  regs->int_frame.rip = (uint64_t)kernel_thread_helper;
 
   /* When kernel threads start execution, their 'userspace' stacks are equal
    * to their kernel stacks.
    */
-  regs->old_rsp = task->kernel_stack.high_address - 128;
-  regs->rflags = KERNEL_RFLAGS;
+  regs->int_frame.old_rsp = task->kernel_stack.high_address - 128;
+  regs->int_frame.rflags = KERNEL_RFLAGS;
 
   return sizeof(regs_t);
 }
@@ -245,11 +245,11 @@ static uint64_t __setup_user_task_context(task_t *task)
   memset( regs, 0, sizeof(regs_t) );
 
   /* Now setup selectors so them reflect user space. */
-  regs->cs = USER_SELECTOR(UTEXT_DES);
-  regs->old_ss = USER_SELECTOR(UDATA_DES);
-  regs->rip = 0;
-  regs->old_rsp = 0;
-  regs->rflags = USER_RFLAGS;
+  regs->int_frame.cs = USER_SELECTOR(UTEXT_DES);
+  regs->int_frame.old_ss = USER_SELECTOR(UDATA_DES);
+  regs->int_frame.rip = 0;
+  regs->int_frame.old_rsp = 0;
+  regs->int_frame.rflags = USER_RFLAGS;
 
   return sizeof(regs_t);
 }
@@ -258,7 +258,7 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
                                  task_privelege_t priv)
 {
   uintptr_t fsave = newtask->kernel_stack.high_address;
-  uint64_t t2, delta, reg_size;
+  uint64_t delta, reg_size;
 
   if( priv == TPL_KERNEL ) {
     reg_size = __setup_kernel_task_context(newtask);
@@ -300,16 +300,16 @@ status_t arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
   
   switch( cmd ) {
     case SYS_PR_CTL_SET_ENTRYPOINT:
-      regs->rip = arg;
+      regs->int_frame.rip = arg;
       break;
     case SYS_PR_CTL_SET_STACK:
-      regs->old_rsp = arg;
+      regs->int_frame.old_rsp = arg;
       break;
     case SYS_PR_CTL_GET_ENTRYPOINT:
-      r = regs->rip;
+      r = regs->int_frame.rip;
       break;
     case SYS_PR_CTL_GET_STACK:
-      r = regs->old_rsp;
+      r = regs->int_frame.old_rsp;
       break;
   }
   return r;
