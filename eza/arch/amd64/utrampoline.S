@@ -24,11 +24,13 @@
 #include <kernel/syscalls.h>
 #include <eza/arch/page.h>
 
+.global __userspace_trampoline_codepage
 .global trampoline_sighandler_invoker_sys
 .global trampoline_sighandler_invoker_int
 
 	.align PAGE_SIZE
 
+__userspace_trampoline_codepage:
 trampoline_sighandler_invoker_syscall:
 	/* Prepare arguments for signal handler. */
 	movq 0x8(%rsp),%rdi

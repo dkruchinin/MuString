@@ -64,4 +64,3 @@ void initialize_swks(void)
 
   vm_register_user_mandatory_area(&swks_area);
 }
-
