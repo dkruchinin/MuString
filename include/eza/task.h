@@ -225,7 +225,8 @@ status_t kernel_thread(void (*fn)(void *), void *data, task_t **out_task);
  * @param priv - Privilege level of target task.
  */
 status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t flags,
-                                 task_privelege_t priv);
+                                 task_privelege_t priv,
+                                 task_t *parent);
 
 /**
  * @fn arch_process_context_control(task_t *task,ulong_t cmd,ulong_t arg)

@@ -40,6 +40,7 @@
 #include <eza/arch/current.h>
 #include <eza/process.h>
 #include <eza/arch/profile.h>
+#include <eza/arch/mm_types.h>
 
 /* Located on 'amd64/asm.S' */
 extern void kthread_fork_path(void);
@@ -255,10 +256,13 @@ static uint64_t __setup_user_task_context(task_t *task)
 }
 
 status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
-                                 task_privelege_t priv)
+                                 task_privelege_t priv,task_t *parent)
 {
   uintptr_t fsave = newtask->kernel_stack.high_address;
   uint64_t delta, reg_size;
+  arch_context_t *parent_ctx = (arch_context_t*)&parent->arch_context[0];
+  arch_context_t *task_ctx;
+  tss_t *tss;
 
   if( priv == TPL_KERNEL ) {
     reg_size = __setup_kernel_task_context(newtask);
@@ -289,6 +293,15 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
 
   /* Now setup CR3 and _current_ value of new thread's stack. */
   __arch_setup_ctx(newtask,(uint64_t)fsave);
+
+  task_ctx=(arch_context_t*)&newtask->arch_context[0];
+  tss=parent_ctx->tss;
+  if( tss ) {
+    task_ctx->tss=tss;
+    task_ctx->tss_limit=parent_ctx->tss_limit;
+    kprintf( "Copying TSS (%p) from %d:%d\n",
+             tss,parent->pid,parent->tid);
+  }
 
   return 0;
 }

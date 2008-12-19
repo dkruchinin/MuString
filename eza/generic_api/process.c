@@ -139,7 +139,7 @@ status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
 
   r = create_new_task(parent,flags,priv,&new_task);
   if(r == 0) {
-    r = arch_setup_task_context(new_task,flags,priv);
+    r = arch_setup_task_context(new_task,flags,priv,parent);
     if(r == 0) {
       /* Tell the scheduler layer to take care of this task. */
       r = sched_add_task(new_task);
