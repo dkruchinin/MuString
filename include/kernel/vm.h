@@ -43,6 +43,8 @@
 
 #define __user
 
+#define USPACE_ADDR(ksym,ubase) (((unsigned long)(ksym) & PAGE_OFFSET_MASK) + (ubase))
+
 status_t copy_to_user(void *dest,void *src,ulong_t size);
 status_t copy_from_user(void *dest,void *src,ulong_t size);
 
@@ -52,14 +54,14 @@ status_t copy_from_user(void *dest,void *src,ulong_t size);
 #ifndef CONFIG_TEST
 static inline bool valid_user_address(uintptr_t addr)
 {
-  return (addr >= USER_START_VIRT && addr < USER_MAX_VIRT);
+  return (addr >= USER_START_VIRT && addr < USPACE_END);
 }
 
 static inline bool valid_user_address_range(uintptr_t addr,ulong_t size)
 {
-  if(addr >= USER_START_VIRT && addr < USER_MAX_VIRT) {
+  if(addr >= USER_START_VIRT && addr < USPACE_END) {
     addr += size;
-    return (addr >= USER_START_VIRT && addr < USER_MAX_VIRT);
+    return (addr >= USER_START_VIRT && addr < USPACE_END);
   }
   return false;
 }

@@ -27,11 +27,12 @@
 .global __userspace_trampoline_codepage
 .global trampoline_sighandler_invoker_sys
 .global trampoline_sighandler_invoker_int
+.global trampoline_sighandler_invoker_int_bottom
 
 	.align PAGE_SIZE
 
 __userspace_trampoline_codepage:
-trampoline_sighandler_invoker_syscall:
+trampoline_sighandler_invoker_sys:
 	/* Prepare arguments for signal handler. */
 	movq 0x8(%rsp),%rdi
 	movq 0x10(%rsp),%rsi
@@ -54,7 +55,7 @@ trampoline_sighandler_invoker_int:
 	movq %rsp,%rdi
 	movq $SC_SIGRETURN,%rax
 	syscall
-
+trampoline_sighandler_invoker_int_bottom:
 	/* Since %rcx is used by 'syscall' instruction, we must restore it. */
 	popq %rcx
 	retq
