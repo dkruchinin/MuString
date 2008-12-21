@@ -32,6 +32,7 @@
 #include <eza/arch/mm.h>
 #include <eza/smp.h>
 #include <eza/kconsole.h>
+#include <eza/arch/context.h>
 
 #define get_fault_address(x) \
     __asm__ __volatile__( "movq %%cr2, %0" : "=r"(x) )
@@ -63,44 +64,48 @@ void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_fr
   l1: goto l1;
 }
 
-static void __dump_regs(char *sp)
+static void __dump_regs(regs_t *r,ulong_t rip)
 {
-  regs_t *r=(regs_t *)sp;
-   kprintf("rax=%p,rdi=%p,rsi=%p\nrdx=%p,rcx=%p\n",
-	   r->rax,r->gpr_regs.rdi,r->gpr_regs.rsi,
-           r->gpr_regs.rdx,r->gpr_regs.rcx);
-   return;
+  kprintf(" Current task: PID=%d, TID=0x%X\n",
+          current_task()->pid,current_task()->tid);
+  kprintf(" RAX: %p, RBX: %p, RDI: %p, RSI: %p\n RDX: %p, RCX: %p\n",
+          r->rax,r->gpr_regs.rbx,
+          r->gpr_regs.rdi,r->gpr_regs.rsi,
+          r->gpr_regs.rdx,r->gpr_regs.rcx);
+  kprintf(" RIP: %p\n",rip);
 }
-
 
 void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
   uint64_t invalid_address,fixup;
-  char *sp=(char *)stack_frame-sizeof(regs_t);
+  regs_t *regs=(regs_t *)(((uintptr_t)stack_frame)-sizeof(struct __gpr_regs)-8);
+
   get_fault_address(invalid_address);
+
   if( kernel_fault(stack_frame) ) {
     goto kernel_fault;
   }
 
   default_console()->enable();
-  kprintf( "[!!!] Unhandled user PF exception ! Stopping (CODE: %d, See page 225). Address: %p\nrip=%p\n",
-           stack_frame->error_code, invalid_address,stack_frame->rip);
-   __dump_regs(sp);
-
-  l2: goto l2;
+  kprintf("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n",
+          cpu_id(), stack_frame->error_code);
+  goto send_sigsegv;
 
 kernel_fault:
   /* First, try to fix this exception. */
   fixup=fixup_fault_address(stack_frame->rip);
   if( fixup != 0 ) {
     stack_frame->rip=fixup;
-    goto out;
+    return;
   }
 
-  kprintf( "[!!!] Unhandled kernel PF exception ! Stopping (CODE: %d, See page 225). Address: %p\nRIP: %p\n",
-           stack_frame->error_code, invalid_address, stack_frame->rip);
-  l1: goto l1;
-out:
-  return;
+  kprintf("[CPU %d] Unhandled kernel-mode PF exception! Stopping CPU with error code=%d.\n",
+          cpu_id(), stack_frame->error_code);
+send_sigsegv:
+  __dump_regs(regs,stack_frame->rip);
+  kprintf( " Invalid address: %p\n", invalid_address );
+
+  interrupts_disable();
+  for(;;);
 }
 

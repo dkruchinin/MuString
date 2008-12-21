@@ -243,7 +243,7 @@ common_exception_path:
    * %r12 contains the value of %rsp before aligning for saving XMM data.
    */
   mov %r12, %rdi;
-  add $SAVED_GPR_SIZE + 8, %rdi 
+  add $SAVED_GPR_SIZE + 8, %rdi
 
   /* Now we call call the handler. */
   call *hi_level_fault_handlers(,%rax,8)
@@ -252,6 +252,14 @@ common_exception_path:
   iretq
 
 error_code_exception_path:
+  /* Since %rax is saved on the stack, we must add 8 bytes in
+   * addition to 8 bytes that contain error code.
+   */
+  cmp $KERNEL_SELECTOR(KTEXT_DES),16+INT_STACK_FRAME_CS_OFFT(%rsp)
+  je error_code_exception_path_kern
+  swapgs
+error_code_exception_path_kern:
+  sti
   SAVE_ALL
   /* No we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to
@@ -264,6 +272,14 @@ error_code_exception_path:
   /* Now we call call the handler. */
   call *hi_level_fault_handlers(,%rax,8)
   RESTORE_ALL
+
+  cli
+  cmp $KERNEL_SELECTOR(KTEXT_DES),16+INT_STACK_FRAME_CS_OFFT(%rsp)
+  je error_code_exception_path_kern_ret
+  swapgs
+error_code_exception_path_kern_ret:
+  sti
+
   popq %rax
   /* We have the error code on the top of stack, so remove it before
    * returning.
