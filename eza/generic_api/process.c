@@ -229,7 +229,10 @@ static bool __check_task_attrs(task_creation_attrs_t *attrs)
 
   valid=valid_user_address(ea->stack);
   valid *=valid_user_address(ea->entrypoint);
-  valid *=valid_user_address(ea->arg);
+
+  if( ea->arg ) {
+    valid *=valid_user_address(ea->arg);
+  }
 
   return valid;
 }
