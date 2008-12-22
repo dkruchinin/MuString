@@ -223,6 +223,10 @@ status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
 crunch_buffer:
       delta=MIN(bufsize,iov_size);
 
+      bufsize-=delta;
+      iov_size-=delta;
+      data_size-=delta;
+
       while( delta ) {
         chunk++;
         to_copy=MIN(delta,PAGE_SIZE);
@@ -234,15 +238,11 @@ crunch_buffer:
           r=copy_to_user(user_addr,dest_kaddr,to_copy);
         }
 
-        bufsize-=to_copy;
-        iov_size-=to_copy;
-        data_size-=to_copy;
         delta-=to_copy;
-
         user_addr+=to_copy;
       }
 
-      if( bufsize ) {
+      if( bufsize && data_size ) {
         if( !iov_size ) {
           user_addr = ++iovecs->iov_base;
           iov_size = iovecs->iov_len;
