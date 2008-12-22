@@ -11,7 +11,7 @@ lxdialog-objs := $(addprefix lxdialog/, checklist.o util.o inputbox.o textbox.o 
 conf-objs := conf.o zconf.tab.o
 mconf-objs := $(lxdialog-objs) mconf.o zconf.tab.o
 
-all: conf
+all: mconf
 
 conf: $(conf-objs)
 	$(call echo-action,"LD","$@")
