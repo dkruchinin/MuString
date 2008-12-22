@@ -134,16 +134,16 @@ ipc_port_message_t *ipc_create_port_message_iov_v(iovec_t *snd_kiovecs,ulong_t s
         goto free_message;
       }
     }
+  }
 
-    /* Now copy user data to the message. */
-    p=msg->send_buffer;
-    for(i=0;i<snd_numvecs;i++) {
-      if( copy_from_user(p,snd_kiovecs->iov_base,snd_kiovecs->iov_len) ) {
-        goto free_message;
-      }
-      p += snd_kiovecs->iov_len;
-      snd_kiovecs++;
+  /* Now copy user data to the message. */
+  p=msg->send_buffer;
+  for(i=0;i<snd_numvecs;i++) {
+    if( copy_from_user(p,snd_kiovecs->iov_base,snd_kiovecs->iov_len) ) {
+      goto free_message;
     }
+    p += snd_kiovecs->iov_len;
+    snd_kiovecs++;
   }
   return msg;
 free_message:
@@ -153,6 +153,14 @@ free_message:
   return NULL;
 }
 
+ipc_port_message_t *ipc_create_port_message_iov(iovec_t *kiovecs,ulong_t numvecs,
+                                                ulong_t data_len,bool blocked,
+                                                uintptr_t rcv_buf,ulong_t rcv_size)
+{
+  return NULL;
+}
+
+/*
 ipc_port_message_t *ipc_create_port_message_iov(iovec_t *kiovecs,ulong_t numvecs,
                                                 ulong_t data_len,bool blocked,
                                                 uintptr_t rcv_buf,ulong_t rcv_size)
@@ -180,12 +188,10 @@ ipc_port_message_t *ipc_create_port_message_iov(iovec_t *kiovecs,ulong_t numvecs
     msg->reply_size=rcv_size;
     msg->sender=owner;
 
-    /* Prepare send buffer. */
     if( data_len <= IPC_BUFFERED_PORT_LENGTH ) {
       msg->send_buffer=ipc_priv->cached_data.cached_page1;
       msg->num_send_bufs=0;
     } else {
-      /* Well, need to setup user buffers. */
       r=ipc_setup_buffer_pages(owner,kiovecs,numvecs,
                                (uintptr_t *)ipc_priv->cached_data.cached_page1,
                                ipc_priv->cached_data.cached_send_buffers);
@@ -196,12 +202,10 @@ ipc_port_message_t *ipc_create_port_message_iov(iovec_t *kiovecs,ulong_t numvecs
       msg->snd_buf=ipc_priv->cached_data.cached_send_buffers;
     }
 
-    /* Prepare receive buffer. */
     if( rcv_size ) {
       if( rcv_size <= IPC_BUFFERED_PORT_LENGTH ) {
         msg->receive_buffer=ipc_priv->cached_data.cached_page2;
       } else {
-        /* Well, need to setup user buffers. */
         iovec_t iv;
 
         iv.iov_base=(void *)rcv_buf;
@@ -220,7 +224,6 @@ ipc_port_message_t *ipc_create_port_message_iov(iovec_t *kiovecs,ulong_t numvecs
     }
   }
 
-  /* Now copy user data to the message. */
   p=msg->send_buffer;
 
   for(i=0;i<numvecs;i++) {
@@ -237,6 +240,7 @@ free_message:
   }
   return NULL;
 }
+*/
 
 static void __notify_message_arrived(ipc_gen_port_t *port)
 {
@@ -538,6 +542,7 @@ static status_t __transfer_message_data_to_receiver(ipc_port_message_t *msg,
 {
   status_t r;
 
+  kprintf("*>> RCV MSG LEN: %d\n",msg->data_size);
   recv_len=MIN(recv_len,msg->data_size);
   if( msg->data_size <= IPC_BUFFERED_PORT_LENGTH ) {
     /* Short message - copy it from the buffer. */
