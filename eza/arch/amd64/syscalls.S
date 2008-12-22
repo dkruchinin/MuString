@@ -59,6 +59,9 @@ syscall_table:
 	.quad   sys_sync_create_object
 	.quad   sys_sync_control
 	.quad   sys_sync_destroy
+	.quad   sys_kill                        /* 25 */
+	.quad   sys_signal
+	.quad   sys_sigreturn
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \
@@ -67,21 +70,21 @@ syscall_table:
 syscall_point:
 	/* Local interrupts are disabled upon entering the entrypoint.
 	 */
-	cmp $NUM_OF_SYSCALLS,%rax
-	jb good_syscall_number
-
-	movq $-ENOSYS,%rax
-        sysretq
-
-good_syscall_number:
 	swapgs
 	movq %rsp,%gs:CPU_SCHED_STAT_USTACK_OFFT
 	movq %gs:CPU_SCHED_STAT_KSTACK_OFFT,%rsp
 
 	/* After changing stack pointer, we can enable IRQs */
 	sti
-	SAVE_GPR
+	SAVE_ALL
 
+	cmp $NUM_OF_SYSCALLS,%rax
+	jb good_syscall_number
+
+	movq $-ENOSYS,%rax
+	jmp return_from_syscall
+
+good_syscall_number:
 	/* Since %rcx contains the return address, we should reload
 	 * %rcx from %r10.
 	 */

@@ -39,10 +39,16 @@
 #include <eza/kernel.h>
 #include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
+#include <eza/vm.h>
+#include <kernel/vm.h>
+#include <mm/mmap.h>
 
 #ifndef IDALLOC_VPAGES
 #define IDALLOC_VPAGES 64
 #endif
+
+/* Userspace trampolines. */
+extern void __userspace_trampoline_codepage(void);
 
 /* An array of all physical pages */
 page_frame_t *page_frames_array;
@@ -54,6 +60,26 @@ static void __init_page(page_frame_t *page)
   list_init_node(&page->node);
   atomic_set(&page->refcount, 0);
   page->_private = 0;
+}
+
+static void __initialize_mandatory_areas(void)
+{
+  /* Create an area for userspace trampolines. */
+  static vm_range_t utrampl_va;
+  int id=0;
+
+  utrampl_va.phys_addr=virt_to_phys(__userspace_trampoline_codepage);
+  utrampl_va.virt_addr=UTRAMPOLINE_VIRT_ADDR;
+  utrampl_va.num_pages=1;
+  utrampl_va.map_flags=MAP_USER | MAP_READ | MAP_EXEC;
+
+  if( !vm_register_user_mandatory_area(&utrampl_va) ) {
+    goto do_panic;
+  }
+
+  return;
+do_panic:
+  panic( "__initialize_mandatory_areas(): can't create area N %d !\n", id );
 }
 
 void mm_init(void)
@@ -120,7 +146,9 @@ void mm_init(void)
   idalloc_meminfo.virt_top=kernel_min_vaddr;
   kernel_min_vaddr-=IDALLOC_VPAGES*PAGE_SIZE;
 
-  kprintf("[MM] All pages were successfully remapped\n");
+  kprintf("[MM] All pages were successfully remapped.\n");
+  __initialize_mandatory_areas();
+  kprintf("[MM] All mandatory user areas were successfully created.\n");
 }
 
 static void __pfiter_idx_first(page_frame_iterator_t *pfi)

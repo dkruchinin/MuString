@@ -192,7 +192,7 @@ void server_run_tasks(void)
 
   if( i > 0 ) {
     kprintf("[SRV] Starting servers: %d ... \n",i);
-    //kconsole->disable();
+    kconsole->disable();
   }
 
   for(a=0;a<i;a++) {
@@ -202,7 +202,7 @@ void server_run_tasks(void)
       flags |= TASK_INIT;
     }
 
-    r=create_task(current_task(),flags,TPL_USER,&server);
+    r=create_task(current_task(),flags,TPL_USER,&server,NULL);
     if( r ) {
       panic( "server_run_tasks(): Can't create task N %d !\n",
              a+1);

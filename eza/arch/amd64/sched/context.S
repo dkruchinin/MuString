@@ -77,11 +77,11 @@ arch_hw_activate_task:
   mov %rax,ARCH_CTX_GS_OFFSET(%rdx)
   mov %gs:(CPU_SCHED_STAT_USER_DS_OFFT), %rax
   mov %rax,ARCH_CTX_DS_OFFSET(%rdx)
-  mov %gs:(CPU_SCHED_STAT_USTACK_OFFT), %rax	
+  mov %gs:(CPU_SCHED_STAT_USTACK_OFFT), %rax
   mov %rax,ARCH_CTX_URSP_OFFSET(%rdx)
 
   /* Save %rsp */
-  mov %rsp,ARCH_CTX_RSP_OFFSET(%rdx) 
+  mov %rsp,ARCH_CTX_RSP_OFFSET(%rdx)
 
   /* Determine if we need to reload %cr3 */
   movq %cr3, %rax;
@@ -103,7 +103,12 @@ leave_cr3:
   mov ARCH_CTX_DS_OFFSET(%rdi),%rax
   mov %rax, %gs:(CPU_SCHED_STAT_USER_DS_OFFT)
   mov ARCH_CTX_URSP_OFFSET(%rdi),%rax
-  mov %rax,%gs:(CPU_SCHED_STAT_USTACK_OFFT)	
+  mov %rax,%gs:(CPU_SCHED_STAT_USTACK_OFFT)
+
+  /* Setup userspace works status. */
+  mov %rdi,%rax
+  add $ARCH_CTX_UWORKS_OFFSET,%rax
+  mov %rax,%gs:(CPU_SCHED_STAT_USER_WORKS_OFFT)
 
   /* Now we can reload %rsp and return to perform actual context switch. */
   movq ARCH_CTX_RSP_OFFSET(%rdi), %rsp

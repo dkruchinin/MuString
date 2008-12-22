@@ -73,7 +73,8 @@ static inline void arch_activate_task(task_t *to)
 
   /* Let's jump ! */
 #ifdef CONFIG_TEST
-  kprintf( "******* ACTIVATING TASK: %d:%d (CPU: %d)\n", to->pid,to->tid,to->cpu );
+  kprintf( "** ACTIVATING TASK: %d:%d (CPU: %d). TSS LIMIT: %d, TSS: %p\n",
+           to->pid,to->tid,to->cpu,tss_limit,tss );
 #endif
 
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);

@@ -433,7 +433,8 @@ static inline void __reschedule_task(task_t *t)
 }
 
 static status_t __change_task_state(task_t *task,task_state_t new_state,
-                                    deferred_sched_handler_t h,void *data)
+                                    deferred_sched_handler_t h,void *data,
+                                    ulong_t mask)
 {
   ulong_t is;
   status_t r=0;
@@ -453,7 +454,7 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
 
   prev_state=task->state;
 
-  if( prev_state != new_state ) {
+  if( (prev_state != new_state) && (prev_state & mask) ) {
     r=-EINVAL;
 
     switch(new_state) {
@@ -507,9 +508,9 @@ out_unlock:
   return r;
 }
 
-status_t def_change_task_state(task_t *task,task_state_t new_state)
+status_t def_change_task_state(task_t *task,task_state_t new_state,ulong_t mask)
 {
-  return __change_task_state(task,new_state,NULL,NULL);
+  return __change_task_state(task,new_state,NULL,NULL,mask);
 }
 
 static status_t def_setup_idle_task(task_t *task)
@@ -629,16 +630,16 @@ static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
       }
       return -EINVAL;
     case SYS_SCHED_CTL_SET_STATE:
-      return def_change_task_state(target,arg);
+      return def_change_task_state(target,arg,__ALL_TASK_STATE_MASK);
   }
   return -EINVAL;
 }
 
 static status_t def_change_task_state_deferred(task_t *task, task_state_t state,
                                               deferred_sched_handler_t handler,
-                                              void *data)
+                                               void *data,ulong_t mask)
 {
-  return __change_task_state(task,state,handler,data);
+  return __change_task_state(task,state,handler,data,mask);
 }
 
 static void __self_move_gc_actor(void *data,ulong_t arg)

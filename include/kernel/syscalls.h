@@ -20,6 +20,8 @@
 #ifndef __K_SYSCALLS_H__
 #define __K_SYSCALLS_H__
 
+#ifndef __ASM__
+
 #include <eza/arch/types.h>
 #include <ipc/port.h>
 #include <eza/task.h>
@@ -28,6 +30,8 @@
 #include <ipc/poll.h>
 #include <ipc/gen_port.h>
 #include <eza/sync.h>
+
+#endif
 
 /* Syscalls identificators. */
 #define SC_GET_PID             0
@@ -52,8 +56,14 @@
 #define SC_CLOSE_PORT          19
 #define SC_CONTROL_CHANNEL     20
 #define SC_PORT_SEND_IOV       21
-#define SC_SYNC_CREATE_OBJECT  22
-#define SC_SYNC_CTRL_OBJECT    23
+#define SC_SYNC_CREATE         22
+#define SC_SYNC_CONTROL        23
+#define SC_SYNC_DESTROY        24
+#define SC_KILL                25
+#define SC_SIGNAL              26
+#define SC_SIGRETURN           27
+
+#ifndef __ASM__
 
 /**
  * @fn status_t sys_get_pid(void)
@@ -81,12 +91,13 @@ status_t sys_get_pid(void);
  * @param flags - Task creation flags. Possible values are:
  *                CLONE_MM - new task will share its memory space with its
  *                           parent (suitable for creation 'threads').
+ * @param attrs - Task creation attributes.
  * @return If new task was successfully created, this function returns
  *         the PID of the new task.
  *         Otherwise, negation of the following error codes is returned:
  *         ENOMEM   No memory was available.
  */
-status_t sys_create_task(ulong_t flags);
+status_t sys_create_task(ulong_t flags,task_creation_attrs_t *a);
 
 
 /**
@@ -398,5 +409,7 @@ status_t sys_sync_create_object(sync_object_type_t obj_type,
                                 ulong_t flags);
 
 status_t sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg);
+
+#endif
 
 #endif

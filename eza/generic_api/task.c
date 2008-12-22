@@ -42,6 +42,7 @@
 #include <eza/uinterrupt.h>
 #include <mm/slab.h>
 #include <eza/sync.h>
+#include <eza/signal.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
@@ -278,7 +279,43 @@ static status_t __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags
   return task->sync_data ? 0 : -ENOMEM;
 }
 
-status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t)
+static status_t __setup_signals(task_t *task,task_t *parent,ulong_t flags)
+{
+  sighandlers_t *shandlers=NULL;
+  sigset_t blocked=0,ignored=DEFAULT_IGNORED_SIGNALS;
+
+  if( flags & CLONE_SIGINFO ) {
+    if( !parent->siginfo.handlers ) {
+      return -EINVAL;
+    }
+    shandlers=parent->siginfo.handlers;
+    atomic_inc(&shandlers->use_count);
+
+    blocked=parent->siginfo.blocked;
+    ignored=parent->siginfo.ignored;
+  }
+
+  if( !shandlers ) {
+    shandlers=allocate_signal_handlers();
+    if( !shandlers ) {
+      return -ENOMEM;
+    }
+  }
+
+  task->siginfo.blocked=blocked;
+  task->siginfo.ignored=ignored;
+  task->siginfo.pending=0;
+  task->siginfo.handlers=shandlers;
+
+  list_init_head(&task->siginfo.sigqueue);
+  atomic_set(&task->siginfo.num_pending,1);
+  spinlock_initialize(&task->siginfo.lock);
+
+  return 0;
+}
+
+status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t,
+                         task_creation_attrs_t *attrs)
 {
   task_t *task;
   status_t r = -ENOMEM;
@@ -357,6 +394,11 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
     goto free_sync_data;
   }
 
+  r=__setup_signals(task,parent,flags);
+  if( r ) {
+    goto free_uevents;
+  }
+
   /* Setup task's initial state. */
   task->state = TASK_STATE_JUST_BORN;
   task->cpu = cpu_id();
@@ -370,6 +412,8 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
 
   *t = task;
   return 0;
+free_uevents:
+  /* TODO: [mt] Free userspace events properly. */
 free_sync_data:
   /* TODO: [mt] Deallocate task's sync data. */
 free_ipc:

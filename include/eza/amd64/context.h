@@ -26,6 +26,9 @@
 #ifndef __ARCH_CONTEXT_H__
 #define __ARCH_CONTEXT_H__ /* there are several context.h(es) */
 
+#define __SYCALL_UWORK  0  /**< Syscall-related works **/
+#define __INT_UWORK     1  /**< Interrupt-related works **/
+
 #define OFFSET_SP   0x0
 #define OFFSET_PC   0x8
 #define OFFSET_RBX  0x10
@@ -79,25 +82,20 @@
  * to point just after saved GPRs area.
  */
 #define SAVE_MM \
-  mov %rsp, %r13; \
-  mov %rsp, %r10; \
-  and $0xfffffffffffffe00, %r13; \
-  mov %rsp, %r14; \
-  sub %r13, %r14; \
-  add $512, %r14; \
-  sub %r14, %rsp; \
-  fxsave (%rsp); \
-  pushq %r14; \
+  mov %rsp, %r12;                               \
+  sub $512,%rsp;                                \
+  and $0xfffffffffffffff0, %rsp;                \
+  fxsave (%rsp);                                \
+  pushq %r12
 
 #define RESTORE_MM \
-  popq %r10; \
+  popq %r12; \
   fxrstor (%rsp); \
-  add %r10, %rsp;
+  movq %r12, %rsp;
 
 /* NOTE: SAVE_MM initializes %rsi so that it points to iterrupt/exception stack frame. */
 #define SAVE_ALL \
   SAVE_GPR \
-  cli; \
   SAVE_MM \
 
 
@@ -144,18 +142,22 @@
 #define SP_DELTA  16
 
 /* Kernel-space task context related stuff. */
-#define ARCH_CTX_CR3_OFFSET   0x0
-#define ARCH_CTX_RSP_OFFSET   0x8
-#define ARCH_CTX_FS_OFFSET    0x10
-#define ARCH_CTX_GS_OFFSET    0x18
-#define ARCH_CTX_ES_OFFSET    0x20
-#define ARCH_CTX_DS_OFFSET    0x28
-#define ARCH_CTX_URSP_OFFSET  0x30
+#define ARCH_CTX_CR3_OFFSET     0x0
+#define ARCH_CTX_RSP_OFFSET     0x8
+#define ARCH_CTX_FS_OFFSET      0x10
+#define ARCH_CTX_GS_OFFSET      0x18
+#define ARCH_CTX_ES_OFFSET      0x20
+#define ARCH_CTX_DS_OFFSET      0x28
+#define ARCH_CTX_URSP_OFFSET    0x30
+#define ARCH_CTX_UWORKS_OFFSET  0x38
 
 #ifdef __ASM__
 
 /* extra bytes on the stack after CPU exception stack frame: %rax */
 #define INT_STACK_EXTRA_PUSHES  8
+
+/* Offset to CS selecetor in case full context is saved on the stack */
+#define INT_FULL_OFFSET_TO_CS (SAVED_GPR_SIZE+8+INT_STACK_FRAME_CS_OFFT)
 
 #include <eza/arch/current.h>
 #include <eza/arch/page.h>
@@ -203,22 +205,44 @@ typedef struct __context_t { /* others don't interesting... */
 } __attribute__ ((packed)) context_t;
 
 typedef struct __arch_context_t {
-    uintptr_t cr3, rsp, fs, gs, es, ds, user_rsp;
-    tss_t *tss;
-    uint16_t tss_limit;
+  uintptr_t cr3, rsp, fs, gs, es, ds, user_rsp;
+  uintptr_t uworks;
+  tss_t *tss;
+  uint16_t tss_limit;
 } arch_context_t;
+
+#define ARCH_CTX_UWORS_SIGNALS_BIT_IDX  0
+
+#define arch_set_task_signals_pending(ctx)              \
+  __asm__ __volatile__(                                 \
+  "bts %0,%1":: "r"(ARCH_CTX_UWORS_SIGNALS_BIT_IDX),    \
+  "m" ((((arch_context_t *)(ctx))->uworks))  )
+
+#define arch_clear_task_signals_pending(ctx)              \
+  __asm__ __volatile__(                                   \
+    "btr %0,%1":: "r"(ARCH_CTX_UWORS_SIGNALS_BIT_IDX),    \
+    "m"(((arch_context_t *)(ctx))->uworks)  )
+
 
 /* Structure that represents GPRs on the stack upon entering
  * kernel mode during a system call.
  */
-typedef struct __regs {
-  /* Kernel-saved registers. */
+struct __gpr_regs {
   uint64_t rbp, rsi, rdi, rdx, rcx, rbx;
   uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
-  uint64_t rax;
-    
-  /* CPU-saved registers. */
+};
+
+struct __int_stackframe {
   uint64_t rip, cs, rflags, old_rsp, old_ss;
+};
+
+typedef struct __regs {
+  /* Kernel-saved registers. */
+  struct __gpr_regs gpr_regs;
+  uint64_t rax;
+
+  /* CPU-saved registers. */
+  struct __int_stackframe int_frame;
 } regs_t;
 
 #endif /* __ASM__ */
