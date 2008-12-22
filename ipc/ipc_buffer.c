@@ -147,6 +147,41 @@ status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
                                       struct __iovec *iovecs,ulong_t numvecs,
                                       bool to_buffer)
 {
+  char *src_ptr;
+  int i,buflen,iovlen,data_size;
+
+  for(buflen=0,i=0;i<numbufs;i++) {
+    buflen += bufs[i].length;
+  }
+
+  for(iovlen=0,i=0;i<numvecs;i++) {
+    iovlen += iovecs[i].iov_len;
+  }
+
+  kprintf( "-------------------- BUFLEN: %d, IOVLEN: %d\n",
+           buflen,iovlen);
+  for(;;);
+
+  for(src_ptr=iovecs->iov_base;;) {
+    ulong_t *chunk=bufs->chunks;
+    ulong_t copy;
+    char *dest_kaddr=(char *)*chunk;
+
+    /* First, process the first not page-aligned chunk. */
+/*
+    if( bufs->first ) {
+      copy=MIN(to_copy,bufs->first);
+      if( to_buffer ) {
+        r=copy_from_user(dest_kaddr,user_addr,copy);
+      } else {
+        r=copy_to_user(user_addr,dest_kaddr,copy);
+      }
+      to_copy-=copy;
+      user_addr += copy;
+      }
+*/
+  }
+
   return 0;
 }
 
@@ -166,7 +201,7 @@ status_t ipc_transfer_buffer_data(ipc_user_buffer_t *bufs,ulong_t numbufs,
       copy=MIN(to_copy,bufs->first);
       if( to_buffer ) {
         r=copy_from_user(dest_kaddr,user_addr,copy);
-      } else { 
+      } else {
         r=copy_to_user(user_addr,dest_kaddr,copy);
       }
       to_copy-=copy;

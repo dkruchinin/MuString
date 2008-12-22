@@ -212,6 +212,7 @@ ipc_port_message_t *ipc_create_port_message_iov(iovec_t *kiovecs,ulong_t numvecs
                                  &ipc_priv->cached_data.recv_buffer);
         if( !r ) {
           msg->rcv_buf=&ipc_priv->cached_data.recv_buffer;
+          msg->num_recv_buffers=1;
           return msg;
         }
         goto free_message;
