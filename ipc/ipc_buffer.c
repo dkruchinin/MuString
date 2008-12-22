@@ -147,8 +147,8 @@ status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
                                       struct __iovec *iovecs,ulong_t numvecs,
                                       bool to_buffer)
 {
-  char *src_ptr;
   int i,buflen,iovlen,data_size;
+  status_t r=0;
 
   for(buflen=0,i=0;i<numbufs;i++) {
     buflen += bufs[i].length;
@@ -158,31 +158,100 @@ status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
     iovlen += iovecs[i].iov_len;
   }
 
-  kprintf( "-------------------- BUFLEN: %d, IOVLEN: %d\n",
-           buflen,iovlen);
-  for(;;);
+  data_size=MIN(buflen,iovlen);
 
-  for(src_ptr=iovecs->iov_base;;) {
+  for(;data_size;) {
     ulong_t *chunk=bufs->chunks;
-    ulong_t copy;
+    ulong_t to_copy,iov_size,bufsize;
     char *dest_kaddr=(char *)*chunk;
+    char *user_addr=iovecs->iov_base;
+    bool repeat_first;
 
     /* First, process the first not page-aligned chunk. */
-/*
-    if( bufs->first ) {
-      copy=MIN(to_copy,bufs->first);
-      if( to_buffer ) {
-        r=copy_from_user(dest_kaddr,user_addr,copy);
-      } else {
-        r=copy_to_user(user_addr,dest_kaddr,copy);
-      }
-      to_copy-=copy;
-      user_addr += copy;
-      }
-*/
-  }
+    iov_size=iovecs->iov_len;
+    bufsize=bufs->first;
 
-  return 0;
+    do {
+      repeat_first=false;
+
+      if( bufs->first ) {
+        to_copy=MIN(bufsize,iov_size);
+        if( to_buffer ) {
+          r=copy_from_user(dest_kaddr,user_addr,to_copy);
+        } else {
+          r=copy_to_user(user_addr,dest_kaddr,to_copy);
+        }
+
+        if( r ) {
+          break;
+        }
+
+        data_size-= to_copy;
+        iov_size -= to_copy;
+        bufsize -= to_copy;
+
+        if( data_size ) {
+          if( iov_size ) {
+            user_addr += to_copy;
+          } else {
+            user_addr = ++iovecs->iov_base;
+            iov_size = iovecs->iov_len;
+            repeat_first=true;
+          }
+
+          if( bufsize ) {
+            dest_kaddr += to_copy;
+          } else {
+            if( bufs->first == bufs->length ) {
+              /* This buffer is over, so process the next one from the beginning. */
+              bufs++;
+              repeat_first=true;
+              bufsize=bufs->first;
+              chunk=bufs->chunks;
+              dest_kaddr=(char *)*chunk;
+            }
+          }
+        }
+      }
+    } while(repeat_first);
+
+    /* Handle the rest of the buffer. */
+    if( data_size ) {
+      ulong_t delta;
+
+      bufsize=MIN(data_size,bufs->length-bufs->first);
+crunch_buffer:
+      delta=MIN(bufsize,iov_size);
+
+      while( delta ) {
+        chunk++;
+        to_copy=MIN(delta,PAGE_SIZE);
+        dest_kaddr=(char *)*chunk;
+
+        if( to_buffer ) {
+          r=copy_from_user(dest_kaddr,user_addr,to_copy);
+        } else {
+          r=copy_to_user(user_addr,dest_kaddr,to_copy);
+        }
+
+        bufsize-=to_copy;
+        iov_size-=to_copy;
+        data_size-=to_copy;
+        delta-=to_copy;
+
+        user_addr+=to_copy;
+      }
+
+      if( bufsize ) {
+        if( !iov_size ) {
+          user_addr = ++iovecs->iov_base;
+          iov_size = iovecs->iov_len;
+        }
+        goto crunch_buffer;
+      }
+    }
+  }
+  return r ? -EFAULT : 0;
 }
 
 status_t ipc_transfer_buffer_data(ipc_user_buffer_t *bufs,ulong_t numbufs,
