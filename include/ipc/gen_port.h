@@ -107,6 +107,10 @@ ipc_port_message_t *ipc_create_port_message_iov_v(iovec_t *snd_kiovecs,ulong_t s
 status_t ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
                             iovec_t *reply_iov,ulong_t numvecs,
                             ulong_t reply_size);
+status_t ipc_port_send_iov(struct __ipc_gen_port *port,
+                           ipc_port_message_t *msg,bool sync_send,
+                           iovec_t *iovecs,ulong_t numvecs,
+                           ulong_t reply_len);
 
 #define IPC_NB_MESSAGE_MAXLEN  (512-sizeof(ipc_port_message_t))
 

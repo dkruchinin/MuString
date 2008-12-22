@@ -243,6 +243,7 @@ static void __notify_message_arrived(ipc_gen_port_t *port)
     waitqueue_pop(&port->waitqueue, NULL);
 }
 
+/*
 static status_t __transfer_reply_data(ipc_port_message_t *msg,
                                       uintptr_t reply_buf,ulong_t reply_len,
                                       bool from_server)
@@ -252,14 +253,12 @@ static status_t __transfer_reply_data(ipc_port_message_t *msg,
   reply_len=MIN(reply_len,msg->reply_size);
   if( reply_len > 0 ) {
     if( msg->reply_size <= IPC_BUFFERED_PORT_LENGTH ) {
-      /* Short message - copy it from the buffer. */
       if( from_server ) {
         r=copy_from_user(msg->receive_buffer,(void*)reply_buf,reply_len);
       } else {
         r=copy_to_user((void*)reply_buf,msg->receive_buffer,reply_len);
       }
     } else {
-      /* Long message - process it via buffer. */
       if( from_server ) {
         r=ipc_transfer_buffer_data(msg->rcv_buf,1,(void *)reply_buf,
                                    reply_len,from_server);
@@ -274,14 +273,22 @@ static status_t __transfer_reply_data(ipc_port_message_t *msg,
     reply_len=0;
   }
 
-  /* If we're replying to the message, setup size properly. */
   if( from_server ) {
     msg->replied_size=reply_len;
   }
 
   return r;
 }
+*/
 
+status_t __ipc_port_send(struct __ipc_gen_port *port,
+                         ipc_port_message_t *msg,bool sync_send,
+                         uintptr_t rcv_buf,ulong_t rcv_size)
+{
+  return 0;
+}
+
+/*
 status_t __ipc_port_send(struct __ipc_gen_port *port,
                          ipc_port_message_t *msg,bool sync_send,
                          uintptr_t rcv_buf,ulong_t rcv_size)
@@ -297,9 +304,6 @@ status_t __ipc_port_send(struct __ipc_gen_port *port,
   IPC_LOCK_PORT_W(port);
   r=(port->flags & IPC_BLOCKED_ACCESS) | sync_send;
   if( r ) {
-    /* In case of synchronous message passing both channel and port
-     * must be in synchronous mode.
-     */
     if( !((port->flags & IPC_BLOCKED_ACCESS) && sync_send) ) {
       r=-EINVAL;
     } else {
@@ -324,7 +328,6 @@ status_t __ipc_port_send(struct __ipc_gen_port *port,
 
   __notify_message_arrived(port);
 
-  /* Sender should wait for the reply, so put it into sleep here. */
   if( sync_send ) {
     IPC_TASK_ACCT_OPERATION(sender);
     event_yield( &msg->event );
@@ -343,6 +346,7 @@ status_t __ipc_port_send(struct __ipc_gen_port *port,
 
   return r;
 }
+*/
 
 static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
                                 task_t *owner)
@@ -673,44 +677,6 @@ void __ipc_put_port(ipc_gen_port_t *p)
   }
 }
 
-status_t __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
-                          ulong_t reply_buf,ulong_t reply_len)
-{
-  ipc_port_message_t *msg;
-  status_t r;
-
-  if( !reply_buf || reply_len > MAX_PORT_MSG_LENGTH ) {
-    return -EINVAL;
-  }
-
-  if( !port->msg_ops->remove_message ||
-      !(port->flags & IPC_BLOCKED_ACCESS)) {
-    return -EINVAL;
-  }
-
-  msg=NULL;
-  IPC_LOCK_PORT_W(port);
-  if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
-    msg=port->msg_ops->remove_message(port,msg_id);
-    if( !msg ) {
-      kprintf( "[5] Can't remove message %d\n",msg_id );
-      r=-EINVAL;
-    }
-  } else {
-    r=-EPIPE;
-  }
-  IPC_UNLOCK_PORT_W(port);
-
-  if( msg ) {
-    r=__transfer_reply_data(msg,reply_buf,reply_len,true);
-    if( event_is_active(&msg->event) ) {
-      event_raise(&msg->event);
-    }
-  }
-
-  return r;
-}
-
 static status_t __transfer_reply_data_iov(ipc_port_message_t *msg,
                                           iovec_t *reply_iov,ulong_t numvecs,
                                           bool from_server,ulong_t reply_len)
@@ -759,6 +725,69 @@ static status_t __transfer_reply_data_iov(ipc_port_message_t *msg,
   /* If we're replying to the message, setup size properly. */
   if( from_server ) {
     msg->replied_size=reply_len;
+  }
+
+  return r;
+}
+
+status_t ipc_port_send_iov(struct __ipc_gen_port *port,
+                           ipc_port_message_t *msg,bool sync_send,
+                           iovec_t *iovecs,ulong_t numvecs,
+                           ulong_t reply_len)
+{
+  ipc_port_msg_ops_t *msg_ops=port->msg_ops;
+  status_t msg_size=0,r=0;
+  task_t *sender=current_task();
+
+  if( !msg_ops->insert_message ) {
+    return -EINVAL;
+  }
+
+  IPC_LOCK_PORT_W(port);
+  r=(port->flags & IPC_BLOCKED_ACCESS) | sync_send;
+  if( r ) {
+    /* In case of synchronous message passing both channel and port
+     * must be in synchronous mode.
+     */
+    if( !((port->flags & IPC_BLOCKED_ACCESS) && sync_send) ) {
+      r=-EINVAL;
+    } else {
+      r=0;
+    }
+  } else {
+    msg_size=msg->data_size;
+  }
+
+  if( !r ) {
+    if( !(port->flags & IPC_PORT_SHUTDOWN ) ) {
+      r=msg_ops->insert_message(port,msg);
+    } else {
+      r=-EPIPE;
+    }
+  }
+  IPC_UNLOCK_PORT_W(port);
+
+  if( r ) {
+    return r;
+  }
+
+  __notify_message_arrived(port);
+
+  /* Sender should wait for the reply, so put it into sleep here. */
+  if( sync_send ) {
+    IPC_TASK_ACCT_OPERATION(sender);
+    event_yield( &msg->event );
+    IPC_TASK_UNACCT_OPERATION(sender);
+
+    r=msg->replied_size;
+    if( r > 0 ) {
+      r=__transfer_reply_data_iov(msg,iovecs,numvecs,false,reply_len);
+      if( !r ) {
+        r=msg->replied_size;
+      }
+    }
+  } else {
+    r=msg_size;
   }
 
   return r;

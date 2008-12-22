@@ -587,7 +587,7 @@ static void __server_thread(void *ctx)
   status_t r;
   port_msg_info_t msg_info;
 
-  __process_events_test(ctx);
+//  __process_events_test(ctx);
 
   for( i=0;i<SERVER_NUM_PORTS;i++) {
     if( i != NON_BLOCKED_PORT_ID ) {
