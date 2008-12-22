@@ -75,15 +75,16 @@ static status_t __reply_iov(ulong_t port,ulong_t msg_id,
 {
   ipc_gen_port_t *p;
   int i,reply_size;
+  status_t r;
 
-  for(reply_size=0,i=0;i<snd_numvecs;i++) {
+  for(reply_size=0,i=0;i<numvecs;i++) {
     if( !valid_user_address_range(reply_iov[i].iov_base,
-                                  snd_kiovecs[i].iov_len) ) {
+                                  reply_iov[i].iov_len) ) {
       return -EFAULT;
     }
 
-    msg_size += snd_kiovecs[i].iov_len;
-    if( msg_size > MAX_PORT_MSG_LENGTH ) {
+    reply_size += reply_iov[i].iov_len;
+    if( reply_size > MAX_PORT_MSG_LENGTH ) {
       return -EINVAL;
     }
   }
@@ -93,7 +94,7 @@ static status_t __reply_iov(ulong_t port,ulong_t msg_id,
     return -EINVAL;
   }
 
-  r=__ipc_port_reply(p,msg_id,reply_buf,reply_len);
+  r=ipc_port_reply_iov(p,msg_id,reply_iov,numvecs,reply_size);
   __ipc_put_port(p);
   return r;
 }
@@ -116,7 +117,7 @@ status_t sys_port_reply(ulong_t port,ulong_t msg_id,ulong_t reply_buf,
                         ulong_t reply_len) {
   iovec_t iv;
 
-  iv.iov_base=reply_buf;
+  iv.iov_base=(void *)reply_buf;
   iv.iov_len=reply_len;
 
   return __reply_iov(port,msg_id,&iv,1);

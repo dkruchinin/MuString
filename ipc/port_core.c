@@ -710,6 +710,94 @@ status_t __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
   return r;
 }
 
+static status_t __transfer_reply_data_iov(ipc_port_message_t *msg,
+                                          iovec_t *reply_iov,ulong_t numvecs,
+                                          bool from_server,ulong_t reply_len)
+{
+  status_t r=0;
+  ulong_t i,to_copy,rlen;
+  char *rcv_buf;
+
+  reply_len=MIN(reply_len,msg->reply_size);
+  if( reply_len > 0 ) {
+    if( !msg->num_send_bufs && msg->reply_size <= IPC_BUFFERED_PORT_LENGTH ) {
+      /* Short message - copy it from the buffer. */
+      rcv_buf=msg->receive_buffer;
+
+      for(i=0,rlen=reply_len;i<numvecs && rlen;i++,reply_iov++) {
+        to_copy=MIN(rlen,reply_iov->iov_len);
+
+        if( from_server ) {
+          r=copy_from_user(rcv_buf,reply_iov->iov_base,to_copy);
+        } else {
+          r=copy_to_user(reply_iov->iov_base,rcv_buf,to_copy);
+        }
+
+        if( r ) {
+          break;
+        }
+        rlen-=to_copy;
+        rcv_buf += to_copy;
+      }
+    } else {
+      /* Long message - process it via buffer. */
+      if( from_server ) {
+        r=ipc_transfer_buffer_data_iov(msg->rcv_buf,msg->num_recv_buffers,
+                                       reply_iov,numvecs,true);
+      } else {
+        r=0;
+      }
+    }
+  }
+
+  if( r ) {
+    r=-EFAULT;
+    reply_len=0;
+  }
+
+  /* If we're replying to the message, setup size properly. */
+  if( from_server ) {
+    msg->replied_size=reply_len;
+  }
+
+  return r;
+}
+
+status_t ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
+                            iovec_t *reply_iov,ulong_t numvecs,
+                            ulong_t reply_len)
+{
+  ipc_port_message_t *msg;
+  status_t r;
+
+  if( !port->msg_ops->remove_message ||
+      !(port->flags & IPC_BLOCKED_ACCESS)) {
+    return -EINVAL;
+  }
+
+  msg=NULL;
+  IPC_LOCK_PORT_W(port);
+  if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
+    msg=port->msg_ops->remove_message(port,msg_id);
+    if( !msg ) {
+      kprintf( "[5] Can't remove message %d\n",msg_id );
+      r=-EINVAL;
+    }
+  } else {
+    r=-EPIPE;
+  }
+  IPC_UNLOCK_PORT_W(port);
+
+  if( msg ) {
+    r=__transfer_reply_data_iov(msg,reply_iov,numvecs,true,reply_len);
+    if( event_is_active(&msg->event) ) {
+      event_raise(&msg->event);
+    }
+  }
+
+  return r;
+}
+
 poll_event_t ipc_port_get_pending_events(ipc_gen_port_t *port)
 {
   poll_event_t e;

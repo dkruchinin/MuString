@@ -143,6 +143,13 @@ out:
   return r;
 }
 
+status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
+                                      struct __iovec *iovecs,ulong_t numvecs,
+                                      bool to_buffer)
+{
+  return 0;
+}
+
 status_t ipc_transfer_buffer_data(ipc_user_buffer_t *bufs,ulong_t numbufs,
                                   void *user_addr,ulong_t to_copy,bool to_buffer)
 {

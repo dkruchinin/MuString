@@ -15,5 +15,7 @@ status_t ipc_setup_buffer_pages(task_t *owner,struct __iovec *iovecs,ulong_t num
                                 uintptr_t *addr_array,ipc_user_buffer_t *bufs);
 status_t ipc_transfer_buffer_data(ipc_user_buffer_t *bufs,ulong_t numbufs,
                                   void *user_addr,ulong_t to_copy,bool to_buffer);
-
+status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
+                                      struct __iovec *iovecs,ulong_t numvecs,
+                                      bool to_buffer);
 #endif

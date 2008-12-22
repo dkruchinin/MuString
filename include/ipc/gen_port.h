@@ -104,6 +104,9 @@ ipc_port_message_t *ipc_create_port_message_iov_v(iovec_t *snd_kiovecs,ulong_t s
                                                   ipc_user_buffer_t *snd_bufs,
                                                   ipc_user_buffer_t *rcv_bufs,
                                                   ulong_t rcv_size);
+status_t ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
+                            iovec_t *reply_iov,ulong_t numvecs,
+                            ulong_t reply_size);
 
 #define IPC_NB_MESSAGE_MAXLEN  (512-sizeof(ipc_port_message_t))
 
