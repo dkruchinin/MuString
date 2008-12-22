@@ -132,14 +132,14 @@ task_t *lookup_task(pid_t pid, ulong_t flags)
 }
 
 status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
-                     task_t **newtask)
+                     task_t **newtask,task_creation_attrs_t *attrs)
 {
   task_t *new_task;
   status_t r;
 
-  r = create_new_task(parent,flags,priv,&new_task);
+  r = create_new_task(parent,flags,priv,&new_task,attrs);
   if(r == 0) {
-    r = arch_setup_task_context(new_task,flags,priv,parent);
+    r = arch_setup_task_context(new_task,flags,priv,parent,attrs);
     if(r == 0) {
       /* Tell the scheduler layer to take care of this task. */
       r = sched_add_task(new_task);
@@ -150,6 +150,11 @@ status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
           LOCK_PID_HASH_LEVEL_W(l);
           list_add2tail(&pid_to_struct_hash[l],&new_task->pid_list);
           UNLOCK_PID_HASH_LEVEL_W(l);
+        }
+
+        /* If user requests to start this task immediately, do so. */
+        if( attrs && attrs->task_attrs.run_immediately == __ATTR_ON ) {
+          sched_change_task_state(new_task,TASK_STATE_RUNNABLE);
         }
       }
     } else {
@@ -217,16 +222,44 @@ out_release:
   return r;
 }
 
-status_t sys_create_task(ulong_t flags)
+static bool __check_task_attrs(task_creation_attrs_t *attrs)
+{
+  exec_attrs_t *ea=&attrs->exec_attrs;
+  bool valid;
+
+  valid=valid_user_address(ea->stack);
+  valid *=valid_user_address(ea->entrypoint);
+  valid *=valid_user_address(ea->arg);
+
+  return valid;
+}
+
+status_t sys_create_task(ulong_t flags,task_creation_attrs_t *a)
 {
   task_t *task;
   status_t r;
+  task_creation_attrs_t attrs,*pa;
 
   if( !security_ops->check_create_process(flags) ) {
     return -EPERM;
   }
 
-  r = create_task(current_task(), flags, TPL_USER, &task);
+  if( a ) {
+    if( copy_from_user(&attrs,a,sizeof(attrs) ) ) {
+      kprintf( "[1]\n" );
+      return -EFAULT;
+    }
+    if( !__check_task_attrs(&attrs) ) {
+      kprintf( "[2]\n" );
+      return -EINVAL;
+    }
+    pa=&attrs;
+  } else {
+    pa=NULL;
+  }
+
+  r = create_task(current_task(), flags, TPL_USER, &task,pa);
+  kprintf( "[R=%d]\n",r );
   if( !r ) {
     if( is_thread(task) ) {
       r=task->tid;

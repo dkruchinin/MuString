@@ -91,12 +91,13 @@ status_t sys_get_pid(void);
  * @param flags - Task creation flags. Possible values are:
  *                CLONE_MM - new task will share its memory space with its
  *                           parent (suitable for creation 'threads').
+ * @param attrs - Task creation attributes.
  * @return If new task was successfully created, this function returns
  *         the PID of the new task.
  *         Otherwise, negation of the following error codes is returned:
  *         ENOMEM   No memory was available.
  */
-status_t sys_create_task(ulong_t flags);
+status_t sys_create_task(ulong_t flags,task_creation_attrs_t *a);
 
 
 /**

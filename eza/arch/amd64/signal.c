@@ -237,9 +237,9 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
   }
 
   /* Determine what is there a user-specific handler installed ? */
-  LOCK_TASK_STRUCT(caller);
+  LOCK_TASK_SIGNALS(caller);
   act=caller->siginfo.handlers->actions[sigitem->info.si_signo].a.sa_sigaction;
-  UNLOCK_TASK_STRUCT(caller);
+  UNLOCK_TASK_SIGNALS(caller);
 
   if( act == SIG_IGN ) {
     goto out;

@@ -192,7 +192,8 @@ status_t kernel_thread(void (*fn)(void *), void *data, task_t **out_task)
   task_t *newtask;
   status_t r;
 
-  r = create_task(current_task(),KERNEL_THREAD_FLAGS,TPL_KERNEL,&newtask);
+  r = create_task(current_task(),KERNEL_THREAD_FLAGS,TPL_KERNEL,&newtask,
+                  NULL);
 
   if(r >= 0) {
     /* Prepare entrypoint for this kernel thread.
@@ -256,13 +257,15 @@ static uint64_t __setup_user_task_context(task_t *task)
 }
 
 status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
-                                 task_privelege_t priv,task_t *parent)
+                                 task_privelege_t priv,task_t *parent,
+                                 task_creation_attrs_t *attrs)
 {
   uintptr_t fsave = newtask->kernel_stack.high_address;
   uint64_t delta, reg_size;
   arch_context_t *parent_ctx = (arch_context_t*)&parent->arch_context[0];
   arch_context_t *task_ctx;
   tss_t *tss;
+  regs_t *regs;
 
   if( priv == TPL_KERNEL ) {
     reg_size = __setup_kernel_task_context(newtask);
@@ -274,6 +277,8 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
    * the address to be 512-bytes aligned.
    */
   fsave-=reg_size;
+  regs=(regs_t*)fsave;
+
   delta=fsave;
   fsave-=512;
   fsave &= 0xfffffffffffffff0;
@@ -301,6 +306,19 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
     task_ctx->tss_limit=parent_ctx->tss_limit;
     kprintf( "Copying TSS (%p) from %d:%d\n",
              tss,parent->pid,parent->tid);
+  }
+
+  /* Process attributes, if any. */
+  if( attrs ) {
+    if( attrs->exec_attrs.stack ) {
+      regs->int_frame.old_rsp=attrs->exec_attrs.stack;
+    }
+    if( attrs->exec_attrs.entrypoint ) {
+      regs->int_frame.rip=attrs->exec_attrs.entrypoint;
+    }
+    if( attrs->exec_attrs.arg ) {
+      regs->gpr_regs.rdi=attrs->exec_attrs.arg;
+    }
   }
 
   return 0;

@@ -33,6 +33,7 @@
 #include <eza/smp.h>
 #include <eza/kconsole.h>
 #include <eza/arch/context.h>
+#include <mm/mmap.h>
 
 #define get_fault_address(x) \
     __asm__ __volatile__( "movq %%cr2, %0" : "=r"(x) )
@@ -75,6 +76,39 @@ static void __dump_regs(regs_t *r,ulong_t rip)
   kprintf(" RIP: %p\n",rip);
 }
 
+#define NUM_STACKWORDS 5
+
+static bool __read_user_safe(uintptr_t addr,uintptr_t *val)
+{
+  uintptr_t *p;
+  page_idx_t pidx=mm_pin_virt_addr(current_task()->page_dir,addr);
+
+  if( pidx < 0 ) {
+    return false;
+  }
+
+  p=(uintptr_t*)(pframe_id_to_virt(pidx)+(addr & PAGE_OFFSET_MASK));
+  *val=*p;
+  return true;
+}
+
+void __dump_stack(uintptr_t ustack)
+{
+  int i;
+  uintptr_t d;
+
+  kprintf("\nTop %d words of userspace stack (RSP=%p).\n\n",
+          NUM_STACKWORDS,ustack);
+  for(i=0;i<NUM_STACKWORDS;i++) {
+    if( __read_user_safe(ustack,&d) ) {
+      kprintf("  <%p>\n",d);
+    } else {
+      kprintf("  <Invalid stack pointer>\n");
+    }
+    ustack += sizeof(uintptr_t);
+  }
+}
+
 void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
   uint64_t invalid_address,fixup;
@@ -82,12 +116,14 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 
   get_fault_address(invalid_address);
 
+  default_console()->disable();
+  default_console()->enable();
+
   if( kernel_fault(stack_frame) ) {
     goto kernel_fault;
   }
 
-  default_console()->enable();
-  kprintf("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n",
+  kprintf("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
   goto send_sigsegv;
 
@@ -99,11 +135,15 @@ kernel_fault:
     return;
   }
 
-  kprintf("[CPU %d] Unhandled kernel-mode PF exception! Stopping CPU with error code=%d.\n",
+  kprintf("[CPU %d] Unhandled kernel-mode PF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
 send_sigsegv:
   __dump_regs(regs,stack_frame->rip);
   kprintf( " Invalid address: %p\n", invalid_address );
+
+  if( !kernel_fault(stack_frame) ) {
+    __dump_stack(stack_frame->old_rsp);
+  }
 
   interrupts_disable();
   for(;;);

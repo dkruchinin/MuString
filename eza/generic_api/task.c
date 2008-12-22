@@ -314,7 +314,8 @@ static status_t __setup_signals(task_t *task,task_t *parent,ulong_t flags)
   return 0;
 }
 
-status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t)
+status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t,
+                         task_creation_attrs_t *attrs)
 {
   task_t *task;
   status_t r = -ENOMEM;

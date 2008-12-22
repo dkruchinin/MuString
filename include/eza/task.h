@@ -180,6 +180,22 @@ typedef struct __task_struct {
 #define LOCK_TASK_SIGNALS(t)  spinlock_lock(&(t)->siginfo.lock)
 #define UNLOCK_TASK_SIGNALS(t)  spinlock_unlock(&(t)->siginfo.lock)
 
+#define __ATTR_OFF  0  /**< Attribute is enabled **/
+#define __ATTR_ON   1  /**< Attribute is disabled **/
+
+typedef struct __task_attrs {
+  uint8_t run_immediately;
+} task_attrs_t;
+
+typedef struct __exec_attrs {
+  uintptr_t stack,entrypoint,arg;
+} exec_attrs_t;
+
+typedef struct __task_creation_attrs {
+  task_attrs_t task_attrs;
+  exec_attrs_t exec_attrs;
+} task_creation_attrs_t;
+
 /**
  * @fn void initialize_task_subsystem(void)
  * @brief Initializes kernel task subsystem.
@@ -223,10 +239,11 @@ status_t kernel_thread(void (*fn)(void *), void *data, task_t **out_task);
  * @return - In case of success, zero is returned. Otherwise, a negated value
  *           of one of the standard error values is returned.
  * @param priv - Privilege level of target task.
+ * @param attrs - Attributes of new task.
  */
 status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t flags,
-                                 task_privelege_t priv,
-                                 task_t *parent);
+                                 task_privelege_t priv,task_t *parent,
+                                 task_creation_attrs_t *attrs);
 
 /**
  * @fn arch_process_context_control(task_t *task,ulong_t cmd,ulong_t arg)
@@ -245,7 +262,7 @@ status_t arch_process_context_control(task_t *task,ulong_t cmd,ulong_t arg);
 
 
 status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
-                     task_t **new_task);
+                     task_t **new_task,task_creation_attrs_t *attrs);
 
 /**
  * @fn status_t create_new_task(task_t *parent, task_t **t,
@@ -258,7 +275,7 @@ status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
  * See 'create_task()' for details.
  */
  status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv,
-                         task_t **t );
+                          task_t **t,task_creation_attrs_t *attrs);
 
 /**
  * @fn void free_task_struct(task_t *task)
