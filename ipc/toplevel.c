@@ -70,17 +70,22 @@ status_t sys_close_port(ulong_t port)
   return ipc_close_port(current_task(),port);
 }
 
-status_t sys_port_reply(ulong_t port,ulong_t msg_id,ulong_t reply_buf,
-                        ulong_t reply_len) {
+static status_t __reply_iov(ulong_t port,ulong_t msg_id,
+                            iovec_t reply_iov[],ulong_t numvecs)
+{
   ipc_gen_port_t *p;
-  status_t r;
+  int i,reply_size;
 
-  if( !reply_buf || reply_len > MAX_PORT_MSG_LENGTH ) {
-    return -EINVAL;
-  }
+  for(reply_size=0,i=0;i<snd_numvecs;i++) {
+    if( !valid_user_address_range(reply_iov[i].iov_base,
+                                  snd_kiovecs[i].iov_len) ) {
+      return -EFAULT;
+    }
 
-  if( !valid_user_address_range(reply_buf,reply_len) ) {
-    return -EFAULT;
+    msg_size += snd_kiovecs[i].iov_len;
+    if( msg_size > MAX_PORT_MSG_LENGTH ) {
+      return -EINVAL;
+    }
   }
 
   p=__ipc_get_port(current_task(),port);
@@ -91,6 +96,30 @@ status_t sys_port_reply(ulong_t port,ulong_t msg_id,ulong_t reply_buf,
   r=__ipc_port_reply(p,msg_id,reply_buf,reply_len);
   __ipc_put_port(p);
   return r;
+}
+
+status_t sys_port_reply_iov(ulong_t port,ulong_t msg_id,
+                            iovec_t reply_iov[],ulong_t numvecs) {
+  iovec_t iovecs[MAX_IOVECS];
+
+  if( !reply_iov || !numvecs || numvecs > MAX_IOVECS ) {
+    return -EINVAL;
+  }
+
+  if( copy_from_user(iovecs,reply_iov,numvecs*sizeof(iovec_t)) ) {
+    return -EFAULT;
+  }
+  return __reply_iov(port,msg_id,iovecs,numvecs);
+}
+
+status_t sys_port_reply(ulong_t port,ulong_t msg_id,ulong_t reply_buf,
+                        ulong_t reply_len) {
+  iovec_t iv;
+
+  iv.iov_base=reply_buf;
+  iv.iov_len=reply_len;
+
+  return __reply_iov(port,msg_id,&iv,1);
 }
 
 status_t sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
@@ -152,6 +181,87 @@ status_t sys_port_send(ulong_t channel,
   __ipc_put_port(port);
 put_channel:
   ipc_put_channel(c);
+  return r;
+}
+
+status_t sys_port_send_iov_v(ulong_t channel,
+                             iovec_t snd_iov[],ulong_t snd_numvecs,
+                             iovec_t rcv_iov[],ulong_t rcv_numvecs)
+{
+  status_t r;
+  iovec_t snd_kiovecs[MAX_IOVECS];
+  iovec_t rcv_kiovecs[MAX_IOVECS];
+  ulong_t i,msg_size,rcv_size;
+  task_t *caller=current_task();
+  ipc_channel_t *c;
+  ipc_gen_port_t *port;
+  ipc_port_message_t *msg;
+  ipc_user_buffer_t snd_bufs[MAX_IOVECS],rcv_bufs[MAX_IOVECS];
+
+  if( !snd_iov || !snd_numvecs || snd_numvecs > MAX_IOVECS ||
+      !rcv_iov || !rcv_numvecs || rcv_numvecs > MAX_IOVECS ) {
+    return -EINVAL;
+  }
+
+  if( copy_from_user( &snd_kiovecs,snd_iov,snd_numvecs*sizeof(iovec_t)) ) {
+    return -EFAULT;
+  }
+
+  if( copy_from_user( &rcv_kiovecs,rcv_iov,rcv_numvecs*sizeof(iovec_t)) ) {
+    return -EFAULT;
+  }
+
+  /* Check send buffer. */
+  for(msg_size=0,i=0;i<snd_numvecs;i++) {
+    if( !valid_user_address_range(snd_kiovecs[i].iov_base,
+                                  snd_kiovecs[i].iov_len) ) {
+      return -EFAULT;
+    }
+
+    msg_size += snd_kiovecs[i].iov_len;
+    if( msg_size > MAX_PORT_MSG_LENGTH ) {
+      return -EINVAL;
+    }
+  }
+
+  /* Check receive buffer. */
+  for(rcv_size=0,i=0;i<rcv_numvecs;i++) {
+    if( !valid_user_address_range(rcv_kiovecs[i].iov_base,
+                                  rcv_kiovecs[i].iov_len) ) {
+      return -EFAULT;
+    }
+
+    rcv_size += rcv_kiovecs[i].iov_len;
+    if( rcv_size > MAX_PORT_MSG_LENGTH ) {
+      return -EINVAL;
+    }
+  }
+
+  c=ipc_get_channel(caller,channel);
+  if( !c ) {
+    return -EINVAL;
+  }
+
+  r=ipc_get_channel_port(c,&port);
+  if( r ) {
+    goto put_channel;
+  }
+
+  msg=ipc_create_port_message_iov_v(snd_kiovecs,snd_numvecs,
+                                    msg_size,channel_in_blocked_mode(c),
+                                    rcv_kiovecs,rcv_numvecs,
+                                    snd_bufs,rcv_bufs,rcv_size);
+  if( !msg ) {
+    r=-ENOMEM;
+  } else {
+//    r=__ipc_port_send(port,msg,channel_in_blocked_mode(c),rcv_buf,rcv_size);
+  }
+
+  __ipc_put_port(port);
+put_channel:
+  ipc_put_channel(c);
+  return r;
+
   return r;
 }
 

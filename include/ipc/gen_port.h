@@ -98,6 +98,12 @@ void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w);
 ipc_port_message_t *ipc_create_port_message_iov(iovec_t *kiovecs,ulong_t numvecs,
                                                 ulong_t data_len,bool blocked,
                                                 uintptr_t rcv_buf,ulong_t rcv_size);
+ipc_port_message_t *ipc_create_port_message_iov_v(iovec_t *snd_kiovecs,ulong_t snd_numvecs,
+                                                  ulong_t data_len,bool blocked,
+                                                  iovec_t *rcv_kiovecs,ulong_t rcv_numvecs,
+                                                  ipc_user_buffer_t *snd_bufs,
+                                                  ipc_user_buffer_t *rcv_bufs,
+                                                  ulong_t rcv_size);
 
 #define IPC_NB_MESSAGE_MAXLEN  (512-sizeof(ipc_port_message_t))
 

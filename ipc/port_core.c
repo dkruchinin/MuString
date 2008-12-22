@@ -71,6 +71,88 @@ static ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t 
   return NULL;
 }
 
+ipc_port_message_t *ipc_create_port_message_iov_v(iovec_t *snd_kiovecs,ulong_t snd_numvecs,
+                                                  ulong_t data_len,bool blocked,
+                                                  iovec_t *rcv_kiovecs,ulong_t rcv_numvecs,
+                                                  ipc_user_buffer_t *snd_bufs,
+                                                  ipc_user_buffer_t *rcv_bufs,
+                                                  ulong_t rcv_size)
+{
+  ipc_port_message_t *msg;
+  int i,r;
+  char *p;
+  task_t *owner=current_task();
+  task_ipc_priv_t *ipc_priv = owner->ipc_priv;
+
+  if( !blocked ) {
+    if( data_len > IPC_NB_MESSAGE_MAXLEN ) {
+      return NULL;
+    }
+
+    msg=__ipc_create_nb_port_message(owner,0,data_len,false);
+    if( !msg ) {
+      return NULL;
+    }
+  } else {
+    msg = &owner->ipc_priv->cached_data.cached_port_message;
+    IPC_RESET_MESSAGE(msg,owner);
+
+    msg->data_size=data_len;
+    msg->reply_size=rcv_size;
+    msg->sender=owner;
+
+    /* Prepare send buffer. */
+    if( data_len <= IPC_BUFFERED_PORT_LENGTH ) {
+      msg->send_buffer=ipc_priv->cached_data.cached_page1;
+      msg->num_send_bufs=0;
+    } else {
+      /* Well, need to setup user buffers. */
+      r=ipc_setup_buffer_pages(owner,snd_kiovecs,snd_numvecs,
+                               (uintptr_t *)ipc_priv->cached_data.cached_page1,
+                               snd_bufs);
+      if( r ) {
+        goto free_message;
+      }
+      msg->num_send_bufs=snd_numvecs;
+      msg->snd_buf=snd_bufs;
+    }
+
+    /* Prepare receive buffer. */
+    if( rcv_size ) {
+      if( rcv_size <= IPC_BUFFERED_PORT_LENGTH ) {
+        msg->receive_buffer=ipc_priv->cached_data.cached_page2;
+        msg->num_recv_buffers=0;
+      } else {
+        r=ipc_setup_buffer_pages(owner,rcv_kiovecs,rcv_numvecs,
+                                 (uintptr_t *)ipc_priv->cached_data.cached_page2,
+                                 rcv_bufs);
+        if( !r ) {
+          msg->num_recv_buffers=rcv_numvecs;
+          msg->rcv_buf=rcv_bufs;
+          return msg;
+        }
+        goto free_message;
+      }
+    }
+
+    /* Now copy user data to the message. */
+    p=msg->send_buffer;
+    for(i=0;i<snd_numvecs;i++) {
+      if( copy_from_user(p,snd_kiovecs->iov_base,snd_kiovecs->iov_len) ) {
+        goto free_message;
+      }
+      p += snd_kiovecs->iov_len;
+      snd_kiovecs++;
+    }
+  }
+  return msg;
+free_message:
+  if( !blocked ) {
+    put_ipc_port_message(msg);
+  }
+  return NULL;
+}
+
 ipc_port_message_t *ipc_create_port_message_iov(iovec_t *kiovecs,ulong_t numvecs,
                                                 ulong_t data_len,bool blocked,
                                                 uintptr_t rcv_buf,ulong_t rcv_size)
