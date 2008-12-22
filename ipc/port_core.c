@@ -160,130 +160,10 @@ ipc_port_message_t *ipc_create_port_message_iov(iovec_t *kiovecs,ulong_t numvecs
   return NULL;
 }
 
-/*
-ipc_port_message_t *ipc_create_port_message_iov(iovec_t *kiovecs,ulong_t numvecs,
-                                                ulong_t data_len,bool blocked,
-                                                uintptr_t rcv_buf,ulong_t rcv_size)
-{
-  ipc_port_message_t *msg;
-  int i,r;
-  char *p;
-  task_t *owner=current_task();
-  task_ipc_priv_t *ipc_priv = owner->ipc_priv;
-
-  if( !blocked ) {
-    if( data_len > IPC_NB_MESSAGE_MAXLEN ) {
-      return NULL;
-    }
-
-    msg=__ipc_create_nb_port_message(owner,0,data_len,false);
-    if( !msg ) {
-      return NULL;
-    }
-  } else {
-    msg = &owner->ipc_priv->cached_data.cached_port_message;
-    IPC_RESET_MESSAGE(msg,owner);
-
-    msg->data_size=data_len;
-    msg->reply_size=rcv_size;
-    msg->sender=owner;
-
-    if( data_len <= IPC_BUFFERED_PORT_LENGTH ) {
-      msg->send_buffer=ipc_priv->cached_data.cached_page1;
-      msg->num_send_bufs=0;
-    } else {
-      r=ipc_setup_buffer_pages(owner,kiovecs,numvecs,
-                               (uintptr_t *)ipc_priv->cached_data.cached_page1,
-                               ipc_priv->cached_data.cached_send_buffers);
-      if( r ) {
-        goto free_message;
-      }
-      msg->num_send_bufs=numvecs;
-      msg->snd_buf=ipc_priv->cached_data.cached_send_buffers;
-    }
-
-    if( rcv_size ) {
-      if( rcv_size <= IPC_BUFFERED_PORT_LENGTH ) {
-        msg->receive_buffer=ipc_priv->cached_data.cached_page2;
-      } else {
-        iovec_t iv;
-
-        iv.iov_base=(void *)rcv_buf;
-        iv.iov_len=rcv_size;
-
-        r=ipc_setup_buffer_pages(owner,&iv,1,
-                                 (uintptr_t *)ipc_priv->cached_data.cached_page2,
-                                 &ipc_priv->cached_data.recv_buffer);
-        if( !r ) {
-          msg->rcv_buf=&ipc_priv->cached_data.recv_buffer;
-          msg->num_recv_buffers=1;
-          return msg;
-        }
-        goto free_message;
-      }
-    }
-  }
-
-  p=msg->send_buffer;
-
-  for(i=0;i<numvecs;i++) {
-    if( copy_from_user(p,kiovecs->iov_base,kiovecs->iov_len) ) {
-      goto free_message;
-    }
-    p += kiovecs->iov_len;
-    kiovecs++;
-  }
-  return msg;
-free_message:
-  if( !blocked ) {
-    put_ipc_port_message(msg);
-  }
-  return NULL;
-}
-*/
-
 static void __notify_message_arrived(ipc_gen_port_t *port)
 {
     waitqueue_pop(&port->waitqueue, NULL);
 }
-
-/*
-static status_t __transfer_reply_data(ipc_port_message_t *msg,
-                                      uintptr_t reply_buf,ulong_t reply_len,
-                                      bool from_server)
-{
-  status_t r=0;
-
-  reply_len=MIN(reply_len,msg->reply_size);
-  if( reply_len > 0 ) {
-    if( msg->reply_size <= IPC_BUFFERED_PORT_LENGTH ) {
-      if( from_server ) {
-        r=copy_from_user(msg->receive_buffer,(void*)reply_buf,reply_len);
-      } else {
-        r=copy_to_user((void*)reply_buf,msg->receive_buffer,reply_len);
-      }
-    } else {
-      if( from_server ) {
-        r=ipc_transfer_buffer_data(msg->rcv_buf,1,(void *)reply_buf,
-                                   reply_len,from_server);
-      } else {
-        r=0;
-      }
-    }
-  }
-
-  if( r ) {
-    r=-EFAULT;
-    reply_len=0;
-  }
-
-  if( from_server ) {
-    msg->replied_size=reply_len;
-  }
-
-  return r;
-}
-*/
 
 status_t __ipc_port_send(struct __ipc_gen_port *port,
                          ipc_port_message_t *msg,bool sync_send,
@@ -291,66 +171,6 @@ status_t __ipc_port_send(struct __ipc_gen_port *port,
 {
   return 0;
 }
-
-/*
-status_t __ipc_port_send(struct __ipc_gen_port *port,
-                         ipc_port_message_t *msg,bool sync_send,
-                         uintptr_t rcv_buf,ulong_t rcv_size)
-{
-  ipc_port_msg_ops_t *msg_ops=port->msg_ops;
-  status_t msg_size=0,r=0;
-  task_t *sender=current_task();
-
-  if( !msg_ops->insert_message ) {
-    return -EINVAL;
-  }
-
-  IPC_LOCK_PORT_W(port);
-  r=(port->flags & IPC_BLOCKED_ACCESS) | sync_send;
-  if( r ) {
-    if( !((port->flags & IPC_BLOCKED_ACCESS) && sync_send) ) {
-      r=-EINVAL;
-    } else {
-      r=0;
-    }
-  } else {
-    msg_size=msg->data_size;
-  }
-
-  if( !r ) {
-    if( !(port->flags & IPC_PORT_SHUTDOWN ) ) {
-      r=msg_ops->insert_message(port,msg);
-    } else {
-      r=-EPIPE;
-    }
-  }
-  IPC_UNLOCK_PORT_W(port);
-
-  if( r ) {
-    return r;
-  }
-
-  __notify_message_arrived(port);
-
-  if( sync_send ) {
-    IPC_TASK_ACCT_OPERATION(sender);
-    event_yield( &msg->event );
-    IPC_TASK_UNACCT_OPERATION(sender);
-
-    r=msg->replied_size;
-    if( r > 0 ) {
-      r=__transfer_reply_data(msg,rcv_buf,rcv_size,false);
-      if( !r ) {
-        r=msg->replied_size;
-      }
-    }
-  } else {
-    r=msg_size;
-  }
-
-  return r;
-}
-*/
 
 static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
                                 task_t *owner)
@@ -542,7 +362,6 @@ static status_t __transfer_message_data_to_receiver(ipc_port_message_t *msg,
 {
   status_t r;
 
-  kprintf("*>> RCV MSG LEN: %d\n",msg->data_size);
   recv_len=MIN(recv_len,msg->data_size);
   if( msg->data_size <= IPC_BUFFERED_PORT_LENGTH ) {
     /* Short message - copy it from the buffer. */
@@ -815,7 +634,6 @@ status_t ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
   if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
     msg=port->msg_ops->remove_message(port,msg_id);
     if( !msg ) {
-      kprintf( "[5] Can't remove message %d\n",msg_id );
       r=-EINVAL;
     }
   } else {

@@ -269,63 +269,6 @@ status_t sys_port_send_iov(ulong_t channel,
   return __send_iov_v(channel,kiovecs,numvecs,&rcv_kiovec,1);
 }
 
-/*
-status_t sys_port_send_iov(ulong_t channel,
-                           iovec_t iov[],ulong_t numvecs,
-                           uintptr_t rcv_buf,ulong_t rcv_size)
-{
-  status_t r;
-  iovec_t kiovecs[MAX_IOVECS];
-  ulong_t i,msg_size;
-  task_t *caller=current_task();
-  ipc_channel_t *c;
-  ipc_gen_port_t *port;
-  ipc_port_message_t *msg;
-
-  if( !iov || !numvecs || numvecs > MAX_IOVECS ) {
-    return -EINVAL;
-  }
-
-  if( copy_from_user( kiovecs,iov,numvecs*sizeof(iovec_t)) ) {
-    return -EFAULT;
-  }
-
-  for(msg_size=0,i=0;i<numvecs;i++) {
-    if( !valid_user_address_range(kiovecs[i].iov_base,
-                                  kiovecs[i].iov_len) ) {
-      return -EFAULT;
-    }
-    msg_size += kiovecs[i].iov_len;
-    if( msg_size > MAX_PORT_MSG_LENGTH ) {
-      return -EINVAL;
-    }
-  }
-
-  c=ipc_get_channel(caller,channel);
-  if( !c ) {
-    return -EINVAL;
-  }
-
-  r=ipc_get_channel_port(c,&port);
-  if( r ) {
-    goto put_channel;
-  }
-
-  msg=ipc_create_port_message_iov(kiovecs,numvecs,msg_size,
-                                  channel_in_blocked_mode(c),rcv_buf,rcv_size);
-  if( !msg ) {
-    r=-ENOMEM;
-  } else {
-    r=__ipc_port_send(port,msg,channel_in_blocked_mode(c),rcv_buf,rcv_size);
-  }
-
-  __ipc_put_port(port);
-put_channel:
-  ipc_put_channel(c);
-  return r;
-}
-*/
-
 status_t sys_control_channel(ulong_t channel,ulong_t cmd,ulong_t arg)
 {
   return ipc_channel_control(current_task(),channel,cmd,arg);
