@@ -33,8 +33,6 @@
 typedef struct __ipc_cached_data {
   void *cached_page1, *cached_page2;
   ipc_port_message_t cached_port_message;
-  ipc_user_buffer_t cached_send_buffers[MAX_IOVECS];
-  ipc_user_buffer_t recv_buffer;
 } ipc_cached_data_t;
 
 typedef struct __ipc_pstats {

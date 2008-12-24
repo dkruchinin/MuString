@@ -550,7 +550,6 @@ static status_t __transfer_reply_data_iov(ipc_port_message_t *msg,
   if( from_server ) {
     msg->replied_size=reply_len;
   }
-
   return r;
 }
 
@@ -566,6 +565,9 @@ status_t ipc_port_send_iov(struct __ipc_gen_port *port,
   if( !msg_ops->insert_message ) {
     return -EINVAL;
   }
+
+  event_initialize(&msg->event);
+  event_set_task(&msg->event,sender);
 
   IPC_LOCK_PORT_W(port);
   r=(port->flags & IPC_BLOCKED_ACCESS) | sync_send;
@@ -600,7 +602,11 @@ status_t ipc_port_send_iov(struct __ipc_gen_port *port,
   /* Sender should wait for the reply, so put it into sleep here. */
   if( sync_send ) {
     IPC_TASK_ACCT_OPERATION(sender);
+    kprintf( "[0x%X] port_send_iov(): Sleeping ...\n",
+            sender->tid );
     event_yield( &msg->event );
+    kprintf( "[0x%X] port_send_iov(): Got woken up !\n",
+            sender->tid );
     IPC_TASK_UNACCT_OPERATION(sender);
 
     r=msg->replied_size;
@@ -613,7 +619,6 @@ status_t ipc_port_send_iov(struct __ipc_gen_port *port,
   } else {
     r=msg_size;
   }
-
   return r;
 }
 
@@ -644,6 +649,8 @@ status_t ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
   if( msg ) {
     r=__transfer_reply_data_iov(msg,reply_iov,numvecs,true,reply_len);
     if( event_is_active(&msg->event) ) {
+      kprintf( "[0x%X] ipc_port_reply_iov(): waking up 0x%X\n",
+               current_task()->tid,msg->event.task->tid );
       event_raise(&msg->event);
     }
   }

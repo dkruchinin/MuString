@@ -86,6 +86,8 @@ status_t ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
 
   LOCK_TASK_VM(owner);
 
+  kprintf( "> " );
+
   for(;numvecs;numvecs--,iovecs++,bufs++) {
     ipc_user_buffer_t *buf=bufs;
     uintptr_t start_addr=(uintptr_t)iovecs->iov_base;
@@ -109,6 +111,8 @@ status_t ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
 
     buf->first=first;
     *pchunk=(uintptr_t)pframe_id_to_virt(idx)+(start_addr & ~PAGE_ADDR_MASK);
+
+    kprintf( " %p ", *pchunk );
 
     size-=first;
     start_addr+=first;
@@ -137,11 +141,14 @@ status_t ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
     buf->length=iovecs->iov_len;
     addr_array+=chunk_num;
   }
+  kprintf( "\n" );
   r = 0;
 out:
   UNLOCK_TASK_VM(owner);
   return r;
 }
+
+static bool verbose=false;
 
 status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
                                       struct __iovec *iovecs,ulong_t numvecs,
@@ -149,6 +156,7 @@ status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
 {
   int i,buflen,iovlen,data_size;
   status_t r=0;
+  char *page_end;
 
   for(buflen=0,i=0;i<numbufs;i++) {
     buflen += bufs[i].length;
@@ -156,26 +164,85 @@ status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
 
   for(iovlen=0,i=0;i<numvecs;i++) {
     iovlen += iovecs[i].iov_len;
+
+    if( verbose ) {
+      kprintf( " %d ",iovecs[i].iov_len );
+    }
   }
 
   data_size=MIN(buflen,iovlen);
 
+  kprintf("+++ NUMBUFS: %d, NUMVECS: %d, DATA: %d\n",
+          numbufs,numvecs,data_size);
+  kprintf("+++ BUFLEN: %d, IOVLEN: %d\n",buflen,iovlen);
+
+  if( verbose ) {
+    kprintf( "\n### Data size: %d\n",data_size );
+  }
+
   for(;data_size;) {
-    ulong_t *chunk=bufs->chunks;
+    ulong_t *chunk;
     ulong_t to_copy,iov_size,bufsize;
-    char *dest_kaddr=(char *)*chunk;
+    char *dest_kaddr;
     char *user_addr=iovecs->iov_base;
-    bool repeat_first;
 
     /* First, process the first not page-aligned chunk. */
     iov_size=iovecs->iov_len;
+new_buffer:
+    chunk=bufs->chunks;    
     bufsize=bufs->first;
+    dest_kaddr=(char *)*chunk;
 
+    kprintf( ">>>>> bufs->first=%d,bufs->length=%d, first buf addr: %p\n",
+             bufs->first,bufs->length,dest_kaddr);
+    while( bufsize ) {
+      to_copy=MIN(bufsize,iov_size);
+      to_copy=MIN(to_copy,data_size);
+
+      if( to_buffer ) {
+        r=copy_from_user(dest_kaddr,user_addr,to_copy);
+      } else {
+        r=copy_to_user(user_addr,dest_kaddr,to_copy);
+      }
+
+      data_size-= to_copy;
+      iov_size -= to_copy;
+      bufsize -= to_copy;
+
+      dest_kaddr += to_copy;
+      user_addr += to_copy;
+
+      if( data_size ) {
+        if( !iov_size ) {
+          iovecs++;
+          user_addr = iovecs->iov_base;
+          iov_size = iovecs->iov_len;
+
+          kprintf( "# NEXT IOV (of %d) has length %d. Data left: %d\n",
+                   numvecs,iov_size,data_size );
+        }
+
+        if( !bufsize ) {
+          if( bufs->first == bufs->length ) {
+            /* This buffer is over, so process the next one from the beginning. */
+            bufs++;
+            kprintf( "# NEXT BUF (of %d).\n",numbufs );
+            goto new_buffer;
+          }
+        }
+      }
+    }
+
+/*
     do {
       repeat_first=false;
 
+      kprintf( "***** DATA SIZE: %d, bufs->first = %d, bufs->length = %d\n",
+               data_size,bufs->first,bufs->length );
       if( bufs->first ) {
         to_copy=MIN(bufsize,iov_size);
+        to_copy=MIN(to_copy,data_size);
+        kprintf( "*****  to_copy: %d, iov_size: %d\n",to_copy,iov_size );
         if( to_buffer ) {
           r=copy_from_user(dest_kaddr,user_addr,to_copy);
         } else {
@@ -183,6 +250,7 @@ status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
         }
 
         if( r ) {
+          kprintf( "FFFFFFFFFFFFFFFFFFAULT !\n" );
           break;
         }
 
@@ -190,12 +258,19 @@ status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
         iov_size -= to_copy;
         bufsize -= to_copy;
 
+        kprintf( ">> IOVSIZE=%d, BUFSIZE: %d, DATA SIZE: %d\n",
+                 iov_size,bufsize,data_size);
+
         if( data_size ) {
           if( iov_size ) {
             user_addr += to_copy;
           } else {
-            user_addr = ++iovecs->iov_base;
+            iovecs++;
+            user_addr = iovecs->iov_base;
             iov_size = iovecs->iov_len;
+
+            kprintf( "# NEXT IOV (of %d) has length %d. Data left: %d\n",
+                     numvecs,iov_size,data_size );
             repeat_first=true;
           }
 
@@ -203,34 +278,37 @@ status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
             dest_kaddr += to_copy;
           } else {
             if( bufs->first == bufs->length ) {
-              /* This buffer is over, so process the next one from the beginning. */
               bufs++;
               repeat_first=true;
               bufsize=bufs->first;
               chunk=bufs->chunks;
               dest_kaddr=(char *)*chunk;
+
+              kprintf( "# NEXT BUF (of %d).\n",numbufs );
             }
           }
         }
       }
     } while(repeat_first);
+*/
 
     /* Handle the rest of the buffer. */
     if( data_size ) {
       ulong_t delta;
 
+      chunk++;
+      dest_kaddr=(char *)*chunk;
+      page_end = dest_kaddr+PAGE_SIZE;
+
       bufsize=MIN(data_size,bufs->length-bufs->first);
 crunch_buffer:
       delta=MIN(bufsize,iov_size);
-
-      bufsize-=delta;
-      iov_size-=delta;
-      data_size-=delta;
+      delta=MIN(delta,data_size);
+      kprintf( "------ IOVSIZE=%d, BUFSIZE: %d, DELTA: %d, DATA SIZE: %d\n",
+               iov_size,bufsize,delta,data_size);
 
       while( delta ) {
-        chunk++;
-        to_copy=MIN(delta,PAGE_SIZE);
-        dest_kaddr=(char *)*chunk;
+        to_copy=MIN(delta,page_end-dest_kaddr);
 
         if( to_buffer ) {
           r=copy_from_user(dest_kaddr,user_addr,to_copy);
@@ -238,16 +316,32 @@ crunch_buffer:
           r=copy_to_user(user_addr,dest_kaddr,to_copy);
         }
 
-        delta-=to_copy;
+        bufsize-=to_copy;
+        iov_size-=to_copy;
+        data_size-=to_copy;
+        delta -= to_copy;
+
+        dest_kaddr += to_copy;
         user_addr+=to_copy;
+
+        if( bufsize && (dest_kaddr >= page_end) ) {
+          chunk++;
+          dest_kaddr=(char *)*chunk;
+          page_end=dest_kaddr+PAGE_SIZE;
+        }
       }
 
       if( bufsize && data_size ) {
         if( !iov_size ) {
-          user_addr = ++iovecs->iov_base;
+          iovecs++;
+          user_addr = iovecs->iov_base;
           iov_size = iovecs->iov_len;
         }
         goto crunch_buffer;
+      } else if( !bufsize ) {
+        /* Current buffer is over. */
+        kprintf( "  ] Buffer is over !\n" );
+        bufs++;
       }
     }
   }

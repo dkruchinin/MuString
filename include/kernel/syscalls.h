@@ -410,6 +410,13 @@ status_t sys_sync_create_object(sync_object_type_t obj_type,
 
 status_t sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg);
 
+status_t sys_port_send_iov_v(ulong_t channel,
+                             iovec_t snd_iov[],ulong_t snd_numvecs,
+                             iovec_t rcv_iov[],ulong_t rcv_numvecs);
+
+status_t sys_port_reply_iov(ulong_t port,ulong_t msg_id,
+                            iovec_t reply_iov[],ulong_t numvecs);
+
 #endif
 
 #endif

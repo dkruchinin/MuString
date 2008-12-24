@@ -116,12 +116,12 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 
   get_fault_address(invalid_address);
 
-  default_console()->disable();
-  default_console()->enable();
-
   if( kernel_fault(stack_frame) ) {
     goto kernel_fault;
   }
+
+//  default_console()->disable();
+//  default_console()->enable();
 
   kprintf("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
@@ -134,6 +134,9 @@ kernel_fault:
     stack_frame->rip=fixup;
     return;
   }
+
+//  default_console()->disable();
+//  default_console()->enable();
 
   kprintf("[CPU %d] Unhandled kernel-mode PF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
