@@ -282,10 +282,19 @@ status_t sys_wait_on_irq_array(ulong_t id)
     return -EINVAL;
   }
 
+  interrupts_disable();
+  event_reset(&array->event);
+  event_set_task(&array->event,current_task());
+  interrupts_enable();
+
   /* Check the event mask first time. */
   if( !*array->event_mask ) {
     event_yield(&array->event);
   }
+
+  interrupts_disable();
+  event_reset(&array->event);
+  interrupts_enable();
 
   return 0;
 }
