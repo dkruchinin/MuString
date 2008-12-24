@@ -129,6 +129,12 @@ status_t waitqueue_insert(wqueue_t *wq, wqueue_task_t *wq_task, wqueue_insop_t i
   if (iop == WQ_INSERT_SLEEP) {
       ret = sched_change_task_state_deferred(wq_task->task, TASK_STATE_SLEEPING,
                                              wq->acts.sleep_if_needful, wq_task);
+      if( ret == -EAGAIN ) {
+         spinlock_lock(&wq->q_lock);
+	 __delete_task(wq_task);
+         spinlock_unlock(&wq->q_lock);
+         ret = 0;
+      }
   }
 
   return ret;
