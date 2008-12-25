@@ -37,6 +37,14 @@ static inline void event_initialize(event_t *event)
   event->private_data=NULL;
 }
 
+static inline void event_reset(event_t *event)
+{
+  LOCK_EVENT(event);
+  event->task=NULL;
+  event->flags=0;
+  UNLOCK_EVENT(event);
+}
+
 static inline void event_set_checker(event_t *event,
                                      event_checker_t checker,void *data)
 {

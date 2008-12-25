@@ -560,7 +560,7 @@ static void __process_events_test(void *ctx)
   r=sys_port_receive(port,IPC_BLOCKED_ACCESS,&ev_descr,
                      sizeof(ev_descr),&msg_info);
   if( r ) {
-    tf->printf("Error occured while waiting for tasl's events: %d !\n",
+    tf->printf("Error occured while waiting for task's events: %d !\n",
                r);
     tf->failed();
   }
@@ -726,12 +726,16 @@ static void __setup_message_iovecs(uint8_t *msg,int parts,iovec_t *iovecs)
 
 static ulong_t __server_pid,__vectored_port;
 
+#define MESSAGE_SIZE(n) (sizeof(message_header_t)+((n)*sizeof(message_part_t))+sizeof(message_tail_t))
+#define WL_PATTERN  0xAABBCCDD
+
 static void __vectored_messages_thread(void *ctx)
 {
   DECLARE_TEST_CONTEXT;
   status_t r,i;
   iovec_t snd_iovecs[MAX_IOVECS],rcv_iovecs[MAX_IOVECS];
   ulong_t channel;
+  ulong_t size;
 
   tf->printf(VECTORER_ID "Starting.\n");
 
@@ -741,26 +745,49 @@ static void __vectored_messages_thread(void *ctx)
     tf->abort();
   }
 
-  for(i=0;i<TEST_ROUNDS;i++) {
-    CLEAR_CLIENT_BUFFERS;
-    __prepare_vectored_message(__vectored_msg_client_snd_buf,6);
-    __setup_message_iovecs(__vectored_msg_client_snd_buf,6,snd_iovecs);
+  for(i=0;i<5*TEST_ROUNDS;i++) {
+    ulong_t parts=(i%6)+1;
+    ulong_t *watchline;
 
-    tf->printf(VECTORER_ID "Sending a message that consists of 6 parts.\n");
-    r=sys_port_send_iov(channel,snd_iovecs,8,
-                        (uintptr_t)__vectored_msg_client_rcv_buf,
-                        sizeof(__vectored_msg_client_rcv_buf) );
-    tf->printf(VECTORER_ID"Message was sent: r=%d\n",r );
-    if( r < 0 ) {
+    CLEAR_CLIENT_BUFFERS;
+    __prepare_vectored_message(__vectored_msg_client_snd_buf,parts);
+    __setup_message_iovecs(__vectored_msg_client_snd_buf,parts,snd_iovecs);
+
+    /* Setup memory watchline. */
+    size=MESSAGE_SIZE(parts);
+    watchline=(ulong_t*)(__vectored_msg_client_rcv_buf+size);
+    *watchline=WL_PATTERN;
+
+    tf->printf(VECTORER_ID "Sending a message consisting of %d parts via %s.\n",
+               parts, (i & 0x1) ? "'sys_port_send_iov()'" : "'sys_port_send_iov_v()'" );
+    if( i & 0x1 ) {
+      r=sys_port_send_iov(channel,snd_iovecs,parts+2,
+                          (uintptr_t)__vectored_msg_client_rcv_buf,
+                          sizeof(__vectored_msg_client_rcv_buf) );
+      tf->printf(VECTORER_ID"Message was sent: r=%d\n",r );
+      if( r < 0 ) {
+        tf->failed();
+      }
+    } else {
+      __setup_message_iovecs(__vectored_msg_client_rcv_buf,parts,rcv_iovecs);
+      r=sys_port_send_iov_v(channel,snd_iovecs,parts+2,
+                            rcv_iovecs,parts+2);
+      tf->printf(VECTORER_ID"Message was sent: r=%d\n",r );
+      if( r < 0 ) {
+        tf->failed();
+      }
+    }
+    tf->printf(VECTORER_ID"Varifying server's reply (%d-parts message).\n",
+               parts);
+    FAIL_ON(!__validate_vectored_message(__vectored_msg_client_rcv_buf,parts,tf),tf);
+    if( *watchline != WL_PATTERN ) {
+      tf->printf(VECTORER_ID"Watchline pattern mismatch ! 0x%X instead of 0x%X\n",
+                 *watchline,WL_PATTERN);
       tf->failed();
     }
-    tf->printf(VECTORER_ID"Varifying server's reply (5-parts message).\n");
-    FAIL_ON(!__validate_vectored_message(__vectored_msg_client_rcv_buf,3,tf),tf);
   }
 
   tf->printf(VECTORER_ID "All messages were successfully transmitted.\n");
-  for(;;);
-
   sys_exit(0);
 }
 
@@ -770,7 +797,7 @@ static void __validate_retval(status_t r,int expected,
   if( r != expected ) {
     tf->printf(SERVER_THREAD "Insufficient return value: %d\n",
                r);
-    tf->abort();
+    tf->failed();
   }
 }
 
@@ -888,22 +915,40 @@ static void __vectored_messages_test(void *ctx)
     tf->abort();
   }
 
-  for(i=0;i<TEST_ROUNDS;i++) {
+  for(i=0;i<5*TEST_ROUNDS;i++) {
+    ulong_t parts=(i%6)+1;
+    ulong_t *watchline;
+    ulong_t size;
+
     CLEAR_SERVER_BUFFERS;
-    tf->printf(SERVER_THREAD"Receiving a message that consists of 6 parts.\n");
+
+    /* Setup memory watchline. */
+    size=MESSAGE_SIZE(parts);
+    watchline=(ulong_t*)(__vectored_msg_server_rcv_buf+size);
+    *watchline=WL_PATTERN;
+
+    tf->printf(SERVER_THREAD"Receiving a message that has %d middle parts.\n",
+               parts);
     r=sys_port_receive(port,IPC_BLOCKED_ACCESS,(ulong_t)__vectored_msg_server_rcv_buf,
                        sizeof(__vectored_msg_server_rcv_buf),&msg_info);
     tf->printf(SERVER_THREAD"Vectored message received.\n");
     __validate_retval(r,0,tf);
-    FAIL_ON(!__validate_vectored_message(__vectored_msg_server_rcv_buf,6,tf),tf);
+    FAIL_ON(!__validate_vectored_message(__vectored_msg_server_rcv_buf,parts,tf),tf);
+
+    if( *watchline != WL_PATTERN ) {
+      tf->printf(SERVER_THREAD"Watchline pattern mismatch ! 0x%X instead of 0x%X\n",
+                 *watchline,WL_PATTERN);
+      tf->failed();
+    }
 
     /* Reply to the client using a vectored message. */
     CLEAR_SERVER_BUFFERS;
-    __prepare_vectored_message(__vectored_msg_server_snd_buf,3);
-    __setup_message_iovecs(__vectored_msg_server_snd_buf,3,snd_iovecs);
+    __prepare_vectored_message(__vectored_msg_server_snd_buf,parts);
+    __setup_message_iovecs(__vectored_msg_server_snd_buf,parts,snd_iovecs);
 
-    tf->printf(SERVER_THREAD"Replying by a message that consists of 5 parts.\n");
-    r=sys_port_reply_iov(port,msg_info.msg_id,snd_iovecs,5);
+    tf->printf(SERVER_THREAD"Replying by a message that consists of %d parts.\n",
+               parts);
+    r=sys_port_reply_iov(port,msg_info.msg_id,snd_iovecs,parts+2);
     tf->printf(SERVER_THREAD"Message %d was replied (%d)\n",
                msg_info.msg_id,r);
   }
@@ -913,8 +958,6 @@ static void __vectored_messages_test(void *ctx)
     tf->printf(SERVER_THREAD"Can't close the port used for vectored messages tests !\n");
     tf->abort();
   }
-
-  for(;;);
 }
 
 static void __server_thread(void *ctx)
@@ -928,10 +971,10 @@ static void __server_thread(void *ctx)
 
   __server_pid=current_task()->pid;
 
+  __process_events_test(ctx);
   __ipc_buffer_test(ctx);
   __vectored_messages_test(ctx);
-  __process_events_test(ctx);
-  
+
   for( i=0;i<SERVER_NUM_PORTS;i++) {
     if( i != NON_BLOCKED_PORT_ID ) {
       flags=IPC_BLOCKED_ACCESS;
