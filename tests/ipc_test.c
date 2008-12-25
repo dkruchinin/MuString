@@ -580,9 +580,9 @@ static void __process_events_test(void *ctx)
 
 #define VECTORER_ID "[VECTORER] "
 
-#define MSG_HEADER_DATA_SIZE  415
-#define MSG_PART_DATA_SIZE    2000
-#define MSG_TAIL_DATA_SIZE   15417
+#define MSG_HEADER_DATA_SIZE  715
+#define MSG_PART_DATA_SIZE    3419
+#define MSG_TAIL_DATA_SIZE   17918
 
 typedef struct __message_header {
   uint16_t data_base;
@@ -603,13 +603,13 @@ typedef struct __message_tail {
     if( (c) ) (tf)->failed();                   \
   } while(0)
 
-#define MAX_MSG_PARTS  4
-#define MAX_MSG_SIZE (sizeof(message_header_t) + MAX_MSG_PARTS*sizeof(message_part_t) + sizeof(message_tail_t) )
+#define MAX_MSG_PARTS  6
+#define MAX_MSG_SIZE (sizeof(message_header_t) + MAX_MSG_PARTS*sizeof(message_part_t) + sizeof(message_tail_t))
 
-static uint8_t __vectored_msg_client_snd_buf[64768];
-static uint8_t __vectored_msg_client_rcv_buf[64768];
-static uint8_t __vectored_msg_server_snd_buf[64768];
-static uint8_t __vectored_msg_server_rcv_buf[64768];
+static uint8_t __vectored_msg_client_snd_buf[MAX_MSG_SIZE];
+static uint8_t __vectored_msg_client_rcv_buf[MAX_MSG_SIZE];
+static uint8_t __vectored_msg_server_snd_buf[MAX_MSG_SIZE];
+static uint8_t __vectored_msg_server_rcv_buf[MAX_MSG_SIZE];
 
 static int __validate_message_data(uint16_t *data,uint16_t base,ulong_t size)
 {
@@ -682,28 +682,18 @@ static void __prepare_vectored_message(uint8_t *buf,int parts)
   hdr->data_base=__data_base;
   __data_base += DATA_BASE_STEP;
 
-  kprintf("  %p=(0x%X): 0x%X", hdr,hdr->data_base,
-          hdr->data[0]);
-
   hdr++;
   part=(message_part_t *)hdr;
   for(i=0;i<parts;i++,part++) {
     __prepare_message_data(part->data,__data_base,MSG_PART_DATA_SIZE);
     part->data_base=__data_base;
     __data_base += DATA_BASE_STEP;
-
-    if( !i ) {
-      kprintf( "  %p=[0x%X]: 0x%X", part,part->data_base,
-               part->data[0]);
-    }
   }
 
   tail=(message_tail_t *)part;
   __prepare_message_data(tail->data,__data_base,MSG_TAIL_DATA_SIZE);
   tail->data_base=__data_base;
   __data_base += DATA_BASE_STEP;
-  kprintf( "  %p=<0x%X>: 0x%X\n" , tail,tail->data_base,
-           tail->data[0]);
 }
 
 static void __setup_message_iovecs(uint8_t *msg,int parts,iovec_t *iovecs)
@@ -764,8 +754,8 @@ static void __vectored_messages_thread(void *ctx)
     if( r < 0 ) {
       tf->failed();
     }
-    tf->printf(VECTORER_ID"Varifying server's reply (0-parts message).\n");
-    FAIL_ON(!__validate_vectored_message(__vectored_msg_client_rcv_buf,0,tf),tf);
+    tf->printf(VECTORER_ID"Varifying server's reply (5-parts message).\n");
+    FAIL_ON(!__validate_vectored_message(__vectored_msg_client_rcv_buf,3,tf),tf);
   }
 
   tf->printf(VECTORER_ID "All messages were successfully transmitted.\n");
@@ -786,18 +776,19 @@ static void __validate_retval(status_t r,int expected,
 
 static uintptr_t __buf_pages[512];
 
+#define MIDDLE_PARTS(t)  ((t)-2)
+
 static void __ipc_buffer_test(void *ctx)
 {
   DECLARE_TEST_CONTEXT;
   iovec_t snd_iovecs[MAX_IOVECS],rcv_iovecs[MAX_IOVECS];
   ipc_user_buffer_t bufs[MAX_IOVECS];
+  ulong_t __parts;
 
   tf->printf(SERVER_THREAD"Testing IPC buffers functionality.\n");
 
-  goto multipart_tests;
-
   /* 1-part buffer, 3-parts message. */
-  tf->printf(SERVER_THREAD"Transferring 3 pieces of data to a 1-part IPC buffer.\n");
+  tf->printf(SERVER_THREAD"Transferring 6 pieces of data to a 1-part IPC buffer.\n");
   CLEAR_SERVER_BUFFERS;
   __prepare_vectored_message(__vectored_msg_server_snd_buf,4);
 
@@ -813,13 +804,12 @@ static void __ipc_buffer_test(void *ctx)
 
   ipc_setup_buffer_pages(current_task(),rcv_iovecs,1,__buf_pages,bufs);
 
-  ipc_transfer_buffer_data_iov(bufs,1,snd_iovecs,3,true);
+  ipc_transfer_buffer_data_iov(bufs,1,snd_iovecs,6,true);
   if( __validate_vectored_message(__vectored_msg_server_rcv_buf,4,tf) ) {
     tf->passed();
   } else {
     tf->failed();
   }
-
 
   /* 1-part buffer, 8-parts message. */
   tf->printf(SERVER_THREAD"Transferring 8 pieces of data to a 1-part IPC buffer.\n");
@@ -836,79 +826,46 @@ static void __ipc_buffer_test(void *ctx)
   snd_iovecs[2].iov_base=snd_iovecs[1].iov_base+snd_iovecs[1].iov_len;
   snd_iovecs[2].iov_len=sizeof(message_tail_t);
 
+  tf->printf(SERVER_THREAD"Setting up buffer pages ... " );
   ipc_setup_buffer_pages(current_task(),rcv_iovecs,1,__buf_pages,bufs);
+  tf->printf(" Done !\n" );
 
+  tf->printf(SERVER_THREAD"Transferring data to the buffers ... " );
   ipc_transfer_buffer_data_iov(bufs,1,snd_iovecs,8,true);
+  tf->printf(" Done !" );
   if( __validate_vectored_message(__vectored_msg_server_rcv_buf,6,tf) ) {
     tf->passed();
   } else {
     tf->failed();
   }
 
-multipart_tests:
   /* 2-parts buffer, 8 pieces of data. */
-  tf->printf(SERVER_THREAD"Transferring 8 pieces of data to a 2-part IPC buffer.\n");
+  __parts=8;
+  tf->printf(SERVER_THREAD"Transferring %d pieces of data to a 2-part IPC buffer.\n",
+             __parts);
   CLEAR_SERVER_BUFFERS;
-  __prepare_vectored_message(__vectored_msg_server_snd_buf,6);
+  __prepare_vectored_message(__vectored_msg_server_snd_buf,MIDDLE_PARTS(__parts));
+  __setup_message_iovecs(__vectored_msg_server_snd_buf,MIDDLE_PARTS(__parts),snd_iovecs);
 
   rcv_iovecs[0].iov_base=__vectored_msg_server_rcv_buf;
   rcv_iovecs[0].iov_len=sizeof(message_header_t);
   rcv_iovecs[1].iov_base=rcv_iovecs[0].iov_base+rcv_iovecs[0].iov_len;
   rcv_iovecs[1].iov_len=6*sizeof(message_part_t)+sizeof(message_tail_t);
+
+  tf->printf("Setting up buffer pages ... " );
   ipc_setup_buffer_pages(current_task(),rcv_iovecs,2,__buf_pages,bufs);
-  kprintf( "rcv_iovecs[1].iov_base=%p\n", rcv_iovecs[1].iov_base);
+  tf->printf("Done !\n" );
 
-  snd_iovecs[0].iov_base=__vectored_msg_server_snd_buf;
-  snd_iovecs[0].iov_len=6*sizeof(message_part_t)+sizeof(message_tail_t)+sizeof(message_header_t);
-//  snd_iovecs[0].iov_len=sizeof(message_header_t);
-//  snd_iovecs[0].iov_base=__vectored_msg_server_snd_buf;
-//  snd_iovecs[0].iov_len=sizeof(message_header_t);
-//  snd_iovecs[1].iov_base=snd_iovecs[0].iov_base+snd_iovecs[0].iov_len;
-// snd_iovecs[1].iov_len=6*sizeof(message_part_t);
-//  snd_iovecs[2].iov_base=snd_iovecs[1].iov_base+snd_iovecs[1].iov_len;
-//  snd_iovecs[2].iov_len=sizeof(message_tail_t);
-
-  ipc_transfer_buffer_data_iov(bufs,2,snd_iovecs,1,true);
-  if( __validate_vectored_message(__vectored_msg_server_rcv_buf,6,tf) ) {
+  tf->printf("Transferring data to the buffer ... " );
+  ipc_transfer_buffer_data_iov(bufs,2,snd_iovecs,__parts,true);
+  tf->printf("Done !\n" );
+  if( __validate_vectored_message(__vectored_msg_server_rcv_buf,MIDDLE_PARTS(__parts),tf) ) {
     tf->passed();
   } else {
     tf->failed();
   }
 
-  for(;;);
-
-
-
-
-
-
-
-  
-  /* 3-part buffer, 8-parts message. */
-  tf->printf(SERVER_THREAD"Transferring MAX_IOVECS pieces of data to a 3-part IPC buffer.\n");
-  CLEAR_SERVER_BUFFERS;
-  __prepare_vectored_message(__vectored_msg_server_snd_buf,6);
-  __setup_message_iovecs(__vectored_msg_server_snd_buf,6,snd_iovecs);
-
-  rcv_iovecs[0].iov_base=__vectored_msg_server_rcv_buf;
-  rcv_iovecs[0].iov_len=sizeof(message_header_t)+sizeof(message_part_t)*6+sizeof(message_tail_t);
-/*
-  rcv_iovecs[1].iov_base=rcv_iovecs[0].iov_base+rcv_iovecs[0].iov_len;
-  rcv_iovecs[1].iov_len=6*sizeof(message_part_t);
-  rcv_iovecs[2].iov_base=rcv_iovecs[1].iov_base+rcv_iovecs[1].iov_len;
-  rcv_iovecs[2].iov_len=sizeof(message_tail_t);
-*/
-  ipc_setup_buffer_pages(current_task(),rcv_iovecs,1,__buf_pages,bufs);
-
-  ipc_transfer_buffer_data_iov(bufs,1,snd_iovecs,8,true);
-  if( __validate_vectored_message(__vectored_msg_server_rcv_buf,8,tf) ) {
-    tf->passed();
-  } else {
-    tf->failed();
-  }
-
-  tf->printf(SERVER_THREAD"IPC buffer tests finished.\n");
-  for(;;);
+  tf->printf(SERVER_THREAD"All IPC buffers functionality tests finished.\n");
 }
 
 static void __vectored_messages_test(void *ctx)
@@ -932,7 +889,7 @@ static void __vectored_messages_test(void *ctx)
   }
 
   for(i=0;i<TEST_ROUNDS;i++) {
-//    CLEAR_SERVER_BUFFERS;
+    CLEAR_SERVER_BUFFERS;
     tf->printf(SERVER_THREAD"Receiving a message that consists of 6 parts.\n");
     r=sys_port_receive(port,IPC_BLOCKED_ACCESS,(ulong_t)__vectored_msg_server_rcv_buf,
                        sizeof(__vectored_msg_server_rcv_buf),&msg_info);
@@ -941,16 +898,22 @@ static void __vectored_messages_test(void *ctx)
     FAIL_ON(!__validate_vectored_message(__vectored_msg_server_rcv_buf,6,tf),tf);
 
     /* Reply to the client using a vectored message. */
-//    CLEAR_SERVER_BUFFERS;
-    __prepare_vectored_message(__vectored_msg_server_snd_buf,0);
-    __setup_message_iovecs(__vectored_msg_server_snd_buf,0,snd_iovecs);
+    CLEAR_SERVER_BUFFERS;
+    __prepare_vectored_message(__vectored_msg_server_snd_buf,3);
+    __setup_message_iovecs(__vectored_msg_server_snd_buf,3,snd_iovecs);
 
-    tf->printf(SERVER_THREAD"Replying by a message that consists of 0 parts.\n");
-    r=sys_port_reply_iov(port,msg_info.msg_id,snd_iovecs,2);
+    tf->printf(SERVER_THREAD"Replying by a message that consists of 5 parts.\n");
+    r=sys_port_reply_iov(port,msg_info.msg_id,snd_iovecs,5);
     tf->printf(SERVER_THREAD"Message %d was replied (%d)\n",
                msg_info.msg_id,r);
   }
   tf->printf(SERVER_THREAD "All messages were successfully transmitted.\n");
+
+  if( sys_close_port(port) ) {
+    tf->printf(SERVER_THREAD"Can't close the port used for vectored messages tests !\n");
+    tf->abort();
+  }
+
   for(;;);
 }
 
@@ -963,11 +926,12 @@ static void __server_thread(void *ctx)
   status_t r;
   port_msg_info_t msg_info;
 
-  __ipc_buffer_test(ctx);
   __server_pid=current_task()->pid;
-//  __process_events_test(ctx);
-  __vectored_messages_test(ctx);
 
+  __ipc_buffer_test(ctx);
+  __vectored_messages_test(ctx);
+  __process_events_test(ctx);
+  
   for( i=0;i<SERVER_NUM_PORTS;i++) {
     if( i != NON_BLOCKED_PORT_ID ) {
       flags=IPC_BLOCKED_ACCESS;
