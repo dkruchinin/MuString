@@ -70,17 +70,23 @@ status_t sys_close_port(ulong_t port)
   return ipc_close_port(current_task(),port);
 }
 
-status_t sys_port_reply(ulong_t port,ulong_t msg_id,ulong_t reply_buf,
-                        ulong_t reply_len) {
+static status_t __reply_iov(ulong_t port,ulong_t msg_id,
+                            iovec_t reply_iov[],ulong_t numvecs)
+{
   ipc_gen_port_t *p;
+  int i,reply_size;
   status_t r;
 
-  if( !reply_buf || reply_len > MAX_PORT_MSG_LENGTH ) {
-    return -EINVAL;
-  }
+  for(reply_size=0,i=0;i<numvecs;i++) {
+    if( !valid_user_address_range(reply_iov[i].iov_base,
+                                  reply_iov[i].iov_len) ) {
+      return -EFAULT;
+    }
 
-  if( !valid_user_address_range(reply_buf,reply_len) ) {
-    return -EFAULT;
+    reply_size += reply_iov[i].iov_len;
+    if( reply_size > MAX_PORT_MSG_LENGTH ) {
+      return -EINVAL;
+    }
   }
 
   p=__ipc_get_port(current_task(),port);
@@ -88,9 +94,33 @@ status_t sys_port_reply(ulong_t port,ulong_t msg_id,ulong_t reply_buf,
     return -EINVAL;
   }
 
-  r=__ipc_port_reply(p,msg_id,reply_buf,reply_len);
+  r=ipc_port_reply_iov(p,msg_id,reply_iov,numvecs,reply_size);
   __ipc_put_port(p);
   return r;
+}
+
+status_t sys_port_reply_iov(ulong_t port,ulong_t msg_id,
+                            iovec_t reply_iov[],ulong_t numvecs) {
+  iovec_t iovecs[MAX_IOVECS];
+
+  if( !reply_iov || !numvecs || numvecs > MAX_IOVECS ) {
+    return -EINVAL;
+  }
+
+  if( copy_from_user(iovecs,reply_iov,numvecs*sizeof(iovec_t)) ) {
+    return -EFAULT;
+  }
+  return __reply_iov(port,msg_id,iovecs,numvecs);
+}
+
+status_t sys_port_reply(ulong_t port,ulong_t msg_id,ulong_t reply_buf,
+                        ulong_t reply_len) {
+  iovec_t iv;
+
+  iv.iov_base=(void *)reply_buf;
+  iv.iov_len=reply_len;
+
+  return __reply_iov(port,msg_id,&iv,1);
 }
 
 status_t sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
@@ -98,6 +128,7 @@ status_t sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
 {
   ipc_gen_port_t *p;
   status_t r;
+  iovec_t iovec;
 
   if( !valid_user_address_range((ulong_t)msg_info,sizeof(*msg_info)) ||
       !valid_user_address_range(recv_buf,recv_len) ) {
@@ -109,84 +140,52 @@ status_t sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
     return -EINVAL;
   }
 
-  r=__ipc_port_receive(p,flags,recv_buf,recv_len,msg_info);
+  iovec.iov_base=(void *)recv_buf;
+  iovec.iov_len=recv_len;
+
+  r=ipc_port_receive(p,flags,&iovec,1,msg_info);
   __ipc_put_port(p);
   return r;
 }
 
-status_t sys_port_send(ulong_t channel,
-                       uintptr_t snd_buf,ulong_t snd_size,
-                       uintptr_t rcv_buf,ulong_t rcv_size)
+static status_t __send_iov_v(ulong_t channel,
+                             iovec_t snd_kiovecs[],ulong_t snd_numvecs,
+                             iovec_t rcv_kiovecs[],ulong_t rcv_numvecs)
 {
-  task_t *caller=current_task();
-  ipc_channel_t *c=ipc_get_channel(caller,channel);
-  ipc_gen_port_t *port;
-  ipc_port_message_t *msg;
-  status_t r=-EINVAL;
-  iovec_t kiovec;
-
-  if( c == NULL ) {
-    return -EINVAL;
-  }
-
-  if( !valid_user_address_range((ulong_t)snd_buf,snd_size) ) {
-    return -EFAULT;
-  }
-
-  r=ipc_get_channel_port(c,&port);
-  if( r ) {
-    goto put_channel;
-  }
-
-  kiovec.iov_base=(void *)snd_buf;
-  kiovec.iov_len=snd_size;
-
-  msg=ipc_create_port_message_iov(&kiovec,1,snd_size,
-                                  channel_in_blocked_mode(c),rcv_buf,rcv_size);
-  if( !msg ) {
-    r=-ENOMEM;
-  } else {
-    r=__ipc_port_send(port,msg,channel_in_blocked_mode(c),rcv_buf,rcv_size);
-  }
-
-  __ipc_put_port(port);
-put_channel:
-  ipc_put_channel(c);
-  return r;
-}
-
-status_t sys_port_send_iov(ulong_t channel,
-                           iovec_t iov[],ulong_t numvecs,
-                           uintptr_t rcv_buf,ulong_t rcv_size)
-{
-  status_t r;
-  iovec_t kiovecs[MAX_IOVECS];
-  ulong_t i,msg_size;
-  task_t *caller=current_task();
   ipc_channel_t *c;
   ipc_gen_port_t *port;
   ipc_port_message_t *msg;
+  ipc_user_buffer_t snd_bufs[MAX_IOVECS],rcv_bufs[MAX_IOVECS];
+  ulong_t i,msg_size,rcv_size;
+  status_t r;
 
-  if( !iov || !numvecs || numvecs > MAX_IOVECS ) {
-    return -EINVAL;
-  }
-
-  if( copy_from_user( kiovecs,iov,numvecs*sizeof(iovec_t)) ) {
-    return -EFAULT;
-  }
-
-  for(msg_size=0,i=0;i<numvecs;i++) {
-    if( !valid_user_address_range(kiovecs[i].iov_base,
-                                  kiovecs[i].iov_len) ) {
+  /* Check send buffer. */
+  for(msg_size=0,i=0;i<snd_numvecs;i++) {
+    if( !valid_user_address_range(snd_kiovecs[i].iov_base,
+                                  snd_kiovecs[i].iov_len) ) {
       return -EFAULT;
     }
-    msg_size += kiovecs[i].iov_len;
+
+    msg_size += snd_kiovecs[i].iov_len;
     if( msg_size > MAX_PORT_MSG_LENGTH ) {
       return -EINVAL;
     }
   }
 
-  c=ipc_get_channel(caller,channel);
+  /* Check receive buffer. */
+  for(rcv_size=0,i=0;i<rcv_numvecs;i++) {
+    if( !valid_user_address_range(rcv_kiovecs[i].iov_base,
+                                  rcv_kiovecs[i].iov_len) ) {
+      return -EFAULT;
+    }
+
+    rcv_size += rcv_kiovecs[i].iov_len;
+    if( rcv_size > MAX_PORT_MSG_LENGTH ) {
+      return -EINVAL;
+    }
+  }
+
+  c=ipc_get_channel(current_task(),channel);
   if( !c ) {
     return -EINVAL;
   }
@@ -196,18 +195,82 @@ status_t sys_port_send_iov(ulong_t channel,
     goto put_channel;
   }
 
-  msg=ipc_create_port_message_iov(kiovecs,numvecs,msg_size,
-                                  channel_in_blocked_mode(c),rcv_buf,rcv_size);
+  msg=ipc_create_port_message_iov_v(snd_kiovecs,snd_numvecs,
+                                    msg_size,channel_in_blocked_mode(c),
+                                    rcv_kiovecs,rcv_numvecs,
+                                    snd_bufs,rcv_bufs,rcv_size);
   if( !msg ) {
     r=-ENOMEM;
   } else {
-    r=__ipc_port_send(port,msg,channel_in_blocked_mode(c),rcv_buf,rcv_size);
+    r=ipc_port_send_iov(port,msg,channel_in_blocked_mode(c),
+                        rcv_kiovecs,rcv_numvecs,rcv_size);
+
   }
 
   __ipc_put_port(port);
 put_channel:
   ipc_put_channel(c);
   return r;
+}
+
+status_t sys_port_send_iov_v(ulong_t channel,
+                             iovec_t snd_iov[],ulong_t snd_numvecs,
+                             iovec_t rcv_iov[],ulong_t rcv_numvecs)
+{
+  iovec_t snd_kiovecs[MAX_IOVECS];
+  iovec_t rcv_kiovecs[MAX_IOVECS];
+
+  if( !snd_iov || !snd_numvecs || snd_numvecs > MAX_IOVECS ||
+      !rcv_iov || !rcv_numvecs || rcv_numvecs > MAX_IOVECS ) {
+    return -EINVAL;
+  }
+
+  if( copy_from_user( &snd_kiovecs,snd_iov,snd_numvecs*sizeof(iovec_t)) ) {
+    return -EFAULT;
+  }
+
+  if( copy_from_user( &rcv_kiovecs,rcv_iov,rcv_numvecs*sizeof(iovec_t)) ) {
+    return -EFAULT;
+  }
+
+  return __send_iov_v(channel,snd_kiovecs,snd_numvecs,
+                      rcv_kiovecs,rcv_numvecs);
+}
+
+status_t sys_port_send(ulong_t channel,
+                       uintptr_t snd_buf,ulong_t snd_size,
+                       uintptr_t rcv_buf,ulong_t rcv_size)
+{
+  iovec_t snd_kiovec,rcv_kiovec;
+
+  snd_kiovec.iov_base=(void *)snd_buf;
+  snd_kiovec.iov_len=snd_size;
+
+  rcv_kiovec.iov_base=(void *)rcv_buf;
+  rcv_kiovec.iov_len=rcv_size;
+
+  return __send_iov_v(channel,&snd_kiovec,1,
+                      &rcv_kiovec,1);
+}
+
+status_t sys_port_send_iov(ulong_t channel,
+                           iovec_t iov[],ulong_t numvecs,
+                           uintptr_t rcv_buf,ulong_t rcv_size)
+{
+  iovec_t kiovecs[MAX_IOVECS],rcv_kiovec;
+
+  if( !iov || !numvecs || numvecs > MAX_IOVECS ) {
+    return -EINVAL;
+  }
+
+  if( copy_from_user(kiovecs,iov,numvecs*sizeof(iovec_t)) ) {
+    return -EFAULT;
+  }
+
+  rcv_kiovec.iov_base=(void *)rcv_buf;
+  rcv_kiovec.iov_len=rcv_size;
+
+  return __send_iov_v(channel,kiovecs,numvecs,&rcv_kiovec,1);
 }
 
 status_t sys_control_channel(ulong_t channel,ulong_t cmd,ulong_t arg)

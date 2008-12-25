@@ -62,6 +62,8 @@
 #define SC_KILL                25
 #define SC_SIGNAL              26
 #define SC_SIGRETURN           27
+#define SC_PORT_SEND_IOV_V     28
+#define SC_PORT_REPLY_IOV      29
 
 #ifndef __ASM__
 
@@ -370,6 +372,11 @@ status_t sys_wait_on_irq_array(ulong_t id);
  * @param nfds - number of structures in the array.
  * @param timeout - operation timeout.
  *        NOTE: Currently timeouts are not supported.
+ *
+ * @return This function returns number of events occured on target ports,
+ *         zero if timeout has elapsed, or a negation of error:
+ *         EINVAL - insufficient @a pfds or @a nfds passed.
+ *         EFAULT - @pfds pointed to insufficient memory area.
  */
 status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout);
 
@@ -383,13 +390,44 @@ status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout);
  *     EFAULT - insufficient address was passed.
  *     EINVAL - seconds or nanoseconds exceed 1000000000.
  */
-
 status_t sys_nanosleep(timeval_t *in,timeval_t *out);
 
+/**
+ * @fn status_t sys_scheduler_control(pid_t pid,ulong_t cmd,ulong_t arg)
+ *
+ * Read or change a parameter related to scheduling scheme of target task.
+ *
+ * @param pid - Target task.
+ * @param cmd - Command to apply.
+ * @param arg - Command's argument.
+ *
+ * @return In case of successful completion this function returns current value of
+ * target scheduling parameter in case of 'get' operation (usually it is above zero
+ * or zero), or a negation of the following errors:
+ *     EINVAL - insuffucient command or argument provided.
+ *     EFAULT - insufficient memory location was used as an argument for the command.
+ *     EPERM - operation was not allowed.
+ *     ESRCH - insufficient pid passed.
+ */
 status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
 
+/**
+ * @fn status_t sys_get_tid(void)
+ *
+ * Get thread identificator of current task.
+ *
+ * @return If the calling task is a process root task, its TID (that is equal
+ * to its PID) is returned. In case of a thread, a value greater than MAX_PID
+ * is returned as its thread ID.
+ */
 status_t sys_get_tid(void);
 
+/**
+ * @fn void sys_exit(int code)
+ *
+ * Terminates the calling task and frees all its resources.
+ * @return This function doesn't return.
+ */
 void sys_exit(int code);
 
 status_t sys_open_channel(pid_t pid,ulong_t port,ulong_t flags);
@@ -409,6 +447,13 @@ status_t sys_sync_create_object(sync_object_type_t obj_type,
                                 ulong_t flags);
 
 status_t sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg);
+
+status_t sys_port_send_iov_v(ulong_t channel,
+                             iovec_t snd_iov[],ulong_t snd_numvecs,
+                             iovec_t rcv_iov[],ulong_t rcv_numvecs);
+
+status_t sys_port_reply_iov(ulong_t port,ulong_t msg_id,
+                            iovec_t reply_iov[],ulong_t numvecs);
 
 #endif
 
