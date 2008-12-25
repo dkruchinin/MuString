@@ -127,7 +127,6 @@ static irq_counter_array_t *__allocate_irq_counter_array(task_t *task,ulong_t nc
     array->num_counters=nc;
     list_init_head(&array->counter_handlers);
     event_initialize(&array->event);
-    event_set_task(&array->event,task);
     event_set_checker(&array->event,__irq_array_event_checker,
                       &array->event_mask);
 
