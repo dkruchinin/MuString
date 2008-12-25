@@ -81,9 +81,11 @@ status_t __ipc_port_send(ipc_gen_port_t *port,
                          ipc_port_message_t *msg,bool sync_send,
                          uintptr_t rcv_buf,ulong_t rcv_size);
 status_t __ipc_create_port(task_t *owner,ulong_t flags);
-status_t __ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
-                            ulong_t recv_buf,ulong_t recv_len,
-                            port_msg_info_t *msg_info);
+
+status_t ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
+                          iovec_t *iovec,ulong_t numvec,
+                          port_msg_info_t *msg_info);
+
 ipc_gen_port_t *__ipc_get_port(task_t *task,ulong_t port);
 void __ipc_put_port(ipc_gen_port_t *p);
 status_t __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,

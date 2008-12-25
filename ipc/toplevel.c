@@ -128,6 +128,7 @@ status_t sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
 {
   ipc_gen_port_t *p;
   status_t r;
+  iovec_t iovec;
 
   if( !valid_user_address_range((ulong_t)msg_info,sizeof(*msg_info)) ||
       !valid_user_address_range(recv_buf,recv_len) ) {
@@ -139,7 +140,10 @@ status_t sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
     return -EINVAL;
   }
 
-  r=__ipc_port_receive(p,flags,recv_buf,recv_len,msg_info);
+  iovec.iov_base=(void *)recv_buf;
+  iovec.iov_len=recv_len;
+
+  r=ipc_port_receive(p,flags,&iovec,1,msg_info);
   __ipc_put_port(p);
   return r;
 }

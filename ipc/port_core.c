@@ -357,19 +357,19 @@ static void __put_receiver_into_sleep(task_t *receiver,ipc_gen_port_t *port)
 }
 
 static status_t __transfer_message_data_to_receiver(ipc_port_message_t *msg,
-                                                    ulong_t recv_buf,ulong_t recv_len,
+                                                    iovec_t *iovec, ulong_t numvecs,
                                                     port_msg_info_t *stats)
 {
-  status_t r;
+  status_t r,recv_len;
 
-  recv_len=MIN(recv_len,msg->data_size);
+  recv_len=MIN(iovec->iov_len,msg->data_size);
   if( msg->data_size <= IPC_BUFFERED_PORT_LENGTH ) {
     /* Short message - copy it from the buffer. */
-    r=copy_to_user((void *)recv_buf,msg->send_buffer,recv_len);
+    r=copy_to_user((void *)iovec->iov_base,msg->send_buffer,recv_len);
   } else {
     /* Long message - process it via buffer. */
-    r=ipc_transfer_buffer_data(msg->snd_buf,msg->num_send_bufs,
-                               (void *)recv_buf,recv_len,false);
+    r=ipc_transfer_buffer_data_iov(msg->snd_buf,msg->num_send_bufs,
+                                   iovec,numvecs,false);
   }
 
   if( !r ) {
@@ -386,16 +386,16 @@ static status_t __transfer_message_data_to_receiver(ipc_port_message_t *msg,
   return r;
 }
 
-status_t __ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
-                            ulong_t recv_buf,ulong_t recv_len,
-                            port_msg_info_t *msg_info)
+status_t ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
+                          iovec_t *iovec,ulong_t numvec,
+                          port_msg_info_t *msg_info)
 {
   status_t r=-EINVAL;
   ipc_port_message_t *msg;
   task_t *owner=current_task();
   ipc_port_msg_ops_t *msg_ops=port->msg_ops;
   
-  if( !recv_buf || !msg_info || !recv_len ) {
+  if( !iovec || !msg_info || !numvec ) {
     return -EINVAL;
   }
 
@@ -430,7 +430,7 @@ recv_cycle:
   IPC_UNLOCK_PORT_W(port);
 
   if( msg != NULL ) {
-    r=__transfer_message_data_to_receiver(msg,recv_buf,recv_len,msg_info);
+    r=__transfer_message_data_to_receiver(msg,iovec,numvec,msg_info);
     if(r) {
       /* It was impossible to copy message to the buffer, so insert it
        * to the queue again.
