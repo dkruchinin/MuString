@@ -269,8 +269,27 @@ error_code_exception_path_kern:
   mov %r12, %rdi;
   add $SAVED_GPR_SIZE + 8, %rdi
 
-  /* Now we call call the handler. */
+  /* Now we can call the handler. */
   call *hi_level_fault_handlers(,%rax,8)
+
+  /* Now let's see if we need to check for userspace works. */
+  mov (%rsp), %rbx
+  add $INT_FULL_OFFSET_TO_CS_ERR,%rbx
+  cmp $KERNEL_SELECTOR(KTEXT_DES),(%rbx)
+  je dont_check_err_exception_uworks
+
+  /* Userspace interrupts, need to check for userspace works. */
+  mov %gs:CPU_SCHED_STAT_USER_WORKS_OFFT, %rbx
+  cmp $0, (%rbx)
+  je dont_check_err_exception_uworks
+
+  /* Process deffered works. */
+  movq $__XCPT_ERR_UWORK, %rdi
+  xorq %rsi, %rsi
+  movq %rsp, %rdx
+  call handle_uworks
+
+dont_check_err_exception_uworks:
   RESTORE_ALL
 
   cli

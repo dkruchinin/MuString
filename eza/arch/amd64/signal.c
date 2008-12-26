@@ -147,7 +147,8 @@ static status_t __setup_syscall_context(uint64_t retcode,uintptr_t kstack,
 }
 
 static status_t __setup_int_context(uint64_t retcode,uintptr_t kstack,
-                                    siginfo_t *info,sa_sigaction_t act)
+                                    siginfo_t *info,sa_sigaction_t act,
+                                    ulong_t extra_bytes)
 {
   uintptr_t ustack;
   struct __extra_int_ctx *int_ctx,kint_ctx;
@@ -166,7 +167,7 @@ static status_t __setup_int_context(uint64_t retcode,uintptr_t kstack,
   /* OK, now we're pointing at saved interrupt number (see asm.S).
    * So skip it.
    */
-  kstack += 8;
+  kstack += (8+extra_bytes);
 
   /* Now we can access hardware interrupt stackframe. */
   int_frame=(struct __int_stackframe *)kstack;
@@ -251,7 +252,11 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
         r=__setup_syscall_context(retcode,kstack,&sigitem->info,act);
         break;
       case __INT_UWORK:
-        r=__setup_int_context(retcode,kstack,&sigitem->info,act);
+      case __XCPT_NOERR_UWORK:
+        r=__setup_int_context(retcode,kstack,&sigitem->info,act,0);
+        break;
+      case __XCPT_ERR_UWORK:
+        r=__setup_int_context(retcode,kstack,&sigitem->info,act,8);
         break;
       default:
         panic( "Unknown userspace work type: %d in task (%d:%d)\n",
