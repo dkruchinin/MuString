@@ -62,6 +62,8 @@ syscall_table:
 	.quad   sys_kill                        /* 25 */
 	.quad   sys_signal
 	.quad   sys_sigreturn
+	.quad   sys_port_send_iov_v
+	.quad   sys_port_reply_iov
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

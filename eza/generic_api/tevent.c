@@ -68,12 +68,16 @@ void task_event_notify(ulong_t events)
       task_event_listener_t *l=container_of(n,task_event_listener_t,llist);
 
       if( l->events & events ) {
-        e.ev_mask=l->events & events;
-        ipc_port_message_t *msg=ipc_create_port_message_iov(&iov,1,sizeof(e),
-                                                            false,0,0);
+        iovec_t iov;
 
+        e.ev_mask=l->events & events;
+        iov.iov_base=&e;
+        iov.iov_len=sizeof(e);
+
+        ipc_port_message_t *msg=ipc_create_port_message_iov_v(&iov,1,sizeof(e),false,
+                                                              NULL,0,NULL,NULL,0);
         if( msg ) {
-          __ipc_port_send(l->port,msg,false,0,0);
+          ipc_port_send_iov(l->port,msg,false,NULL,0,0);
         }
       }
     }

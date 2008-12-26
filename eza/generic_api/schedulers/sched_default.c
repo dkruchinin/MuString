@@ -449,6 +449,7 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
   sched_data=get_task_sched_data_locked(task,&is,true);
   if( h != NULL && !h(data) ) {
     kprintf( "[*] Breaking lazy scheduling loop.\n" );
+    r=-EAGAIN;
     goto out_unlock;
   }
 

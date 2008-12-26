@@ -77,13 +77,11 @@ typedef struct __iovec {
   size_t iov_len;
 } iovec_t;
 
-status_t __ipc_port_send(ipc_gen_port_t *port,
-                         ipc_port_message_t *msg,bool sync_send,
-                         uintptr_t rcv_buf,ulong_t rcv_size);
 status_t __ipc_create_port(task_t *owner,ulong_t flags);
-status_t __ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
-                            ulong_t recv_buf,ulong_t recv_len,
-                            port_msg_info_t *msg_info);
+status_t ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
+                          iovec_t *iovec,ulong_t numvec,
+                          port_msg_info_t *msg_info);
+
 ipc_gen_port_t *__ipc_get_port(task_t *task,ulong_t port);
 void __ipc_put_port(ipc_gen_port_t *p);
 status_t __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
@@ -95,17 +93,27 @@ extern ipc_port_msg_ops_t def_port_msg_ops;
 poll_event_t ipc_port_get_pending_events(ipc_gen_port_t *port);
 void ipc_port_add_poller(ipc_gen_port_t *port,task_t *poller, wqueue_task_t *w);
 void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w);
-ipc_port_message_t *ipc_create_port_message_iov(iovec_t *kiovecs,ulong_t numvecs,
-                                                ulong_t data_len,bool blocked,
-                                                uintptr_t rcv_buf,ulong_t rcv_size);
+ipc_port_message_t *ipc_create_port_message_iov_v(iovec_t *snd_kiovecs,ulong_t snd_numvecs,
+                                                  ulong_t data_len,bool blocked,
+                                                  iovec_t *rcv_kiovecs,ulong_t rcv_numvecs,
+                                                  ipc_user_buffer_t *snd_bufs,
+                                                  ipc_user_buffer_t *rcv_bufs,
+                                                  ulong_t rcv_size);
+status_t ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
+                            iovec_t *reply_iov,ulong_t numvecs,
+                            ulong_t reply_size);
+status_t ipc_port_send_iov(struct __ipc_gen_port *port,
+                           ipc_port_message_t *msg,bool sync_send,
+                           iovec_t *iovecs,ulong_t numvecs,
+                           ulong_t reply_len);
 
 #define IPC_NB_MESSAGE_MAXLEN  (512-sizeof(ipc_port_message_t))
 
 #define IPC_RESET_MESSAGE(m,t)   do {           \
-    list_init_node(&msg->l);                    \
-    list_init_node(&msg->messages_list);        \
-    event_initialize(&m->event);                \
-    event_set_task(&m->event,t);                \
+    list_init_node(&(m)->l);                    \
+    list_init_node(&(m)->messages_list);        \
+    event_initialize(&(m)->event);              \
+    event_set_task(&(m)->event,(t));            \
   } while(0)
 
 #define put_ipc_port_message(m)  memfree((m))

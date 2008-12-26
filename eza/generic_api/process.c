@@ -249,11 +249,9 @@ status_t sys_create_task(ulong_t flags,task_creation_attrs_t *a)
 
   if( a ) {
     if( copy_from_user(&attrs,a,sizeof(attrs) ) ) {
-      kprintf( "[1]\n" );
       return -EFAULT;
     }
     if( !__check_task_attrs(&attrs) ) {
-      kprintf( "[2]\n" );
       return -EINVAL;
     }
     pa=&attrs;
@@ -262,7 +260,6 @@ status_t sys_create_task(ulong_t flags,task_creation_attrs_t *a)
   }
 
   r = create_task(current_task(), flags, TPL_USER, &task,pa);
-  kprintf( "[R=%d]\n",r );
   if( !r ) {
     if( is_thread(task) ) {
       r=task->tid;
