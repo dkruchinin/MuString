@@ -495,7 +495,12 @@ static status_t __transfer_reply_data_iov(ipc_port_message_t *msg,
   ulong_t i,to_copy,rlen;
   char *rcv_buf;
 
-  reply_len=MIN(reply_len,msg->reply_size);
+  if( from_server ) {
+    reply_len=MIN(reply_len,msg->reply_size);
+  } else {
+    reply_len=MIN(reply_len,msg->replied_size);
+  }
+
   if( reply_len > 0 ) {
     if( !msg->num_send_bufs && msg->reply_size <= IPC_BUFFERED_PORT_LENGTH ) {
       /* Short message - copy it from the buffer. */
