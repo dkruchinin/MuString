@@ -56,12 +56,11 @@ void initialize_signals(void)
   }
 }
 
-bool update_pending_signals(task_t *task)
+static bool __update_pending_signals(task_t *task)
 {
   signal_struct_t *siginfo=&task->siginfo;
   bool delivery_needed;
 
-  LOCK_TASK_SIGNALS(task);
   if( deliverable_signals_present(siginfo) ) {
     set_task_signals_pending(task);
     delivery_needed=true;
@@ -69,8 +68,18 @@ bool update_pending_signals(task_t *task)
     clear_task_signals_pending(task);
     delivery_needed=false;
   }
-  UNLOCK_TASK_SIGNALS(task);
   return delivery_needed;
+}
+
+bool update_pending_signals(task_t *task)
+{
+  bool r;
+
+  LOCK_TASK_SIGNALS(task);
+  r=__update_pending_signals(task);
+  UNLOCK_TASK_SIGNALS(task);
+
+  return r;
 }
 
 static void __remove_signal_from_queue(signal_struct_t *siginfo,int sig,
@@ -92,7 +101,7 @@ static status_t __send_task_siginfo(task_t *task,siginfo_t *info,
   bool send_signal;
 
   if( force_delivery ) {
-    sa_sigaction_t act;
+    sa_sigaction_t act=task->siginfo.handlers->actions[sig].a.sa_sigaction;
 
     if( act == SIG_IGN ) {
       task->siginfo.handlers->actions[sig].a.sa_sigaction=SIG_DFL;
@@ -250,13 +259,16 @@ static status_t sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
   *oact=*sa;
   *sa=*sact;
 
+  kprintf( "[SSS]: %p : 0x%X\n",
+           sa,sa->a.sa_handler );
+
   /* POSIX 3.3.1.3 */
   if( s == SIG_IGN || (s == SIG_DFL && def_ignorable(sig)) ) {
     sigaddset(&caller->siginfo.ignored,sig);
     sigdelset(&caller->siginfo.pending,sig);
 
     __remove_signal_from_queue(&caller->siginfo,sig,&removed_signals);
-    update_pending_signals(caller);
+    __update_pending_signals(caller);
   } else {
     sigdelset(&caller->siginfo.ignored,sig);
   }
@@ -278,6 +290,8 @@ sa_sigaction_t sys_signal(int sig,sa_handler_t handler)
   sigemptyset(act.sa_mask);
 
   r=sigaction(&act,&oact,sig);
+  kprintf( "sys_signal(%d,%p): %d\n",
+           sig,handler,r);
   return !r ? oact.a.sa_sigaction : SIG_ERR;
 }
 
@@ -303,19 +317,20 @@ sighandlers_t *allocate_signal_handlers(void)
 sigq_item_t *extract_one_signal_from_queue(task_t *task)
 {
   list_node_t *n;
+  sigq_item_t *item;
 
   LOCK_TASK_SIGNALS(task);
   if( !list_is_empty(&task->siginfo.sigqueue) ) {
     n=list_node_first(&task->siginfo.sigqueue);
+
     list_del(n);
     atomic_dec(&task->siginfo.num_pending);
+    item=container_of(n,sigq_item_t,l);
+
+    sigdelset(&task->siginfo.pending,item->info.si_signo);
   } else {
-    n=NULL;
+    item=NULL;
   }
   UNLOCK_TASK_SIGNALS(task);
-
-  if( n ) {
-    return container_of(n,sigq_item_t,l);
-  }
-  return NULL;
+  return item;
 }

@@ -60,6 +60,12 @@ typedef struct __siginfo {
   int      si_fd;       /* File descriptor */
 } siginfo_t;
 
+#define INIT_SIGINFO_CURR(s)  do {              \
+  memset((s),0,sizeof(siginfo_t));              \
+  (s)->si_pid=current_task()->pid;              \
+  (s)->si_uid=current_task()->uid;              \
+  } while(0)
+
 #define SI_USER    0 /* Sent by user */
 #define SI_KERNEL  1 /* Sent by kernel */
 
@@ -100,11 +106,6 @@ typedef struct __sighandlers {
 } sighandlers_t;
 
 #define SIGNAL_PENDING(set,sig)  arch_bit_test((set),sig)
-
-bool update_pending_signals(task_t *task);
-status_t send_task_siginfo(task_t *task,siginfo_t *info);
-status_t send_task_siginfo_forced(task_t *task,siginfo_t *info);
-sighandlers_t * allocate_signal_handlers(void);
 
 static inline void put_signal_handlers(sighandlers_t *s)
 {
@@ -153,8 +154,16 @@ static inline void put_signal_handlers(sighandlers_t *s)
 
 #define process_wide_signal(s)  ((s) & (_BM(SIGTERM) | _BM(SIGSTOP)) )
 
+/* si_code for SIGSEGV signal. */
+#define SEGV_MAPERR  0x1  /** address not mapped **/
+#define SEGV_ACCERR  0x2  /** invalid permissions **/
+
 #define DEFAULT_IGNORED_SIGNALS (_BM(SIGCHLD) | _BM(SIGURG) | _BM(SIGWINCH))
 #define UNTOUCHABLE_SIGNALS (_BM(SIGKILL) | _BM(SIGSTOP))
+
+#define LETHAL_SIGNALS  (_BM(SIGHUP) | _BM(SIGINT) | _BM(SIGKILL) | _BM(SIGPIPE) | _BM(SIGALRM) \
+                         | _BM(SIGTERM) | _BM(SIGUSR1) | _BM(SIGUSR2) | _BM(SIGPOLL) | _BM(SIGPROF) \
+                         | _BM(SIGVTALRM) | _BM(SIGSEGV) )
 
 #define def_ignorable(s) (_BM(s) & DEFAULT_IGNORED_SIGNALS)
 
@@ -171,9 +180,9 @@ sigq_item_t *extract_one_signal_from_queue(task_t *task);
 
 #define pending_signals_present(t) ((t)->siginfo.pending != 0)
 
-
 status_t send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery);
-
-
+bool update_pending_signals(task_t *task);
+status_t send_task_siginfo_forced(task_t *task,siginfo_t *info);
+sighandlers_t * allocate_signal_handlers(void);
 
 #endif
