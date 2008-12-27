@@ -26,8 +26,10 @@
 #ifndef __ARCH_CONTEXT_H__
 #define __ARCH_CONTEXT_H__ /* there are several context.h(es) */
 
-#define __SYCALL_UWORK  0  /**< Syscall-related works **/
-#define __INT_UWORK     1  /**< Interrupt-related works **/
+#define __SYCALL_UWORK     0  /**< Syscall-related works **/
+#define __INT_UWORK        1  /**< Interrupt-related works **/
+#define __XCPT_NOERR_UWORK 2  /**< Exception-related works (no error code on the stack) **/
+#define __XCPT_ERR_UWORK   3  /**< Exception-related works (error code on the stack)  **/
 
 #define OFFSET_SP   0x0
 #define OFFSET_PC   0x8
@@ -158,6 +160,7 @@
 
 /* Offset to CS selecetor in case full context is saved on the stack */
 #define INT_FULL_OFFSET_TO_CS (SAVED_GPR_SIZE+8+INT_STACK_FRAME_CS_OFFT)
+#define INT_FULL_OFFSET_TO_CS_ERR (SAVED_GPR_SIZE+8+INT_STACK_FRAME_CS_OFFT+8)
 
 #include <eza/arch/current.h>
 #include <eza/arch/page.h>

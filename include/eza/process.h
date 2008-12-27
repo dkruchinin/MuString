@@ -60,4 +60,8 @@ status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg);
 void zombify_task(task_t *target);
 void spawn_percpu_threads(void);
 
+#define EXITCODE(s,ec) ((s))
+
+void do_exit(int code);
+
 #endif
