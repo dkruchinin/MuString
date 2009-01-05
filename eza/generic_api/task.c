@@ -43,11 +43,11 @@
 #include <mm/slab.h>
 #include <eza/sync.h>
 #include <eza/signal.h>
+#include <eza/sigqueue.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
 static spinlock_t pid_array_lock;
-static memcache_t *task_cache;
 static bool init_launched;
 
 /* Macros for dealing with PID array locks. */
@@ -89,12 +89,6 @@ void initialize_task_subsystem(void)
   if(idle != 1) {
     panic( "initialize_task_subsystem(): Can't allocate PID for Init task ! (%d returned)\n",
            idle );
-  }
-
-  task_cache = create_memcache( "Task struct memcache", sizeof(task_t),
-                                2, SMCF_PGEN);
-  if( !task_cache ) {
-    panic( "initialize_task_subsystem(): Can't create the task struct memcache !" );
   }
   
   init_launched=false;
@@ -215,10 +209,10 @@ void cleanup_thread_data(void *t,ulong_t arg)
 
 static task_t *__allocate_task_struct(void)
 {
-  task_t *task=alloc_from_memcache(task_cache);
+  task_t *task=alloc_pages_addr(1,AF_PGEN);
 
   if( task ) {
-    memset(task,0,sizeof(*task));
+    memset(task,0,PAGE_SIZE);
 
     list_init_node(&task->pid_list);
     list_init_node(&task->child_list);
@@ -306,10 +300,9 @@ static status_t __setup_signals(task_t *task,task_t *parent,ulong_t flags)
   task->siginfo.ignored=ignored;
   task->siginfo.pending=0;
   task->siginfo.handlers=shandlers;
-
-  list_init_head(&task->siginfo.sigqueue);
-  atomic_set(&task->siginfo.num_pending,1);
   spinlock_initialize(&task->siginfo.lock);
+  sigqueue_initialize(&task->siginfo.sigqueue,
+                      &task->siginfo.pending);
 
   return 0;
 }

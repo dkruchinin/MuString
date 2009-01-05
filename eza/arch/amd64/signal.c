@@ -197,8 +197,6 @@ static status_t __setup_int_context(uint64_t retcode,uintptr_t kstack,
 
   /* Now we can create signal context. */
   ctx=(struct __signal_context *)(int_frame->old_rsp-sizeof(*ctx)-sizeof(*int_ctx));
-  kprintf( "%CTX: %p, OLD_RSP: %p\n",
-           ctx,int_frame->old_rsp);
 
   if( copy_to_user(&ctx->gen_ctx.xmm,xmm,XMM_CTX_SIZE) ) {
     return -EFAULT;
@@ -227,9 +225,6 @@ static status_t __setup_int_context(uint64_t retcode,uintptr_t kstack,
   /* Setup user stack pointer. */
   int_frame->old_rsp=ustack;
 
-  kprintf(">>>> RCX: %p, RET: %p, TRAMPOLINE: %p, OLD_RSP: %p\n",
-          kint_ctx.rcx, kint_ctx.retaddr,
-          int_frame->rip,int_frame->old_rsp);
   return 0;
 }
 
@@ -279,7 +274,7 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
   }
 
 out_recalc:
-  clear_task_signals_pending(current_task());
+  update_pending_signals(current_task());
   free_sigqueue_item(sigitem);
   return;
 bad_memory:
@@ -309,20 +304,16 @@ status_t sys_sigreturn(uintptr_t ctx)
   uintptr_t skctx=kctx;
 
   if( !valid_user_address_range(ctx,sizeof(struct __signal_context)) ) {
-    kprintf( "[1]\n" );
     goto bad_ctx;
   }
 
   /* Restore GPRs. */
   if( copy_from_user(kctx,&uctx->gen_ctx.gpr_regs,sizeof(struct __gpr_regs) ) ) {
-    kprintf( "[2]\n" );
     goto bad_ctx;
   }
 
-  kprintf( ">>>>>> RCX: %p\n",((struct __gpr_regs *)kctx)->rcx );
   /* Make sure user has valid return address. */
   if( !valid_user_address(((struct __gpr_regs *)kctx)->rcx) ) {
-    kprintf( "[3]\n" );
     goto bad_ctx;
   }
 
@@ -332,7 +323,6 @@ status_t sys_sigreturn(uintptr_t ctx)
 
   /* Restore XMM context. */
   if( copy_from_user(kctx,uctx->gen_ctx.xmm,XMM_CTX_SIZE) ) {
-    kprintf( "[4]\n" );
     goto bad_ctx;
   }
 
@@ -342,13 +332,10 @@ status_t sys_sigreturn(uintptr_t ctx)
   /* Finally, restore retcode. */
   if( !copy_from_user(&retcode,&uctx->retcode,sizeof(retcode)) ) {
     set_userspace_stack_pointer(ctx+sizeof(struct __signal_context));
-    kprintf( "[GOOD]\n" );
     return retcode;
-  } else {
-    kprintf( "[5]\n" );
   }
-
 bad_ctx:
+  kprintf("[!!!] BAD context for 'sys_sigreturn()' for task %d !\n",
+          caller->tid);
   for(;;);
-  return -1;
 }

@@ -120,12 +120,10 @@ static status_t __send_task_siginfo(task_t *task,siginfo_t *info,
     sigq_item_t *qitem=__alloc_sigqueue_item();
 
     if( qitem ) {
-      list_init_node(&qitem->l);
+      qitem->h.idx=sig;
       qitem->info=*info;
 
-      list_add2tail(&task->siginfo.sigqueue,&qitem->l);
-      atomic_inc(&task->siginfo.num_pending);
-
+      sigqueue_add_item(&task->siginfo.sigqueue,&qitem->h);
       sigaddset(&task->siginfo.pending,sig);
       r=0;
     } else {
@@ -316,21 +314,14 @@ sighandlers_t *allocate_signal_handlers(void)
 
 sigq_item_t *extract_one_signal_from_queue(task_t *task)
 {
-  list_node_t *n;
-  sigq_item_t *item;
+  sq_header_t *sh;
 
   LOCK_TASK_SIGNALS(task);
-  if( !list_is_empty(&task->siginfo.sigqueue) ) {
-    n=list_node_first(&task->siginfo.sigqueue);
-
-    list_del(n);
-    atomic_dec(&task->siginfo.num_pending);
-    item=container_of(n,sigq_item_t,l);
-
-    sigdelset(&task->siginfo.pending,item->info.si_signo);
-  } else {
-    item=NULL;
-  }
+  sh=sigqueue_remove_first_item(&task->siginfo.sigqueue,false);
   UNLOCK_TASK_SIGNALS(task);
-  return item;
+
+  if( sh != NULL ) {
+    return container_of(sh,sigq_item_t,h);
+  }
+  return NULL;
 }

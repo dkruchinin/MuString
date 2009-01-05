@@ -32,6 +32,7 @@
 #include <mm/slab.h>
 #include <eza/bits.h>
 #include <ds/list.h>
+#include <eza/sigqueue.h>
 
 #define NUM_POSIX_SIGNALS  32
 #define NUM_RT_SIGNALS     32
@@ -170,7 +171,7 @@ static inline void put_signal_handlers(sighandlers_t *s)
 #define deliverable_signals_present(s) ((s)->pending & ~((s)->blocked))
 
 typedef struct __sigq_item {
-  list_node_t l;
+  sq_header_t h;
   siginfo_t info;
 } sigq_item_t;
 

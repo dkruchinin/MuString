@@ -54,7 +54,7 @@ void segment_not_present_fault_handler_impl(interrupt_stack_frame_err_t *stack_f
     kprintf( "  [!!] #Segment not present exception raised !\n" );
 }
 
-static int __send_sigsegv_on_faults=0;
+static int __send_sigsegv_on_faults=1;
 
 void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
