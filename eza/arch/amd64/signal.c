@@ -30,6 +30,7 @@
 #include <eza/errno.h>
 #include <eza/arch/current.h>
 #include <kernel/vm.h>
+#include <eza/process.h>
 
 #define XMM_CTX_SIZE  512
 
@@ -110,7 +111,15 @@ static status_t __setup_trampoline_ctx(struct __signal_context *__user ctx,
 
 static void __perform_default_action(int sig)
 {
-  kprintf( ">>>>>>> DEFAULT ACTION FOR %d\n",sig );
+  int sm=_BM(sig);
+
+  kprintf( ">>>>>>> DEFAULT ACTION FOR %d: ",sig );
+  if( sm & LETHAL_SIGNALS ) {
+    kprintf( "TERMINATE PROCESS\n" );
+    do_exit(EXITCODE(sig,0));
+  }
+  kprintf( "IGNORE\n" );
+  for(;;);
 }
 
 static status_t __setup_syscall_context(uint64_t retcode,uintptr_t kstack,
@@ -147,7 +156,8 @@ static status_t __setup_syscall_context(uint64_t retcode,uintptr_t kstack,
 }
 
 static status_t __setup_int_context(uint64_t retcode,uintptr_t kstack,
-                                    siginfo_t *info,sa_sigaction_t act)
+                                    siginfo_t *info,sa_sigaction_t act,
+                                    ulong_t extra_bytes)
 {
   uintptr_t ustack;
   struct __extra_int_ctx *int_ctx,kint_ctx;
@@ -155,18 +165,19 @@ static status_t __setup_int_context(uint64_t retcode,uintptr_t kstack,
   struct __gpr_regs *kpregs;
   struct __signal_context *ctx;
   uint8_t *xmm;
-
+  
   /* Save XMM and GPR context. */
   xmm=(uint8_t *)kstack+8;  /* Skip pointer to saved GPRs. */
 
   /* Locate saved GPRs. */
-  kpregs=(struct __gpr_regs *)(xmm+XMM_CTX_SIZE);
+  //kpregs=(struct __gpr_regs *)(xmm+XMM_CTX_SIZE);
+  kpregs=(struct __gpr_regs *)(*(uintptr_t *)kstack);
 
   kstack=(uintptr_t)kpregs + sizeof(*kpregs);
   /* OK, now we're pointing at saved interrupt number (see asm.S).
    * So skip it.
    */
-  kstack += 8;
+  kstack += (8+extra_bytes);
 
   /* Now we can access hardware interrupt stackframe. */
   int_frame=(struct __int_stackframe *)kstack;
@@ -232,17 +243,18 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
 
   sigitem=extract_one_signal_from_queue(caller);
   if( !sigitem ) {
-    panic("No signals for delivery for %d/%d !\n",
-          current_task()->pid,current_task()->tid);
+    kprintf("** No signals for delivery for %d/%d !\n",
+            current_task()->pid,current_task()->tid);
+    for(;;);
   }
 
-  /* Determine what is there a user-specific handler installed ? */
+  /* Determine if there is a user-specific handler installed. */
   LOCK_TASK_SIGNALS(caller);
   act=caller->siginfo.handlers->actions[sigitem->info.si_signo].a.sa_sigaction;
   UNLOCK_TASK_SIGNALS(caller);
 
   if( act == SIG_IGN ) {
-    goto out;
+    goto out_recalc;
   } else if( act == SIG_DFL ) {
     __perform_default_action(sigitem->info.si_signo);
   } else {
@@ -251,7 +263,11 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
         r=__setup_syscall_context(retcode,kstack,&sigitem->info,act);
         break;
       case __INT_UWORK:
-        r=__setup_int_context(retcode,kstack,&sigitem->info,act);
+      case __XCPT_NOERR_UWORK:
+        r=__setup_int_context(retcode,kstack,&sigitem->info,act,0);
+        break;
+      case __XCPT_ERR_UWORK:
+        r=__setup_int_context(retcode,kstack,&sigitem->info,act,8);
         break;
       default:
         panic( "Unknown userspace work type: %d in task (%d:%d)\n",
@@ -262,9 +278,9 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
     }
   }
 
+out_recalc:
   clear_task_signals_pending(current_task());
   free_sigqueue_item(sigitem);
-out:
   return;
 bad_memory:
   kprintf( "***** BAD MEMORY !!!\n" );

@@ -124,24 +124,26 @@ ipc_port_message_t *ipc_create_port_message_iov_v(iovec_t *snd_kiovecs,ulong_t s
         r=ipc_setup_buffer_pages(owner,rcv_kiovecs,rcv_numvecs,
                                  (uintptr_t *)ipc_priv->cached_data.cached_page2,
                                  rcv_bufs);
-        if( !r ) {
-          msg->num_recv_buffers=rcv_numvecs;
-          msg->rcv_buf=rcv_bufs;
-          return msg;
-        }
-        goto free_message;
+        if( r ) {
+	  goto free_message;
+	}
+        msg->num_recv_buffers=rcv_numvecs;
+        msg->rcv_buf=rcv_bufs;
+	/* Fallthrough. */
       }
     }
   }
 
   /* Now copy user data to the message. */
-  p=msg->send_buffer;
-  for(i=0;i<snd_numvecs;i++) {
-    if( copy_from_user(p,snd_kiovecs->iov_base,snd_kiovecs->iov_len) ) {
-      goto free_message;
+  if( data_len <= IPC_BUFFERED_PORT_LENGTH ) {
+    p=msg->send_buffer;
+    for(i=0;i<snd_numvecs;i++) {
+      if( copy_from_user(p,snd_kiovecs->iov_base,snd_kiovecs->iov_len) ) {
+        goto free_message;
+      }
+      p += snd_kiovecs->iov_len;
+      snd_kiovecs++;
     }
-    p += snd_kiovecs->iov_len;
-    snd_kiovecs++;
   }
   return msg;
 free_message:
@@ -493,7 +495,12 @@ static status_t __transfer_reply_data_iov(ipc_port_message_t *msg,
   ulong_t i,to_copy,rlen;
   char *rcv_buf;
 
-  reply_len=MIN(reply_len,msg->reply_size);
+  if( from_server ) {
+    reply_len=MIN(reply_len,msg->reply_size);
+  } else {
+    reply_len=MIN(reply_len,msg->replied_size);
+  }
+
   if( reply_len > 0 ) {
     if( !msg->num_send_bufs && msg->reply_size <= IPC_BUFFERED_PORT_LENGTH ) {
       /* Short message - copy it from the buffer. */

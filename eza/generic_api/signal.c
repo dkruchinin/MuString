@@ -43,7 +43,8 @@ struct __def_sig_data {
 static bool __deferred_sig_check(void *d)
 {
   struct __def_sig_data *sd=(struct __def_sig_data *)d;
-  return !signal_matches(sd->blocked,sd->sig);
+  return !signal_matches(sd->blocked,sd->sig) &&
+    signal_matches(&current_task()->siginfo.pending,sd->sig);
 }
 
 void initialize_signals(void)
@@ -55,7 +56,7 @@ void initialize_signals(void)
   }
 }
 
-bool update_pending_signals(task_t *task)
+static bool __update_pending_signals(task_t *task)
 {
   signal_struct_t *siginfo=&task->siginfo;
   bool delivery_needed;
@@ -70,6 +71,17 @@ bool update_pending_signals(task_t *task)
   return delivery_needed;
 }
 
+bool update_pending_signals(task_t *task)
+{
+  bool r;
+
+  LOCK_TASK_SIGNALS(task);
+  r=__update_pending_signals(task);
+  UNLOCK_TASK_SIGNALS(task);
+
+  return r;
+}
+
 static void __remove_signal_from_queue(signal_struct_t *siginfo,int sig,
                                        list_head_t *removed_signals)
 {
@@ -78,20 +90,33 @@ static void __remove_signal_from_queue(signal_struct_t *siginfo,int sig,
 /* NOTE: Caller must hold the signal lock !
  * Return codes:
  *   0: signal was successfully queued.
- *   1: signal wasn't queued since it is ignored.
+ *   1: signal wasn't queued since it was ignored.
  * -ENOMEM: no memory for a new queue item.
  */
-static status_t __send_task_siginfo(task_t *task,siginfo_t *info)
+static status_t __send_task_siginfo(task_t *task,siginfo_t *info,
+                                    bool force_delivery)
 {
   int sig=info->si_signo;
   status_t r;
+  bool send_signal;
+
+  if( force_delivery ) {
+    sa_sigaction_t act=task->siginfo.handlers->actions[sig].a.sa_sigaction;
+
+    if( act == SIG_IGN ) {
+      task->siginfo.handlers->actions[sig].a.sa_sigaction=SIG_DFL;
+    }
+    send_signal=true;
+  } else {
+    send_signal=!signal_matches(&task->siginfo.ignored,sig);
+  }
 
   /* Make sure only one instance of a non-RT signal is present. */
   if( !rt_signal(sig) && signal_matches(&task->siginfo.pending,sig) ) {
     return 0;
   }
 
-  if( !signal_matches(&task->siginfo.ignored,sig) ) {
+  if( send_signal ) {
     sigq_item_t *qitem=__alloc_sigqueue_item();
 
     if( qitem ) {
@@ -112,7 +137,6 @@ static status_t __send_task_siginfo(task_t *task,siginfo_t *info)
   return r;
 }
 
-/* NOTE: Called must hold the signal lock ! */
 static void __send_siginfo_postlogic(task_t *task,siginfo_t *info)
 {
   if( update_pending_signals(task) && task != current_task() ) {
@@ -128,17 +152,12 @@ static void __send_siginfo_postlogic(task_t *task,siginfo_t *info)
   }
 }
 
-status_t send_task_siginfo_forced(task_t *task,siginfo_t *info)
-{
-  return 0;
-}
-
-status_t send_task_siginfo(task_t *task,siginfo_t *info)
+status_t send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery)
 {
   status_t r;
 
   LOCK_TASK_SIGNALS(task);
-  r=__send_task_siginfo(task,info);
+  r=__send_task_siginfo(task,info,force_delivery);
   UNLOCK_TASK_SIGNALS(task);
 
   if( !r ) {
@@ -171,7 +190,7 @@ status_t static __send_pid_siginfo(siginfo_t *info,pid_t pid)
       }
       if( !process_wide_signal(sig) ) {
         /* OK, send signal to target thread. */
-        r=send_task_siginfo(task,info);
+        r=send_task_siginfo(task,info,false);
         release_task_struct(task);
         return r;
       } else {
@@ -240,13 +259,16 @@ static status_t sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
   *oact=*sa;
   *sa=*sact;
 
+  kprintf( "[SSS]: %p : 0x%X\n",
+           sa,sa->a.sa_handler );
+
   /* POSIX 3.3.1.3 */
   if( s == SIG_IGN || (s == SIG_DFL && def_ignorable(sig)) ) {
     sigaddset(&caller->siginfo.ignored,sig);
     sigdelset(&caller->siginfo.pending,sig);
 
     __remove_signal_from_queue(&caller->siginfo,sig,&removed_signals);
-    update_pending_signals(caller);
+    __update_pending_signals(caller);
   } else {
     sigdelset(&caller->siginfo.ignored,sig);
   }
@@ -268,6 +290,8 @@ sa_sigaction_t sys_signal(int sig,sa_handler_t handler)
   sigemptyset(act.sa_mask);
 
   r=sigaction(&act,&oact,sig);
+  kprintf( "sys_signal(%d,%p): %d\n",
+           sig,handler,r);
   return !r ? oact.a.sa_sigaction : SIG_ERR;
 }
 
@@ -293,19 +317,20 @@ sighandlers_t *allocate_signal_handlers(void)
 sigq_item_t *extract_one_signal_from_queue(task_t *task)
 {
   list_node_t *n;
+  sigq_item_t *item;
 
   LOCK_TASK_SIGNALS(task);
   if( !list_is_empty(&task->siginfo.sigqueue) ) {
     n=list_node_first(&task->siginfo.sigqueue);
+
     list_del(n);
     atomic_dec(&task->siginfo.num_pending);
+    item=container_of(n,sigq_item_t,l);
+
+    sigdelset(&task->siginfo.pending,item->info.si_signo);
   } else {
-    n=NULL;
+    item=NULL;
   }
   UNLOCK_TASK_SIGNALS(task);
-
-  if( n ) {
-    return container_of(n,sigq_item_t,l);
-  }
-  return NULL;
+  return item;
 }
