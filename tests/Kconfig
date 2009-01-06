@@ -27,4 +27,9 @@ config TEST_USYNC
        bool "Userspace synchronization test"
        default n
 
+config TEST_SIGNALS
+       bool "Signal subsystem test"
+       default n
+
+
 endif

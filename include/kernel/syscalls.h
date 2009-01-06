@@ -64,6 +64,8 @@
 #define SC_SIGRETURN           27
 #define SC_PORT_SEND_IOV_V     28
 #define SC_PORT_REPLY_IOV      29
+#define SC_SIGACTION           30
+#define SC_THREAD_KILL         31
 
 #ifndef __ASM__
 

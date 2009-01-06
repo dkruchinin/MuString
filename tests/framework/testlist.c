@@ -9,6 +9,7 @@ extern testcase_t ipc_testcase;
 extern testcase_t sched_testcase;
 extern testcase_t wq_testcase;
 extern testcase_t usync_testcase;
+extern testcase_t signals_testcase;
 
 static testcase_t *known_testcases[] = {
 #ifdef CONFIG_TEST_IPC
@@ -22,6 +23,9 @@ static testcase_t *known_testcases[] = {
 #endif
 #ifdef CONFIG_TEST_USYNC
   &usync_testcase,
+#endif
+#ifdef CONFIG_TEST_SIGNALS
+  &signals_testcase,
 #endif
   NULL,
 };

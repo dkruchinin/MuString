@@ -82,11 +82,6 @@ bool update_pending_signals(task_t *task)
   return r;
 }
 
-static void __remove_signal_from_queue(signal_struct_t *siginfo,int sig,
-                                       list_head_t *removed_signals)
-{
-}
-
 /* NOTE: Caller must hold the signal lock !
  * Return codes:
  *   0: signal was successfully queued.
@@ -237,51 +232,90 @@ status_t sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
   return r;
 }
 
-static status_t sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
-                          int sig) {
-  task_t *caller=current_task();
-  kern_sigaction_t *sa=&caller->siginfo.handlers->actions[sig];
-  sa_sigaction_t s=sact->a.sa_sigaction;
-  list_head_t removed_signals;
+status_t sys_thread_kill(pid_t process,tid_t tid,int sig)
+{
+  task_t *target=pid_to_task(tid);
+  status_t r;
+  siginfo_t k_siginfo;
+
+  if( !target ) {
+    return -ESRCH;
+  }
 
   if( !valid_signal(sig) ) {
     return -EINVAL;
   }
 
-  list_init_head(&removed_signals);
+  if( target->pid != process ) {
+    r=-ESRCH;
+    goto out;
+  }
+
+  memset(&k_siginfo,0,sizeof(k_siginfo));
+  k_siginfo.si_signo=sig;
+  k_siginfo.si_errno=0;
+  k_siginfo.si_pid=current_task()->pid;
+  k_siginfo.si_uid=current_task()->uid;
+  k_siginfo.si_code=SI_USER;
+
+  r=send_task_siginfo(target,&k_siginfo,false);
+out:
+  release_task_struct(target);
+  return r;
+}
+
+static status_t sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
+                          int sig) {
+  task_t *caller=current_task();
+  sa_sigaction_t s=sact->a.sa_sigaction;
+  sq_header_t *removed_signals=NULL;
+
+  if( !valid_signal(sig) ) {
+    return -EINVAL;
+  }
 
   /* Remove signals that can't be blocked. */
-  sa->sa_mask &= ~UNTOUCHABLE_SIGNALS;
+  sact->sa_mask &= ~UNTOUCHABLE_SIGNALS;
 
   LOCK_TASK_SIGNALS(caller);
-  *oact=*sa;
-  *sa=*sact;
-
-  kprintf( "[SSS]: %p : 0x%X\n",
-           sa,sa->a.sa_handler );
+  if( oact ) {
+    *oact=caller->siginfo.handlers->actions[sig];
+  }
+  caller->siginfo.handlers->actions[sig]=*sact;
 
   /* POSIX 3.3.1.3 */
   if( s == SIG_IGN || (s == SIG_DFL && def_ignorable(sig)) ) {
     sigaddset(&caller->siginfo.ignored,sig);
-    sigdelset(&caller->siginfo.pending,sig);
 
-    __remove_signal_from_queue(&caller->siginfo,sig,&removed_signals);
     __update_pending_signals(caller);
+    removed_signals=sigqueue_remove_item(&caller->siginfo.sigqueue,sig,true);
   } else {
     sigdelset(&caller->siginfo.ignored,sig);
   }
   UNLOCK_TASK_SIGNALS(caller);
 
   /* Now we can sefely remove queue items. */
-  if( !list_is_empty(&removed_signals) ) {
+  if( removed_signals != NULL ) {
+    list_node_t *last=removed_signals->l.prev;
+    list_node_t *next=&removed_signals->l;
+
+    do {
+      sq_header_t *h=container_of(next,sq_header_t,l);
+      next=next->next;
+      free_sigqueue_item(h);
+    } while(last != next);
   }
   return 0;
 }
 
-sa_sigaction_t sys_signal(int sig,sa_handler_t handler)
+status_t sys_signal(int sig,sa_handler_t handler)
 {
   kern_sigaction_t act,oact;
   status_t r;
+
+  if( (sig == SIGKILL || sig == SIGSTOP) && (sa_sigaction_t)handler != SIG_DFL ) {
+    return -EINVAL;
+  }
 
   act.a.sa_handler=handler;
   act.sa_flags=SA_RESETHAND | SA_NODEFER;
@@ -290,7 +324,50 @@ sa_sigaction_t sys_signal(int sig,sa_handler_t handler)
   r=sigaction(&act,&oact,sig);
   kprintf( "sys_signal(%d,%p): %d\n",
            sig,handler,r);
-  return !r ? oact.a.sa_sigaction : SIG_ERR;
+  return !r ? (status_t)oact.a.sa_sigaction : r;
+}
+
+status_t sys_sigaction(int signum,sigaction_t *act,
+                       sigaction_t *oldact)
+{
+  kern_sigaction_t kact,koact;
+  sigaction_t uact;
+  status_t r;
+
+  if( !valid_signal(signum) || signum == SIGKILL ||
+      signum == SIGSTOP ) {
+    return -EINVAL;
+  }
+
+  if( !act ) {
+    return -EFAULT;
+  }
+
+  if( copy_from_user(&uact,act,sizeof(uact)) ) {
+    return -EFAULT;
+  }
+
+  /* Transform userspace data to kernel data. */
+  if( uact.sa_flags & SA_SIGINFO ) {
+    kact.a.sa_sigaction=uact.sa_sigaction;
+  } else {
+    kact.a.sa_handler=uact.sa_handler;
+  }
+  if( !kact.a.sa_handler ) {
+    return -EINVAL;
+  }
+
+  kact.sa_mask=uact.sa_mask;
+  kact.sa_flags=uact.sa_flags;
+
+  r=sigaction(&kact,oldact ? &koact : NULL,signum);
+
+  if( !r && oldact ) {
+    if( copy_to_user(oldact,&koact,sizeof(koact)) ) {
+      r=-EFAULT;
+    }
+  }
+  return r;
 }
 
 sighandlers_t *allocate_signal_handlers(void)

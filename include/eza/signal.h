@@ -25,6 +25,7 @@
 #define  __SIGNAL_H__
 
 #include <eza/arch/types.h>
+#include <eza/time.h>
 #include <eza/task.h>
 #include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
@@ -44,6 +45,11 @@
 #define valid_signal(n)  ((n)>=0 && (n) < SIGRTMAX )
 #define rt_signal(n)  ((n)>=SIGRTMIN && (n) < SIGRTMAX)
 
+typedef union sigval {
+  int sival_int;
+  void *sival_ptr;
+} sigval_t;
+
 typedef struct __siginfo {
   int       si_signo;    /* Signal number */
   int       si_errno;    /* An errno value */
@@ -51,9 +57,9 @@ typedef struct __siginfo {
   pid_t     si_pid;      /* Sending process ID */
   uid_t     si_uid;      /* Real user ID of sending process */
   int       si_status;   /* Exit value or signal */
-//  clock_t   si_utime;    /* User time consumed */
-//  clock_t   si_stime;    /* System time consumed */
-//  sigval_t  si_value;    /* Signal value */
+  clock_t   si_utime;    /* User time consumed */
+  clock_t   si_stime;    /* System time consumed */
+  sigval_t  si_value;    /* Signal value */
   int       si_int;      /* POSIX.1b signal */
   void     *si_ptr;      /* POSIX.1b signal */
   void     *si_addr;     /* Memory location which caused fault */
@@ -171,7 +177,7 @@ static inline void put_signal_handlers(sighandlers_t *s)
 #define deliverable_signals_present(s) ((s)->pending & ~((s)->blocked))
 
 typedef struct __sigq_item {
-  sq_header_t h;
+  sq_header_t h;   /* Must be the first member ! */
   siginfo_t info;
 } sigq_item_t;
 
