@@ -106,5 +106,20 @@ static inline bit_idx_t set_and_test_bit_mem_64( uint64_t *ptr, bit_idx_t bit )
   return prev_state;
 }
 
+static inline int count_active_bits(ulong_t p)
+{
+  int bits=0;
+  ulong_t mask=1;
+
+  while( p ) {
+    if( p & mask ) {
+      bits++;
+    }
+    p >>= 1;
+  }
+
+  return bits;
+}
+
 #endif
 

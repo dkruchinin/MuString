@@ -30,6 +30,7 @@
 #include <ipc/poll.h>
 #include <ipc/gen_port.h>
 #include <eza/sync.h>
+#include <eza/signal.h>
 
 #endif
 
@@ -66,6 +67,7 @@
 #define SC_PORT_REPLY_IOV      29
 #define SC_SIGACTION           30
 #define SC_THREAD_KILL         31
+#define SC_SIGPROCMASK         32
 
 #ifndef __ASM__
 
@@ -456,6 +458,10 @@ status_t sys_port_send_iov_v(ulong_t channel,
 
 status_t sys_port_reply_iov(ulong_t port,ulong_t msg_id,
                             iovec_t reply_iov[],ulong_t numvecs);
+
+status_t sys_thread_kill(pid_t prcess,tid_t tid,int sig);
+
+status_t sys_sigprocmask(int how,const sigset_t *set,sigset_t *oldset);
 
 #endif
 

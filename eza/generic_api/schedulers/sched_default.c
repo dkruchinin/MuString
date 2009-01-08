@@ -245,7 +245,6 @@ static void def_scheduler_tick(void)
 
   discipl = tdata->sched_discipline;
 
-  LOCK_TASK_STRUCT(current);
   LOCK_CPU_SCHED_DATA(cpudata);
 
   if( discipl != SCHED_FIFO ) {
@@ -269,7 +268,6 @@ static void def_scheduler_tick(void)
   }
 
   UNLOCK_CPU_SCHED_DATA(cpudata);
-  UNLOCK_TASK_STRUCT(current);
 }
 
 static status_t def_add_task(task_t *task)

@@ -36,7 +36,7 @@ static memcache_t *sigq_cache;
 #define __alloc_sigqueue_item()  alloc_from_memcache(sigq_cache)
 
 struct __def_sig_data {
-  sigset_t *blocked;
+  sigset_t *blocked,*pending;
   int sig;
 };
 
@@ -44,7 +44,7 @@ static bool __deferred_sig_check(void *d)
 {
   struct __def_sig_data *sd=(struct __def_sig_data *)d;
   return !signal_matches(sd->blocked,sd->sig) &&
-    signal_matches(&current_task()->siginfo.pending,sd->sig);
+    signal_matches(sd->pending,sd->sig);
 }
 
 void initialize_signals(void)
@@ -56,6 +56,7 @@ void initialize_signals(void)
   }
 }
 
+/* NOTE: Signals must be locked before calling this function ! */
 static bool __update_pending_signals(task_t *task)
 {
   signal_struct_t *siginfo=&task->siginfo;
@@ -119,7 +120,6 @@ static status_t __send_task_siginfo(task_t *task,siginfo_t *info,
       qitem->info=*info;
 
       sigqueue_add_item(&task->siginfo.sigqueue,&qitem->h);
-      sigaddset(&task->siginfo.pending,sig);
       r=0;
     } else {
       r=-ENOMEM;
@@ -138,6 +138,7 @@ static void __send_siginfo_postlogic(task_t *task,siginfo_t *info)
     ulong_t state=TASK_STATE_SLEEPING | TASK_STATE_STOPPED;
 
     sd.blocked=&task->siginfo.blocked;
+    sd.pending=&task->siginfo.pending;
     sd.sig=info->si_signo;
     sched_change_task_state_deferred_mask(task,TASK_STATE_RUNNABLE,
                                           __deferred_sig_check,&sd,
@@ -162,40 +163,76 @@ status_t send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery)
   return r < 0 ? r : 0;
 }
 
-status_t static __send_pid_siginfo(siginfo_t *info,pid_t pid)
+static status_t __send_signal_to_process(pid_t pid,siginfo_t *siginfo)
 {
-  task_t *caller=current_task();
-  task_t *task;
-  int sig=info->si_signo;
-  status_t r;
+  task_t *root=pid_to_task(pid);
+  task_t *target=NULL;
+  int sig=siginfo->si_signo;
+  int i,ab=SIGRTMAX;
+  list_node_t *ln;
 
-  if( !pid ) {
-    return -2;
-  } else if ( pid > 0 ) {
-    if( is_tid(pid) ) { /* Send signal to a separate thread. */
-      /* Make sure target thread belongs to our process. */
-      if( caller->pid != TID_TO_PIDBASE(pid) ) {
-        return -EINVAL;
-      }
-      task=pid_to_task(pid);
-      if( !task ) {
-        return -ESRCH;
-      }
-      if( !process_wide_signal(sig) ) {
-        /* OK, send signal to target thread. */
-        r=send_task_siginfo(task,info,false);
-        release_task_struct(task);
-        return r;
-      } else {
-        /* Trying to send a process-wide signal, so fall-through. */
-        release_task_struct(task);
-      }
-    }
-    /* Send signal to a whole process. */
-    return -5;
-  } else {
-    return -10;
+  if( !root ) {
+    return -ESRCH;
   }
+
+  if( process_wide_signal(sig) ) {
+  } else {
+    /* Locate a valid target thread within target process starting from
+     * the main thread.
+     */
+    LOCK_TASK_SIGNALS(root);
+    if( can_send_signal_to_task(sig,root) ) {
+      target=root;
+      if( can_deliver_signal_to_task(sig,root) ) {
+        goto send_signal;
+      }
+      ab=count_active_bits(root->siginfo.pending);
+    }
+    UNLOCK_TASK_SIGNALS(root);
+
+    /* Signal can't be delivered to the main thread, so try to find a valid
+     * target among other threads of target process.
+     */
+    LOCK_TASK_CHILDS(root);
+    list_for_each(&root->threads,ln) {
+      task_t *t=container_of(ln,task_t,child_list);
+
+      LOCK_TASK_SIGNALS(t);
+      if( can_send_signal_to_task(sig,t) ) {
+        if( can_deliver_signal_to_task(sig,t) ) {
+          target=t;
+          UNLOCK_TASK_CHILDS(root);
+          goto send_signal;
+        }
+        i=count_active_bits(t->siginfo.pending);
+        if( i < ab ) {
+          target=t;
+          ab=i;
+        }
+      }
+      UNLOCK_TASK_SIGNALS(t);
+    }
+    UNLOCK_TASK_CHILDS(root);
+  }
+
+  if( !target ) {
+    /* No valid targets found. */
+    return 0;
+  } else {
+    /* Only one valid target was found, so check it one more time. */
+    LOCK_TASK_SIGNALS(target);
+    if( !can_send_signal_to_task(sig,target) ) {
+      UNLOCK_TASK_SIGNALS(target);
+      return 0;
+    }
+    /* Fallthrough. */
+  }
+
+send_signal:
+  __send_task_siginfo(target,siginfo,false);
+  UNLOCK_TASK_SIGNALS(target);
+  __send_siginfo_postlogic(target,siginfo);
+  return 0;
 }
 
 status_t sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
@@ -206,6 +243,10 @@ status_t sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
   if( !valid_signal(sig) ) {
     kprintf("sys_kill: bad signal %d!\n",sig);
     return -EINVAL;
+  }
+
+  if( is_tid(pid) ) {
+    return -ESRCH;
   }
 
   if( sinfo ) {
@@ -226,24 +267,81 @@ status_t sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
   k_siginfo.si_uid=current_task()->uid;
   k_siginfo.si_code=SI_USER;
 
-  r=__send_pid_siginfo(&k_siginfo,pid);
-  kprintf( ">> sending signal to %d : %d\n",
-           pid,r);
+  if( !pid ) {
+    /* Send signal to every process in process group we belong to. */
+  } else if( pid > 0 ) {
+    /* Send signal to target process. */
+    r=__send_signal_to_process(pid,&k_siginfo);
+  } else if( pid == -1 ) {
+    /* Send signal to all processes except the init process. */
+  } else {
+    /* PID is lesser than -1: send signal to every process in group -PID */
+  }
+
   return r;
+}
+
+status_t sys_sigprocmask(int how,const sigset_t *set,sigset_t *oldset)
+{
+  task_t *target=current_task();
+  sigset_t kset,wset;
+
+  if( how < 0 || how > SIG_SETMASK ) {
+    return -EINVAL;
+  }
+
+  if( oldset != NULL ) {
+    LOCK_TASK_SIGNALS(target);
+    kset=target->siginfo.blocked;
+    UNLOCK_TASK_SIGNALS(target);
+
+    if( copy_to_user(oldset,&kset,sizeof(kset)) ) {
+      return -EFAULT;
+    }
+  }
+
+  if( set != NULL ) {
+    if( copy_from_user(&kset,set,sizeof(kset)) ) {
+      return -EFAULT;
+    }
+    kset &= ~UNTOUCHABLE_SIGNALS;
+
+    LOCK_TASK_SIGNALS(target);
+    wset=target->siginfo.blocked;
+
+    switch( how ) {
+      case SIG_BLOCK:
+        wset |= kset;
+        break;
+      case SIG_UNBLOCK:
+        wset &= ~kset;
+        break;
+      case SIG_SETMASK:
+        wset=kset;
+        break;
+    }
+
+    target->siginfo.blocked=wset;
+    __update_pending_signals(target);
+    UNLOCK_TASK_SIGNALS(target);
+  }
+
+  return 0;
 }
 
 status_t sys_thread_kill(pid_t process,tid_t tid,int sig)
 {
-  task_t *target=pid_to_task(tid);
+  task_t *target;
   status_t r;
   siginfo_t k_siginfo;
 
-  if( !target ) {
-    return -ESRCH;
+  if( !valid_signal(sig) || !is_tid(tid) ) {
+    return -EINVAL;
   }
 
-  if( !valid_signal(sig) ) {
-    return -EINVAL;
+  target=pid_to_task(tid);
+  if( !target ) {
+    return -ESRCH;
   }
 
   if( target->pid != process ) {

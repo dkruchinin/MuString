@@ -101,12 +101,12 @@ static status_t __setup_trampoline_ctx(struct __signal_context *__user ctx,
   if( copy_to_user(&ctx->trampl_ctx.handler,&kt,sizeof(kt)) ) {
     return -EFAULT;
   }
-
+/*
   kprintf( "TRAMPLCTX: %p, handler: %p, arg1=%p,arg2=%p,arg3=%p\n",
            &ctx->trampl_ctx,
            ctx->trampl_ctx.handler,ctx->trampl_ctx.arg1,
            ctx->trampl_ctx.arg2,ctx->trampl_ctx.arg3);
-
+*/
   return 0;
 }
 
@@ -289,7 +289,6 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
     caller->siginfo.blocked=sa_mask;
     UNLOCK_TASK_SIGNALS(caller);
 
-    kprintf( "[!!!] Blocked signals: 0x%X\n", caller->siginfo.blocked );
     if( copy_to_user(&pctx->saved_blocked,&kmask,sizeof(sigset_t)) ) {
       goto bad_memory;
     }
@@ -307,7 +306,7 @@ bad_memory:
 
 void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
 {
-  kprintf("[UWORKS]: %d/%d. Processing works for %d:%d, KSTACK: %p\n",
+  kprintf("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
           reason,retcode,
           current_task()->pid,current_task()->tid,
           kstack);
