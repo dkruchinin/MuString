@@ -266,7 +266,7 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
   } else {
     switch( reason ) {
       case __SYCALL_UWORK:
-        r=__setup_syscall_context(retcode,kstack,&sigitem->info,act,&pctx);
+        r=__setup_int_context(retcode,kstack,&sigitem->info,act,0,&pctx);
         break;
       case __INT_UWORK:
       case __XCPT_NOERR_UWORK:

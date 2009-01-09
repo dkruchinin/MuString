@@ -208,26 +208,27 @@ return_from_syscall:
    */
   mov %gs:CPU_SCHED_STAT_USER_WORKS_OFFT, %rbx
 
-  cmp $0, (%rbx)
+  cmp $0,(%rbx)
   je no_works_after_syscall
 
   pushq %rax
   movq $__SYCALL_UWORK, %rdi
   movq %rax, %rsi
   movq %rsp, %rdx
+  addq $8, %rdx  /* Skip just saved %rax */
   call handle_uworks
   popq %rax
 
 no_works_after_syscall:
   RESTORE_ALL
-  RESTORE_USER_SEGMENT_REGISTERS
 
   /* Now restore user %gs */
   cli
+  RESTORE_USER_SEGMENT_REGISTERS
   pushq %rax
-  mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
+//  mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
   swapgs
-  mov %eax,%gs
+//  mov %eax,%gs
   jmp ret_from_int
 
 /* Here goes handlers for CPU-specific fault handlers ranged at [0 .. 31]
@@ -381,6 +382,7 @@ general_protection_fault_handler:
 
 page_fault_fault_handler:
   cli
+  jmp page_fault_fault_handler
   push %rax
   movl $14,%eax
   jmp error_code_exception_path
