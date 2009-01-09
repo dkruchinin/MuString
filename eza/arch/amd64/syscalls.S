@@ -78,6 +78,7 @@ syscall_point:
 	swapgs
 	movq %rsp,%gs:CPU_SCHED_STAT_USTACK_OFFT
 	movq %gs:CPU_SCHED_STAT_KSTACK_OFFT,%rsp
+	SAVE_AND_LOAD_SEGMENT_REGISTERS
 
 	/* After changing stack pointer, we can enable IRQs */
 	sti

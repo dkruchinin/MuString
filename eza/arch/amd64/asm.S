@@ -188,11 +188,10 @@ dont_check_int_works:
    */
 userspace_ret_from_int:
   /* Restore user segment registers. */
-  mov %gs:(CPU_SCHED_STAT_USER_DS_OFFT),%ds
-  mov %gs:(CPU_SCHED_STAT_USER_ES_OFFT),%es
-  mov %gs:(CPU_SCHED_STAT_USER_FS_OFFT),%fs
+  RESTORE_USER_SEGMENT_REGISTERS
 
   /* Now restore user %gs */
+  cli
   mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
   swapgs
   mov %eax,%gs
@@ -224,6 +223,7 @@ no_works_after_syscall:
   /* Restore back user stack pointer. Interrupts will be
    * restored after performing the SYSRET command.
    */
+  RESTORE_USER_SEGMENT_REGISTERS
   movq %gs:CPU_SCHED_STAT_USTACK_OFFT, %rsp
 
   swapgs

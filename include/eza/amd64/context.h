@@ -170,14 +170,23 @@
  */
 #define HW_INTERRUPT_CTX_RFLAGS_OFFT  0x10
 
+#define SAVE_AND_LOAD_SEGMENT_REGISTERS         \
+   mov %ds, %gs:CPU_SCHED_STAT_USER_DS_OFFT;            \
+   mov %es, %gs:CPU_SCHED_STAT_USER_ES_OFFT;            \
+   mov %fs, %gs:CPU_SCHED_STAT_USER_FS_OFFT;            \
+   mov %gs, %gs:CPU_SCHED_STAT_USER_GS_OFFT;            \
+   mov %gs:(CPU_SCHED_STAT_KERN_DS_OFFT),%ds;   \
+
+#define RESTORE_USER_SEGMENT_REGISTERS          \
+   mov %gs:(CPU_SCHED_STAT_USER_DS_OFFT),%ds;   \
+   mov %gs:(CPU_SCHED_STAT_USER_ES_OFFT),%es;   \
+   mov %gs:(CPU_SCHED_STAT_USER_FS_OFFT),%fs;   \
+
 #define ENTER_INTERRUPT_CTX(label,extra_pushes) \
 	cmp $KERNEL_SELECTOR(KTEXT_DES),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ;\
 	je label; \
         swapgs ;  \
-        mov %ds, %gs:CPU_SCHED_STAT_USER_DS_OFFT;       \
-        mov %es, %gs:CPU_SCHED_STAT_USER_ES_OFFT;       \
-        mov %fs, %gs:CPU_SCHED_STAT_USER_FS_OFFT;       \
-        mov %gs:(CPU_SCHED_STAT_KERN_DS_OFFT),%ds;      \
+        SAVE_AND_LOAD_SEGMENT_REGISTERS         \
 label:	;\
 	incq %gs:CPU_SCHED_STAT_IRQCNT_OFFT ;\
 	SAVE_ALL ;\
