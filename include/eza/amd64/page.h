@@ -169,7 +169,8 @@ static inline uintptr_t _k2p(uintptr_t p)
  */
 
 #define IDT_ITEMS  256  /* interrupt descriptors */
-#define GDT_ITEMS  8   /* GDT */
+#define GDT_ITEMS  10   /* GDT */
+#define LDT_ITEMS  1    /* Default number of LDT entries */
 
 #define NIL_DES  0  /* nil(null) descriptor */
 #define KTEXT_DES    1 /* kernel space */
@@ -178,6 +179,7 @@ static inline uintptr_t _k2p(uintptr_t p)
 #define UTEXT_DES    4
 #define KTEXT32_DES  5 /* it's requered while bootstrap in 32bit mode */
 #define TSS_DES      6
+#define LDT_DES      8
 
 #define PL_KERNEL  0
 #define PL_USER    3
@@ -190,6 +192,7 @@ static inline uintptr_t _k2p(uintptr_t p)
 #define AR_TSS        (0x9)   /* task state segment */
 #define AR_INTR       (0xe)   /* interrupt */
 #define AR_TRAP       (0xf)
+#define AR_LDT        (0x2)   /* 64-bit LDT descriptor */
 
 #define DPL_KERNEL  (PL_KERNEL<<5)
 #define DPL_USPACE  (PL_USER<<5)

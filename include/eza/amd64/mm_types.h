@@ -77,6 +77,8 @@ struct __tss_descriptor { /* task state segments descriptor */
 } __attribute__ ((packed));
 typedef struct __tss_descriptor tss_descriptor_t;
 
+typedef struct __tss_descriptor ldt_descriptor_t;
+
 struct __intrdescriptor { /* interrupt descriptor */
   unsigned offset_0_15: 16;
   unsigned selector: 16;
