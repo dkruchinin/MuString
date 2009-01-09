@@ -71,6 +71,8 @@ static void __arch_setup_ctx(task_t *newtask,uint64_t rsp)
   /* Default TSS value which means: use per-CPU TSS. */
   ctx->tss=NULL;
   ctx->tss_limit=TSS_DEFAULT_LIMIT;
+  ctx->ldt=0;
+  ctx->ldt_limit=0;
 }
 
 extern long __t1;
@@ -306,6 +308,19 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
     task_ctx->tss_limit=parent_ctx->tss_limit;
     kprintf( "Copying TSS (%p) from %d:%d\n",
              tss,parent->pid,parent->tid);
+  }
+
+  if( priv == TPL_USER ) {
+    /* Allocate LDT for this task. */
+    task_ctx->ldt_limit=LDT_ITEMS*sizeof(descriptor_t);
+    task_ctx->ldt=(uintptr_t)memalloc(task_ctx->ldt_limit);
+
+    if( !task_ctx->ldt ) {
+      kprintf("** Can't allocate LDT for task %d/%d !\n",
+              newtask->pid,newtask->tid);
+      for(;;);
+      return -ENOMEM;
+    }
   }
 
   /* Process attributes, if any. */

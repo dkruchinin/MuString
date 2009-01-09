@@ -211,7 +211,9 @@ typedef struct __arch_context_t {
   uintptr_t cr3, rsp, fs, gs, es, ds, user_rsp;
   uintptr_t uworks;
   tss_t *tss;
+  uintptr_t ldt;
   uint16_t tss_limit;
+  uint16_t ldt_limit;
 } arch_context_t;
 
 #define ARCH_CTX_UWORS_SIGNALS_BIT_IDX  0

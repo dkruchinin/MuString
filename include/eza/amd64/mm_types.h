@@ -140,6 +140,7 @@ extern void tss_init(tss_t *tp);
 
 /* context switching - related functions. */
 void load_tss(cpu_id_t cpu,tss_t *new_tss,uint16_t limit);
+void load_ldt(cpu_id_t cpu,uintptr_t ldt,uint16_t limit);
 void copy_tss(tss_t *dst_tss,tss_t *src_tss);
 
 /* gdt related misc functions */

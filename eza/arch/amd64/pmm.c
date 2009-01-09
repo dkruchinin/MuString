@@ -45,9 +45,6 @@ tss_t tss[CONFIG_NRCPUS];
 /* Global IDT array */
 idescriptor_t idt[IDT_ITEMS];
 
-/* Global per-cpu LDT entries. */
-descriptor_t ldt[CONFIG_NRCPUS][LDT_ITEMS];
-
 /* init tss - just fill it nil */
 void tss_init(tss_t *tp)
 {
@@ -109,6 +106,19 @@ void gdt_tss_setlim(descriptor_t *p, uint32_t lim)
   return;
 }
 
+void load_ldt(cpu_id_t cpu,uintptr_t ldt,uint16_t limit)
+{
+  ldt_descriptor_t *ldt_dsc=(ldt_descriptor_t *)&gdt[cpu][LDT_DES];
+  ldt_dsc->present=1;
+  ldt_dsc->type=AR_LDT;
+  ldt_dsc->dpl=PL_KERNEL;
+
+  gdt_tss_setbase(&gdt[cpu][LDT_DES],ldt);
+  gdt_tss_setlim(&gdt[cpu][LDT_DES],limit);
+
+  ldtr_load(gdtselector(LDT_DES));
+}
+
 void idt_set_offset(idescriptor_t *p, uintptr_t off)                             
 {
   p->offset_0_15=off & 0xffff;
@@ -159,7 +169,6 @@ int install_interrupt_gate( uint32_t slot, uintptr_t handler,
 void arch_pmm_init(cpu_id_t cpu)
 {
   tss_descriptor_t *tss_dsc;
-  ldt_descriptor_t *ldt_dsc;
   ptr_16_64_t gdtr;
   tss_t *tss_p;
   ptr_16_64_t idtr;
@@ -187,20 +196,10 @@ void arch_pmm_init(cpu_id_t cpu)
   idtr.limit = sizeof(idt);
   idtr.base = (uint64_t)idt;
 
-  /* Prepare LDT descriptor */
-  ldt_dsc=(ldt_descriptor_t *)&gdt[cpu][LDT_DES];
-  ldt_dsc->present=1;
-  ldt_dsc->type=AR_LDT;
-  ldt_dsc->dpl=PL_KERNEL;
-
-  gdt_tss_setbase(&gdt[cpu][LDT_DES],(uintptr_t)&ldt[cpu][0]);
-  gdt_tss_setlim(&gdt[cpu][LDT_DES],sizeof(ldt)/CONFIG_NRCPUS);
-
   /* Now load CPU registers with new descriptors. */
   gdtr_load(&gdtr);
   tr_load(gdtselector(TSS_DES));
   idtr_load(&idtr);
-  ldtr_load(gdtselector(LDT_DES));
 
   return;
 }

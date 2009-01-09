@@ -163,14 +163,17 @@ static inline uintptr_t _k2p(uintptr_t p)
 
 #endif /* __ASM__ */
 
-/* varios stuff for paging and tss operating 
- * for more portability we assume that 
+/* varios stuff for paging and tss operating
+ * for more portability we assume that
  * there are no segmantation in long mode
  */
 
 #define IDT_ITEMS  256  /* interrupt descriptors */
 #define GDT_ITEMS  10   /* GDT */
-#define LDT_ITEMS  1    /* Default number of LDT entries */
+#define LDT_ITEMS  2    /* Default number of LDT entries (must include 'nil'
+                         * selector), so by default each task has only one
+                         * LDT item.
+                         */
 
 #define NIL_DES  0  /* nil(null) descriptor */
 #define KTEXT_DES    1 /* kernel space */

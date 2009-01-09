@@ -67,9 +67,13 @@ static inline void arch_activate_task(task_t *to)
 
   /* We should setup TSS to reflect new task's kernel stack. */
   tss->rsp0 = to->kernel_stack.high_address;
-
   /* Reload TSS. */
   load_tss(to->cpu,tss,tss_limit);
+
+  /* Setup LDT for new task. */
+  if( to_ctx->ldt ) {
+    load_ldt(to->cpu,to_ctx->ldt,to_ctx->ldt_limit);
+  }
 
   /* Let's jump ! */
 #ifdef CONFIG_TEST
