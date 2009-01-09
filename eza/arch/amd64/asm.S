@@ -198,8 +198,7 @@ userspace_ret_from_int:
 ret_from_int:
   popq %rax
 
-  /* Make sure IF is set after returning from interrupt context. 
-   */
+  /* Make sure IF is set after returning from interrupt context. */
   orq $RFLAGS_IF,HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
   iretq
 
@@ -212,22 +211,24 @@ return_from_syscall:
   cmp $0, (%rbx)
   je no_works_after_syscall
 
+  pushq %rax
   movq $__SYCALL_UWORK, %rdi
   movq %rax, %rsi
   movq %rsp, %rdx
   call handle_uworks
+  popq %rax
 
 no_works_after_syscall:
   RESTORE_ALL
-  cli
-  /* Restore back user stack pointer. Interrupts will be
-   * restored after performing the SYSRET command.
-   */
   RESTORE_USER_SEGMENT_REGISTERS
-  movq %gs:CPU_SCHED_STAT_USTACK_OFFT, %rsp
 
+  /* Now restore user %gs */
+  cli
+  pushq %rax
+  mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
   swapgs
-  sysretq
+  mov %eax,%gs
+  jmp ret_from_int
 
 /* Here goes handlers for CPU-specific fault handlers ranged at [0 .. 31]
  */

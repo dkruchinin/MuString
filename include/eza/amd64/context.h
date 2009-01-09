@@ -168,7 +168,13 @@
 /* Since we'll always turn turn on interrupts after executing IRETQ,
  * we should know where saved RFLAGS is located.
  */
+#define HW_INTERRUPT_CTX_RIP_OFFT     0x0
+#define HW_INTERRUPT_CTX_CS_OFFT      0x8
 #define HW_INTERRUPT_CTX_RFLAGS_OFFT  0x10
+#define HW_INTERRUPT_CTX_RSP_OFFT     0x18
+#define HW_INTERRUPT_CTX_SS_OFFT      0x20
+
+#define HW_INTERRUPT_CTX_SIZE         0x28
 
 #define SAVE_AND_LOAD_SEGMENT_REGISTERS         \
    mov %ds, %gs:CPU_SCHED_STAT_USER_DS_OFFT;            \

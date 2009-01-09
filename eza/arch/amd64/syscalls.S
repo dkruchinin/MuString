@@ -23,6 +23,7 @@
 
 #include <eza/arch/context.h>
 #include <eza/errno.h>
+#include <eza/arch/cpu.h>
 
 .global syscall_point
 
@@ -79,6 +80,22 @@ syscall_point:
 	movq %rsp,%gs:CPU_SCHED_STAT_USTACK_OFFT
 	movq %gs:CPU_SCHED_STAT_KSTACK_OFFT,%rsp
 	SAVE_AND_LOAD_SEGMENT_REGISTERS
+
+	/* Since we use IRET instead of SYSRETURN to return from syscall,
+	 *  we need to setup a fake interrupt stack frame on the stack.
+	 */
+	subq $HW_INTERRUPT_CTX_SIZE,%rsp
+	movq %rcx,HW_INTERRUPT_CTX_RIP_OFFT(%rsp)
+	movq $USER_SELECTOR(UTEXT_DES),HW_INTERRUPT_CTX_CS_OFFT(%rsp)
+	/* Since %rcx was saved, we can use it. */
+	pushfq
+	popq %rcx
+	orq $RFLAGS_IF,%rcx
+	movq %rcx,HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
+
+	movq $USER_SELECTOR(UDATA_DES),HW_INTERRUPT_CTX_SS_OFFT(%rsp)
+	movq %gs:CPU_SCHED_STAT_USTACK_OFFT,%rcx
+	movq %rcx,HW_INTERRUPT_CTX_RSP_OFFT(%rsp)
 
 	/* After changing stack pointer, we can enable IRQs */
 	sti
