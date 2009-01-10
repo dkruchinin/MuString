@@ -17,7 +17,10 @@
 
 #define UNTRUSTED_MANDATORY_FLAGS  (IPC_BLOCKED_ACCESS)
 
-/* Send/receive flags. */
+/* NOTE: This number is used for allocate temporary arrays on task's
+ * kernel stack. So please don't use huge numbers here.
+ */
+#define MAX_IOVECS  8
 
 /* TODO: [mt] Changes IPC_DEFAULT_PORTS to a smoller value !!! */
 #define IPC_DEFAULT_PORTS  512

@@ -52,3 +52,7 @@ endmenu
 
 source "kernel/Kconfig"
 source "tests/Kconfig"
+
+config EMU
+	bool "Make MuiString for running on emulator"
+	default y

@@ -1,3 +1,25 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ *
+ * eza/generic_api/gc.c: Core functions related to system GC thread actions.
+ */
+
 #include <eza/arch/types.h>
 #include <eza/task.h>
 #include <eza/smp.h>
@@ -65,47 +87,33 @@ static void __gc_thread_logic(void *arg)
       struct __gc_action *action=container_of(n,struct __gc_action,l);
 
       action->action(action->data,action->data_arg);
-      action->dtor(action);
+      if( action->dtor ) {
+        action->dtor(action);
+      }
     }
 
     sched_change_task_state(current_task(),TASK_STATE_SLEEPING);
   }
 }
 
-static gc_actor_t __percpu_threads[NUM_PERCPU_THREADS] = {
-  __gc_thread_logic,
-#ifdef CONFIG_SMP
+static actor_t __percpu_threads[NUM_PERCPU_THREADS] = {
   migration_thread,
-#endif
+  __gc_thread_logic,
 };
 
 void spawn_percpu_threads(void)
 {
-  int i,j;
+  int cpu,j;
   task_t **ts;
 
-  kprintf( "++++++++ NUM_PERCPU_THREADS: %d\n", NUM_PERCPU_THREADS );
-  for(i=0;i<CONFIG_NRCPUS;i++) {
-    /* First, create a set of threads on this CPU. */
-    ts=&gc_threads[i][0];
+  cpu=cpu_id();
+  ts=&gc_threads[cpu_id()][0];
 
-    for(j=0;j<NUM_PERCPU_THREADS;j++) {
-      if( kernel_thread(__percpu_threads[j],NULL, &ts[j]) || !ts[j] ) {
-        panic( "Can't create a GC thread for CPU %d !\n", cpu_id() );
-      }
+  for(j=0;j<NUM_PERCPU_THREADS;j++) {
+    if( kernel_thread(__percpu_threads[j],NULL, &ts[j]) || !ts[j] ) {
+      panic( "Can't create system thread N %d for CPU %d !\n",
+             j,cpu_id() );
     }
-
-  #ifdef CONFIG_SMP
-    /* Move threads to their domestic CPU. */
-    if( i != cpu_id() ) {
-      for(j=0;j<NUM_PERCPU_THREADS;j++) {
-        if( sched_move_task_to_cpu(ts[j],i) ) {
-          panic( "Can't move GC thread N %d to CPU %d !\n",
-                 i,cpu_id() );
-        }
-      }
-    }
-  #endif
   }
 }
 
@@ -114,13 +122,8 @@ gc_action_t *gc_allocate_action(gc_actor_t actor, void *data,
 {
   gc_action_t *action=__alloc_gc_action();
   if( action ) {
-    action->action=actor;
-    action->data=data;
+    gc_init_action(action,actor,data,data_arg);
     action->dtor=__free_gc_action;
-    list_init_node(&action->l);
-    list_init_head(&action->data_list_head);
-    action->type=0;
-    action->data_arg=data_arg;
   }
   return action;
 }

@@ -62,6 +62,9 @@ typedef struct __irq_action {
 /* Low-level IRQ entrypoints. */
 extern uintptr_t irq_entrypoints_array[NUM_IRQS];
 
+/* vector irq table */
+extern uint8_t vector_irq_table[NUM_IRQS];
+
 void initialize_irqs( void );
 int register_irq(irq_t irq, irq_handler_t handler, void *data, uint32_t flags);
 int unregister_irq(irq_t irq, void *data);

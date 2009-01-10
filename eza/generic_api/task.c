@@ -41,11 +41,14 @@
 #include <ipc/ipc.h>
 #include <eza/uinterrupt.h>
 #include <mm/slab.h>
+#include <eza/sync.h>
+#include <eza/signal.h>
+#include <eza/sigqueue.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
 static spinlock_t pid_array_lock;
-static memcache_t *task_cache;
+static bool init_launched;
 
 /* Macros for dealing with PID array locks. */
 #define LOCK_PID_ARRAY spinlock_lock(&pid_array_lock)
@@ -75,25 +78,20 @@ void initialize_task_subsystem(void)
   /* Sanity check: allocate PID 0 for idle tasks, so the next available PID
    * will be 1 (init).
    */
-  idle = __allocate_pid();
+  idle=__allocate_pid();
   if(idle != 0) {
-    panic( "initialize_task_subsystem(): Can't allocate PID for idle tasks ! (%d returned)",
+    panic( "initialize_task_subsystem(): Can't allocate PID for idle task ! (%d returned)\n",
            idle );
   }
 
-#ifdef CONFIG_TEST
-  /* To avoid kernel panic when exiting the first test task (its PID will
-   * almost always be 1), we reserve PID 1.
-   */
-  __allocate_pid();
-#endif
-
-  task_cache = create_memcache( "Task struct memcache", sizeof(task_t),
-                                2, SMCF_PGEN);
-  if( !task_cache ) {
-    panic( "initialize_task_subsystem(): Can't create the task struct memcache !" );
+  /* Reserve a PID for the init task. */
+  idle=__allocate_pid();
+  if(idle != 1) {
+    panic( "initialize_task_subsystem(): Can't allocate PID for Init task ! (%d returned)\n",
+           idle );
   }
-
+  
+  init_launched=false;
   initialize_process_subsystem();
 }
 
@@ -128,6 +126,23 @@ static status_t __alloc_pid_and_tid(task_t *parent,ulong_t flags,
 {
   pid_t pid;
   tid_t tid;
+
+  /* Init task ? */
+  if( flags & TASK_INIT ) {
+    status_t r;
+
+    LOCK_PID_ARRAY;
+    if( !init_launched ) {
+      *ppid=1;
+      *ptid=1;
+      init_launched=true;
+      r=0;
+    } else {
+      r=-EINVAL;
+    }
+    UNLOCK_PID_ARRAY;
+    return r;
+  }
 
   if( (flags & CLONE_MM) && priv != TPL_KERNEL ) {
     pid=parent->pid;
@@ -194,10 +209,10 @@ void cleanup_thread_data(void *t,ulong_t arg)
 
 static task_t *__allocate_task_struct(void)
 {
-  task_t *task=alloc_from_memcache(task_cache);
+  task_t *task=alloc_pages_addr(1,AF_PGEN);
 
   if( task ) {
-    memset(task,0,sizeof(*task));
+    memset(task,0,PAGE_SIZE);
 
     list_init_node(&task->pid_list);
     list_init_node(&task->child_list);
@@ -205,6 +220,9 @@ static task_t *__allocate_task_struct(void)
 
     list_init_head(&task->children);
     list_init_head(&task->threads);
+
+    list_init_head(&task->task_events.my_events);
+    list_init_head(&task->task_events.listeners);
 
     spinlock_initialize(&task->lock);
     spinlock_initialize(&task->child_lock);
@@ -214,7 +232,7 @@ static task_t *__allocate_task_struct(void)
     task->group_leader=task;
     task->cpu_affinity_mask=ONLINE_CPUS_MASK;
   }
-  return task;  
+  return task;
 }
 
 static status_t __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
@@ -238,7 +256,59 @@ static status_t __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
   }
 }
 
-status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t)
+static status_t __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags,
+                                       task_privelege_t priv)
+{
+  if( flags & CLONE_MM ) {
+    if( !parent->sync_data && (priv != TPL_KERNEL) ) {
+      return -EINVAL;
+    }
+    if( parent->sync_data ) {
+      task->sync_data=parent->sync_data;
+      return dup_task_sync_data(parent->sync_data);
+    }
+  }
+
+  task->sync_data=allocate_task_sync_data();
+  return task->sync_data ? 0 : -ENOMEM;
+}
+
+static status_t __setup_signals(task_t *task,task_t *parent,ulong_t flags)
+{
+  sighandlers_t *shandlers=NULL;
+  sigset_t blocked=0,ignored=DEFAULT_IGNORED_SIGNALS;
+
+  if( flags & CLONE_SIGINFO ) {
+    if( !parent->siginfo.handlers ) {
+      return -EINVAL;
+    }
+    shandlers=parent->siginfo.handlers;
+    atomic_inc(&shandlers->use_count);
+
+    blocked=parent->siginfo.blocked;
+    ignored=parent->siginfo.ignored;
+  }
+
+  if( !shandlers ) {
+    shandlers=allocate_signal_handlers();
+    if( !shandlers ) {
+      return -ENOMEM;
+    }
+  }
+
+  task->siginfo.blocked=blocked;
+  task->siginfo.ignored=ignored;
+  task->siginfo.pending=0;
+  task->siginfo.handlers=shandlers;
+  spinlock_initialize(&task->siginfo.lock);
+  sigqueue_initialize(&task->siginfo.sigqueue,
+                      &task->siginfo.pending);
+
+  return 0;
+}
+
+status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t,
+                         task_creation_attrs_t *attrs)
 {
   task_t *task;
   status_t r = -ENOMEM;
@@ -252,7 +322,7 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
   }
 
   /* TODO: [mt] Add memory limit check. */
-  /* goto task_create_fault; */  
+  /* goto task_create_fault; */
   r=__alloc_pid_and_tid(parent,flags,&pid,&tid,priv);
   if( r ) {
     goto task_create_fault;
@@ -306,10 +376,20 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
     goto free_limits;
   }
 
+  r=__setup_task_sync_data(task,parent,flags,priv);
+  if( r ) {
+    goto free_ipc;
+  }
+
   task->uspace_events=allocate_task_uspace_events_data();
   if( !task->uspace_events ) {
     r=-ENOMEM;
-    goto free_ipc;
+    goto free_sync_data;
+  }
+
+  r=__setup_signals(task,parent,flags);
+  if( r ) {
+    goto free_uevents;
   }
 
   /* Setup task's initial state. */
@@ -325,6 +405,10 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
 
   *t = task;
   return 0;
+free_uevents:
+  /* TODO: [mt] Free userspace events properly. */
+free_sync_data:
+  /* TODO: [mt] Deallocate task's sync data. */
 free_ipc:
   /* TODO: [mt] deallocate task's IPC structure. */
 free_limits:

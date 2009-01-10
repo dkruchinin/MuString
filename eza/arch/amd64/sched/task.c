@@ -40,6 +40,7 @@
 #include <eza/arch/current.h>
 #include <eza/process.h>
 #include <eza/arch/profile.h>
+#include <eza/arch/mm_types.h>
 
 /* Located on 'amd64/asm.S' */
 extern void kthread_fork_path(void);
@@ -191,7 +192,8 @@ status_t kernel_thread(void (*fn)(void *), void *data, task_t **out_task)
   task_t *newtask;
   status_t r;
 
-  r = create_task(current_task(),KERNEL_THREAD_FLAGS,TPL_KERNEL,&newtask);
+  r = create_task(current_task(),KERNEL_THREAD_FLAGS,TPL_KERNEL,&newtask,
+                  NULL);
 
   if(r >= 0) {
     /* Prepare entrypoint for this kernel thread.
@@ -199,8 +201,8 @@ status_t kernel_thread(void (*fn)(void *), void *data, task_t **out_task)
      * But we should setup 'fn' and 'data' as parameters for 'kernel_thread_helper()'. */
      regs_t *regs = (regs_t *)(newtask->kernel_stack.high_address - sizeof(regs_t));
 
-     regs->rdi = (uint64_t)fn;
-     regs->rsi = (uint64_t)data;
+     regs->gpr_regs.rdi = (uint64_t)fn;
+     regs->gpr_regs.rsi = (uint64_t)data;
 
      /* Start this task. */
      sched_change_task_state(newtask,TASK_STATE_RUNNABLE);
@@ -225,15 +227,15 @@ static uint64_t __setup_kernel_task_context(task_t *task)
   memset( regs, 0, sizeof(regs_t) );
 
   /* Now setup selectors so them reflect kernel space. */
-  regs->cs = KERNEL_SELECTOR(KTEXT_DES);
-  regs->old_ss = KERNEL_SELECTOR(KDATA_DES);
-  regs->rip = (uint64_t)kernel_thread_helper;
+  regs->int_frame.cs = KERNEL_SELECTOR(KTEXT_DES);
+  regs->int_frame.old_ss = KERNEL_SELECTOR(KDATA_DES);
+  regs->int_frame.rip = (uint64_t)kernel_thread_helper;
 
   /* When kernel threads start execution, their 'userspace' stacks are equal
    * to their kernel stacks.
    */
-  regs->old_rsp = task->kernel_stack.high_address - 128;
-  regs->rflags = KERNEL_RFLAGS;
+  regs->int_frame.old_rsp = task->kernel_stack.high_address - 128;
+  regs->int_frame.rflags = KERNEL_RFLAGS;
 
   return sizeof(regs_t);
 }
@@ -245,20 +247,25 @@ static uint64_t __setup_user_task_context(task_t *task)
   memset( regs, 0, sizeof(regs_t) );
 
   /* Now setup selectors so them reflect user space. */
-  regs->cs = USER_SELECTOR(UTEXT_DES);
-  regs->old_ss = USER_SELECTOR(UDATA_DES);
-  regs->rip = 0;
-  regs->old_rsp = 0;
-  regs->rflags = USER_RFLAGS;
+  regs->int_frame.cs = USER_SELECTOR(UTEXT_DES);
+  regs->int_frame.old_ss = USER_SELECTOR(UDATA_DES);
+  regs->int_frame.rip = 0;
+  regs->int_frame.old_rsp = 0;
+  regs->int_frame.rflags = USER_RFLAGS;
 
   return sizeof(regs_t);
 }
 
 status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
-                                 task_privelege_t priv)
+                                 task_privelege_t priv,task_t *parent,
+                                 task_creation_attrs_t *attrs)
 {
   uintptr_t fsave = newtask->kernel_stack.high_address;
-  uint64_t t2, delta, reg_size;
+  uint64_t delta, reg_size;
+  arch_context_t *parent_ctx = (arch_context_t*)&parent->arch_context[0];
+  arch_context_t *task_ctx;
+  tss_t *tss;
+  regs_t *regs;
 
   if( priv == TPL_KERNEL ) {
     reg_size = __setup_kernel_task_context(newtask);
@@ -269,17 +276,12 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   /* Now reserve space for storing XMM context since it requires
    * the address to be 512-bytes aligned.
    */
-  fsave -= reg_size;
+  fsave-=reg_size;
+  regs=(regs_t*)fsave;
 
-  /* Calculate offset to the nearest 512-bytes boundary. */
-  t2 = fsave & 0xfffffffffffffe00;
-  delta = fsave - t2;
-
-  /* After this we will be 100% able to store 512-bytes XMM context. */
-  delta += 512;
-
-  /* Now prepare XMM context. */
-  fsave -= delta;
+  delta=fsave;
+  fsave-=512;
+  fsave &= 0xfffffffffffffff0;
 
   memset( (char *)fsave, 0, 512 );
   /* Save size of this context for further use in RESTORE_ALL. */
@@ -297,6 +299,28 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   /* Now setup CR3 and _current_ value of new thread's stack. */
   __arch_setup_ctx(newtask,(uint64_t)fsave);
 
+  task_ctx=(arch_context_t*)&newtask->arch_context[0];
+  tss=parent_ctx->tss;
+  if( tss ) {
+    task_ctx->tss=tss;
+    task_ctx->tss_limit=parent_ctx->tss_limit;
+    kprintf( "Copying TSS (%p) from %d:%d\n",
+             tss,parent->pid,parent->tid);
+  }
+
+  /* Process attributes, if any. */
+  if( attrs ) {
+    if( attrs->exec_attrs.stack ) {
+      regs->int_frame.old_rsp=attrs->exec_attrs.stack;
+    }
+    if( attrs->exec_attrs.entrypoint ) {
+      regs->int_frame.rip=attrs->exec_attrs.entrypoint;
+    }
+    if( attrs->exec_attrs.arg ) {
+      regs->gpr_regs.rdi=attrs->exec_attrs.arg;
+    }
+  }
+
   return 0;
 }
 
@@ -307,16 +331,16 @@ status_t arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
   
   switch( cmd ) {
     case SYS_PR_CTL_SET_ENTRYPOINT:
-      regs->rip = arg;
+      regs->int_frame.rip = arg;
       break;
     case SYS_PR_CTL_SET_STACK:
-      regs->old_rsp = arg;
+      regs->int_frame.old_rsp = arg;
       break;
     case SYS_PR_CTL_GET_ENTRYPOINT:
-      r = regs->rip;
+      r = regs->int_frame.rip;
       break;
     case SYS_PR_CTL_GET_STACK:
-      r = regs->old_rsp;
+      r = regs->int_frame.old_rsp;
       break;
   }
   return r;

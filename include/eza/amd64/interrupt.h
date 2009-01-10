@@ -54,6 +54,9 @@ typedef struct __interrupt_stack_frame_err {
   uint64_t rflags, old_rsp, old_ss;
 } interrupt_stack_frame_err_t;
 
+#define saved_gprs_from_err_stackframe(s)       \
+  (struct __gpr_regs *)(((uintptr_t)(s))-sizeof(struct __gpr_regs)-8)
+
 extern volatile cpu_id_t online_cpus;
 
 /* interrupts_enable(): enabling interrupts and return

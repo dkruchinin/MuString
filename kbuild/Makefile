@@ -1,5 +1,5 @@
 include $(BUILD_ROOT)/include/Makefile.inc
-
+#include ../include/Makefile.inc
 # lxdialig related variables
 lxdialog_root := $(BUILD_ROOT)/kbuild/lxdialog
 check-lxdialog := $(lxdialog_root)/check-lxdialog.sh
@@ -11,7 +11,7 @@ lxdialog-objs := $(addprefix lxdialog/, checklist.o util.o inputbox.o textbox.o 
 conf-objs := conf.o zconf.tab.o
 mconf-objs := $(lxdialog-objs) mconf.o zconf.tab.o
 
-all: conf
+all: conf mconf
 
 conf: $(conf-objs)
 	$(call echo-action,"LD","$@")

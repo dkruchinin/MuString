@@ -31,7 +31,7 @@
 #ifdef CONFIG_SMP
 extern void ap_boot(void);
 extern ptr_16_32_t protected_ap_gdtr;
-void arch_smp_init(void);
+void arch_smp_init(int ncpus);
 
 void smp_local_timer_interrupt_handler(void);
 void smp_scheduler_interrupt_handler(void);

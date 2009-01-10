@@ -34,28 +34,38 @@
 
 #define USPACE_END       USER_END_VIRT
 
-#define USER_MAX_VIRT  (USER_END_VIRT-SWKS_PAGES*PAGE_SIZE)
-#define SWKS_VIRT_ADDR  USER_MAX_VIRT
+#define USER_MAX_VIRT  (USER_END_VIRT-SWKS_PAGES*PAGE_SIZE-PAGE_SIZE)
+
+#define UTRAMPOLINE_VIRT_ADDR USER_MAX_VIRT
+#define SWKS_VIRT_ADDR  UTRAMPOLINE_VIRT_ADDR+PAGE_SIZE
 
 #define USER_STACK_SIZE  4
+
+#define __user
+
+#define USPACE_ADDR(ksym,ubase) (((unsigned long)(ksym) & PAGE_OFFSET_MASK) + (ubase))
 
 status_t copy_to_user(void *dest,void *src,ulong_t size);
 status_t copy_from_user(void *dest,void *src,ulong_t size);
 
+#define get_user(a,_uptr)  copy_from_user(&(a),_uptr,sizeof((a)))
+#define put_user(a,_uptr)  copy_to_user(_uptr,&(a),sizeof((a)))
+
 #ifndef CONFIG_TEST
 static inline bool valid_user_address(uintptr_t addr)
 {
-  return (addr >= USER_START_VIRT && addr < USER_MAX_VIRT);
+  return (addr >= USER_START_VIRT && addr < USPACE_END);
 }
 
 static inline bool valid_user_address_range(uintptr_t addr,ulong_t size)
 {
-  if(addr >= USER_START_VIRT && addr < USER_MAX_VIRT) {
+  if(addr >= USER_START_VIRT && addr < USPACE_END) {
     addr += size;
-    return (addr >= USER_START_VIRT && addr < USER_MAX_VIRT);
+    return (addr >= USER_START_VIRT && addr < USPACE_END);
   }
   return false;
 }
+
 #else /* CONFIG_TEST */
 
 /* If we're running tests, allow syscalls to work with kernel space. */

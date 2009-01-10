@@ -62,7 +62,7 @@ free_ds:
 }
 
 static status_t def_insert_message(struct __ipc_gen_port *port,
-                                   ipc_port_message_t *msg,ulong_t flags)
+                                   ipc_port_message_t *msg)
 {
   def_port_data_storage_t *ds=(def_port_data_storage_t *)port->data_storage;
   ulong_t id=linked_array_alloc_item(&ds->msg_array);

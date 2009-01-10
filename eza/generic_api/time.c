@@ -36,6 +36,7 @@
 #include <kernel/vm.h>
 #include <eza/arch/interrupt.h>
 #include <eza/errno.h>
+#include <eza/signal.h>
 
 void initialize_timer(void)
 {
@@ -86,10 +87,11 @@ status_t sys_nanosleep(timeval_t *in,timeval_t *out)
   ticks=time_to_ticks(&tv);
   if( !ticks ) {
     /* TODO: [mt] support busy-wait cycle in 'sys_nanosleep()' */
+    return 0;
   } else {
     sleep(ticks);
+    return pending_signals_present(current_task()) ? -EINTR : 0;
   }
-  return 0;
 }
 
 #ifdef CONFIG_SMP

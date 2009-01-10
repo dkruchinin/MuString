@@ -37,7 +37,7 @@
 
 struct __ipc_port_t;
 
-#define IPC_BUFFERED_PORT_LENGTH  1024
+#define IPC_BUFFERED_PORT_LENGTH  PAGE_SIZE
 
 #define IPC_PORT_SHUTDOWN  0x800
 
@@ -48,7 +48,8 @@ typedef struct __ipc_port_messsage_t {
   list_node_t l,messages_list;
   event_t event;
   struct __ipc_port_t *port;
-  ipc_user_buffer_t snd_buf, rcv_buf;
+  ipc_user_buffer_t *snd_buf, *rcv_buf;
+  ulong_t num_send_bufs,num_recv_buffers;
   task_t *receiver;  /* To handle 'reply()' properly. */
   task_t *sender;
 } ipc_port_message_t;

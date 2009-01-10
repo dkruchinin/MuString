@@ -127,7 +127,6 @@ static irq_counter_array_t *__allocate_irq_counter_array(task_t *task,ulong_t nc
     array->num_counters=nc;
     list_init_head(&array->counter_handlers);
     event_initialize(&array->event);
-    event_set_task(&array->event,task);
     event_set_checker(&array->event,__irq_array_event_checker,
                       &array->event_mask);
 
@@ -282,10 +281,19 @@ status_t sys_wait_on_irq_array(ulong_t id)
     return -EINVAL;
   }
 
+  interrupts_disable();
+  event_reset(&array->event);
+  event_set_task(&array->event,current_task());
+  interrupts_enable();
+
   /* Check the event mask first time. */
   if( !*array->event_mask ) {
     event_yield(&array->event);
   }
+
+  interrupts_disable();
+  event_reset(&array->event);
+  interrupts_enable();
 
   return 0;
 }

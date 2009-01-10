@@ -36,7 +36,6 @@
 
 /* Global per-CPU GDT entries. */
 descriptor_t gdt[CONFIG_NRCPUS][GDT_ITEMS]={
-  GDT_CPU_ENTRIES,
   GDT_CPU_ENTRIES
 };
 

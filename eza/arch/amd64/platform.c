@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
+ * (c) Copyright 2008 Dmitry Gromada <gromada@jarios.org>
  *
  * eza/amd64/platform.c: specific platform initialization.
  *
@@ -25,90 +26,80 @@
 #include <ds/iterator.h>
 #include <eza/arch/types.h>
 #include <eza/arch/apic.h>
-#include <eza/arch/ioapic.h>
 #include <eza/interrupt.h>
 #include <eza/timer.h>
 #include <mm/mm.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
-#include <mm/mmap.h>
 #include <mm/pfalloc.h>
 #include <eza/arch/page.h>
 #include <eza/arch/smp.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 #include <eza/swks.h>
-#include <mm/idalloc.h>
-#include <config.h>
+#include <eza/actbl.h>
 
-extern volatile struct __local_apic_t *local_apic;
+extern volatile uint32_t local_apic_base;
+extern volatile uint8_t local_apic_ids[CONFIG_NRCPUS];
 
-static int __map_apic_page(void)
-{
-  int32_t res;
-  uintptr_t apic_vaddr;
-
-  apic_vaddr=(uintptr_t)idalloc_allocate_vregion(1);
-  if( !apic_vaddr ) {
-    panic( "[MM] Can't allocate memory range for mapping APIC !\n" );
-  }
-
-  res = mmap_kern(apic_vaddr, APIC_BASE >> PAGE_WIDTH, 1, MAP_RW | MAP_DONTCACHE | MAP_EXEC);
-  if(res<0) {
-    panic("[MM] Cannot map IO page for APIC.\n");
-  }
-
-  local_apic=(struct __local_apic_t *)apic_vaddr;
-  return 0;
-}
-
-static int __map_ioapic_page(void)
-{
-  uint32_t res;
-
-  res = mmap_kern(IOAPIC_BASE, IOAPIC_BASE >> PAGE_WIDTH, 1, MAP_RW | MAP_DONTCACHE);
-  if(res<0) {
-    kprintf("[MM] Cannot map IO page for IO APIC.\n");
-    return -1;
-  }
-
-  return 0;
-}
+#ifdef CONFIG_APIC
 
 void arch_specific_init(void)
 {
-  int err=0;
-
-  kprintf("[HW] Init arch specific ... ");
-
-#ifndef CONFIG_APIC
-  return;
-#endif
-
-  if(__map_apic_page()<0) 
-    err++;
-  if(__map_ioapic_page()<0) 
-    err++;
-  
-  if(err) {
-    kprintf("Fail\nErrors: %d\n",err);
-    return;
-  } else
-    kprintf("OK\n");
-
-  local_apic_bsp_switch(); 
-  local_bsp_apic_init();
+  int r, i;
+	uint32_t apic_base = 0;
+	int n;
+	uint8_t id;
+	
+	kprintf("[HW] Init arch specific ...\n");
+	
+	r = get_acpi_lapic_info(&apic_base, local_apic_ids, CONFIG_NRCPUS, &n);
+	if (apic_base)
+		local_apic_base = apic_base;
+	
+	local_apic_bsp_switch(); 
+	if (local_bsp_apic_init() == -1)
+		panic("Local APIC is not detected!\n");
 
 #ifdef CONFIG_SMP
-  arch_smp_init();
+	if (r > 0) {
+		/* ensure that the APIC ID of the bootstrap CPU is the first in the ID array */
+		id = get_local_apic_id();
+		for (i = 0; (i < r) && (local_apic_ids[i] != id); i++);
+		
+		if (i == r) {
+			kprintf("Local apic information is invalid!\n");
+			return;
+		} else if (i) {
+			local_apic_ids[i] = local_apic_ids[0];
+			local_apic_ids[0] = id;
+		}
+		
+		kprintf("[HW] Launch other cpus");
+		if (r < n)
+			kprintf(", found CPUs: %d, being launched CPUs: %d\n", n - 1, r - 1);
+		else
+			kprintf(", total number of CPUs: %d\n", r);
+
+		arch_smp_init(r);
+	}
 #endif
 }
+
+#else
+
+void arch_specific_init(void)
+{
+	/* dummy */
+}
+
+#endif /* CONFIG_APIC */
 
 #ifdef CONFIG_SMP
 
 void arch_ap_specific_init(void)
 {
-    local_ap_apic_init();
+	local_ap_apic_init();
 }
 
 #endif
@@ -117,6 +108,6 @@ void arch_initialize_swks(void)
 {
  /* According to the x86 programming manual, we must reserve
   * eight bits after the last available I/O port in all IOPMs.
-  */
-  swks.ioports_available=(PAGE_SIZE-sizeof(tss_t)-1)*8;
+  */ 
+	swks.ioports_available=(PAGE_SIZE-sizeof(tss_t)-1)*8;
 }

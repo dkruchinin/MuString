@@ -16,7 +16,8 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2005,2008 Tirra <tirra.newly@gmail.com>
- * (C) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2008 Dmitry Gromada <gromada@jarios.org>
  *
  * /eza/amd64/asm.S: low level assembler functions specific for amd64
  *                   architecture
@@ -91,6 +92,9 @@ resume_userspace:
     RESTORE_ALL
     jmp userspace_ret_from_int
 
+/* Declare table containing matches of interrupt vectors with irqs */
+.comm vector_irq_table, 256
+
 /* Initialize low-level IRQ stubs. Thank Linux team for a very good approach !
  */
 .global irq_entrypoints_array 
@@ -105,7 +109,8 @@ low_irq_stubs:
 
 .rept 256
 1:  pushq %rax
-    movq $v,%rax
+    xor %rax,%rax
+		movb (vector_irq_table + v),%al
     jmp common_interrupt
 
 .data
@@ -151,6 +156,25 @@ return_from_common_interrupt:
   call schedule
 
 no_preemption_in_interrupt:
+  /* Now let's see if we need to check for userspace works. */
+  mov (%rsp), %rbx
+  add $INT_FULL_OFFSET_TO_CS,%rbx
+  cmp $KERNEL_SELECTOR(KTEXT_DES),(%rbx)
+  je dont_check_int_works
+
+  /* Userspace interrupts, need to check for userspace works. */
+  mov %gs:CPU_SCHED_STAT_USER_WORKS_OFFT, %rbx
+
+  cmp $0, (%rbx)
+  je dont_check_int_works
+
+  /* Process deff  */
+  movq $__INT_UWORK, %rdi
+  xorq %rsi, %rsi
+  movq %rsp, %rdx
+  call handle_uworks
+
+dont_check_int_works:
   RESTORE_ALL
   /* Now we can enable interrupts. */
   cmp $KERNEL_SELECTOR(KTEXT_DES),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)
@@ -181,8 +205,21 @@ ret_from_int:
   iretq
 
 return_from_syscall:
-  RESTORE_GPR
+  /* Before returning from syscall we should check for pending works.
+   * Note that %rax contains return code.
+   */
+  mov %gs:CPU_SCHED_STAT_USER_WORKS_OFFT, %rbx
 
+  cmp $0, (%rbx)
+  je no_works_after_syscall
+
+  movq $__SYCALL_UWORK, %rdi
+  movq %rax, %rsi
+  movq %rsp, %rdx
+  call handle_uworks
+
+no_works_after_syscall:
+  RESTORE_ALL
   cli
   /* Restore back user stack pointer. Interrupts will be
    * restored after performing the SYSRET command.
@@ -203,10 +240,10 @@ common_exception_path:
   /* No we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to
    * skip %rax on the stack since we saved it before calling SAVE_ALL
-   * %r10 contains the value of %rsp before aligning for saving XMM data.
+   * %r12 contains the value of %rsp before aligning for saving XMM data.
    */
-  mov %r10, %rdi;
-  add $SAVED_GPR_SIZE + 8, %rdi 
+  mov %r12, %rdi;
+  add $SAVED_GPR_SIZE + 8, %rdi
 
   /* Now we call call the handler. */
   call *hi_level_fault_handlers(,%rax,8)
@@ -215,18 +252,53 @@ common_exception_path:
   iretq
 
 error_code_exception_path:
+  /* Since %rax is saved on the stack, we must add 8 bytes in
+   * addition to 8 bytes that contain error code.
+   */
+  cmp $KERNEL_SELECTOR(KTEXT_DES),16+INT_STACK_FRAME_CS_OFFT(%rsp)
+  je error_code_exception_path_kern
+  swapgs
+error_code_exception_path_kern:
+  sti
   SAVE_ALL
   /* No we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to
    * skip %rax on the stack since we saved it before calling SAVE_ALL
-   * %r10 contains the value of %rsp before aligning for saving XMM data.
+   * %r12 contains the value of %rsp before aligning for saving XMM data.
    */
-  mov %r10, %rdi;
+  mov %r12, %rdi;
   add $SAVED_GPR_SIZE + 8, %rdi
 
-  /* Now we call call the handler. */
+  /* Now we can call the handler. */
   call *hi_level_fault_handlers(,%rax,8)
+
+  /* Now let's see if we need to check for userspace works. */
+  mov (%rsp), %rbx
+  add $INT_FULL_OFFSET_TO_CS_ERR,%rbx
+  cmp $KERNEL_SELECTOR(KTEXT_DES),(%rbx)
+  je dont_check_err_exception_uworks
+
+  /* Userspace interrupts, need to check for userspace works. */
+  mov %gs:CPU_SCHED_STAT_USER_WORKS_OFFT, %rbx
+  cmp $0, (%rbx)
+  je dont_check_err_exception_uworks
+
+  /* Process deffered works. */
+  movq $__XCPT_ERR_UWORK, %rdi
+  xorq %rsi, %rsi
+  movq %rsp, %rdx
+  call handle_uworks
+
+dont_check_err_exception_uworks:
   RESTORE_ALL
+
+  cli
+  cmp $KERNEL_SELECTOR(KTEXT_DES),16+INT_STACK_FRAME_CS_OFFT(%rsp)
+  je error_code_exception_path_kern_ret
+  swapgs
+error_code_exception_path_kern_ret:
+  sti
+
   popq %rax
   /* We have the error code on the top of stack, so remove it before
    * returning.
@@ -302,7 +374,6 @@ stack_fault_handler:
 
 general_protection_fault_handler:
   cli
-  jmp general_protection_fault_handler
   push %rax
   movl $13,%eax
   jmp error_code_exception_path

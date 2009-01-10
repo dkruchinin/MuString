@@ -20,12 +20,19 @@
 #ifndef __K_SYSCALLS_H__
 #define __K_SYSCALLS_H__
 
+#ifndef __ASM__
+
 #include <eza/arch/types.h>
 #include <ipc/port.h>
 #include <eza/task.h>
 #include <ipc/port.h>
 #include <eza/time.h>
 #include <ipc/poll.h>
+#include <ipc/gen_port.h>
+#include <eza/sync.h>
+#include <eza/signal.h>
+
+#endif
 
 /* Syscalls identificators. */
 #define SC_GET_PID             0
@@ -44,6 +51,25 @@
 #define SC_NANOSLEEP           13
 #define SC_SCHED_CONTROL       14
 #define SC_GET_TID             15
+#define SC_EXIT                16
+#define SC_OPEN_CHANNEL        17
+#define SC_CLOSE_CHANNEL       18
+#define SC_CLOSE_PORT          19
+#define SC_CONTROL_CHANNEL     20
+#define SC_PORT_SEND_IOV       21
+#define SC_SYNC_CREATE         22
+#define SC_SYNC_CONTROL        23
+#define SC_SYNC_DESTROY        24
+#define SC_KILL                25
+#define SC_SIGNAL              26
+#define SC_SIGRETURN           27
+#define SC_PORT_SEND_IOV_V     28
+#define SC_PORT_REPLY_IOV      29
+#define SC_SIGACTION           30
+#define SC_THREAD_KILL         31
+#define SC_SIGPROCMASK         32
+
+#ifndef __ASM__
 
 /**
  * @fn status_t sys_get_pid(void)
@@ -71,12 +97,13 @@ status_t sys_get_pid(void);
  * @param flags - Task creation flags. Possible values are:
  *                CLONE_MM - new task will share its memory space with its
  *                           parent (suitable for creation 'threads').
+ * @param attrs - Task creation attributes.
  * @return If new task was successfully created, this function returns
  *         the PID of the new task.
  *         Otherwise, negation of the following error codes is returned:
  *         ENOMEM   No memory was available.
  */
-status_t sys_create_task(ulong_t flags);
+status_t sys_create_task(ulong_t flags,task_creation_attrs_t *a);
 
 
 /**
@@ -187,7 +214,7 @@ status_t sys_create_port( ulong_t flags, ulong_t queue_size );
  *             b) message had insufficient size (currently only up to 2MB
  *                can be transferred via ports).
  */
-status_t sys_port_send(ulong_t channel,ulong_t flags,
+status_t sys_port_send(ulong_t channel,
                        uintptr_t snd_buf,ulong_t snd_size,
                        uintptr_t rcv_buf,ulong_t rcv_size);
 
@@ -201,10 +228,6 @@ status_t sys_port_send(ulong_t channel,ulong_t flags,
  * (until available messages appear) unless a special flag is specified.
  *
  * @param port Target port that belongs to the calling process.
- * @param flags Flags that control this operation. The following flags
- *    are currently supported:
- *       IPC_BLOCKED_ACCESS - put calling process into sleep until
- *                            new messages appear.
  * @param recv Output buffer where to put received data.
  * @param recv_len Size of output buffer.
  * @param msg_info Structure that will contain message details.
@@ -353,6 +376,11 @@ status_t sys_wait_on_irq_array(ulong_t id);
  * @param nfds - number of structures in the array.
  * @param timeout - operation timeout.
  *        NOTE: Currently timeouts are not supported.
+ *
+ * @return This function returns number of events occured on target ports,
+ *         zero if timeout has elapsed, or a negation of error:
+ *         EINVAL - insufficient @a pfds or @a nfds passed.
+ *         EFAULT - @pfds pointed to insufficient memory area.
  */
 status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout);
 
@@ -366,19 +394,75 @@ status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout);
  *     EFAULT - insufficient address was passed.
  *     EINVAL - seconds or nanoseconds exceed 1000000000.
  */
-
 status_t sys_nanosleep(timeval_t *in,timeval_t *out);
 
+/**
+ * @fn status_t sys_scheduler_control(pid_t pid,ulong_t cmd,ulong_t arg)
+ *
+ * Read or change a parameter related to scheduling scheme of target task.
+ *
+ * @param pid - Target task.
+ * @param cmd - Command to apply.
+ * @param arg - Command's argument.
+ *
+ * @return In case of successful completion this function returns current value of
+ * target scheduling parameter in case of 'get' operation (usually it is above zero
+ * or zero), or a negation of the following errors:
+ *     EINVAL - insuffucient command or argument provided.
+ *     EFAULT - insufficient memory location was used as an argument for the command.
+ *     EPERM - operation was not allowed.
+ *     ESRCH - insufficient pid passed.
+ */
 status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
 
+/**
+ * @fn status_t sys_get_tid(void)
+ *
+ * Get thread identificator of current task.
+ *
+ * @return If the calling task is a process root task, its TID (that is equal
+ * to its PID) is returned. In case of a thread, a value greater than MAX_PID
+ * is returned as its thread ID.
+ */
 status_t sys_get_tid(void);
 
+/**
+ * @fn void sys_exit(int code)
+ *
+ * Terminates the calling task and frees all its resources.
+ * @return This function doesn't return.
+ */
 void sys_exit(int code);
 
-status_t sys_open_channel(pid_t pid,ulong_t port);
+status_t sys_open_channel(pid_t pid,ulong_t port,ulong_t flags);
 
 status_t sys_close_channel(ulong_t channel);
 
 status_t sys_close_port(ulong_t port);
+
+status_t sys_control_channel(ulong_t channel,ulong_t cmd,ulong_t arg);
+
+status_t sys_port_send_iov(ulong_t channel,
+                           iovec_t iov[],ulong_t numvecs,
+                           uintptr_t rcv_buf,ulong_t rcv_size);
+
+status_t sys_sync_create_object(sync_object_type_t obj_type,
+                                void *uobj,uint8_t *attrs,
+                                ulong_t flags);
+
+status_t sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg);
+
+status_t sys_port_send_iov_v(ulong_t channel,
+                             iovec_t snd_iov[],ulong_t snd_numvecs,
+                             iovec_t rcv_iov[],ulong_t rcv_numvecs);
+
+status_t sys_port_reply_iov(ulong_t port,ulong_t msg_id,
+                            iovec_t reply_iov[],ulong_t numvecs);
+
+status_t sys_thread_kill(pid_t prcess,tid_t tid,int sig);
+
+status_t sys_sigprocmask(int how,const sigset_t *set,sigset_t *oldset);
+
+#endif
 
 #endif

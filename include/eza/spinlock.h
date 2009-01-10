@@ -33,6 +33,7 @@
 #include <eza/arch/preempt.h>
 #include <eza/arch/interrupt.h>
 #include <eza/arch/spinlock.h>
+#include <eza/raw_sync.h>
 
 #ifdef CONFIG_SMP
 #define SPINLOCK_INITIALIZE(state)              \
@@ -103,6 +104,27 @@
      isok; })
 
 #define spinlock_is_locked(s) arch_spinlock_is_locked(s)
+
+/* CPU-bound spinlocks. */
+#define bound_spinlock_initialize(b,cpu)        \
+  do {                                          \
+    (b)->__lock=__SPIN_LOCK_UNLOCKED;           \
+    (b)->__cpu=cpu;                             \
+  } while(0)
+
+#define bound_spinlock_lock_cpu(b,cpu)          \
+  preempt_disable();                            \
+  arch_bound_spinlock_lock_cpu((b),cpu)
+
+#define bound_spinlock_unlock(b)                \
+  arch_bound_spinlock_unlock((b));              \
+  preempt_enable()
+
+#define bound_spinlock_trylock_cpu(b,cpu)               \
+  ({bool is_ok;preempt_disable();                       \
+  is_ok=arch_bound_spinlock_trylock_cpu((b),cpu);       \
+  if(!is_ok) {preempt_enable();}                        \
+  is_ok; })
 
 #else
 

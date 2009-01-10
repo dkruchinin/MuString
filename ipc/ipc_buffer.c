@@ -1,3 +1,26 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ *
+ * ipc/ipc_buffer.c: routines for dealing with IPC buffers.
+ *
+ */
+
 #include <ipc/buffer.h>
 #include <eza/task.h>
 #include <kernel/vm.h>
@@ -12,333 +35,147 @@
 #include <mm/page.h>
 #include <kernel/vm.h>
 #include <mlibc/stddef.h>
+#include <ipc/gen_port.h>
 
-#define REF_BUFFER(b) atomic_inc(&b->use_count)
-#define UNREF_BUFFER(b) atomic_dec(&b->use_count)
-
-static ipc_user_buffer_t *__alloc_buffer(uintptr_t start_addr,ulong_t size)
-{
-  ipc_user_buffer_t *buf;
-  uintptr_t adr;
-  ulong_t t,chunks;
-
-  adr=(start_addr+PAGE_SIZE) & PAGE_ADDR_MASK;
-  t=adr-start_addr;
-  if( size <= t ) {
-    t = size;
-  }
-  size-=t;
-  chunks=1;
-  t=PAGE_SIZE;
-
-  /* Determine the number of chunks for this buffer. */
-  while(size>0) {
-    chunks++;
-
-    if(size<PAGE_SIZE) {
-      t=size;
-    }
-    size-=t;
-  }
-
-  /* TODO: [mt] Allocate new buffers via slabs. */
-  buf = alloc_pages_addr(1,AF_PGEN|AF_ZERO);
-  buf->chunks=alloc_pages_addr(1,AF_PGEN|AF_ZERO);
-  if( buf != NULL ) {
-    atomic_set(&buf->use_count,1);
-  }
-  return buf;
-}
-
-static void __free_buffer( ipc_user_buffer_t *buf )
-{
-  free_pages_addr(buf);
-}
-
-static void ipc_put_buffer( ipc_user_buffer_t *buf )
-{
-  /* TODO: [mt] Free buffer memory upon deletion. */
-  UNREF_BUFFER(buf);
-}
-
-status_t ipc_setup_buffer_pages(task_t *owner,ipc_user_buffer_t *buf,
-                                uintptr_t start_addr, ulong_t size)
+status_t ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
+                                uintptr_t *addr_array,ipc_user_buffer_t *bufs)
 {
   page_frame_t *pd = owner->page_dir;
   page_idx_t idx;
   ulong_t chunk_num;
   status_t r=-EFAULT;
-  uintptr_t adr;
-  ulong_t first,ssize;
-  ipc_user_buffer_chunk_t *pchunk;
-
-  buf->length=0;
-  buf->num_chunks=0;
-  ssize=size;
+  uintptr_t adr,*pchunk;
 
   LOCK_TASK_VM(owner);
 
-  /* Process the first chunk. */
-  idx = mm_pin_virt_addr(pd, start_addr);
-  if (idx < 0)
-    goto out;
+  for(;numvecs;numvecs--,iovecs++,bufs++) {
+    ipc_user_buffer_t *buf=bufs;
+    uintptr_t start_addr=(uintptr_t)iovecs->iov_base;
+    ulong_t first,size=iovecs->iov_len;
 
-  pchunk = buf->chunks;
+    buf->chunks=addr_array;
 
-  adr=(start_addr+PAGE_SIZE) & PAGE_ADDR_MASK;
-  first=adr-start_addr;
-  if( size <= first ) {
-    first = size;
-  }
-
-  buf->first=first;
-  pchunk->kaddr=pframe_id_to_virt(idx)+(start_addr & ~PAGE_ADDR_MASK);
-
-  size-=first;
-  start_addr+=first;
-  chunk_num=1;
-
-  /* Process the rest of chunks. */
-  while( size ) {
-    idx = mm_pin_virt_addr(pd, start_addr);
-    if(idx < 0) {
+    /* Process the first chunk. */
+    idx=mm_pin_virt_addr(pd,start_addr);
+    if( idx < 0 ) {
       goto out;
     }
-    pchunk++;
-    chunk_num++;
 
-    if(size<PAGE_SIZE) {
-      size=0;
-    } else {
-      size-=PAGE_SIZE;
+    pchunk=buf->chunks;
+
+    adr=(start_addr+PAGE_SIZE) & PAGE_ADDR_MASK;
+    first=adr-start_addr;
+    if( size <= first ) {
+      first = size;
     }
 
-    pchunk->kaddr = pframe_id_to_virt(idx);
-    start_addr+=PAGE_SIZE;
-  }
+    buf->first=first;
+    *pchunk=(uintptr_t)pframe_id_to_virt(idx)+(start_addr & ~PAGE_ADDR_MASK);
 
-  buf->num_chunks=chunk_num;
-  buf->length=ssize;
+    size-=first;
+    start_addr+=first;
+    chunk_num=1;
+
+    /* Process the rest of chunks. */
+    while( size ) {
+      idx=mm_pin_virt_addr(pd, start_addr);
+      if(idx < 0) {
+        goto out;
+      }
+      pchunk++;
+      chunk_num++;
+
+      if(size<=PAGE_SIZE) {
+        size=0;
+      } else {
+        size-=PAGE_SIZE;
+      }
+
+      *pchunk=(uintptr_t)pframe_id_to_virt(idx);
+      start_addr+=PAGE_SIZE;
+    }
+
+    buf->num_chunks=chunk_num;
+    buf->length=iovecs->iov_len;
+    addr_array+=chunk_num;
+  }
   r = 0;
 out:
   UNLOCK_TASK_VM(owner);
   return r;
 }
 
-ipc_user_buffer_t *ipc_get_buffer(task_t *owner,ulong_t buf_id)
+status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
+                                      struct __iovec *iovecs,ulong_t numvecs,
+                                      bool to_buffer)
 {
-  ipc_user_buffer_t *buf;
-  task_ipc_t *ipc = owner->ipc;
-
-  if( !ipc ) {
-    return NULL;
-  }
-
-  IPC_LOCK_BUFFERS(ipc);
-  if( buf_id < owner->limits->limits[LIMIT_IPC_MAX_USER_BUFFERS] ) {
-    buf = ipc->user_buffers[buf_id];
-    if( buf != NULL ) {
-      REF_BUFFER(buf);
-    }
-  } else {
-    buf = NULL;
-  }
-  IPC_UNLOCK_BUFFERS(ipc);
-
-  return buf;
-}
-
-status_t ipc_transfer_buffer_data(ipc_user_buffer_t *buf,ulong_t buf_offset,
-                                  ulong_t to_copy, void *user_addr,
-                                  bool to_buffer)
-{
+  char *page_end;
+  ulong_t *chunk;
+  ulong_t to_copy,iov_size,bufsize,data_size;
   char *dest_kaddr;
-  ipc_user_buffer_chunk_t *chunk;
-  status_t r;
-  ulong_t delta,skip,offset;
-
-  if( !to_copy ) {
-    return -EINVAL;
-  }
-
-//  if( !valid_user_address_range((uintptr_t)user_addr,to_copy) ) {
-//    return -EFAULT;
-//  }
-
-  if( (buf->length-buf_offset) < to_copy ) {
-    r=-EINVAL;
-    goto out;
-  }
-
-  chunk=buf->chunks;
-  r=-EFAULT;
-
-  if( buf_offset < buf->first ) { /* Start filling from the first chunk. */
-    dest_kaddr=chunk->kaddr+buf_offset;
-    delta=MIN(buf->first-buf_offset,to_copy);
-
-    if( to_buffer ) {
-      r=copy_from_user(dest_kaddr,user_addr,delta);
-    } else {
-      r=copy_to_user(user_addr,dest_kaddr,delta);
-    }
-    if( r ) {
-      goto out;
-    }
-  } else { /* Skip some medium pages. */
-    delta=buf_offset-buf->first; /* Skip the first chunk. */
-    skip=(delta >> PAGE_WIDTH)+1;
-    offset=delta & PAGE_OFFSET_MASK;
-
-    /* Since 'chunk' points to the first chunk, we should skip it. */
-    chunk+=skip;
-    dest_kaddr=chunk->kaddr+offset;
-    delta=MIN(PAGE_SIZE-offset,to_copy);
-
-    if( to_buffer ) {
-      r=copy_from_user(dest_kaddr,user_addr,delta);
-    } else {
-      r=copy_to_user(user_addr,dest_kaddr,delta);
-    }
-    if( r ) {
-      goto out;
-    }
-  }
-  to_copy-=delta;
-  user_addr+=delta;
-
-  /* Fill the rest of the buffer. */
-  while( to_copy > 0 ) {
-    delta=MIN(PAGE_SIZE,to_copy);
-    chunk++;
-
-    dest_kaddr=chunk->kaddr;
-    if( to_buffer ) {
-      r=copy_from_user(dest_kaddr,user_addr,delta);
-    } else { 
-      r=copy_to_user(user_addr,dest_kaddr,delta);
-    }
-    if( r ) {
-      goto out;
-    }
-    to_copy-=delta;
-    user_addr+=delta;
-  }
-
-  r = 0;
-out:
-  ipc_put_buffer(buf);
-  return r;
-}
-
-status_t ipc_create_buffer(task_t *owner,uintptr_t start_addr, ulong_t size)
-{
-  ipc_user_buffer_t *buf;
-  status_t r;
-  ulong_t id;
-
-  if( !owner->ipc || !size ) {
-    return -EINVAL;
-  }
-
-/*
-  if( !valid_user_address_range(start_addr,size) ) {
-    return -EFAULT;
-  }
-*/
-
-  LOCK_IPC(owner->ipc);
-
-  if( owner->ipc->num_buffers >=
-      owner->limits->limits[LIMIT_IPC_MAX_USER_BUFFERS]) {
-    r = -EMFILE;
-    goto out_unlock;
-  }
-
-  /* First buffer created ? */
-  if( !linked_array_is_initialized(&owner->ipc->buffers_array) ) {
-    r = linked_array_initialize(&owner->ipc->buffers_array,
-                                owner->limits->limits[LIMIT_IPC_MAX_USER_BUFFERS]);
-    if( r ) {
-      r = -ENOMEM;
-      goto out_unlock;
-    }
-  }
-
-  r = -ENOMEM;
-  /* First buffer created ? */
-  if( owner->ipc->user_buffers == NULL ) {
-    /* TODO: [mt] Allocate buffers via slabs ! */
-    owner->ipc->user_buffers = alloc_pages_addr(1,AF_PGEN|AF_ZERO);
-    if( !owner->ipc->user_buffers ) {
-      goto out_unlock;
-    }
-  }
-
-  id = linked_array_alloc_item(&owner->ipc->buffers_array);
-  if( id==INVALID_ITEM_IDX ) {
-    goto out_unlock;
-  }
-
-  buf = __alloc_buffer(start_addr,size);
-  if( !buf ) {
-    r = -ENOMEM;
-    goto out_put_id;
-  }
-
-  /* OK, metadata is ready for this buffer. So pin all pages
-   * for this buffer.
-   */
-  r = ipc_setup_buffer_pages(owner,buf,start_addr,size);
-  if( r ) {
-    goto out_free_buffer;
-  }
-
-  /* Now install the buffer. */
-  IPC_LOCK_BUFFERS(owner->ipc);
-  owner->ipc->user_buffers[id] = buf;
-  owner->ipc->num_buffers++;
-  IPC_UNLOCK_BUFFERS(owner->ipc);
-
-  UNLOCK_IPC(owner->ipc);
-  return id;
-out_free_buffer:
-  __free_buffer(buf);
-out_put_id:
-  linked_array_free_item(&owner->ipc->buffers_array,id);
-out_unlock:
-  UNLOCK_IPC(owner->ipc);
-  return r;
-}
-
-status_t ipc_destroy_buffer(task_t *owner,ulong_t id)
-{
-  ipc_user_buffer_t *buf;  
+  char *user_addr;
   status_t r;
 
-  LOCK_IPC(owner->ipc);
-
-  if( id >= owner->limits->limits[LIMIT_IPC_MAX_USER_BUFFERS] ) {
-    r = -EINVAL;
-    goto out_unlock;
+  for(bufsize=0,to_copy=0;to_copy<numbufs;to_copy++) {
+    bufsize+=bufs[to_copy].length;
   }
 
-  IPC_LOCK_BUFFERS(owner->ipc);
-  buf = owner->ipc->user_buffers[id];
-  owner->ipc->user_buffers[id] = NULL;
-  IPC_UNLOCK_BUFFERS(owner->ipc);
-
-  UNLOCK_IPC(owner->ipc);
-
-  if( buf != NULL ) {
-    ipc_put_buffer(buf);
-    r = 0;
-  } else {
-    r = -EINVAL;
+  for(iov_size=0,to_copy=0;to_copy<numvecs;to_copy++) {
+    iov_size+=iovecs[to_copy].iov_len;
   }
 
-  return r;
-out_unlock:
-  UNLOCK_IPC(owner->ipc);
-  return r;
+  data_size=MIN(bufsize,iov_size);
+  iov_size=iovecs->iov_len;
+  user_addr=iovecs->iov_base;
+
+  for(;data_size;) {
+    chunk=bufs->chunks;    
+    bufsize=bufs->length;
+    dest_kaddr=(char *)*chunk;
+    page_end=dest_kaddr+bufs->length;
+
+    /* Process one buffer. */
+    while( data_size ) {
+      to_copy=MIN(bufsize,iov_size);
+      to_copy=MIN(to_copy,data_size);
+      to_copy=MIN(to_copy,page_end-dest_kaddr);
+
+      if( to_buffer ) {
+        r=copy_from_user(dest_kaddr,user_addr,to_copy);
+      } else {
+        r=copy_to_user(user_addr,dest_kaddr,to_copy);
+      }
+
+      if( r ) {
+        return -EFAULT;
+      }
+
+      data_size-= to_copy;
+      iov_size -= to_copy;
+      bufsize -= to_copy;
+
+      dest_kaddr += to_copy;
+      user_addr += to_copy;
+
+      if( bufsize && (dest_kaddr >= page_end) ) {
+        chunk++;
+        dest_kaddr=(char *)*chunk;
+        page_end=dest_kaddr+PAGE_SIZE;
+      }
+
+      if( data_size ) {
+        if( !iov_size && numvecs ) {
+          numvecs--;
+          iovecs++;
+          user_addr = iovecs->iov_base;
+          iov_size = iovecs->iov_len;
+        }
+        if( !bufsize ) {
+          bufs++;
+          break;
+        }
+      }
+    }
+  }
+  return 0;
 }

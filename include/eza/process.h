@@ -32,6 +32,7 @@
 #define SYS_PR_CTL_SET_STACK 0x1
 #define SYS_PR_CTL_GET_ENTRYPOINT 0x2
 #define SYS_PR_CTL_GET_STACK 0x3
+#define SYS_PR_CTL_ADD_EVENT_LISTENER  0x4
 
 #define LOOKUP_ZOMBIES  0x1
 
@@ -58,5 +59,9 @@ status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg);
 
 void zombify_task(task_t *target);
 void spawn_percpu_threads(void);
+
+#define EXITCODE(s,ec) ((s))
+
+void do_exit(int code);
 
 #endif
