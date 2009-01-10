@@ -36,6 +36,7 @@
 #include <mm/mmpool.h>
 #include <mm/idalloc.h>
 #include <mm/mmap.h>
+#include <mm/vmm.h>
 #include <eza/kernel.h>
 #include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
@@ -97,8 +98,8 @@ void mm_init(void)
    * very first page and iterates forward until the last page available
    * in the system is handled. On each iteration it returns an
    * index of initialized by arhitecture-dependent level page frame.
-   */  
-  arch_mm_page_iter_init(&pfi, &pfi_arch_ctx);
+   */
+  pfi_arch_init(&pfi, &pfi_arch_ctx);
   
   /* initialize page and add it to the related pool */
   iterate_forward(&pfi) {
@@ -129,12 +130,9 @@ void mm_init(void)
             atomic_get(&pool->free_pages), pool->reserved_pages);
     mmpools_init_pool_allocator(pool);
   }
-
-  /* create and initialize kernel pagatable root directory */
-  kernel_root_pagedir = mm_create_root_pagedir();
-  if (!kernel_root_pagedir)
-      panic("Can't create kernel root page directory (ENOMEM)");
-
+  if (ptable_rpd_initialize(&kernel_rpd))
+    panic("mm_init: Can't initialize kernel root page directory!");
+  
   /* Now we can remap memory */
   arch_mm_remap_pages();
 
@@ -154,64 +152,62 @@ void mm_init(void)
 static void __pfiter_idx_first(page_frame_iterator_t *pfi)
 {
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
-
+  
   ASSERT(pfi->type == PF_ITER_INDEX);
   ctx = iter_fetch_ctx(pfi);
   pfi->pf_idx = ctx->first;
-  pfi->state = ITER_RUN;
+  pfi->state = (pfi->pf_idx != ctx->last) ?
+    ITER_RUN : ITER_STOP;
 }
 
 static void __pfiter_idx_last(page_frame_iterator_t *pfi)
 {
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
-
-  ASSERT(pfi->type == PF_ITER_INDEX);
+  
+  ASSERT(pfi->type == PF_ITER_INDEX);  
   ctx = iter_fetch_ctx(pfi);
   pfi->pf_idx = ctx->last;
-  pfi->state = ITER_RUN;
+  pfi->state = (pfi->pf_idx != ctx->first) ?
+    ITER_RUN : ITER_STOP;
 }
 
 static void __pfiter_idx_next(page_frame_iterator_t *pfi)
 {  
   ASSERT(pfi->type == PF_ITER_INDEX);    
-  if (pfi->pf_idx == PF_ITER_UNDEF_VAL)
+  if (!iter_isrunning(pfi))
     iter_first(pfi);
   else {
     ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
 
     ctx = iter_fetch_ctx(pfi);
-    if (pfi->pf_idx > ctx->last) {
+    if (++pfi->pf_idx >= ctx->last) {
       pfi->state = ITER_STOP;
-      pfi->pf_idx = PF_ITER_UNDEF_VAL;
       return;
     }
-
-    pfi->pf_idx++;
   }
 }
 
 static void __pfiter_idx_prev(page_frame_iterator_t *pfi)
 {  
   ASSERT(pfi->type == PF_ITER_INDEX);  
-  if (pfi->pf_idx == PF_ITER_UNDEF_VAL)
+  if (!iter_isrunning(pfi))
     iter_last(pfi);
   else {
     ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
 
     ctx = iter_fetch_ctx(pfi);
-    if (pfi->pf_idx < ctx->first) {
+    if (pfi->pf_idx)
+      pfi->pf_idx--;
+    if (pfi->pf_idx <= ctx->first) {
       pfi->state = ITER_STOP;
-      pfi->pf_idx = PF_ITER_UNDEF_VAL;
       return;
     }
-
-    pfi->pf_idx--;
   }
 }
 
-void mm_init_pfiter_index(page_frame_iterator_t *pfi,
-                          ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx,
-                          page_idx_t start_pfi, page_idx_t end_pfi)
+void pfi_index_init(page_frame_iterator_t *pfi,
+                    ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx,
+                    page_idx_t start_pfi, page_idx_t end_pfi)
 {
   pfi->first = __pfiter_idx_first;
   pfi->last = __pfiter_idx_last;
@@ -221,7 +217,9 @@ void mm_init_pfiter_index(page_frame_iterator_t *pfi,
   memset(ctx, 0, sizeof(*ctx));
   ctx->first = start_pfi;
   ctx->last = end_pfi;
-  pfi->pf_idx = PF_ITER_UNDEF_VAL;
+  pfi->pf_idx = PAGE_IDX_INVAL;
+  pfi->state = ITER_LIE;
+  pfi->error = 0;
   iter_set_ctx(pfi, ctx);
 }
 
@@ -234,7 +232,8 @@ static void __pfiter_list_first(page_frame_iterator_t *pfi)
   ctx->cur = ctx->first_node;
   pfi->pf_idx =
     pframe_number(list_entry(ctx->cur, page_frame_t, node));
-  pfi->state = ITER_RUN;
+  pfi->state = (ctx->cur != ctx->last_node) ?
+    ITER_RUN : ITER_STOP;
 }
 
 static void __pfiter_list_last(page_frame_iterator_t *pfi)
@@ -246,51 +245,47 @@ static void __pfiter_list_last(page_frame_iterator_t *pfi)
   ctx->cur = ctx->last_node;
   pfi->pf_idx =
     pframe_number(list_entry(ctx->cur, page_frame_t, node));
-  pfi->state = ITER_RUN;
+  pfi->state = (ctx->cur != ctx->first_node) ?
+    ITER_RUN : ITER_STOP;
 }
 
 static void __pfiter_list_next(page_frame_iterator_t *pfi)
 {
   ASSERT(pfi->type == PF_ITER_LIST);
-  if (pfi->pf_idx == PF_ITER_UNDEF_VAL)
+  if (!iter_isrunning(pfi))
     iter_first(pfi);
   else {
     ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
 
     ctx = iter_fetch_ctx(pfi);
-    if (ctx->cur == ctx->last_node) {
-      pfi->state = ITER_STOP;
-      pfi->pf_idx = PF_ITER_UNDEF_VAL;
-      return;
-    }
-
     ctx->cur = ctx->cur->next;
-    pfi->pf_idx = pframe_number(list_entry(ctx->cur, page_frame_t, node));
+    pfi->pf_idx =
+      pframe_number(list_entry(ctx->cur, page_frame_t, node));
+    if (unlikely(ctx->cur == ctx->last_node))
+      pfi->state = ITER_STOP;
   }
 }
 
 static void __pfiter_list_prev(page_frame_iterator_t *pfi)
 {
   ASSERT(pfi->type == PF_ITER_LIST);
-  if (pfi->pf_idx == PF_ITER_UNDEF_VAL)
+  if (!iter_isrunning(pfi))
     iter_last(pfi);
   else {
     ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
 
     ctx = iter_fetch_ctx(pfi);
-    if (ctx->cur == ctx->first_node) {
-      pfi->state = ITER_STOP;
-      pfi->pf_idx = PF_ITER_UNDEF_VAL;
-    }
-
     ctx->cur = ctx->cur->prev;
-    pfi->pf_idx = pframe_number(list_entry(ctx->cur, page_frame_t, node));
+    pfi->pf_idx =
+      pframe_number(list_entry(ctx->cur, page_frame_t, node));
+    if (ctx->cur == ctx->first_node)
+      pfi->state = ITER_STOP;
   }
 }
 
-void mm_init_pfiter_list(page_frame_iterator_t *pfi,
-                         ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx,
-                         list_node_t *first_node, list_node_t *last_node)
+void pfi_list_init(page_frame_iterator_t *pfi,
+                   ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx,
+                   list_node_t *first_node, list_node_t *last_node)
 {
   pfi->first = __pfiter_list_first;
   pfi->last = __pfiter_list_last;
@@ -300,6 +295,8 @@ void mm_init_pfiter_list(page_frame_iterator_t *pfi,
   memset(ctx, 0, sizeof(*ctx));
   ctx->first_node = first_node;
   ctx->last_node = last_node;
-  pfi->pf_idx = PF_ITER_UNDEF_VAL;
+  pfi->pf_idx = PAGE_IDX_INVAL;
+  pfi->state = ITER_LIE;
+  pfi->error = 0;
   iter_set_ctx(pfi, ctx);
 }

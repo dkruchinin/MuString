@@ -28,9 +28,11 @@
 
 #include <ds/iterator.h>
 #include <mm/page.h>
+#include <mm/mmap.h>
+#include <mlibc/types.h>
+#include <eza/arch/mm_types.h>
 #include <eza/arch/e820map.h>
 #include <eza/arch/boot.h>
-#include <eza/arch/types.h>
 
 extern int _kernel_end;
 extern int _kernel_start;
@@ -42,9 +44,7 @@ extern uintptr_t _kernel_extended_end;
 #define KERNEL_FIRST_ADDRESS ((void *)&_kernel_end)
 #define IDENT_MAP_PAGES (_mb2b(2) >> PAGE_WIDTH)
 
-DEFINE_ITERATOR_CTX(page_frame, PF_ITER_ARCH,
-                    e820memmap_t *mmap;
-                    uint32_t e820id);
+#define INVALID_ADDRESS (~0UL)
 
 static inline bool is_kernel_addr(void *a)
 {
@@ -59,8 +59,8 @@ static inline bool is_kernel_addr(void *a)
 
 void arch_mm_init(void);
 void arch_mm_remap_pages(void);
-void arch_mm_page_iter_init(page_frame_iterator_t *pfi, ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx);
 void arch_smp_mm_init(int cpu);
+page_idx_t mm_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr);
 
 #endif
 

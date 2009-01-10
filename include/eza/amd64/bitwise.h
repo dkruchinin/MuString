@@ -29,12 +29,12 @@
  * @author Dan Kruchinin
  */
 
-#ifndef __AMD64_BITWISE_H__
-#define __AMD64_BITWISE_H__
+#ifndef __ARCH_BITWISE_H__
+#define __ARCH_BITWISE_H__
 
 #include <config.h>
+#include <mlibc/types.h>
 #include <eza/arch/asm.h>
-#include <eza/arch/types.h>
 
 #define ARCH_BIT_SET
 /* Atomic operation */
@@ -131,4 +131,4 @@ static always_inline void arch_bits_and(volatile void *word, unsigned long mask)
                     : "memory");
 }
 
-#endif /* __AMD64_BITWISE_H__ */
+#endif /* __ARCH_BITWISE_H__ */

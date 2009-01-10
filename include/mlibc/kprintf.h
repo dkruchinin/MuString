@@ -68,8 +68,9 @@
 #define KBUF_SIZE 4096
 
 #ifndef __ASM__
+#include <config.h>
 #include <mlibc/stdarg.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 
 typedef struct kbuffer {  
   size_t cur_size;

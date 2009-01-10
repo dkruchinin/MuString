@@ -3,7 +3,7 @@
 
 #ifndef __ASM__
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/container.h>
 
 struct __task_struct;

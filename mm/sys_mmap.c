@@ -46,6 +46,7 @@
 /* system call used to map memory pages, ``memory'' means a regular area */
 status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_t offset)
 {
+#if 0
   page_frame_t *aframe;
   status_t e;
   task_t *task;
@@ -76,7 +77,7 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
       kprintf("mmap() yummie fuck\n");
 #endif
       e=mmap(task->page_dir, addr, offset >> PAGE_WIDTH, size,
-             MAP_USER | MAP_RW | MAP_EXEC | MMAP_NONCACHABLE);
+             MAP_USER | MAP_READ | MAP_WRITE | MAP_EXEC | MAP_NOCACHE | MAP_PHYS);
       if(e!=0) return e;
 #if 0
       kprintf("mmap() OK\n");
@@ -94,7 +95,7 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
       return -ENOMEM; /* no free pages to allocate */
 
     if(flags & MMAP_RW) /*map_rd map_rdonly*/
-      _flags |= MAP_RW;
+      _flags |= MAP_READ | MAP_WRITE;
     else if(flags & MMAP_RDONLY)
       _flags |= MAP_READ;
 
@@ -102,7 +103,7 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
     if(e!=0) return e;
   } else 
     return -ENOSYS;
-
+#endif
   return 0;
 }
 

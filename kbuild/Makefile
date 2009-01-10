@@ -19,13 +19,12 @@ conf: $(conf-objs)
 
 mconf: $(mconf-objs)
 	$(call echo-action,"LD","$@")	
-	$(ECHO) "==> $^"
 	$(HOSTCC) $(HOSTCFLAGS) $(HOSTLDFLAGS) $^ -o $@
 
 zconf.tab.c: lex.zconf.c zconf.hash.c
 
 clean:
-	$(Q)$(RM) -f $(mconf-objs) lex.zconf.c zconf.hash.c zconf.tab.c *.o
+	$(Q)$(RM) -f $(mconf-objs) lex.zconf.c zconf.hash.c zconf.tab.c *.o conf mconf
 
 ###
 # The following requires flex/bison/gperf

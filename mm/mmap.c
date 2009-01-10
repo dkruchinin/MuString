@@ -23,147 +23,148 @@
 
 #include <ds/iterator.h>
 #include <ds/list.h>
+#include <mlibc/kprintf.h>
 #include <mlibc/stddef.h>
 #include <mm/mm.h>
 #include <mm/page.h>
 #include <mm/mmap.h>
 #include <mm/pfalloc.h>
-#include <eza/spinlock.h>
+#include <mm/vmm.h>
+#include <eza/mutex.h>
 #include <eza/errno.h>
 #include <eza/arch/page.h>
+#include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
 #include <eza/arch/types.h>
 
-#define DEFAULT_MAPDIR_FLAGS (MAP_RW | MAP_EXEC | MAP_USER)
+rpd_t kernel_rpd;
 
-page_frame_t *kernel_root_pagedir = NULL;
-static RW_SPINLOCK_DEFINE(tmp_lock);
+#if 0
+#define DEFAULT_MAPDIR_FLAGS (MAP_READ | MAP_WRITE | MAP_EXEC | MAP_USER)
 
-page_idx_t mm_pin_virt_addr(page_frame_t *dir, uintptr_t va)
+static memcache_t *__rpd_memcache = NULL;
+
+static inline int __number_of_entries(uintptr_t va_diff, int start_pde_idx, uintptr_t range)
+{
+  if (va_diff >=  pgt_get_range(level))
+    return (PTABLE_DIR_ENTRIES - start_idx);
+  else
+    return (pgt_vaddr2idx(va_diff, level) + 1);
+}
+
+static status_t __check_va(root_pagedir_t *root_dir, uintptr_t va, /* OUT */uintptr_t *entry_addr)
 {
   pdir_level_t level;
-  page_frame_t *cur_dir = dir;
+  page_frame_t *cur_dir = root_dir->dir;
   pde_t *pde;
 
   for (level = PTABLE_LEVEL_LAST; level > PTABLE_LEVEL_FIRST; level--) {
     pde = pgt_fetch_entry(cur_dir, pgt_vaddr2idx(va, level));    
-    if (!pgt_pde_is_mapped(pde))
-      return -1;
+    if (!pgt_pde_is_mapped(pde)) {
+      if (entry_addr)
+        *entry_addr = (uintptr_t)pde;
+      
+      return -EADDRNOTAVAIL;
+    }
 
-    cur_dir = pgt_get_pde_subdir(pde);
+    cur_dir = pgt_pde_fetch_subdir(pde);
   }
 
   pde = pgt_fetch_entry(cur_dir, pgt_vaddr2idx(va, PTABLE_LEVEL_FIRST));
-  return (pgt_pde_is_mapped(pde) ? pgt_pde_page_idx(pde) : -1);
-}
-
-void mm_pagedir_initialize(page_frame_t *new_dir, page_frame_t *parent, pdir_level_t level)
-{
-  new_dir->entries = 0;  
-  new_dir->level = level;
-  list_init_head(&new_dir->head);
-  if (likely(parent != NULL))
-    list_add2tail(&parent->head, &new_dir->node);
-}
-
-int mm_populate_pagedir(pde_t *pde, pde_flags_t flags)
-{
-  page_frame_t *dir = pgt_get_pde_dir(pde);
-  page_frame_t *subdir = pgt_create_pagedir(dir, dir->level - 1);
-
-  if (!subdir)
-    return -ENOMEM;
-
-  ASSERT(subdir->level >= PTABLE_LEVEL_FIRST);
-  ASSERT((dir->level <= PTABLE_LEVEL_LAST) ||
-         (dir->level > PTABLE_LEVEL_FIRST));
-
-  pgt_pde_save(pde, pframe_number(subdir), flags);
-  dir->entries++;
-  ASSERT(dir->entries <= PTABLE_DIR_ENTRIES);
+  if (entry_addr)
+    *entry_addr = (uintptr_t)pde;
+  if (!pgt_pde_is_mapped(pde))
+    return -EADDRNOTAVAIL;
 
   return 0;
 }
 
-int mm_map_entries(pde_t *pde_start, pde_idx_t entries,
-                   page_frame_iterator_t *pfi, pde_flags_t flags)
+
+status_t mm_check_va_range(root_pagedir_t *root_dir, uintptr_t va_from,
+                           uintptr_t va_to, /* OUT */uintptr_t *entry_addr)
 {
-  page_frame_t *dir = pgt_get_pde_dir(pde_start);
-  pde_t *pde = pde_start;  
+  uintptr_t va;
+  status_t ret = 0;
 
-  ASSERT(dir->level == PTABLE_LEVEL_FIRST);
-  dir->entries += entries;
-  ASSERT(dir->entries <= PTABLE_DIR_ENTRIES);
-  while (entries--) {
-    ASSERT(!pgt_pde_is_mapped(pde));
-    iter_next(pfi);
-    if (!iter_isrunning(pfi))
-      return -EINVAL;
-
-    pgt_pde_save(pde++, pfi->pf_idx, flags);
+  pin_root_pagedir(root_dir, RPD_PIN_RDONLY);
+  for (va = PAGE_ALIGN_DOWN(va_from); va < va_to; va += PAGE_SIZE) {
+    ret = __check_va(root_dir, va, entry_addr);
+    if (ret)
+      goto out;
   }
-    
+
+  out:
+  unpin_root_pagedir(root_dir);
+  return ret;
+}
+
+status_t mm_check_va(root_pagedir_t *root_dir, uintptr_t va, /* OUT */uintptr_t *entry_addr)
+{
+  status_t ret;
+  
+  pin_root_pagedir(root_dir, RPD_PIN_RDONLY);
+  ret = __check_va(root_dir, va, entry_addr);
+  unpin_root_pagedir(root_dir);
+
+  return ret;
+}
+
+status_t pagedir_populate(pde_t *parent_pde, pde_flags_t flags)
+{
+}
+
+status_t pagedir_depopulate(pde_t *pde)
+{
+  page_frame_t *dir = pgt_pde2pagedir(pde);
+  
+  if (!pgt_pde_is_mapped(pde))
+    return -EALREADY;
+
+  ASSERT((pagedir_get_level(dir) >= PTABLE_LEVEL_FIRST) &&
+         (pagedir_get_level(dir) <= PTABLE_LEVEL_LAST));
+  pgt_pde_delete(pde);
+  if (!pagedir_get_entries(dir))
+    pagedir_free(dir);
+
   return 0;
 }
 
-int mmap(page_frame_t *root_dir, uintptr_t va, page_idx_t first_page, int npages, mmap_flags_t flags)
+
+
+status_t mmap(root_pagedir_t *root_dir, uintptr_t va, page_idx_t first_page, int npages, mmap_flags_t flags)
 {  
   page_idx_t idx;
-  mmap_info_t minfo;
-  int ret;
+  mmapper_t mapper;
+  status_t ret;
+  page_frame_iterator_t pfi;
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
-
-  idx = virt_to_pframe_id((void *)va);
-  minfo.va_from = va;
-  minfo.va_to = va + ((npages - 1) << PAGE_WIDTH);
-  minfo.flags = flags;
-  mm_init_pfiter_index(&minfo.pfi, &pfi_index_ctx, first_page, first_page + npages - 1);
-
-  spinlock_lock_write(&tmp_lock);
-  ret = mmap_pages(root_dir, &minfo);
-  spinlock_unlock_write(&tmp_lock);
-  return ret;
-}
-
-int __mmap_pages(page_frame_t *dir, mmap_info_t *minfo, pdir_level_t level)
-{
-  pde_idx_t idx, entries;
-  uintptr_t range = pgt_get_range(level);
-  int ret = 0;  
   
-  idx = pgt_vaddr2idx(minfo->va_from, level);
-  if (likely((minfo->va_to - minfo->va_from) >= range))
-    entries = PTABLE_DIR_ENTRIES - idx;
-  else
-    entries = pgt_vaddr2idx(minfo->va_to - minfo->va_from, level) + 1;
+  mapper.va_from = PAGE_ALIGN(va);
+  idx = virt_to_pframe_id((void *)mapper.va_from);
+  mapper.va_to = mapper.va_from + ((npages - 1) << PAGE_WIDTH);
+  mapper.flags = flags;
+  mm_init_pfiter_index(&pfi, &pfi_index_ctx, first_page, first_page + npages - 1);
+  mapper.pfi = &pfi;
 
-  if (level == PTABLE_LEVEL_FIRST) {
-    ret = mm_map_entries(pgt_fetch_entry(dir, idx), entries, &minfo->pfi, pgt_translate_flags(minfo->flags));
-    minfo->va_from += (range - pgt_idx2vaddr(idx, level));
-  }
-  else {
-    pde_flags_t _flags = pgt_translate_flags(DEFAULT_MAPDIR_FLAGS);
-    
-    do {
-      pde_t *pde = pgt_fetch_entry(dir, idx++);
-      
-      if (!pgt_pde_is_mapped(pde)) {
-        ret = mm_populate_pagedir(pde, _flags);
-        if (ret < 0)
-          return ret;
-      }
-      
-      ret = __mmap_pages(pgt_get_pde_subdir(pde), minfo, level - 1);
-      if (ret < 0)
-        return ret;            
-    } while (--entries > 0);
-  }
-
+  pin_root_pagedir(root_dir, RPD_PIN_RW);
+  ret = __mmap_pages(root_dir->dir, &mapper, PTABLE_LEVEL_LAST);
+  unpin_root_pagedir(root_dir);
+  
   return ret;
 }
+#endif
 
-int __unmap_pages(page_frame_t *dir, mmap_info_t *minfo, pdir_level_t level)
+status_t mmap_kern(uintptr_t va, page_idx_t first_page, int npages,
+                   uint_t proto, uint_t flags)
 {
-  /* TODO DK: implement */
-  return 0;
+  mmap_info_t minfo;
+  page_frame_iterator_t pfi;
+  ITERATOR_CTX(page_frame, PF_ITER_INDEX) pf_idx_ctx;
+
+  minfo.va_from = PAGE_ALIGN_DOWN(va);
+  minfo.va_to = minfo.va_from + ((npages - 1) << PAGE_WIDTH);
+  minfo.ptable_flags = mpf2ptf(proto, flags);
+  pfi_index_init(&pfi, &pf_idx_ctx, first_page, first_page + npages - 1);
+  minfo.pfi = &pfi;
+  return ptable_map(&kernel_rpd, &minfo);
 }

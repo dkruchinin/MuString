@@ -30,7 +30,6 @@
 #include <eza/context.h>
 #include <eza/mm_init.h>
 #include <mlibc/kprintf.h>
-#include <profile.h>
 #include <server.h>
 #include <align.h>
 #include <misc.h>

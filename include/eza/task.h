@@ -24,11 +24,12 @@
 #ifndef __TASK_H__
 #define __TASK_H__ 
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/kstack.h>
 #include <eza/arch/context.h>
 #include <mlibc/index_array.h>
 #include <mm/page.h>
+#include <eza/arch/mm_types.h>
 #include <eza/limits.h>
 #include <eza/tevent.h>
 #include <eza/sigqueue.h>
@@ -133,7 +134,7 @@ typedef struct __task_struct {
   priority_t static_priority, priority, orig_priority;
 
   kernel_stack_t kernel_stack;
-  page_frame_t *page_dir;
+  rpd_t rpd;
   list_node_t pid_list;
   task_flags_t flags;
 

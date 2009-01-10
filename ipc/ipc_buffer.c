@@ -36,12 +36,13 @@
 #include <kernel/vm.h>
 #include <mlibc/stddef.h>
 #include <ipc/gen_port.h>
+#include <eza/arch/mm.h>
 
 status_t ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
                                 uintptr_t *addr_array,ipc_user_buffer_t *bufs)
 {
-  page_frame_t *pd = owner->page_dir;
-  page_idx_t idx;
+  rpd_t *rpd = &owner->rpd;
+  page_idx_t pfn;
   ulong_t chunk_num;
   status_t r=-EFAULT;
   uintptr_t adr,*pchunk;
@@ -52,21 +53,43 @@ status_t ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
     ipc_user_buffer_t *buf=bufs;
     uintptr_t start_addr=(uintptr_t)iovecs->iov_base;
     ulong_t first,size=iovecs->iov_len;
-
     buf->chunks=addr_array;
 
     /* Process the first chunk. */
-    idx=mm_pin_virt_addr(pd,start_addr);
-    if( idx < 0 ) {
+    idx=mm_vaddr2page_idx(pd, start_addr);mm_pin_virt_addr(pd,start_addr);
+    if( idx == PAGE_IDX_INVAL ) {
       goto out;
     }
 
     pchunk=buf->chunks;
-
     adr=(start_addr+PAGE_SIZE) & PAGE_ADDR_MASK;
     first=adr-start_addr;
     if( size <= first ) {
       first = size;
+
+  buf->num_chunks=chunk_num;
+  buf->length=ssize;
+  r = 0;
+out:
+  UNLOCK_TASK_VM(owner);
+  return r;
+}
+
+ipc_user_buffer_t *ipc_get_buffer(task_t *owner,ulong_t buf_id)
+{
+  ipc_user_buffer_t *buf;
+  task_ipc_t *ipc = owner->ipc;
+
+  if( !ipc ) {
+    return NULL;
+  }
+
+  IPC_LOCK_BUFFERS(ipc);
+  if( buf_id < owner->limits->limits[LIMIT_IPC_MAX_USER_BUFFERS] ) {
+    buf = ipc->user_buffers[buf_id];
+    if( buf != NULL ) {
+      REF_BUFFER(buf);
+>>>>>>> .merge_file_6d1pLT
     }
 
     buf->first=first;

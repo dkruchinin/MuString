@@ -190,8 +190,8 @@ label:	;\
 
 #ifndef __ASM__
 
-#include <eza/arch/types.h>
-#include <eza/arch/mm_types.h>
+#include <mlibc/types.h>
+#include <eza/arch/cpu.h>
 
 typedef struct __context_t { /* others don't interesting... */
   uintptr_t sp;

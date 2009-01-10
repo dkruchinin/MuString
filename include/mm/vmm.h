@@ -15,37 +15,27 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2005,2008 Tirra <madtirra@jarios.org>
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * include/server.h: servers going multiboot related structs and defines
+ * include/mm/vmm.h - Architecture independend memory mapping API
  *
  */
 
-#ifndef __SERVER_H__
-#define __SERVER_H__
+#ifndef __VMM_H__
+#define __VMM_H__
 
+#include <ds/iterator.h>
+#include <mm/page.h>
 #include <mlibc/types.h>
+#include <eza/arch/mm_types.h>
 
-#define MAX_PRIVBOOT_SERVERS  16
+typedef struct __mmap_info {
+  uintptr_t va_from;
+  uintptr_t va_to;
+  page_frame_iterator_t *pfi;
+  uint_t ptable_flags;
+} mmap_info_t;
 
-typedef struct __init_server {
-  uintptr_t addr; /* start address of the server loaded via boot loader */
-  size_t size; /* it's size */
-} init_server_t;
+rpd_t kernel_rpd;
 
-typedef struct __init_type {
-  ulong_t c; /* # of servers */
-  init_server_t server[MAX_PRIVBOOT_SERVERS];
-} init_t; /* general init servers structure */
-
-extern init_t init;
-
-/* functions */
-uint32_t server_get_num(void); /* get real number of servers */
-uintptr_t server_get_start_phy_addr(void); /* get start physical address */
-uintptr_t server_get_end_phy_addr(void); /* get end physical address */
-
-/* initing servers */
-void server_run_tasks(void);
-
-#endif /* __SERVER_H__ */
+#endif /* __VMM_H__ */

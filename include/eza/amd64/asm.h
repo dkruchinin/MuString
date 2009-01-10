@@ -29,9 +29,9 @@
 #define __ASM_H__
 
 #include <config.h>
-#include <eza/arch/types.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/page.h>
+#include <eza/arch/cpu.h>
+#include <mlibc/types.h>
 
 #ifdef CONFIG_SMP
 /*
@@ -45,7 +45,7 @@
  */
 #define __LOCK_PREFIX "lock "
 #else
-#define __LOCK_PREFIX ""
+#define __LOCK_PREFIX
 #endif /* CONFIG_SMP */
 
 extern void set_efer_flag(int flag);
