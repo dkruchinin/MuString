@@ -464,6 +464,8 @@ status_t sys_thread_kill(pid_t prcess,tid_t tid,int sig);
 
 status_t sys_sigprocmask(int how,const sigset_t *set,sigset_t *oldset);
 
+void sys_thread_exit(int code);
+
 #endif
 
 #endif

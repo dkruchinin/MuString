@@ -119,6 +119,13 @@ void load_ldt(cpu_id_t cpu,uintptr_t ldt,uint16_t limit)
   ldtr_load(gdtselector(LDT_DES));
 }
 
+void descriptor_set_base(descriptor_t *d,uint32_t base)
+{
+  d->base_0_15=base & 0xffff;
+  d->base_16_23=(base >> 16) & 0xff;
+  d->base_24_31=(base >> 24) & 0xff;
+}
+
 void idt_set_offset(idescriptor_t *p, uintptr_t off)                             
 {
   p->offset_0_15=off & 0xffff;

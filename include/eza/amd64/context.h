@@ -229,6 +229,7 @@ typedef struct __arch_context_t {
   uintptr_t ldt;
   uint16_t tss_limit;
   uint16_t ldt_limit;
+  uintptr_t per_task_data;
 } arch_context_t;
 
 #define ARCH_CTX_UWORS_SIGNALS_BIT_IDX  0

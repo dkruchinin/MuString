@@ -41,6 +41,7 @@
 #include <eza/process.h>
 #include <eza/arch/profile.h>
 #include <eza/arch/mm_types.h>
+#include <kernel/vm.h>
 
 /* Located on 'amd64/asm.S' */
 extern void kthread_fork_path(void);
@@ -55,17 +56,31 @@ extern void user_fork_path(void);
 /* Per-CPU glabal structure that reflects the most important kernel states. */
 cpu_sched_stat_t PER_CPU_VAR(cpu_sched_stat);
 
-static void __arch_setup_ctx(task_t *newtask,uint64_t rsp)
+static void __arch_setup_ctx(task_t *newtask,uint64_t rsp,
+                             task_privelege_t priv)
 {
   arch_context_t *ctx = (arch_context_t*)&(newtask->arch_context[0]);
+  uint64_t fs,es,gs,ds;
+
+  if( priv == TPL_KERNEL ) {
+    fs=KERNEL_SELECTOR(KDATA_DES);
+    es=fs;
+    gs=fs;
+    ds=fs;
+  } else {
+    fs=USER_SELECTOR(PTD_SELECTOR) | 0x4; /* First selector in LDT. */
+    es=USER_SELECTOR(UDATA_DES);
+    gs=es;
+    ds=es;
+  }
 
   /* Setup CR3 */
   ctx->cr3 = _k2p((uintptr_t)pframe_to_virt(newtask->page_dir));
   ctx->rsp = rsp;
-  ctx->fs = USER_SELECTOR(UDATA_DES);
-  ctx->es = USER_SELECTOR(UDATA_DES);
-  ctx->gs = USER_SELECTOR(UDATA_DES);
-  ctx->ds = USER_SELECTOR(UDATA_DES);
+  ctx->fs = fs;
+  ctx->es = es;
+  ctx->gs = gs;
+  ctx->ds = ds;
   ctx->user_rsp = 0;
 
   /* Default TSS value which means: use per-CPU TSS. */
@@ -73,21 +88,14 @@ static void __arch_setup_ctx(task_t *newtask,uint64_t rsp)
   ctx->tss_limit=TSS_DEFAULT_LIMIT;
   ctx->ldt=0;
   ctx->ldt_limit=0;
+  ctx->per_task_data=0;
 }
-
-extern long __t1;
-long __t2;
 
 void kernel_thread_helper(void (*fn)(void*), void *data)
 {
-//  __READ_TIMESTAMP_COUNTER(__t2);
-//  kprintf( "******* CONTEXT SWITCH TIME: %d\n", __t2 - __t1 );
-//  for(;;);
-
-    fn(data);
-    sys_exit(0);
+  fn(data);
+  sys_exit(0);
 }
-
 
 /* For initial stack filling. */
 static page_frame_t *next_frame;
@@ -174,7 +182,7 @@ void initialize_idle_tasks(void)
       panic( "initialize_idle_tasks(): Can't map kernel stack for idle task !" );
     }
     /* Setup arch-specific task context. */
-    __arch_setup_ctx(task,0);
+    __arch_setup_ctx(task,0,TPL_KERNEL);
   }
 
   /* Now initialize per-CPU scheduler statistics. */
@@ -299,7 +307,7 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   }
 
   /* Now setup CR3 and _current_ value of new thread's stack. */
-  __arch_setup_ctx(newtask,(uint64_t)fsave);
+  __arch_setup_ctx(newtask,(uint64_t)fsave,priv);
 
   task_ctx=(arch_context_t*)&newtask->arch_context[0];
   tss=parent_ctx->tss;
@@ -321,6 +329,7 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
       for(;;);
       return -ENOMEM;
     }
+    memset((void *)task_ctx->ldt,0,task_ctx->ldt_limit);
   }
 
   /* Process attributes, if any. */
@@ -343,7 +352,8 @@ status_t arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
 {
   regs_t *regs = (regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
   status_t r = 0;
-  
+  arch_context_t *arch_ctx;
+
   switch( cmd ) {
     case SYS_PR_CTL_SET_ENTRYPOINT:
       regs->int_frame.rip = arg;
@@ -356,6 +366,28 @@ status_t arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
       break;
     case SYS_PR_CTL_GET_STACK:
       r = regs->int_frame.old_rsp;
+      break;
+    case SYS_PR_CTL_SET_PERTASK_DATA:
+      arch_ctx=(arch_context_t*)&task->arch_context[0];
+      if( arch_ctx->ldt ) {
+        descriptor_t *ldt_dsc=(descriptor_t*)arch_ctx->ldt;
+        ldt_dsc=&ldt_dsc[PTD_SELECTOR];
+
+        arch_ctx->per_task_data=arg;
+        descriptor_set_base(ldt_dsc,arg);
+        ldt_dsc->access=AR_PRESENT | AR_DATA | AR_WRITEABLE | (1 << 2) | DPL_USPACE;
+
+        interrupts_disable();
+        if( task == current_task() ) {
+          load_ldt(cpu_id(),arch_ctx->ldt,arch_ctx->ldt_limit);
+        }
+        interrupts_enable();
+      } else {
+        r=-EINVAL;
+      }
+      break;
+    default:
+      r=-EINVAL;
       break;
   }
   return r;

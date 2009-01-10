@@ -73,13 +73,19 @@ static inline void arch_activate_task(task_t *to)
   /* Setup LDT for new task. */
   if( to_ctx->ldt ) {
     load_ldt(to->cpu,to_ctx->ldt,to_ctx->ldt_limit);
+    /* Load all 64 bits of per-task data via MSR to FS. */
+    if( to_ctx->per_task_data ) {
+      kprintf( "* WRITING FS MSR: %p\n",to_ctx->per_task_data );
+      write_msr(AMD_MSR_FS,to_ctx->per_task_data);
+      kprintf( "* DONE !\n" );
+    }
   }
 
   /* Let's jump ! */
-#ifdef CONFIG_TEST
-  kprintf( "** ACTIVATING TASK: 0x%X:0x%X (CPU: %d).\n",
-           to->pid,to->tid,to->cpu );
-#endif
+//#ifdef CONFIG_TEST
+  kprintf( "** ACTIVATING TASK: 0x%X:0x%X (CPU: %d). FS=0x%X\n",
+           to->pid,to->tid,to->cpu,to_ctx->fs );
+//#endif
 
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
 }

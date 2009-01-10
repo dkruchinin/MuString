@@ -38,6 +38,7 @@
 #include <server.h>
 #include <mlibc/unistd.h>
 #include <eza/process.h>
+#include <eza/ptd.h>
 
 static status_t __create_task_mm(task_t *task, int num)
 {
@@ -171,6 +172,11 @@ static status_t __create_task_mm(task_t *task, int num)
 
   /* Now allocate stack space for per-task user data. */
   ustack_top=USPACE_END-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH);
+  ustack_top-=PER_TASK_DATA_SIZE;
+
+  r=do_task_control(task,SYS_PR_CTL_SET_PERTASK_DATA,ustack_top);
+  /* Insufficient return address to prevent task from returning to void. */
+  ustack_top-=8;
 
   r=do_task_control(task,SYS_PR_CTL_SET_ENTRYPOINT,ehead.e_entry);
   r|=do_task_control(task,SYS_PR_CTL_SET_STACK,ustack_top);

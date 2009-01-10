@@ -68,6 +68,7 @@ syscall_table:
 	.quad   sys_sigaction                   /* 30 */
 	.quad   sys_thread_kill
 	.quad   sys_sigprocmask
+	.quad   sys_thread_exit
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

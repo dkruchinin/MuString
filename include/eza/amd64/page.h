@@ -174,6 +174,7 @@ static inline uintptr_t _k2p(uintptr_t p)
                          * selector), so by default each task has only one
                          * LDT item.
                          */
+#define PTD_SELECTOR  1  /* LDT selector that refers to per-task data. */
 
 #define NIL_DES  0  /* nil(null) descriptor */
 #define KTEXT_DES    1 /* kernel space */
