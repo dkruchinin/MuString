@@ -53,7 +53,7 @@ include include/Makefile.inc
 -include .config
 -include eza/arch/$(ARCH)/Makefile.inc
 
-GENERICS = eza mm mlibc ipc server
+GENERICS = eza mm mlibc ipc server ds
 ifeq ($(CONFIG_TEST),y)
 GENERICS += tests
 endif

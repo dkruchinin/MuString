@@ -20,7 +20,7 @@
   linux/lib/rbtree.c
 */
 
-#include <mlibc/rbtree.h>
+#include <ds/rbtree.h>
 #include <eza/arch/types.h>
 
 static void __rb_rotate_left(struct rb_node *node, struct rb_root *root)

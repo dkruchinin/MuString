@@ -28,7 +28,7 @@
 #include <eza/mutex.h>
 #include <eza/swks.h>
 #include <eza/resource.h>
-#include <mlibc/rbtree.h>
+#include <ds/rbtree.h>
 #include <mm/pfalloc.h>
 #include <mlibc/string.h>
 #include <kernel/syscalls.h>
