@@ -3,10 +3,13 @@
 
 #include <eza/arch/types.h>
 
+#define PTD_CUSTOM_SLOTS  8
+
 typedef struct __per_task_data {
   int errno;
-  void *task_private_data;
   void *process_shared_data;
+  void *task_private_data;
+  ulong_t custom_slots[PTD_CUSTOM_SLOTS];
 } per_task_data_t;
 
 #define PER_TASK_DATA_SIZE  sizeof(per_task_data_t)

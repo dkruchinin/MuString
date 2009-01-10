@@ -343,6 +343,7 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
     if( attrs->exec_attrs.arg ) {
       regs->gpr_regs.rdi=attrs->exec_attrs.arg;
     }
+    task_ctx->per_task_data=attrs->exec_attrs.per_task_data;
   }
 
   return 0;

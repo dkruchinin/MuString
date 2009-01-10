@@ -240,6 +240,12 @@ static bool __check_task_attrs(task_creation_attrs_t *attrs)
     valid *=valid_user_address(ea->arg);
   }
 
+  if( ea->per_task_data ) {
+    valid *=valid_user_address(ea->per_task_data);
+    kprintf( "[eee]: Checking per-task data %p. VALID=%d\n",
+             ea->per_task_data,valid);
+  }
+
   return valid;
 }
 

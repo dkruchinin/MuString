@@ -190,6 +190,7 @@ typedef struct __task_attrs {
 
 typedef struct __exec_attrs {
   uintptr_t stack,entrypoint,arg;
+  uintptr_t per_task_data;
 } exec_attrs_t;
 
 typedef struct __task_creation_attrs {

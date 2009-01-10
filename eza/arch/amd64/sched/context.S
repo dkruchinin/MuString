@@ -79,6 +79,8 @@ arch_hw_activate_task:
   mov %rax,ARCH_CTX_DS_OFFSET(%rdx)
   mov %gs:(CPU_SCHED_STAT_USTACK_OFFT), %rax
   mov %rax,ARCH_CTX_URSP_OFFSET(%rdx)
+  mov %gs:(CPU_SCHED_STAT_USER_PTD_OFFT), %rax
+  mov %rax,ARCH_CTX_PTD_OFFSET(%rdx)
 
   /* Save %rsp */
   mov %rsp,ARCH_CTX_RSP_OFFSET(%rdx)
@@ -104,6 +106,8 @@ leave_cr3:
   mov %rax, %gs:(CPU_SCHED_STAT_USER_DS_OFFT)
   mov ARCH_CTX_URSP_OFFSET(%rdi),%rax
   mov %rax,%gs:(CPU_SCHED_STAT_USTACK_OFFT)
+  mov ARCH_CTX_PTD_OFFSET(%rdi),%rax
+  mov %rax,%gs:(CPU_SCHED_STAT_USER_PTD_OFFT)
 
   /* Setup userspace works status. */
   mov %rdi,%rax
