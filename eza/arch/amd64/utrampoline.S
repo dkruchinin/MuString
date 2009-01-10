@@ -32,18 +32,6 @@
 	.align PAGE_SIZE
 
 __userspace_trampoline_codepage:
-trampoline_sighandler_invoker_sys:
-	/* Prepare arguments for signal handler. */
-	movq 0x8(%rsp),%rdi
-	movq 0x10(%rsp),%rsi
-	movq 0x18(%rsp),%rdx
-	callq (%rsp)
-
-	/* Restore context. */
-	movq %rsp,%rdi
-	movq $SC_SIGRETURN,%rax
-	syscall
-
 trampoline_sighandler_invoker_int:
 	/* Prepare arguments for signal handler. */
 	movq 0x8(%rsp),%rdi
@@ -55,7 +43,11 @@ trampoline_sighandler_invoker_int:
 	movq %rsp,%rdi
 	movq $SC_SIGRETURN,%rax
 	syscall
-trampoline_sighandler_invoker_int_bottom:
-	/* Since %rcx is used by 'syscall' instruction, we must restore it. */
-	popq %rcx
-	retq
+
+	/* We shouldn't return from this syscall here !
+	 * So insert some preventive logic which means termination
+	 * of the calling thread.
+	 */
+	movq $SC_THREAD_EXIT,%rax
+	movq $-1,%rdi
+	syscall

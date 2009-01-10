@@ -68,6 +68,7 @@
 #define SC_SIGACTION           30
 #define SC_THREAD_KILL         31
 #define SC_SIGPROCMASK         32
+#define SC_THREAD_EXIT         33
 
 #ifndef __ASM__
 

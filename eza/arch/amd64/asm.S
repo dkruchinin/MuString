@@ -226,9 +226,9 @@ no_works_after_syscall:
   cli
   RESTORE_USER_SEGMENT_REGISTERS
   pushq %rax
-//  mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
+  mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
   swapgs
-//  mov %eax,%gs
+  mov %eax,%gs
   jmp ret_from_int
 
 /* Here goes handlers for CPU-specific fault handlers ranged at [0 .. 31]
@@ -382,7 +382,6 @@ general_protection_fault_handler:
 
 page_fault_fault_handler:
   cli
-  jmp page_fault_fault_handler
   push %rax
   movl $14,%eax
   jmp error_code_exception_path
