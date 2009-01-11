@@ -68,7 +68,7 @@ void spawn_percpu_threads(void);
 #define GC_TASK_RESOURCE  0x1
 
 static inline void gc_init_action(gc_action_t *action,gc_actor_t actor,
-                                  void *data,long_t data_arg)
+                                  void *data,long data_arg)
 {
   action->action=actor;
   action->data=data;

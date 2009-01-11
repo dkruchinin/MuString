@@ -132,24 +132,24 @@ static always_inline bool atomic_sub_and_test(atomic_t *a,long sub)
   return (atomic_get(a) == 0);
 }
 
-static always_inline bool atomic_test_and_set_bit(ulong_t *v,ulong_t bit) {
+static always_inline bool atomic_test_and_set_bit(void *v,ulong_t bit) {
   bool res;
 
   __asm__ __volatile__( __LOCK_PREFIX "bts %0,%1\n"
                         "adc $0,%2\n"
                         :"=r"(res)
-                        :"m"(*v),"r"(bit), "r"(0))  ;
-  return res ? 1 : 0;
+                        :"m"(*(unsigned long *)v),"r"(bit), "r"(0))  ;
+  return !!res;
 }
 
-static always_inline bool atomic_test_and_reset_bit(ulong_t *v,ulong_t bit) {
+static always_inline bool atomic_test_and_reset_bit(void *v,ulong_t bit) {
   bool res;
 
   __asm__ __volatile__( __LOCK_PREFIX "btr %0,%1\n"
                         "adc $0,%2\n"
                         :"=r"(res)
-                        :"m"(*v),"r"(bit), "r"(0))  ;
-  return res ? 1 : 0;
+                        :"m"(*(unsigned long *)v),"r"(bit), "r"(0))  ;
+  return !!res;
 }
 
 

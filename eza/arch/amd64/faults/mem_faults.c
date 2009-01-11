@@ -84,9 +84,9 @@ static void __dump_regs(regs_t *r,ulong_t rip)
 static bool __read_user_safe(uintptr_t addr,uintptr_t *val)
 {
   uintptr_t *p;
-  page_idx_t pidx=mm_pin_virt_addr(current_task()->page_dir,addr);
+  page_idx_t pidx = mm_vaddr2page_idx(&current_task()->rpd, addr);  
 
-  if( pidx < 0 ) {
+  if( pidx == PAGE_IDX_INVAL ) {
     return false;
   }
 

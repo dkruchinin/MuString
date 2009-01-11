@@ -45,6 +45,7 @@
 #define SLAB_OBJLIST_END     ((char *)0xF00BAAF)
 /* Quantity of pages per slab for generic caches */
 #define GENERIC_SLAB_PAGES   1
+#define DEFAULT_SLAB_PAGES   1
 /* Minimal allowed object size */
 #define SLAB_OBJECT_MIN_SIZE 8 
 /* Max allowed object size */

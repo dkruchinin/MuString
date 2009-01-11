@@ -64,7 +64,8 @@ static int __map_apic_page(void)
     panic( "[MM] Can't allocate memory range for mapping APIC !\n" );
   }
 
-  res = mmap_kern(apic_vaddr, local_apic_base >> PAGE_WIDTH, 1, MAP_RW | MAP_DONTCACHE | MAP_EXEC);
+  res = mmap_kern(apic_vaddr, local_apic_base >> PAGE_WIDTH, 1,
+                  PROT_READ | PROT_WRITE | PROT_NOCACHE | PROT_EXEC, MAP_PHYS);
   if(res<0) {
     panic("[MM] Cannot map IO page for APIC.\n");
   }

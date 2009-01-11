@@ -160,12 +160,8 @@ config:
 	$(Q)$(ECHO) "ARCH=$(arch)" >> .config
 
 menuconfig: host
-<<<<<<< .merge_file_ccNK1y
 	$(Q)$(MKDIR) -p $(BUILD_ROOT)/include/config
-	$(Q)$(MAKE) -C kbuild BUILD_ROOT=$(BUILD_ROOT)
-=======
 	$(Q)$(MAKE) mconf -C kbuild BUILD_ROOT=$(BUILD_ROOT)
->>>>>>> .merge_file_icBSix
 	$(Q)$(BUILD_ROOT)/kbuild/mconf $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
 	$(Q)$(BUILD_ROOT)/kbuild/conf -s $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
 	$(Q)$(ECHO) "ARCH=$(arch)" >> .config

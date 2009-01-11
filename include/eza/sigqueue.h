@@ -1,7 +1,7 @@
 #ifndef __SIGQUEUE_H__
 #define __SIGQUEUE_H__
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <ds/list.h>
 #include <eza/errno.h>
 #include <eza/arch/bitwise.h>
@@ -45,7 +45,7 @@ static inline status_t sigqueue_add_item(sigqueue_t *sq,sq_header_t *item)
   return 0;
 }
 
-static inline sq_header_t *sigqueue_remove_item(sigqueue_t *sq,long_t idx,
+static inline sq_header_t *sigqueue_remove_item(sigqueue_t *sq,long idx,
                                                  bool remove_all)
 {
   sq_header_t *item;

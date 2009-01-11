@@ -840,7 +840,7 @@ void *alloc_from_memcache(memcache_t *cache)
     
     /*
      * Unfortunately our percpu guy is already full,
-     * this means it must be replaces(if there is enough memory
+     * this means it must be replaced(if there is enough memory
      * to allocate it :)).
      */
     __slab_lock(old_slab); /* Full slab is locked only for disabling preemption */

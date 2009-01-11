@@ -682,7 +682,7 @@ static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu)
       /* Since we can't put ourself into sleep and than schedule our migration,
        * we should ask the GC thread to migrate us.
        */
-      gc_init_action(&a,__self_move_gc_actor,task,(long_t)&t);
+      gc_init_action(&a,__self_move_gc_actor,task,(long)&t);
       gc_schedule_action(&a);
     }
 
