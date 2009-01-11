@@ -266,6 +266,26 @@ static uint64_t __setup_user_task_context(task_t *task)
   return sizeof(regs_t);
 }
 
+/* NOTE: This function doesn't reload LDT ! */
+static void __setup_user_ldt( uintptr_t ldt )
+{
+  descriptor_t *ldt_root=(descriptor_t*)ldt;
+  descriptor_t *ldt_dsc;
+
+  if( !ldt ) {
+    return;
+  }
+
+  /* Zeroize the NIL descriptor. */
+  ldt_dsc=ldt_root;
+  memset(ldt_dsc,0,sizeof(*ldt_dsc));
+
+  /* Setup default PTD descriptor. */
+  ldt_dsc=&ldt_root[PTD_SELECTOR];
+  descriptor_set_base(ldt_dsc,0);
+  ldt_dsc->access=AR_PRESENT | AR_DATA | AR_WRITEABLE | (1 << 2) | DPL_USPACE;
+}
+
 status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
                                  task_privelege_t priv,task_t *parent,
                                  task_creation_attrs_t *attrs)
@@ -314,8 +334,6 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   if( tss ) {
     task_ctx->tss=tss;
     task_ctx->tss_limit=parent_ctx->tss_limit;
-    kprintf( "Copying TSS (%p) from %d:%d\n",
-             tss,parent->pid,parent->tid);
   }
 
   if( priv == TPL_USER ) {
@@ -329,7 +347,7 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
       for(;;);
       return -ENOMEM;
     }
-    memset((void *)task_ctx->ldt,0,task_ctx->ldt_limit);
+    __setup_user_ldt(task_ctx->ldt);
   }
 
   /* Process attributes, if any. */

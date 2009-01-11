@@ -72,5 +72,6 @@ int mm_map_entries(pde_t *pde_start, pde_idx_t entries,
                    page_frame_iterator_t *pfi, pde_flags_t flags);
 page_idx_t mm_pin_virt_addr(page_frame_t *dir, uintptr_t va);
 void mm_pagedir_initialize(page_frame_t *new_dir, page_frame_t *parent, pdir_level_t level);
+void *mm_user_addr_to_kern_addr(page_frame_t *dir, uintptr_t va);
 
 #endif /* __MMAP_H__ */

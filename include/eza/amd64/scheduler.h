@@ -58,6 +58,12 @@ static inline void arch_activate_task(task_t *to)
   tss_t *tss=to_ctx->tss;
   uint16_t tss_limit;
 
+#ifdef CONFIG_TEST
+  kprintf( "** ACTIVATING TASK: 0x%X:0x%X (CPU: %d). FS=0x%X, LDT=%p,PTD=%p\n",
+           to->pid,to->tid,to->cpu,to_ctx->fs,
+           to_ctx->ldt,to_ctx->per_task_data);
+#endif
+
   if( !tss ) {
     tss=get_cpu_tss(to->cpu);
     tss_limit=TSS_DEFAULT_LIMIT;
@@ -76,12 +82,6 @@ static inline void arch_activate_task(task_t *to)
   }
 
   /* Let's jump ! */
-//#ifdef CONFIG_TEST
-  kprintf( "** ACTIVATING TASK: 0x%X:0x%X (CPU: %d). FS=0x%X, LDT=%p,PTD=%p\n",
-           to->pid,to->tid,to->cpu,to_ctx->fs,
-           to_ctx->ldt,to_ctx->per_task_data);
-//#endif
-
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
 }
 

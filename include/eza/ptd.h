@@ -6,6 +6,7 @@
 #define PTD_CUSTOM_SLOTS  8
 
 typedef struct __per_task_data {
+  uintptr_t ptd_addr;
   int errno;
   void *process_shared_data;
   void *task_private_data;
