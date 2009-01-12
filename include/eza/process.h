@@ -27,15 +27,21 @@
 #include <eza/task.h>
 #include <eza/arch/types.h>
 #include <kernel/syscalls.h>
+#include <ipc/gen_port.h>
 
-#define SYS_PR_CTL_SET_ENTRYPOINT 0x0
-#define SYS_PR_CTL_SET_STACK 0x1
-#define SYS_PR_CTL_GET_ENTRYPOINT 0x2
-#define SYS_PR_CTL_GET_STACK 0x3
+#define SYS_PR_CTL_SET_ENTRYPOINT      0x0
+#define SYS_PR_CTL_SET_STACK           0x1
+#define SYS_PR_CTL_GET_ENTRYPOINT      0x2
+#define SYS_PR_CTL_GET_STACK           0x3
 #define SYS_PR_CTL_ADD_EVENT_LISTENER  0x4
 #define SYS_PR_CTL_SET_PERTASK_DATA    0x5
+#define SYS_PR_CTL_DISINTEGRATE_TASK   0x6  /* Very strong spell. */
 
 #define LOOKUP_ZOMBIES  0x1
+
+typedef struct __disintegration_descr_t {
+  ipc_gen_port_t *port;
+} disintegration_descr_t;
 
 task_t *lookup_task(pid_t pid,ulong_t flags);
 
@@ -64,5 +70,7 @@ void spawn_percpu_threads(void);
 #define EXITCODE(s,ec) ((s))
 
 void do_exit(int code);
+
+void perform_disintegrate_work(void);
 
 #endif

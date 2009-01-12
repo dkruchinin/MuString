@@ -117,3 +117,8 @@ void sys_exit(int code)
 void sys_thread_exit(int code)
 {
 }
+
+void perform_disintegrate_work(void)
+{
+  
+}

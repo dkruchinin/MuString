@@ -40,6 +40,8 @@
 #include <kernel/vm.h>
 #include <eza/kconsole.h>
 #include <eza/tevent.h>
+#include <ipc/gen_port.h>
+#include <ipc/ipc.h>
 
 typedef uint32_t hash_level_t;
 
@@ -172,6 +174,48 @@ status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
   return r;
 }
 
+static status_t __disintegrate_task(task_t *target,ulong_t pnum)
+{
+  ipc_gen_port_t *port;
+  disintegration_descr_t *descr;
+  status_t r;
+
+  if( !(port=__ipc_get_port(current_task(),pnum)) ) {
+    return -EINVAL;
+  }
+
+  if( port->flags & IPC_BLOCKED_ACCESS ) {
+    r=-EINVAL;
+    goto put_port;
+  }
+
+  descr=memalloc(sizeof(*descr));
+  if( !descr ) {
+    r=-ENOMEM;
+    goto put_port;
+  }
+
+  descr->port=port;
+
+  LOCK_TASK_STRUCT(target);
+  if( !check_task_flags(target,TF_EXITING)
+      && !set_and_check_task_flag(target,__TF_DISINTEGRATION_BIT) ) {
+    r=0;
+  } else {
+    r=-EBUSY;
+  }
+  UNLOCK_TASK_STRUCT(target);
+
+  if( !r ) {
+    return r;
+  }
+
+  memfree(descr);
+put_port:
+  __ipc_put_port(port);
+  return r;
+}
+
 status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
 {
   task_event_ctl_arg te_ctl;
@@ -204,6 +248,11 @@ status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       }
       return arch_process_context_control(target,SYS_PR_CTL_SET_PERTASK_DATA,
                                           arg);
+    case SYS_PR_CTL_DISINTEGRATE_TASK:
+      if( target == current_task() ) {
+        return -EWOULDBLOCK;
+      }
+      return __disintegrate_task(target,arg);
   }
   return -EINVAL;
 }
@@ -211,9 +260,15 @@ status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
 status_t sys_task_control(pid_t pid, ulong_t cmd, ulong_t arg)
 {
   status_t r;
-  task_t *task=pid_to_task(pid);
+  task_t *task;
 
-  if( task == NULL ) {
+  if( is_tid(pid) ) {
+    if( cmd == SYS_PR_CTL_DISINTEGRATE_TASK ) {
+      return -EINVAL;
+    }
+  }
+
+  if( (task=pid_to_task(pid)) == NULL ) {
     return -ESRCH;
   }
 

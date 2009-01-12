@@ -113,12 +113,19 @@ typedef struct __signal_struct {
 #define __TF_USPC_BLOCKED_BIT  0
 #define __TF_UNDER_MIGRATION_BIT  1
 #define __TF_EXITING_BIT  2
+#define __TF_DISINTEGRATION_BIT  3
 
 typedef enum __task_flags {
   TF_USPC_BLOCKED=(1<<__TF_USPC_BLOCKED_BIT),/**< Block facility to change task's static priority outside the kernel **/
   TF_UNDER_MIGRATION=(1<<__TF_UNDER_MIGRATION_BIT), /**< Task is currently being migrated. Don't disturb. **/
-  TF_EXITING=(1<<__TF_EXITING_BIT) /**< Task is exiting to avoid faults during 'sys_exit()' **/
+  TF_EXITING=(1<<__TF_EXITING_BIT), /**< Task is exiting to avoid faults during 'sys_exit()' **/
+  TF_DISINTEGRATING=(1<<__TF_DISINTEGRATION_BIT) /**< Task is being disintegrated **/
 } task_flags_t;
+
+struct __disintegration_descr_t;
+typedef struct __uwork_data {
+  struct __disintegration_descr_t *disintegration_descr;
+} uworks_data_t;
 
 /* Abstract object for scheduling. */
 typedef struct __task_struct {
@@ -173,6 +180,8 @@ typedef struct __task_struct {
 
   /* Signal-related stuff. */
   signal_struct_t siginfo;
+
+  /* Userspace works-reated stuff. */
 
   /* Arch-dependent context is located here */
   uint8_t arch_context[256];
@@ -301,6 +310,7 @@ void cleanup_thread_data(void *t,ulong_t arg);
 
 #define set_task_flags(t,f) ((t)->flags |= (f))
 #define check_task_flags(t,f) ((t)->flags & (f) )
+#define set_and_check_task_flag(t,fb) (arch_bit_test_and_set(&(t)->flags,(fb)))
 
 #define set_task_signals_pending(t)             \
   arch_set_task_signals_pending( &(((task_t*)(t))->arch_context[0]) )
