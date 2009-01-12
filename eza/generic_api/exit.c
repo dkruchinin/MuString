@@ -29,6 +29,8 @@
 #include <ipc/ipc.h>
 #include <eza/security.h>
 #include <eza/tevent.h>
+#include <eza/process.h>
+#include <ipc/gen_port.h>
 
 static void __exit_ipc(task_t *exiter) {
   task_ipc_t *ipc;
@@ -63,6 +65,23 @@ static void __exit_limits(task_t *exiter)
 {
 }
 
+static void __flush_pending_uworks(task_t *exiter)
+{
+  disintegration_descr_t *dreq=exiter->uworks_data.disintegration_descr;
+
+  if( dreq ) { /* Pending disintegration requests ? */
+    disintegration_req_packet_t *p=ipc_message_data(dreq->msg);
+
+    p->pid=exiter->pid;
+    p->status=__DR_EXITED;
+
+    ipc_port_send_iov(dreq->port,dreq->msg,false,NULL,0,0);
+
+    __ipc_put_port(dreq->port);
+    memfree(dreq);
+  }
+}
+
 static void __exit_resources(task_t *exiter)
 {
   /* Remove all our listeners. */
@@ -90,7 +109,13 @@ void do_exit(int code)
 
   /* It's good to be undead ! */
   zombify_task(exiter);
+
+  LOCK_TASK_STRUCT(exiter);
   set_task_flags(exiter,TF_EXITING);
+  UNLOCK_TASK_STRUCT(exiter);
+
+  /* Flush any pending uworks. */
+  __flush_pending_uworks(exiter);
 
   /* Notify all listeners that we're exiting. */
   task_event_notify(TASK_EVENT_TERMINATION);
@@ -120,5 +145,6 @@ void sys_thread_exit(int code)
 
 void perform_disintegrate_work(void)
 {
-  
+  kprintf("** DISINTEGRATING TASK %d\n",current_task()->pid);
+  do_exit(0);
 }

@@ -179,6 +179,8 @@ static status_t __disintegrate_task(task_t *target,ulong_t pnum)
   ipc_gen_port_t *port;
   disintegration_descr_t *descr;
   status_t r;
+  iovec_t iov;
+  disintegration_req_packet_t drp;
 
   if( !(port=__ipc_get_port(current_task(),pnum)) ) {
     return -EINVAL;
@@ -195,11 +197,21 @@ static status_t __disintegrate_task(task_t *target,ulong_t pnum)
     goto put_port;
   }
 
+  iov.iov_base=&drp;
+  iov.iov_len=sizeof(drp);
+
   descr->port=port;
+  descr->msg=ipc_create_port_message_iov_v(&iov,1,sizeof(drp),false,NULL,0,NULL,NULL,0);
+  if( !descr->msg ) {
+    r=-ENOMEM;
+    goto free_descr;
+  }
 
   LOCK_TASK_STRUCT(target);
   if( !check_task_flags(target,TF_EXITING)
       && !set_and_check_task_flag(target,__TF_DISINTEGRATION_BIT) ) {
+    set_task_disintegration_request(target);
+    target->uworks_data.disintegration_descr=descr;
     r=0;
   } else {
     r=-EBUSY;
@@ -207,9 +219,15 @@ static status_t __disintegrate_task(task_t *target,ulong_t pnum)
   UNLOCK_TASK_STRUCT(target);
 
   if( !r ) {
-    return r;
+    r=sched_change_task_state(target,TASK_STATE_RUNNABLE);
+    if( !r ) {
+      return r;
+    }
+    /* Fallthrough in case of error. */
   }
 
+  put_ipc_port_message(descr->msg);
+free_descr:
   memfree(descr);
 put_port:
   __ipc_put_port(port);

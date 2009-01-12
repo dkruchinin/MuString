@@ -81,11 +81,11 @@ typedef enum __task_state {
   TASK_STATE_JUST_BORN = 0x4,
   TASK_STATE_SLEEPING = 0x8,   /**< Interruptible sleep. **/
   TASK_STATE_STOPPED = 0x10,
-  TASK_STATE_ZOMBIE = 0x20,
-  TASK_STATE_SUSPENDED = 0x40,  /**< Non-interruptible sleep. **/
+  TASK_STATE_SUSPENDED = 0x20,  /**< Non-interruptible sleep. **/
+  TASK_STATE_ZOMBIE = 0x8000,
 } task_state_t;
 
-#define __ALL_TASK_STATE_MASK  0x7F  /**< All possible task states. */
+#define __ALL_TASK_STATE_MASK  0x3F  /**< All possible task states exclude zombies */
 
 typedef uint32_t priority_t;
 typedef uint32_t cpu_array_t;
@@ -182,6 +182,7 @@ typedef struct __task_struct {
   signal_struct_t siginfo;
 
   /* Userspace works-reated stuff. */
+  uworks_data_t uworks_data;
 
   /* Arch-dependent context is located here */
   uint8_t arch_context[256];
@@ -312,10 +313,25 @@ void cleanup_thread_data(void *t,ulong_t arg);
 #define check_task_flags(t,f) ((t)->flags & (f) )
 #define set_and_check_task_flag(t,fb) (arch_bit_test_and_set(&(t)->flags,(fb)))
 
-#define set_task_signals_pending(t)             \
-  arch_set_task_signals_pending( &(((task_t*)(t))->arch_context[0]) )
+#define ARCH_CTX_UWORS_SIGNALS_BIT_IDX  0
+#define ARCH_CTX_UWORS_DISINT_REQ_BIT_IDX  1
+
+#define ARCH_CTX_UWORKS_SIGNALS_MASK  (1<<ARCH_CTX_UWORS_SIGNALS_BIT_IDX)
+#define ARCH_CTX_UWORKS_DISINT_REQ_MASK  (1<<ARCH_CTX_UWORS_DISINT_REQ_BIT_IDX)
+
+#define set_task_signals_pending(t)                                    \
+  arch_set_uworks_bit( &(((task_t*)(t))->arch_context[0]),ARCH_CTX_UWORS_SIGNALS_BIT_IDX )
 
 #define clear_task_signals_pending(t)             \
-  arch_clear_task_signals_pending( &(((task_t*)(t))->arch_context[0]) )
+  arch_clear_uworks_bit( &(((task_t*)(t))->arch_context[0]),ARCH_CTX_UWORS_SIGNALS_BIT_IDX )
+
+#define set_task_disintegration_request(t)      \
+  arch_set_uworks_bit( &(((task_t*)(t))->arch_context[0]),ARCH_CTX_UWORS_DISINT_REQ_BIT_IDX )
+
+#define clear_task_disintegration_request(t)      \
+  arch_clear_uworks_bit( &(((task_t*)(t))->arch_context[0]),ARCH_CTX_UWORS_DISINT_REQ_BIT_IDX )
+
+#define read_task_pending_uworks(t)             \
+  arch_read_pending_uworks( &(((task_t*)(t))->arch_context[0]) )
 
 #endif

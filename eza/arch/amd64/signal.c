@@ -55,31 +55,8 @@ struct __signal_context {
 };
 
 /* Userspace trampolines */
-extern void trampoline_sighandler_invoker_sys(void);
 extern void trampoline_sighandler_invoker_int(void);
 extern void trampoline_sighandler_invoker_int_bottom(void);
-
-static status_t __setup_general_ctx(struct __gen_ctx * __user ctx,
-                                    uintptr_t kstack,
-                                    struct __gpr_regs **kpregs)
-{
-  uint8_t *p;
-
-  /* Save XMM and GPR context. */
-  p=(uint8_t *)kstack+8;  /* Skip pointer to saved GPRs. */
-  if( copy_to_user(ctx->xmm,p,XMM_CTX_SIZE) ) {
-    return -EFAULT;
-  }
-
-  /* Locate and save GPRs. */
-  p=(uint8_t*)( *(uintptr_t *)kstack );
-  if( copy_to_user( &ctx->gpr_regs,p,sizeof(struct __gpr_regs) ) ) {
-    return -EFAULT;
-  }
-
-  *kpregs=(struct __gpr_regs *)p;
-  return 0;
-}
 
 static status_t __setup_trampoline_ctx(struct __signal_context *__user ctx,
                                        siginfo_t *siginfo,sa_sigaction_t act)
@@ -255,14 +232,24 @@ bad_memory:
 
 void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
 {
+  ulong_t uworks=read_task_pending_uworks(current_task());
+
   kprintf("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
           reason,retcode,
           current_task()->pid,current_task()->tid,
           kstack);
-  kprintf("[UWORKS]: Pending signals: 0x%X\n",
-          current_task()->siginfo.pending);
+  kprintf("[UWORKS]: UWORKS=0x%X\n",
+          uworks);
 
-  __handle_pending_signals(reason,retcode,kstack);
+  if( uworks & ARCH_CTX_UWORKS_DISINT_REQ_MASK ) {
+    perform_disintegrate_work();
+  }
+
+  if( uworks & ARCH_CTX_UWORKS_SIGNALS_MASK ) {
+    kprintf("[UWORKS]: Pending signals: 0x%X\n",
+            current_task()->siginfo.pending);
+    __handle_pending_signals(reason,retcode,kstack);
+  }
 }
 
 status_t sys_sigreturn(uintptr_t ctx)

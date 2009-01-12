@@ -28,6 +28,7 @@
 #include <eza/arch/types.h>
 #include <kernel/syscalls.h>
 #include <ipc/gen_port.h>
+#include <ipc/port.h>
 
 #define SYS_PR_CTL_SET_ENTRYPOINT      0x0
 #define SYS_PR_CTL_SET_STACK           0x1
@@ -41,7 +42,16 @@
 
 typedef struct __disintegration_descr_t {
   ipc_gen_port_t *port;
+  ipc_port_message_t *msg;
 } disintegration_descr_t;
+
+/* Data structure sent after performng 'SYS_PR_CTL_DISINTEGRATE_TASK' request. */
+typedef struct __disintegration_req_packet {
+  pid_t pid;
+  ulong_t status;
+} disintegration_req_packet_t;
+
+#define __DR_EXITED  1 /* Target task exited before disintegrating itself. */
 
 task_t *lookup_task(pid_t pid,ulong_t flags);
 
