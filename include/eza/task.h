@@ -33,6 +33,8 @@
 #include <eza/tevent.h>
 #include <eza/sigqueue.h>
 #include <eza/mutex.h>
+#include <eza/event.h>
+#include <eza/scheduler.h>
 
 #define INVALID_PID  ((pid_t)~0) 
 /* TODO: [mt] Manage NUM_PIDS properly ! */
@@ -58,8 +60,8 @@
 #define LOCK_TASK_STRUCT(t) spinlock_lock(&t->lock)
 #define UNLOCK_TASK_STRUCT(t) spinlock_unlock(&t->lock)
 
-#define LOCK_TASK_CHILDS(t) spinlock_lock(&(t)->child_lock) 
-#define UNLOCK_TASK_CHILDS(t) spinlock_unlock(&(t)->child_lock)
+#define LOCK_TASK_CHILDS(t) mutex_lock(&(t)->child_lock) 
+#define UNLOCK_TASK_CHILDS(t) mutex_unlock(&(t)->child_lock)
 
 #define LOCK_TASK_MEMBERS(t) spinlock_lock(&t->member_lock)
 #define UNLOCK_TASK_MEMBERS(t) spinlock_unlock(&t->member_lock)
@@ -73,18 +75,6 @@ typedef enum __task_creation_flag_t {
 } task_creation_flags_t;
 
 #define TASK_FLAG_UNDER_STATE_CHANGE  0x1
-
-typedef enum __task_state {
-  TASK_STATE_RUNNING = 0x1,
-  TASK_STATE_RUNNABLE = 0x2,
-  TASK_STATE_JUST_BORN = 0x4,
-  TASK_STATE_SLEEPING = 0x8,   /**< Interruptible sleep. **/
-  TASK_STATE_STOPPED = 0x10,
-  TASK_STATE_SUSPENDED = 0x20,  /**< Non-interruptible sleep. **/
-  TASK_STATE_ZOMBIE = 0x8000,
-} task_state_t;
-
-#define __ALL_TASK_STATE_MASK  0x3F  /**< All possible task states exclude zombies */
 
 typedef uint32_t priority_t;
 typedef uint32_t cpu_array_t;
@@ -127,6 +117,17 @@ typedef struct __uwork_data {
   struct __disintegration_descr_t *disintegration_descr;
 } uworks_data_t;
 
+/* Task that waits another task to exit. */
+typedef struct __jointee {
+  event_t e;
+  list_node_t l;
+} jointee_t;
+
+typedef struct __tg_leader_private {
+  countered_event_t ce;
+  ulong_t num_threads;
+} tg_leader_private_t;
+
 /* Abstract object for scheduling. */
 typedef struct __task_struct {
   pid_t pid, ppid;
@@ -148,7 +149,7 @@ typedef struct __task_struct {
 
   /* Children/threads - related stuff. */
   struct __task_struct *group_leader;
-  spinlock_t child_lock;
+  mutex_t child_lock;
   list_head_t children,threads;
   list_node_t child_list;
 
@@ -180,6 +181,13 @@ typedef struct __task_struct {
 
   /* Signal-related stuff. */
   signal_struct_t siginfo;
+
+  /* 'wait()'-related stuff. */
+  jointee_t jointee;
+  list_head_t jointed;
+  countered_event_t *cwaiter;
+
+  tg_leader_private_t *tg_priv;
 
   /* Userspace works-reated stuff. */
   uworks_data_t uworks_data;

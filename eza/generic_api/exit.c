@@ -31,6 +31,7 @@
 #include <eza/tevent.h>
 #include <eza/process.h>
 #include <ipc/gen_port.h>
+#include <eza/signal.h>
 
 #define __set_exiting_flag(exiter)              \
   LOCK_TASK_STRUCT((exiter));                   \
@@ -82,14 +83,18 @@ static void __exit_mm(task_t *exiter)
 static void __notify_disintegration_done(disintegration_descr_t *dreq,
                                          ulong_t status)
 {
-  disintegration_req_packet_t *p=ipc_message_data(dreq->msg);
+  disintegration_req_packet_t *p;
 
-  p->pid=current_task()->pid;
-  p->status=status;
+  if( dreq ) {
+    p=ipc_message_data(dreq->msg);
 
-  ipc_port_send_iov(dreq->port,dreq->msg,false,NULL,0,0);
-  __ipc_put_port(dreq->port);
-  memfree(dreq);
+    p->pid=current_task()->pid;
+    p->status=status;
+
+    ipc_port_send_iov(dreq->port,dreq->msg,false,NULL,0,0);
+    __ipc_put_port(dreq->port);
+    memfree(dreq);
+  }
 }
 
 static void __flush_pending_uworks(task_t *exiter)
@@ -153,9 +158,35 @@ void do_exit(int code,ulong_t flags)
   __exit_mm(exiter);
 
   if( !is_thread(exiter) ) {
-    if( flags & EF_DISINTEGRATE ) {
-    } else {
+    siginfo_t siginfo;
+    tg_leader_private_t *priv=exiter->tg_priv;
+
+    LOCK_TASK_CHILDS(exiter);
+    kprintf( "[XXX]: Threads %d\n", priv->num_threads );
+    if( priv->num_threads ) { /* Terminate all process's threads. */
+      list_node_t *ln;
+
+      /* First, initialize a counter for the event. */
+      atomic_set(&priv->ce.counter,priv->num_threads);
+      event_reset(&priv->ce.e);
+      event_set_task(&priv->ce.e,exiter);
+
+      INIT_SIGINFO_CURR(&siginfo);
+      siginfo.si_signo=SIGKILL;
+
+      list_for_each(&exiter->threads,ln) {
+        task_t *thread=container_of(ln,task_t,child_list);
+
+        LOCK_TASK_STRUCT(thread);
+        thread->cwaiter=&priv->ce;
+        UNLOCK_TASK_STRUCT(thread);
+
+        kprintf( "[F]: Sending SIGKILL to 0x%X.\n", thread->tid );
+        //send_task_siginfo(exiter,&siginfo,true);
+        kprintf( "[F]: Done !\n" );
+      }
     }
+    UNLOCK_TASK_CHILDS(exiter);
   } else {
     kprintf("** [0x%X] Thread has exited !\n",
             exiter->tid);

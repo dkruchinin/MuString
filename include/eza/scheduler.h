@@ -27,7 +27,6 @@
 
 #include <config.h>
 #include <eza/arch/types.h>
-//#include <eza/resource.h>
 #include <eza/kstack.h>
 #include <eza/spinlock.h>
 #include <eza/arch/current.h>
@@ -41,6 +40,18 @@ struct __task_struct;
  * otherwise - it won't.
  */
 typedef bool (*deferred_sched_handler_t)(void *data);
+
+typedef enum __task_state {
+  TASK_STATE_RUNNING = 0x1,
+  TASK_STATE_RUNNABLE = 0x2,
+  TASK_STATE_JUST_BORN = 0x4,
+  TASK_STATE_SLEEPING = 0x8,   /**< Interruptible sleep. **/
+  TASK_STATE_STOPPED = 0x10,
+  TASK_STATE_SUSPENDED = 0x20,  /**< Non-interruptible sleep. **/
+  TASK_STATE_ZOMBIE = 0x8000,
+} task_state_t;
+
+#define __ALL_TASK_STATE_MASK  0x3F  /**< All possible task states exclude zombies */
 
 /* Abstract scheduler. */
 typedef struct __scheduler {
