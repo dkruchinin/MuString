@@ -25,6 +25,7 @@
 #define  __SIGNAL_H__
 
 #include <eza/arch/types.h>
+#include <eza/time.h>
 #include <eza/task.h>
 #include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
@@ -32,16 +33,22 @@
 #include <mm/slab.h>
 #include <eza/bits.h>
 #include <ds/list.h>
+#include <eza/sigqueue.h>
 
 #define NUM_POSIX_SIGNALS  32
 #define NUM_RT_SIGNALS     32
 
 #define SIGRTMIN  NUM_POSIX_SIGNALS
-#define SIGRTMAX  (SIGRTMIN+NUM_RT_SIGNALS)
-#define NR_SIGNALS  SIGRTMAX
+#define SIGRTMAX  ((SIGRTMIN+NUM_RT_SIGNALS)-1)
+#define NR_SIGNALS  (NUM_POSIX_SIGNALS + NUM_RT_SIGNALS)
 
-#define valid_signal(n)  ((n)>=0 && (n) < SIGRTMAX )
-#define rt_signal(n)  ((n)>=SIGRTMIN && (n) < SIGRTMAX)
+#define valid_signal(n)  ((n)>=0 && (n) <= SIGRTMAX )
+#define rt_signal(n)  ((n)>=SIGRTMIN && (n) <= SIGRTMAX)
+
+typedef union sigval {
+  int sival_int;
+  void *sival_ptr;
+} sigval_t;
 
 typedef struct __siginfo {
   int       si_signo;    /* Signal number */
@@ -50,9 +57,9 @@ typedef struct __siginfo {
   pid_t     si_pid;      /* Sending process ID */
   uid_t     si_uid;      /* Real user ID of sending process */
   int       si_status;   /* Exit value or signal */
-//  clock_t   si_utime;    /* User time consumed */
-//  clock_t   si_stime;    /* System time consumed */
-//  sigval_t  si_value;    /* Signal value */
+  clock_t   si_utime;    /* User time consumed */
+  clock_t   si_stime;    /* System time consumed */
+  sigval_t  si_value;    /* Signal value */
   int       si_int;      /* POSIX.1b signal */
   void     *si_ptr;      /* POSIX.1b signal */
   void     *si_addr;     /* Memory location which caused fault */
@@ -118,6 +125,10 @@ static inline void put_signal_handlers(sighandlers_t *s)
 #define SIG_DFL  ((sa_sigaction_t)1)
 #define SIG_ERR  ((sa_sigaction_t)-1)
 
+#define SIG_BLOCK    0
+#define SIG_UNBLOCK  1
+#define SIG_SETMASK  2  /* Must be the maximum value. */
+
 #define SIGHUP     1
 #define SIGINT     2
 #define SIGQUIT    3
@@ -168,9 +179,11 @@ static inline void put_signal_handlers(sighandlers_t *s)
 #define def_ignorable(s) (_BM(s) & DEFAULT_IGNORED_SIGNALS)
 
 #define deliverable_signals_present(s) ((s)->pending & ~((s)->blocked))
+#define can_send_signal_to_task(s,t) (!signal_matches(&(t)->siginfo.ignored,(s)))
+#define can_deliver_signal_to_task(s,t) (!signal_matches(&(t)->siginfo.blocked,(s)))
 
 typedef struct __sigq_item {
-  list_node_t l;
+  sq_header_t h;   /* Must be the first member ! */
   siginfo_t info;
 } sigq_item_t;
 

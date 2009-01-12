@@ -38,6 +38,7 @@
 #include <server.h>
 #include <mlibc/unistd.h>
 #include <eza/process.h>
+#include <eza/ptd.h>
 
 static status_t __create_task_mm(task_t *task, int num)
 {
@@ -49,12 +50,13 @@ static status_t __create_task_mm(task_t *task, int num)
   elf_head_t ehead;
   elf_pr_t epr;
   elf_sh_t esh;
-  uintptr_t data_bss,bss_virt;
+  uintptr_t data_bss,bss_virt,ustack_top;
   size_t real_code_size=0,real_data_size=0;
   size_t last_data_size,real_data_offset=0;
   size_t last_offset,last_sect_size,last_data_offset;
   status_t r;
   int i;
+  per_task_data_t *ptd;
 
   stack=alloc_pages(USER_STACK_SIZE,AF_PGEN|AF_ZERO);
   if(!stack)
@@ -169,9 +171,26 @@ static status_t __create_task_mm(task_t *task, int num)
   if (r)
     return r;
 
-  r=do_task_control(task,SYS_PR_CTL_SET_ENTRYPOINT,ehead.e_entry);
-  r|=do_task_control(task,SYS_PR_CTL_SET_STACK,USPACE_END-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH));
+  /* Now allocate stack space for per-task user data. */
+  ustack_top=USPACE_END-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH);
+  ustack_top-=PER_TASK_DATA_SIZE;
+  ptd=mm_user_addr_to_kern_addr(task->page_dir,ustack_top);
 
+  if( !ptd ) {
+    return -1;
+  }
+  ptd->ptd_addr=(uintptr_t)ustack_top;
+
+  r=do_task_control(task,SYS_PR_CTL_SET_PERTASK_DATA,(uintptr_t)ustack_top);
+  if( r ) {
+    return r;
+  }
+
+  /* Insufficient return address to prevent task from returning to void. */
+  ustack_top-=8;
+
+  r=do_task_control(task,SYS_PR_CTL_SET_ENTRYPOINT,ehead.e_entry);
+  r|=do_task_control(task,SYS_PR_CTL_SET_STACK,ustack_top);
 
   if (r)
     return r;
@@ -192,7 +211,7 @@ void server_run_tasks(void)
 
   if( i > 0 ) {
     kprintf("[SRV] Starting servers: %d ... \n",i);
-    //kconsole->disable();
+    kconsole->disable();
   }
 
   for(a=0;a<i;a++) {

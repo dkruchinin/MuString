@@ -113,3 +113,7 @@ void sys_exit(int code)
 {
   do_exit(code);
 }
+
+void sys_thread_exit(int code)
+{
+}

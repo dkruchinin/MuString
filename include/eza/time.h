@@ -17,7 +17,7 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *
- * eza/include/time.h: contains types and prototypes for dealing with
+ * include/eza/time.h: contains types and prototypes for dealing with
  *                     time processing.
  *
  */
@@ -27,6 +27,8 @@
 
 #include <eza/arch/types.h>
 #include <eza/swks.h>
+
+typedef long clock_t;
 
 uint32_t delay_loop;
 

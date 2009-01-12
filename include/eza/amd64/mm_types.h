@@ -77,6 +77,8 @@ struct __tss_descriptor { /* task state segments descriptor */
 } __attribute__ ((packed));
 typedef struct __tss_descriptor tss_descriptor_t;
 
+typedef struct __tss_descriptor ldt_descriptor_t;
+
 struct __intrdescriptor { /* interrupt descriptor */
   unsigned offset_0_15: 16;
   unsigned selector: 16;
@@ -138,6 +140,7 @@ extern void tss_init(tss_t *tp);
 
 /* context switching - related functions. */
 void load_tss(cpu_id_t cpu,tss_t *new_tss,uint16_t limit);
+void load_ldt(cpu_id_t cpu,uintptr_t ldt,uint16_t limit);
 void copy_tss(tss_t *dst_tss,tss_t *src_tss);
 
 /* gdt related misc functions */
@@ -145,6 +148,8 @@ extern void gdt_tss_setbase(descriptor_t *p,uintptr_t baddre);
 extern void gdt_tss_setlim(descriptor_t *p,uint32_t lim);
 /* idt realted misc functions */
 extern void idt_set_offset(idescriptor_t *p,uintptr_t off);
+
+void descriptor_set_base(descriptor_t *d,uint32_t base);
 
 extern tss_t *get_cpu_tss(cpu_id_t cpu);
 

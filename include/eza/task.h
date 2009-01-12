@@ -31,6 +31,7 @@
 #include <mm/page.h>
 #include <eza/limits.h>
 #include <eza/tevent.h>
+#include <eza/sigqueue.h>
 
 #define INVALID_PID  ((pid_t)~0) 
 /* TODO: [mt] Manage NUM_PIDS properly ! */
@@ -100,10 +101,10 @@ struct __task_sync_data;
 
 /* Per-task signal descriptors. */
 struct __sighandlers;
+
 typedef struct __signal_struct {
   spinlock_t lock;
-  atomic_t num_pending;
-  list_head_t sigqueue;
+  sigqueue_t sigqueue;
   sigset_t blocked,ignored,pending;
   struct __sighandlers *handlers;
 } signal_struct_t;
@@ -189,6 +190,7 @@ typedef struct __task_attrs {
 
 typedef struct __exec_attrs {
   uintptr_t stack,entrypoint,arg;
+  uintptr_t per_task_data;
 } exec_attrs_t;
 
 typedef struct __task_creation_attrs {

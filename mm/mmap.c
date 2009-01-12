@@ -57,6 +57,17 @@ page_idx_t mm_pin_virt_addr(page_frame_t *dir, uintptr_t va)
   return (pgt_pde_is_mapped(pde) ? pgt_pde_page_idx(pde) : -1);
 }
 
+void *mm_user_addr_to_kern_addr(page_frame_t *dir, uintptr_t va)
+{
+  page_idx_t pidx=mm_pin_virt_addr(dir,va);
+
+  if( pidx >= 0 ) {
+    return (char *)pframe_id_to_virt(pidx)+(va & PAGE_OFFSET_MASK);
+  }
+
+  return NULL;
+}
+
 void mm_pagedir_initialize(page_frame_t *new_dir, page_frame_t *parent, pdir_level_t level)
 {
   new_dir->entries = 0;  

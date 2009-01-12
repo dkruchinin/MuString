@@ -85,6 +85,11 @@ static inline void gdtr_load(struct __ptr_16_64 *gdtr_reg)
   asm volatile("lgdtq %0\n" : : "m" (*gdtr_reg));
 }
 
+static inline void ldtr_load(long ldtr_reg)
+{
+  asm volatile( "lldt %0\n" : : "r"((short)ldtr_reg));
+}
+
 static inline void gdtr_store(struct __ptr_16_64 *gdtr_reg)
 {
   asm volatile("sgdtq %0\n" : : "m" (*gdtr_reg));

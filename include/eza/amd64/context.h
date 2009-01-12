@@ -152,6 +152,7 @@
 #define ARCH_CTX_DS_OFFSET      0x28
 #define ARCH_CTX_URSP_OFFSET    0x30
 #define ARCH_CTX_UWORKS_OFFSET  0x38
+#define ARCH_CTX_PTD_OFFSET     0x40
 
 #ifdef __ASM__
 
@@ -168,16 +169,42 @@
 /* Since we'll always turn turn on interrupts after executing IRETQ,
  * we should know where saved RFLAGS is located.
  */
+#define HW_INTERRUPT_CTX_RIP_OFFT     0x0
+#define HW_INTERRUPT_CTX_CS_OFFT      0x8
 #define HW_INTERRUPT_CTX_RFLAGS_OFFT  0x10
+#define HW_INTERRUPT_CTX_RSP_OFFT     0x18
+#define HW_INTERRUPT_CTX_SS_OFFT      0x20
+
+#define HW_INTERRUPT_CTX_SIZE         0x28
+
+#define SAVE_AND_LOAD_SEGMENT_REGISTERS         \
+   mov %ds, %gs:CPU_SCHED_STAT_USER_DS_OFFT;            \
+   mov %es, %gs:CPU_SCHED_STAT_USER_ES_OFFT;            \
+   mov %fs, %gs:CPU_SCHED_STAT_USER_FS_OFFT;            \
+   mov %gs, %gs:CPU_SCHED_STAT_USER_GS_OFFT;            \
+   mov %gs:(CPU_SCHED_STAT_KERN_DS_OFFT),%ds;   \
+
+#define RESTORE_USER_SEGMENT_REGISTERS          \
+   mov %gs:(CPU_SCHED_STAT_USER_DS_OFFT),%ds; \
+   mov %gs:(CPU_SCHED_STAT_USER_ES_OFFT),%es; \
+   mov %gs:(CPU_SCHED_STAT_USER_FS_OFFT),%fs; \
+   pushq %rax;     \
+   pushq %rcx;     \
+   pushq %rdx;     \
+   mov %gs:(CPU_SCHED_STAT_USER_PTD_OFFT),%rax; \
+   movq $0xC0000100, %rcx; \
+   movq %rax,%rdx; \
+   shr $32,%rdx;\
+   wrmsr; \
+   popq %rdx; \
+   popq %rcx; \
+   popq %rax; \
 
 #define ENTER_INTERRUPT_CTX(label,extra_pushes) \
 	cmp $KERNEL_SELECTOR(KTEXT_DES),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ;\
 	je label; \
         swapgs ;  \
-        mov %ds, %gs:CPU_SCHED_STAT_USER_DS_OFFT;       \
-        mov %es, %gs:CPU_SCHED_STAT_USER_ES_OFFT;       \
-        mov %fs, %gs:CPU_SCHED_STAT_USER_FS_OFFT;       \
-        mov %gs:(CPU_SCHED_STAT_KERN_DS_OFFT),%ds;      \
+        SAVE_AND_LOAD_SEGMENT_REGISTERS         \
 label:	;\
 	incq %gs:CPU_SCHED_STAT_IRQCNT_OFFT ;\
 	SAVE_ALL ;\
@@ -210,8 +237,11 @@ typedef struct __context_t { /* others don't interesting... */
 typedef struct __arch_context_t {
   uintptr_t cr3, rsp, fs, gs, es, ds, user_rsp;
   uintptr_t uworks;
+  uintptr_t per_task_data;
   tss_t *tss;
+  uintptr_t ldt;
   uint16_t tss_limit;
+  uint16_t ldt_limit;
 } arch_context_t;
 
 #define ARCH_CTX_UWORS_SIGNALS_BIT_IDX  0

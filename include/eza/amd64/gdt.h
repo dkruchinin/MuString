@@ -83,4 +83,7 @@
   /* tss desciptor - for 64bit on amd64 we're need two descriptors */ \
   { 0,0,0,0,0,0,0,0,0,0 }, \
   { 0,0,0,0,0,0,0,0,0,0 }, \
+  /* LDT descriptor - need to expand it by extra 64 bits */ \
+  { 0,0,0,0,0,0,0,0,0,0 }, \
+  { 0,0,0,0,0,0,0,0,0,0 }, \
 }

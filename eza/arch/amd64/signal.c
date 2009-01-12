@@ -49,11 +49,9 @@ struct __signal_context {
   struct __trampoline_ctx trampl_ctx;
   struct __gen_ctx gen_ctx;
   siginfo_t siginfo;
-  uint64_t retcode;
-};
-
-struct __extra_int_ctx {
-  uintptr_t rcx,retaddr;
+  sigset_t saved_blocked;
+  status_t retcode;
+  uintptr_t retaddr;
 };
 
 /* Userspace trampolines */
@@ -100,12 +98,12 @@ static status_t __setup_trampoline_ctx(struct __signal_context *__user ctx,
   if( copy_to_user(&ctx->trampl_ctx.handler,&kt,sizeof(kt)) ) {
     return -EFAULT;
   }
-
+/*
   kprintf( "TRAMPLCTX: %p, handler: %p, arg1=%p,arg2=%p,arg3=%p\n",
            &ctx->trampl_ctx,
            ctx->trampl_ctx.handler,ctx->trampl_ctx.arg1,
            ctx->trampl_ctx.arg2,ctx->trampl_ctx.arg3);
-
+*/
   return 0;
 }
 
@@ -122,45 +120,12 @@ static void __perform_default_action(int sig)
   for(;;);
 }
 
-static status_t __setup_syscall_context(uint64_t retcode,uintptr_t kstack,
-                                        siginfo_t *info,sa_sigaction_t act)
-{
-  uintptr_t ustack;
-  struct __signal_context *ctx;
-  struct __gpr_regs *kpregs;
-
-  /* Perform user-specific action. First, save signal context in user stack.*/
-  ustack=get_userspace_stack_pointer();
-
-  /* Allocate signal context using user's stack area. */
-  ctx=(struct __signal_context *)(ustack-sizeof(struct __signal_context));
-
-  if( __setup_general_ctx(&ctx->gen_ctx,kstack,&kpregs) ) {
-    return -EFAULT;
-  }
-
-  if( __setup_trampoline_ctx(ctx,info,act) ) {
-    return -EFAULT;
-  }
-
-  if( copy_to_user(&ctx->retcode,&retcode,sizeof(retcode)) ) {
-    return -EFAULT;
-  }
-
-  /* Update user's stack to point at our context frame. */
-  set_userspace_stack_pointer(ctx);
-
-  /* Setup trampoline. */
-  kpregs->rcx=USPACE_TRMPL(trampoline_sighandler_invoker_sys);
-  return 0;
-}
-
 static status_t __setup_int_context(uint64_t retcode,uintptr_t kstack,
                                     siginfo_t *info,sa_sigaction_t act,
-                                    ulong_t extra_bytes)
+                                    ulong_t extra_bytes,
+                                    struct __signal_context **pctx)
 {
-  uintptr_t ustack;
-  struct __extra_int_ctx *int_ctx,kint_ctx;
+  uintptr_t ustack,t;
   struct __int_stackframe *int_frame;
   struct __gpr_regs *kpregs;
   struct __signal_context *ctx;
@@ -170,35 +135,19 @@ static status_t __setup_int_context(uint64_t retcode,uintptr_t kstack,
   xmm=(uint8_t *)kstack+8;  /* Skip pointer to saved GPRs. */
 
   /* Locate saved GPRs. */
-  //kpregs=(struct __gpr_regs *)(xmm+XMM_CTX_SIZE);
   kpregs=(struct __gpr_regs *)(*(uintptr_t *)kstack);
 
   kstack=(uintptr_t)kpregs + sizeof(*kpregs);
   /* OK, now we're pointing at saved interrupt number (see asm.S).
    * So skip it.
    */
-  kstack += (8+extra_bytes);
+  kstack += extra_bytes;
 
   /* Now we can access hardware interrupt stackframe. */
   int_frame=(struct __int_stackframe *)kstack;
 
-  /* Save address where to continue execution from. */
-  kint_ctx.retaddr=int_frame->rip;
-  /* Copy saved %rcx to copy it userspace context later. */
-  kint_ctx.rcx=kpregs->rcx;
-
-  /* %rcx will specify the address to continue execution from, so
-   * make it point to a valid routine.
-   */
-  kpregs->rcx=USPACE_TRMPL(trampoline_sighandler_invoker_int_bottom);
-
-  /* Setup trampoline. */
-  int_frame->rip=USPACE_TRMPL(trampoline_sighandler_invoker_int);
-
   /* Now we can create signal context. */
-  ctx=(struct __signal_context *)(int_frame->old_rsp-sizeof(*ctx)-sizeof(*int_ctx));
-  kprintf( "%CTX: %p, OLD_RSP: %p\n",
-           ctx,int_frame->old_rsp);
+  ctx=(struct __signal_context *)(int_frame->old_rsp-sizeof(*ctx));
 
   if( copy_to_user(&ctx->gen_ctx.xmm,xmm,XMM_CTX_SIZE) ) {
     return -EFAULT;
@@ -216,20 +165,19 @@ static status_t __setup_int_context(uint64_t retcode,uintptr_t kstack,
     return -EFAULT;
   }
 
-  ustack=(uintptr_t)ctx;
-
-  /* Now copy extra interrupt context to userspace. */
-  int_ctx=(struct __extra_int_ctx *)(++ctx);
-  if( copy_to_user(int_ctx,&kint_ctx,sizeof(kint_ctx) ) ) {
+  t=int_frame->rip;
+  if( copy_to_user(&ctx->retaddr,&t,sizeof(t)) ) {
     return -EFAULT;
   }
 
+  /* Setup trampoline. */
+  int_frame->rip=USPACE_TRMPL(trampoline_sighandler_invoker_int);
+
+  *pctx=ctx;
+  ustack=(uintptr_t)ctx;
   /* Setup user stack pointer. */
   int_frame->old_rsp=ustack;
 
-  kprintf(">>>> RCX: %p, RET: %p, TRAMPOLINE: %p, OLD_RSP: %p\n",
-          kint_ctx.rcx, kint_ctx.retaddr,
-          int_frame->rip,int_frame->old_rsp);
   return 0;
 }
 
@@ -240,6 +188,10 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
   sigq_item_t *sigitem;
   sa_sigaction_t act;
   task_t *caller=current_task();
+  kern_sigaction_t *ka;
+  sigset_t sa_mask,kmask;
+  int sa_flags;
+  struct __signal_context *pctx;
 
   sigitem=extract_one_signal_from_queue(caller);
   if( !sigitem ) {
@@ -249,8 +201,11 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
   }
 
   /* Determine if there is a user-specific handler installed. */
+  ka=&caller->siginfo.handlers->actions[sigitem->info.si_signo];
   LOCK_TASK_SIGNALS(caller);
-  act=caller->siginfo.handlers->actions[sigitem->info.si_signo].a.sa_sigaction;
+  act=ka->a.sa_sigaction;
+  sa_mask=ka->sa_mask;
+  sa_flags=ka->sa_flags;
   UNLOCK_TASK_SIGNALS(caller);
 
   if( act == SIG_IGN ) {
@@ -260,14 +215,14 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
   } else {
     switch( reason ) {
       case __SYCALL_UWORK:
-        r=__setup_syscall_context(retcode,kstack,&sigitem->info,act);
+        r=__setup_int_context(retcode,kstack,&sigitem->info,act,0,&pctx);
         break;
       case __INT_UWORK:
       case __XCPT_NOERR_UWORK:
-        r=__setup_int_context(retcode,kstack,&sigitem->info,act,0);
+        r=__setup_int_context(retcode,kstack,&sigitem->info,act,8,&pctx);
         break;
       case __XCPT_ERR_UWORK:
-        r=__setup_int_context(retcode,kstack,&sigitem->info,act,8);
+        r=__setup_int_context(retcode,kstack,&sigitem->info,act,16,&pctx);
         break;
       default:
         panic( "Unknown userspace work type: %d in task (%d:%d)\n",
@@ -276,10 +231,20 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
     if( r ) {
       goto bad_memory;
     }
+
+    /* Now we should apply a new mask of blocked signals. */
+    LOCK_TASK_SIGNALS(caller);
+    kmask=caller->siginfo.blocked;
+    caller->siginfo.blocked=sa_mask;
+    UNLOCK_TASK_SIGNALS(caller);
+
+    if( copy_to_user(&pctx->saved_blocked,&kmask,sizeof(sigset_t)) ) {
+      goto bad_memory;
+    }
   }
 
 out_recalc:
-  clear_task_signals_pending(current_task());
+  update_pending_signals(current_task());
   free_sigqueue_item(sigitem);
   return;
 bad_memory:
@@ -290,7 +255,7 @@ bad_memory:
 
 void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
 {
-  kprintf("[UWORKS]: %d/%d. Processing works for %d:%d, KSTACK: %p\n",
+  kprintf("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
           reason,retcode,
           current_task()->pid,current_task()->tid,
           kstack);
@@ -305,24 +270,30 @@ status_t sys_sigreturn(uintptr_t ctx)
   struct __signal_context *uctx=(struct __signal_context *)ctx;
   status_t retcode;
   task_t *caller=current_task();
-  uintptr_t kctx=caller->kernel_stack.high_address-sizeof(struct __gpr_regs);
-  uintptr_t skctx=kctx;
+  uintptr_t kctx=caller->kernel_stack.high_address-sizeof(struct __gpr_regs)-
+                 sizeof(struct __int_stackframe);
+  struct __int_stackframe *sframe=(struct __int_stackframe*)(kctx+sizeof(struct __gpr_regs));
+  uintptr_t skctx=kctx,retaddr;
+  sigset_t sa_mask;
 
   if( !valid_user_address_range(ctx,sizeof(struct __signal_context)) ) {
-    kprintf( "[1]\n" );
     goto bad_ctx;
   }
+
+  /* Restore the mask of blocked signals. */
+  if( copy_from_user(&sa_mask,&uctx->saved_blocked,sizeof(sa_mask)) ) {
+    goto bad_ctx;
+  }
+
+  /* Don't touch these signals ! */
+  sa_mask &= UNTOUCHABLE_SIGNALS;
+
+  LOCK_TASK_SIGNALS(caller);
+  caller->siginfo.blocked=sa_mask;
+  UNLOCK_TASK_SIGNALS(caller);
 
   /* Restore GPRs. */
   if( copy_from_user(kctx,&uctx->gen_ctx.gpr_regs,sizeof(struct __gpr_regs) ) ) {
-    kprintf( "[2]\n" );
-    goto bad_ctx;
-  }
-
-  kprintf( ">>>>>> RCX: %p\n",((struct __gpr_regs *)kctx)->rcx );
-  /* Make sure user has valid return address. */
-  if( !valid_user_address(((struct __gpr_regs *)kctx)->rcx) ) {
-    kprintf( "[3]\n" );
     goto bad_ctx;
   }
 
@@ -332,23 +303,36 @@ status_t sys_sigreturn(uintptr_t ctx)
 
   /* Restore XMM context. */
   if( copy_from_user(kctx,uctx->gen_ctx.xmm,XMM_CTX_SIZE) ) {
-    kprintf( "[4]\n" );
     goto bad_ctx;
   }
 
   /* Save location of saved GPR frame. */
   *((uintptr_t *)(kctx-sizeof(uintptr_t)))=skctx;
 
-  /* Finally, restore retcode. */
-  if( !copy_from_user(&retcode,&uctx->retcode,sizeof(retcode)) ) {
-    set_userspace_stack_pointer(ctx+sizeof(struct __signal_context));
-    kprintf( "[GOOD]\n" );
-    return retcode;
-  } else {
-    kprintf( "[5]\n" );
+  /* Restore retcode. */
+  if( copy_from_user(&retcode,&uctx->retcode,sizeof(retcode)) ) {
+    goto bad_ctx;
   }
 
+  /* Finally, restore the address to continue execution from. */
+  if( copy_from_user(&retaddr,&uctx->retaddr,sizeof(retaddr)) ) {
+    goto bad_ctx;
+  }
+
+  if( !valid_user_address(retaddr) ) {
+    goto bad_ctx;
+  }
+
+  uctx++;
+  sframe->rip=retaddr;
+  sframe->old_rsp=(uintptr_t)uctx;
+
+  /* Update pending signals to let any unblocked signals be processed. */
+  update_pending_signals(caller);
+  return retcode;
+
 bad_ctx:
+  kprintf("[!!!] BAD context for 'sys_sigreturn()' for task %d !\n",
+          caller->tid);
   for(;;);
-  return -1;
 }

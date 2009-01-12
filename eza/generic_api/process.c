@@ -198,6 +198,12 @@ status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
         return -EFAULT;
       }
       return task_event_attach(target,current_task(),&te_ctl);
+    case SYS_PR_CTL_SET_PERTASK_DATA:
+      if( !valid_user_address(arg) ) {
+        return -EFAULT;
+      }
+      return arch_process_context_control(target,SYS_PR_CTL_SET_PERTASK_DATA,
+                                          arg);
   }
   return -EINVAL;
 }
@@ -232,6 +238,10 @@ static bool __check_task_attrs(task_creation_attrs_t *attrs)
 
   if( ea->arg ) {
     valid *=valid_user_address(ea->arg);
+  }
+
+  if( ea->per_task_data ) {
+    valid *=valid_user_address(ea->per_task_data);
   }
 
   return valid;
