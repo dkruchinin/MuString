@@ -57,13 +57,11 @@
 #define LOCK_TASK_STRUCT(t) spinlock_lock(&t->lock)
 #define UNLOCK_TASK_STRUCT(t) spinlock_unlock(&t->lock)
 
-/*   */
-#define LOCK_TASK_CHILDS(t) spinlock_lock(&t->child_lock)
-#define UNLOCK_TASK_CHILDS(t) spinlock_unlock(&t->child_lock)
+#define LOCK_TASK_CHILDS(t) spinlock_lock(&(t)->child_lock) 
+#define UNLOCK_TASK_CHILDS(t) spinlock_unlock(&(t)->child_lock)
 
 #define LOCK_TASK_MEMBERS(t) spinlock_lock(&t->member_lock)
 #define UNLOCK_TASK_MEMBERS(t) spinlock_unlock(&t->member_lock)
-
 
 typedef uint32_t time_slice_t;
 
@@ -98,6 +96,7 @@ struct __userspace_events_data;
 struct __task_ipc_priv;
 struct __task_mutex_locks;
 struct __task_sync_data;
+struct __mutex;
 
 /* Per-task signal descriptors. */
 struct __sighandlers;
@@ -169,7 +168,7 @@ typedef struct __task_struct {
   task_limits_t *limits;
 
   /* Lock for protecting changing and outer access the following fields:
-   *   ipc,ipc_priv,limits
+   * ipc,ipc_priv,limits
    */
   spinlock_t member_lock;
 
@@ -312,6 +311,7 @@ void cleanup_thread_data(void *t,ulong_t arg);
 #define set_task_flags(t,f) ((t)->flags |= (f))
 #define check_task_flags(t,f) ((t)->flags & (f) )
 #define set_and_check_task_flag(t,fb) (arch_bit_test_and_set(&(t)->flags,(fb)))
+#define clear_task_flag(t,f) ((t)->flags &= ~(f))
 
 #define ARCH_CTX_UWORS_SIGNALS_BIT_IDX  0
 #define ARCH_CTX_UWORS_DISINT_REQ_BIT_IDX  1

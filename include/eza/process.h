@@ -79,7 +79,11 @@ void spawn_percpu_threads(void);
 
 #define EXITCODE(s,ec) ((s))
 
-void do_exit(int code);
+typedef enum {
+  EF_DISINTEGRATE=0x1,
+} exit_flags_t;
+
+void do_exit(int code,ulong_t flags);
 
 void perform_disintegrate_work(void);
 

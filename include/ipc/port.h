@@ -25,6 +25,7 @@
 #define __IPC_PORT__
 
 #include <eza/arch/types.h>
+#include <eza/mutex.h>
 #include <eza/task.h>
 #include <eza/spinlock.h>
 #include <eza/arch/atomic.h>

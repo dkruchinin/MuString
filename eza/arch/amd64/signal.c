@@ -91,7 +91,7 @@ static void __perform_default_action(int sig)
   kprintf( ">>>>>>> DEFAULT ACTION FOR %d: ",sig );
   if( sm & LETHAL_SIGNALS ) {
     kprintf( "TERMINATE PROCESS\n" );
-    do_exit(EXITCODE(sig,0));
+    do_exit(EXITCODE(sig,0),0);
   }
   kprintf( "IGNORE\n" );
   for(;;);
