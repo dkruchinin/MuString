@@ -32,6 +32,7 @@
 #include <eza/limits.h>
 #include <eza/tevent.h>
 #include <eza/sigqueue.h>
+#include <eza/mutex.h>
 
 #define INVALID_PID  ((pid_t)~0) 
 /* TODO: [mt] Manage NUM_PIDS properly ! */
@@ -148,7 +149,7 @@ typedef struct __task_struct {
   /* Children/threads - related stuff. */
   struct __task_struct *group_leader;
   spinlock_t child_lock;
-  list_head_t children,threads; 
+  list_head_t children,threads;
   list_node_t child_list;
 
   /* Scheduler-related stuff. */

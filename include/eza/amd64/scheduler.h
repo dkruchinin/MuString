@@ -33,6 +33,7 @@
 #include <eza/arch/current.h>
 #include <eza/smp.h>
 #include <eza/arch/mm_types.h>
+#include <eza/task.h>
 
 static inline cpu_id_t cpu_id(void)
 {
