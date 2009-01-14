@@ -259,9 +259,11 @@ void do_exit(int code,ulong_t flags,ulong_t exitval)
          */
         event_yield(&exiter->reinc_event);
 
-        /* OK, reincarnation complete. So recalculate pending signals and return
+        /* OK, reincarnation complete.
+         * So leave invisible mode, recalculate pending signals and return
          * to let the new process to execute.
          */
+        __clear_exiting_flag(exiter);
         update_pending_signals(exiter);
         return;
       }

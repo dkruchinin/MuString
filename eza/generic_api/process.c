@@ -83,7 +83,7 @@ task_t *lookup_task(pid_t pid, ulong_t flags)
 {
   tid_t tid;
   bool thread;
-  task_t *task=NULL;
+  task_t *t,*task=NULL;
   list_node_t *n;
 
   if( pid > NUM_PIDS ) {
@@ -99,17 +99,21 @@ task_t *lookup_task(pid_t pid, ulong_t flags)
 
     LOCK_PID_HASH_LEVEL_R(l);
     list_for_each(&pid_to_struct_hash[l],n) {
-      task_t *t = container_of(n,task_t,pid_list);
+      t=container_of(n,task_t,pid_list);
       if(t->pid == pid) {
-        if( t->state != TASK_STATE_ZOMBIE ||
-            (t->state == TASK_STATE_ZOMBIE && (flags & LOOKUP_ZOMBIES) ) ) {
-          grab_task_struct(t);
-          task=t;
-          break;
-        }
+        grab_task_struct(t);
+        task=t;
+        break;
       }
     }
     UNLOCK_PID_HASH_LEVEL_R(l);
+
+    /* Now we should check for task's invisibility.
+     * To avoid double-locking, we perform all task-related checks later.
+     */
+    if( task && !thread ) {
+      goto found_something;
+    }
   }
 
   if( task && thread ) {
@@ -117,7 +121,7 @@ task_t *lookup_task(pid_t pid, ulong_t flags)
 
     LOCK_TASK_CHILDS(task);
     list_for_each(&task->threads,n) {
-      task_t *t = container_of(n,task_t,child_list);
+      t=container_of(n,task_t,child_list);
       if(t->tid == tid) {
         grab_task_struct(t);
         target=t;
@@ -130,6 +134,30 @@ task_t *lookup_task(pid_t pid, ulong_t flags)
     task=target;
   }
 
+found_something:
+  if( task ) {
+    t=NULL;
+
+    LOCK_TASK_STRUCT(task);
+    if( task->state == TASK_STATE_ZOMBIE ) {
+      if( flags & LOOKUP_ZOMBIES ) {
+        t=task;
+      }
+    } else if( check_task_flags(task,TF_EXITING) ||
+               check_task_flags(task,TF_DISINTEGRATING) ) {
+      if( flags & LOOKUP_ZOMBIES ) {
+        t=task;
+      }
+    } else {
+      t=task;
+    }
+    UNLOCK_TASK_STRUCT(task);
+
+    if( !t ) {
+      release_task_struct(task);
+    }
+    task=t;
+  }
   return task;
 }
 
@@ -278,8 +306,24 @@ static status_t __reincarnate_task(task_t *target,ulong_t arg)
         r=arch_process_context_control(target,SYS_PR_CTL_REINCARNATE_TASK,
                                        (ulong_t)&attrs);
         if( !r ) {
-          /* OK, task context was restored, so we can activate the task. */
-          event_raise(&target->reinc_event);
+          /* OK, task context was restored, so we can activate the task.
+           * But first make sure we're not performing concurrent reincarnation
+           * requests.
+           */
+          LOCK_TASK_STRUCT(target);
+          if( target->terminator == current_task() &&
+              check_task_flags(target,TF_DISINTEGRATING) ) {
+            target->terminator=NULL;
+            clear_task_flag(target,TF_DISINTEGRATING);
+            r=0;
+          } else {
+            r=-EBUSY;
+          }
+          UNLOCK_TASK_STRUCT(target);
+
+          if( !r ) {
+            event_raise(&target->reinc_event);
+          }
         }
       }
     }
@@ -341,6 +385,11 @@ status_t sys_task_control(pid_t pid, ulong_t cmd, ulong_t arg)
     if( cmd == SYS_PR_CTL_DISINTEGRATE_TASK ) {
       return -EINVAL;
     }
+  }
+
+  /* Only reincarnation can target zombies. */
+  if( cmd == SYS_PR_CTL_REINCARNATE_TASK ) {
+    lookup_flags |= LOOKUP_ZOMBIES;
   }
 
   if( (task=lookup_task(pid,lookup_flags)) == NULL ) {
