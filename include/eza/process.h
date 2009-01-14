@@ -84,7 +84,7 @@ typedef enum {
   EF_DISINTEGRATE=0x1,
 } exit_flags_t;
 
-void do_exit(int code,ulong_t flags);
+void do_exit(int code,ulong_t flags,ulong_t exitval);
 
 void perform_disintegrate_work(void);
 

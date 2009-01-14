@@ -174,9 +174,8 @@ status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
   return r;
 }
 
-static bool __check_task_attrs(task_creation_attrs_t *attrs)
+static bool __check_task_exec_attrs(exec_attrs_t *ea)
 {
-  exec_attrs_t *ea=&attrs->exec_attrs;
   bool valid;
 
   valid=valid_user_address(ea->stack);
@@ -273,12 +272,15 @@ static status_t __reincarnate_task(task_t *target,ulong_t arg)
     if( arg == 0 || copy_from_user(&attrs,arg,sizeof(attrs)) ) {
       r=-EFAULT;
     } else {
-      r=arch_process_context_control(target,SYS_PR_CTL_REINCARNATE_TASK,
-                                     (ulong_t)&attrs);
-      if( !r ) {
-        /* OK, task context was restored, so we can activate the task. */
-        event_raise(&target->reinc_event);
-        kprintf( "CHANGE TASK STATE=%d\n",r );
+      if( !__check_task_exec_attrs(&attrs) ) {
+        r=-EINVAL;
+      } else {
+        r=arch_process_context_control(target,SYS_PR_CTL_REINCARNATE_TASK,
+                                       (ulong_t)&attrs);
+        if( !r ) {
+          /* OK, task context was restored, so we can activate the task. */
+          event_raise(&target->reinc_event);
+        }
       }
     }
   }
@@ -370,7 +372,7 @@ status_t sys_create_task(ulong_t flags,task_creation_attrs_t *a)
     if( copy_from_user(&attrs,a,sizeof(attrs) ) ) {
       return -EFAULT;
     }
-    if( !__check_task_attrs(&attrs) ) {
+    if( !__check_task_exec_attrs(&attrs.exec_attrs) ) {
       return -EINVAL;
     }
     pa=&attrs;

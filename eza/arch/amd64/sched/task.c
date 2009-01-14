@@ -56,10 +56,9 @@ extern void user_fork_path(void);
 /* Per-CPU glabal structure that reflects the most important kernel states. */
 cpu_sched_stat_t PER_CPU_VAR(cpu_sched_stat);
 
-static void __arch_setup_ctx(task_t *newtask,uint64_t rsp,
-                             task_privelege_t priv)
+static void __setup_arch_segment_regs(arch_context_t *ctx,
+                                      task_privelege_t priv)
 {
-  arch_context_t *ctx = (arch_context_t*)&(newtask->arch_context[0]);
   uint64_t fs,es,gs,ds;
 
   if( priv == TPL_KERNEL ) {
@@ -73,14 +72,22 @@ static void __arch_setup_ctx(task_t *newtask,uint64_t rsp,
     gs=es;
     ds=es;
   }
-
-  /* Setup CR3 */
-  ctx->cr3 = _k2p((uintptr_t)pframe_to_virt(newtask->page_dir));
-  ctx->rsp = rsp;
   ctx->fs = fs;
   ctx->es = es;
   ctx->gs = gs;
   ctx->ds = ds;
+}
+
+static void __arch_setup_ctx(task_t *newtask,uint64_t rsp,
+                             task_privelege_t priv)
+{
+  arch_context_t *ctx = (arch_context_t*)&(newtask->arch_context[0]);
+
+  __setup_arch_segment_regs(ctx,priv);
+  
+  /* Setup CR3 */
+  ctx->rsp = rsp;
+  ctx->cr3 = _k2p((uintptr_t)pframe_to_virt(newtask->page_dir));
   ctx->user_rsp = 0;
 
   /* Default TSS value which means: use per-CPU TSS. */
@@ -286,6 +293,21 @@ static void __setup_user_ldt( uintptr_t ldt )
   ldt_dsc->access=AR_PRESENT | AR_DATA | AR_WRITEABLE | (1 << 2) | DPL_USPACE;
 }
 
+static void __apply_task_exec_attrs(regs_t *regs,exec_attrs_t *exec_attrs,
+                                    arch_context_t *task_ctx)
+{
+  if( exec_attrs->stack ) {
+    regs->int_frame.old_rsp=exec_attrs->stack;
+  }
+  if( exec_attrs->entrypoint ) {
+    regs->int_frame.rip=exec_attrs->entrypoint;
+  }
+  if( exec_attrs->arg ) {
+    regs->gpr_regs.rdi=exec_attrs->arg;
+  }
+  task_ctx->per_task_data=exec_attrs->per_task_data;
+}
+
 status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
                                  task_privelege_t priv,task_t *parent,
                                  task_creation_attrs_t *attrs)
@@ -352,16 +374,7 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
 
   /* Process attributes, if any. */
   if( attrs ) {
-    if( attrs->exec_attrs.stack ) {
-      regs->int_frame.old_rsp=attrs->exec_attrs.stack;
-    }
-    if( attrs->exec_attrs.entrypoint ) {
-      regs->int_frame.rip=attrs->exec_attrs.entrypoint;
-    }
-    if( attrs->exec_attrs.arg ) {
-      regs->gpr_regs.rdi=attrs->exec_attrs.arg;
-    }
-    task_ctx->per_task_data=attrs->exec_attrs.per_task_data;
+    __apply_task_exec_attrs(regs,&attrs->exec_attrs,task_ctx);
   }
 
   return 0;
@@ -369,9 +382,11 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
 
 status_t arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
 {
-  regs_t *regs = (regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
-  status_t r = 0;
+  regs_t *regs=(regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
+  status_t r=0;
   arch_context_t *arch_ctx;
+  exec_attrs_t *attrs;
+  ulong_t l;
 
   switch( cmd ) {
     case SYS_PR_CTL_SET_ENTRYPOINT:
@@ -406,6 +421,18 @@ status_t arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
       }
       break;
     case SYS_PR_CTL_REINCARNATE_TASK:
+      attrs=(exec_attrs_t *)arg;
+      arch_ctx=(arch_context_t*)&task->arch_context[0];
+
+      /* Reset hardware context. */
+      __setup_arch_segment_regs(arch_ctx,TPL_USER);
+      __setup_user_task_context(task);
+      __apply_task_exec_attrs(regs,attrs,arch_ctx);
+
+      /* Setup XMM context. */
+      l=((ulong_t)regs-512) & 0xfffffffffffffff0;
+      memset( (char *)l, 0, 512 );
+
       break;
     default:
       r=-EINVAL;

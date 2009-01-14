@@ -119,7 +119,7 @@ static void __exit_resources(task_t *exiter,ulong_t flags)
 
 #define __UNUSABLE_PTR (void *)0x007
 
-void do_exit(int code,ulong_t flags)
+void do_exit(int code,ulong_t flags,ulong_t exitval)
 {
   task_t *exiter=current_task();
   list_node_t *ln;
@@ -140,9 +140,11 @@ void do_exit(int code,ulong_t flags)
            cpu_id() );
   }
 
+  /* Voila ! We're invisible now ! */
   __set_exiting_flag(exiter);
+
+  /* Only threads and not-terminated processes become zombies. */
   if( !(flags & EF_DISINTEGRATE) || is_thread(exiter) ) {
-    /* It's good to be undead ! */
     zombify_task(exiter);
   }
 
@@ -152,15 +154,15 @@ void do_exit(int code,ulong_t flags)
     task_event_notify(TASK_EVENT_TERMINATION);
   }
 
-  __exit_ipc(exiter);
+  /* Perform general exit()-related works. */
   __exit_mm(exiter);
 
-  if( !is_thread(exiter) ) {
+  if( !is_thread(exiter) ) { /* All process-related works are performed here. */
     tg_leader_private_t *priv=exiter->tg_priv;
 
-    /* All process-related works are performed here. */
     if( !(flags & EF_DISINTEGRATE) ) {
       __exit_limits(exiter);
+      __exit_ipc(exiter);
     }
 
     LOCK_TASK_CHILDS(exiter);
@@ -184,36 +186,30 @@ void do_exit(int code,ulong_t flags)
         }
         UNLOCK_TASK_STRUCT(thread);
 
-        kprintf( "[F]: Sending disintegration request to 0x%X.\n", thread->tid );
         set_task_disintegration_request(thread);
         activate_task(thread);
-        kprintf( "[F]: Done !\n" );
       }
 
+      /* Prepare threads termination event. */
       event_initialize(&priv->ce.e);
       event_set_task(&priv->ce.e,exiter);
       UNLOCK_TASK_CHILDS(exiter);
 
+      /* Clear any pending extra termination requests. */
       clear_task_disintegration_request(exiter);
 
-      kprintf("[F]: Waiting for all our threads to exit.\n" );
+      /* Wait for all out threads to terminate. */
       event_yield(&priv->ce.e);
-      kprintf("[F]: Done !\n");
     } else {
       /* No threads. */
       UNLOCK_TASK_CHILDS(exiter);
     }
     /* After we have terminated all our threads, we should notify our parent. */
-  } else {
-    /* All thread-related works are performed here.
-     */
+  } else { /* All thread-related works are performed here. */
     countered_event_t *ce;
 
     __exit_limits(exiter);
-
-    kprintf("** [0x%X] Thread is exiting ! N=%p, P=%p\n",
-            exiter->tid,exiter->jointed.head.next,
-            exiter->jointed.head.next);
+    __exit_ipc(exiter);
 
     list_init_head(&plist);
     LOCK_TASK_STRUCT(exiter);
@@ -251,28 +247,29 @@ void do_exit(int code,ulong_t flags)
 
   if( !is_thread(exiter) ) {
     if( flags & EF_DISINTEGRATE ) {
+      /* Prepare the final reincarnation event. */
       event_initialize(&exiter->reinc_event);
       event_set_task(&exiter->reinc_event,exiter);
 
       if( !__notify_disintegration_done(exiter->uworks_data.disintegration_descr,0) ) {
         /* OK, folks: for now we have no attached resources and userspace.
          * So we can't return from syscall until the process that initiated our
-         * disintegration reconstrucs our userspace. So sleep until it change
-         * our state.
+         * disintegration reconstrucs our userspace. So sleep until it has changed
+         * our state via 'SYS_PR_CTL_REINCARNATE_TASK'.
          */
-        kprintf("[F]: WAITING FOR REINCARNATION TO COMPLETE (%d) !\n",
-                exiter->pid);
-        kprintf("[F]: REINCARNATION COMPLETE ! %d\n",
-                event_yield(&exiter->reinc_event));
-        for(;;);
+        event_yield(&exiter->reinc_event);
+
+        /* OK, reincarnation complete. So recalculate pending signals and return
+         * to let the new process to execute.
+         */
+        update_pending_signals(exiter);
         return;
       }
-      /* In case of errors just fallthrough and perform real exit. */
+      /* In case of errors just fallthrough and deattach from scheduler. */
     }
   }
 
-  kprintf("** EXITING SCHEDULER FOR 0x%X\n",
-          exiter->tid);
+  /* Bye-bye task. */
   __exit_scheduler(exiter);
   panic( "do_exit(): zombie task <%d:%d> is still running !\n",
          exiter->pid, exiter->tid);
@@ -280,7 +277,7 @@ void do_exit(int code,ulong_t flags)
 
 void sys_exit(int code)
 {
-  do_exit(code,0);
+  do_exit(code,0,0);
 }
 
 void sys_thread_exit(int code)
@@ -290,5 +287,5 @@ void sys_thread_exit(int code)
 void perform_disintegrate_work(void)
 {
   kprintf("** DISINTEGRATING TASK 0x%X\n",current_task()->tid);
-  do_exit(0,EF_DISINTEGRATE);
+  do_exit(0,EF_DISINTEGRATE,0);
 }

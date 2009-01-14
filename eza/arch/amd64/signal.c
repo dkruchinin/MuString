@@ -91,7 +91,7 @@ static void __perform_default_action(int sig)
   kprintf( ">>>>>>> DEFAULT ACTION FOR %d: ",sig );
   if( sm & LETHAL_SIGNALS ) {
     kprintf( "TERMINATE PROCESS\n" );
-    do_exit(EXITCODE(sig,0),0);
+    do_exit(EXITCODE(sig,0),0,0);
   }
   kprintf( "IGNORE\n" );
   for(;;);
@@ -245,11 +245,14 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
   if( uworks & ARCH_CTX_UWORKS_DISINT_REQ_MASK ) {
     perform_disintegrate_work();
 
-    /* Only main threads will return to finalize their reborn. */
-    return;
+    /* Only main threads will return to finalize their reborn.
+     * There can be some signals waiting for delivery, so take it
+     * into account.
+     */
+    uworks=read_task_pending_uworks(current_task());
   }
 
-  /* First, check for pending disintegration requests. */
+  /* Next, check for pending signals. */
   if( uworks & ARCH_CTX_UWORKS_SIGNALS_MASK ) {
     kprintf("[UWORKS]: Pending signals: 0x%X\n",
             current_task()->siginfo.pending);
