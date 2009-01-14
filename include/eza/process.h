@@ -37,6 +37,7 @@
 #define SYS_PR_CTL_ADD_EVENT_LISTENER  0x4
 #define SYS_PR_CTL_SET_PERTASK_DATA    0x5
 #define SYS_PR_CTL_DISINTEGRATE_TASK   0x6  /* Very strong spell. */
+#define SYS_PR_CTL_REINCARNATE_TASK    0x7  /* Another very strong spell. */
 
 #define LOOKUP_ZOMBIES  0x1
 

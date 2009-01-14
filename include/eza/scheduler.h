@@ -185,9 +185,9 @@ static inline bool is_cpu_online(cpu_id_t cpu)
 
 #define cpu_affinity_ok(task,c) ( ((task)->cpu_affinity_mask & (1<<(c))) && is_cpu_online((c)) )
 
-#define activate_task(t) sched_change_task_state(t,TASK_STATE_RUNNABLE)
-#define stop_task(t) sched_change_task_state(t,TASK_STATE_STOPPED)
-#define suspend_task(t) sched_change_task_state(t,TASK_STATE_SUSPENDED)
+#define activate_task(t) sched_change_task_state((t),TASK_STATE_RUNNABLE)
+#define stop_task(t) sched_change_task_state((t),TASK_STATE_STOPPED)
+#define suspend_task(t) sched_change_task_state((t),TASK_STATE_SUSPENDED)
 
 #endif
 

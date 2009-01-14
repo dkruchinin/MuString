@@ -241,10 +241,15 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
   kprintf("[UWORKS]: UWORKS=0x%X\n",
           uworks);
 
+  /* First, check for pending disintegration requests. */
   if( uworks & ARCH_CTX_UWORKS_DISINT_REQ_MASK ) {
     perform_disintegrate_work();
+
+    /* Only main threads will return to finalize their reborn. */
+    return;
   }
 
+  /* First, check for pending disintegration requests. */
   if( uworks & ARCH_CTX_UWORKS_SIGNALS_MASK ) {
     kprintf("[UWORKS]: Pending signals: 0x%X\n",
             current_task()->siginfo.pending);

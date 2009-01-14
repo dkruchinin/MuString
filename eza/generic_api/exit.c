@@ -80,9 +80,10 @@ static void __exit_mm(task_t *exiter)
 {
 }
 
-static void __notify_disintegration_done(disintegration_descr_t *dreq,
-                                         ulong_t status)
+static int __notify_disintegration_done(disintegration_descr_t *dreq,
+                                        ulong_t status)
 {
+  int r=-EINVAL;
   disintegration_req_packet_t *p;
 
   if( dreq ) {
@@ -91,10 +92,11 @@ static void __notify_disintegration_done(disintegration_descr_t *dreq,
     p->pid=current_task()->pid;
     p->status=status;
 
-    ipc_port_send_iov(dreq->port,dreq->msg,false,NULL,0,0);
+    r=ipc_port_send_iov(dreq->port,dreq->msg,false,NULL,0,0);
     __ipc_put_port(dreq->port);
     memfree(dreq);
   }
+  return r > 0 ? 0 : r;
 }
 
 static void __flush_pending_uworks(task_t *exiter)
@@ -106,15 +108,22 @@ static void __flush_pending_uworks(task_t *exiter)
   }
 }
 
-static void __exit_resources(task_t *exiter)
+static void __exit_resources(task_t *exiter,ulong_t flags)
 {
-  /* Remove all our listeners. */
-  exit_task_events(exiter);
+  if( !(flags & EF_DISINTEGRATE) ) {
+    /* Remove all our listeners. */
+    exit_task_events(exiter);
+  }
 }
+
+#define __UNUSABLE_PTR (void *)0x007
 
 void do_exit(int code,ulong_t flags)
 {
   task_t *exiter=current_task();
+  list_node_t *ln;
+  list_head_t plist;
+  int i;
 
   if( !exiter->pid ) {
     panic( "do_exit(): Exiting from the idle task on CPU N%d !\n",
@@ -131,78 +140,134 @@ void do_exit(int code,ulong_t flags)
            cpu_id() );
   }
 
-  if( !(flags & EF_DISINTEGRATE) ) {
-    /* It's good to be undead ! */
-    zombify_task(exiter);
-  } else {
-    /* It's good to be just born ! */
-    LOCK_TASK_STRUCT(exiter);
-    exiter->state=TASK_STATE_JUST_BORN;
-    UNLOCK_TASK_STRUCT(exiter);
-  }
-
+  /* It's good to be undead ! */
+  zombify_task(exiter);
   __set_exiting_flag(exiter);
 
   /* Flush any pending uworks. */
   if( !(flags & EF_DISINTEGRATE) ) {
     __flush_pending_uworks(exiter);
-  }
-
-  /* Notify listeners. */
-  if( !(flags & EF_DISINTEGRATE) ) {
     task_event_notify(TASK_EVENT_TERMINATION);
-    __exit_limits(exiter);
   }
 
   __exit_ipc(exiter);
   __exit_mm(exiter);
 
   if( !is_thread(exiter) ) {
-    siginfo_t siginfo;
     tg_leader_private_t *priv=exiter->tg_priv;
 
-    LOCK_TASK_CHILDS(exiter);
-    kprintf( "[XXX]: Threads %d\n", priv->num_threads );
-    if( priv->num_threads ) { /* Terminate all process's threads. */
-      list_node_t *ln;
+    /* All process-related works are performed here. */
+    if( !(flags & EF_DISINTEGRATE) ) {
+      __exit_limits(exiter);
+    }
 
-      /* First, initialize a counter for the event. */
-      atomic_set(&priv->ce.counter,priv->num_threads);
+    LOCK_TASK_CHILDS(exiter);
+    if( priv->num_threads ) { /* Terminate all process's threads. */
+      /* We can't just initialize event counter to the number of our threads,
+       * because some of our threads might be performing 'exit_thread()' and
+       * might have passed the code that raises such an event - so we can sleep
+       * forever. To avoid this, we will calculate the exact amount of 'valid
+       * for termination' threads.
+       */
+      atomic_set(&priv->ce.counter,0);
       event_reset(&priv->ce.e);
       event_set_task(&priv->ce.e,exiter);
-
-      INIT_SIGINFO_CURR(&siginfo);
-      siginfo.si_signo=SIGKILL;
 
       list_for_each(&exiter->threads,ln) {
         task_t *thread=container_of(ln,task_t,child_list);
 
-        LOCK_TASK_STRUCT(thread);
-        thread->cwaiter=&priv->ce;
-        UNLOCK_TASK_STRUCT(thread);
+          LOCK_TASK_STRUCT(thread);
+          if( thread->cwaiter != __UNUSABLE_PTR ) {
+            /* Take this thread into account. */
+            atomic_inc(&priv->ce.counter);
+            thread->cwaiter=&priv->ce;
+          }
+          UNLOCK_TASK_STRUCT(thread);
 
-        kprintf( "[F]: Sending SIGKILL to 0x%X.\n", thread->tid );
-        //send_task_siginfo(exiter,&siginfo,true);
-        kprintf( "[F]: Done !\n" );
+          kprintf( "[F]: Sending disintegration request to 0x%X.\n", thread->tid );
+
+          set_task_disintegration_request(thread);
+          activate_task(thread);
+          
+          kprintf( "[F]: Done !\n" );
       }
+      UNLOCK_TASK_CHILDS(exiter);
+
+      kprintf("[F]: Waiting for all our threads to exit.\n");
+      event_yield(&priv->ce.e);
+      kprintf("[F]: Done !\n");
+    } else {
+      /* No threads. */
+      UNLOCK_TASK_CHILDS(exiter);
     }
-    UNLOCK_TASK_CHILDS(exiter);
+    /* After we have terminated all our threads, we should notify our parent. */
   } else {
-    kprintf("** [0x%X] Thread has exited !\n",
-            exiter->tid);
+    /* All thread-related works are performed here.
+     */
+    countered_event_t *ce;
+
+    __exit_limits(exiter);
+
+    kprintf("** [0x%X] Thread is exiting ! N=%p, P=%p\n",
+            exiter->tid,exiter->jointed.head.next,
+            exiter->jointed.head.next);
+
+    list_init_head(&plist);
+    LOCK_TASK_STRUCT(exiter);
+    list_move2head(&plist,&exiter->jointed);
+    UNLOCK_TASK_STRUCT(exiter);
+
+    /*
+    if( !list_is_empty(&plist) ) {
+      list_for_each(&plist,ln) {
+        jointee_t *j=container_of(ln,jointee_t,l);
+        task_t *target=container_of(j,task_t,jointee);
+
+        //j->u.exit_ptr=NULL;
+        //event_raise(&j->e);
+        kprintf("** [0x%X] [XXX] !\n",exiter->tid);
+      }
+      }
+    */
+
+    /* Next, notify our parent in case he needs it. */
+    LOCK_TASK_STRUCT(exiter);
+    ce=exiter->cwaiter;
+    exiter->cwaiter=__UNUSABLE_PTR; /* We don't wake up anymore ! */
+    UNLOCK_TASK_STRUCT(exiter);
+
+    if( ce ) {
+      countered_event_raise(ce);
+    }
   }
 
-  __exit_resources(exiter);
+  __exit_resources(exiter,flags);
 
-  if( !(flags & EF_DISINTEGRATE) ) {
-    __exit_scheduler(exiter);
-    panic( "do_exit(): zombie task <%d:%d> is still running !\n",
-           exiter->pid, exiter->tid);
-  } else {
-    __clear_exiting_flag(exiter);
-    __notify_disintegration_done(exiter->uworks_data.disintegration_descr,0);
-    for(;;);
+  if( !is_thread(exiter) ) {
+    if( flags & EF_DISINTEGRATE ) {
+      if( !__notify_disintegration_done(exiter->uworks_data.disintegration_descr,0) ) {
+        /* OK, folks: for now we have no attached resources and userspace.
+         * So we can't return from syscall until the process that initiated our
+         * disintegration reconstrucs our userspace. So sleep until it change
+         * our state.
+         */
+        kprintf("[F]: WAITING FOR REINCARNATION TO COMPLETE (%d) !\n",
+                exiter->pid);
+        kprintf("[F]: REINCARNATION COMPLETE ! %d\n",
+                sched_change_task_state_mask(exiter,TASK_STATE_SUSPENDED,
+                                     TASK_STATE_ZOMBIE));
+        for(;;);
+        return;
+      }
+      /* In case of errors just fallthrough and perform real exit. */
+    }
   }
+
+  kprintf("** EXITING SCHEDULER FOR 0x%X\n",
+          exiter->tid);
+  __exit_scheduler(exiter);
+  panic( "do_exit(): zombie task <%d:%d> is still running !\n",
+         exiter->pid, exiter->tid);
 }
 
 void sys_exit(int code)
@@ -216,6 +281,6 @@ void sys_thread_exit(int code)
 
 void perform_disintegrate_work(void)
 {
-  kprintf("** DISINTEGRATING TASK %d\n",current_task()->pid);
+  kprintf("** DISINTEGRATING TASK 0x%X\n",current_task()->tid);
   do_exit(0,EF_DISINTEGRATE);
 }

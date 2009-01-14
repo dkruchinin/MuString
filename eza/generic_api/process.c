@@ -174,6 +174,25 @@ status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
   return r;
 }
 
+static bool __check_task_attrs(task_creation_attrs_t *attrs)
+{
+  exec_attrs_t *ea=&attrs->exec_attrs;
+  bool valid;
+
+  valid=valid_user_address(ea->stack);
+  valid *=valid_user_address(ea->entrypoint);
+
+  if( ea->arg ) {
+    valid *=valid_user_address(ea->arg);
+  }
+
+  if( ea->per_task_data ) {
+    valid *=valid_user_address(ea->per_task_data);
+  }
+
+  return valid;
+}
+
 static status_t __disintegrate_task(task_t *target,ulong_t pnum)
 {
   ipc_gen_port_t *port;
@@ -211,6 +230,7 @@ static status_t __disintegrate_task(task_t *target,ulong_t pnum)
   if( !check_task_flags(target,TF_EXITING)
       && !set_and_check_task_flag(target,__TF_DISINTEGRATION_BIT) ) {
     set_task_disintegration_request(target);
+    target->terminator=current_task();
     target->uworks_data.disintegration_descr=descr;
     r=0;
   } else {
@@ -219,7 +239,7 @@ static status_t __disintegrate_task(task_t *target,ulong_t pnum)
   UNLOCK_TASK_STRUCT(target);
 
   if( !r ) {
-    r=sched_change_task_state(target,TASK_STATE_RUNNABLE);
+    r=activate_task(target);
     if( !r ) {
       return r;
     }
@@ -231,6 +251,39 @@ free_descr:
   memfree(descr);
 put_port:
   __ipc_put_port(port);
+  return r;
+}
+
+static status_t __reincarnate_task(task_t *target,ulong_t arg)
+{
+  exec_attrs_t attrs;
+  status_t r;
+
+  /* Check if target task is a zombie. */
+  LOCK_TASK_STRUCT(target);
+  if( target->state == TASK_STATE_ZOMBIE &&
+      target->terminator == current_task() ) {
+    r=0;
+  } else {
+    r=-EPERM;
+  }
+  UNLOCK_TASK_STRUCT(target);
+
+  if( !r ) {
+    if( arg == 0 || copy_from_user(&attrs,arg,sizeof(attrs)) ) {
+      r=-EFAULT;
+    } else {
+      r=arch_process_context_control(target,SYS_PR_CTL_REINCARNATE_TASK,
+                                     (ulong_t)&attrs);
+      if( !r ) {
+        /* OK, task context was restored, so we can activate the task. */
+        r=sched_change_task_state_mask(target,TASK_STATE_RUNNABLE,
+                                       TASK_STATE_ZOMBIE);
+        kprintf( "CHANGE TASK STATE=%d\n",r );
+      }
+    }
+  }
+
   return r;
 }
 
@@ -271,6 +324,8 @@ status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
         return -EWOULDBLOCK;
       }
       return __disintegrate_task(target,arg);
+    case SYS_PR_CTL_REINCARNATE_TASK:
+      return __reincarnate_task(target,arg);
   }
   return -EINVAL;
 }
@@ -279,6 +334,7 @@ status_t sys_task_control(pid_t pid, ulong_t cmd, ulong_t arg)
 {
   status_t r;
   task_t *task;
+  ulong_t lookup_flags=0;
 
   if( is_tid(pid) ) {
     if( cmd == SYS_PR_CTL_DISINTEGRATE_TASK ) {
@@ -286,7 +342,11 @@ status_t sys_task_control(pid_t pid, ulong_t cmd, ulong_t arg)
     }
   }
 
-  if( (task=pid_to_task(pid)) == NULL ) {
+  if( cmd == SYS_PR_CTL_REINCARNATE_TASK ) {
+    lookup_flags |= LOOKUP_ZOMBIES;
+  }
+
+  if( (task=lookup_task(pid,lookup_flags)) == NULL ) {
     return -ESRCH;
   }
 
@@ -299,25 +359,6 @@ status_t sys_task_control(pid_t pid, ulong_t cmd, ulong_t arg)
 out_release:
   release_task_struct(task);
   return r;
-}
-
-static bool __check_task_attrs(task_creation_attrs_t *attrs)
-{
-  exec_attrs_t *ea=&attrs->exec_attrs;
-  bool valid;
-
-  valid=valid_user_address(ea->stack);
-  valid *=valid_user_address(ea->entrypoint);
-
-  if( ea->arg ) {
-    valid *=valid_user_address(ea->arg);
-  }
-
-  if( ea->per_task_data ) {
-    valid *=valid_user_address(ea->per_task_data);
-  }
-
-  return valid;
 }
 
 status_t sys_create_task(ulong_t flags,task_creation_attrs_t *a)

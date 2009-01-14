@@ -121,6 +121,10 @@ typedef struct __uwork_data {
 typedef struct __jointee {
   event_t e;
   list_node_t l;
+  union {
+    void *exit_ptr;
+    int exit_int;
+  } u;
 } jointee_t;
 
 typedef struct __tg_leader_private {
@@ -186,6 +190,7 @@ typedef struct __task_struct {
   jointee_t jointee;
   list_head_t jointed;
   countered_event_t *cwaiter;
+  struct __task_struct *terminator;
 
   tg_leader_private_t *tg_priv;
 

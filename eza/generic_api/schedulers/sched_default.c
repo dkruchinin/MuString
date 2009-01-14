@@ -477,7 +477,8 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
       case TASK_STATE_SLEEPING:
       case TASK_STATE_SUSPENDED:
         if( task->state == TASK_STATE_RUNNABLE
-            || task->state == TASK_STATE_RUNNING ) {
+            || task->state == TASK_STATE_RUNNING
+            || task->state == TASK_STATE_ZOMBIE ) {
 
           __remove_task_from_array(tdata->array,task);
           sched_data->stats->active_tasks--;

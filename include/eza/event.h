@@ -123,7 +123,7 @@ static inline void event_raise(event_t *event)
   }
 }
 
-static inline void counered_event_raise(countered_event_t *ce)
+static inline void countered_event_raise(countered_event_t *ce)
 {
   if( atomic_dec_and_test(&ce->counter) ) {
     event_raise(&ce->e);

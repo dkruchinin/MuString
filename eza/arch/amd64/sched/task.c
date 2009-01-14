@@ -405,6 +405,8 @@ status_t arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
         r=-EINVAL;
       }
       break;
+    case SYS_PR_CTL_REINCARNATE_TASK:
+      break;
     default:
       r=-EINVAL;
       break;
