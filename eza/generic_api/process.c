@@ -261,8 +261,8 @@ static status_t __reincarnate_task(task_t *target,ulong_t arg)
 
   /* Check if target task is a zombie. */
   LOCK_TASK_STRUCT(target);
-  if( target->state == TASK_STATE_ZOMBIE &&
-      target->terminator == current_task() ) {
+  if( target->terminator == current_task() &&
+      check_task_flags(target,TF_DISINTEGRATING) ) {
     r=0;
   } else {
     r=-EPERM;
@@ -277,8 +277,7 @@ static status_t __reincarnate_task(task_t *target,ulong_t arg)
                                      (ulong_t)&attrs);
       if( !r ) {
         /* OK, task context was restored, so we can activate the task. */
-        r=sched_change_task_state_mask(target,TASK_STATE_RUNNABLE,
-                                       TASK_STATE_ZOMBIE);
+        event_raise(&target->reinc_event);
         kprintf( "CHANGE TASK STATE=%d\n",r );
       }
     }
@@ -340,10 +339,6 @@ status_t sys_task_control(pid_t pid, ulong_t cmd, ulong_t arg)
     if( cmd == SYS_PR_CTL_DISINTEGRATE_TASK ) {
       return -EINVAL;
     }
-  }
-
-  if( cmd == SYS_PR_CTL_REINCARNATE_TASK ) {
-    lookup_flags |= LOOKUP_ZOMBIES;
   }
 
   if( (task=lookup_task(pid,lookup_flags)) == NULL ) {

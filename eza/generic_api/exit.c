@@ -32,6 +32,7 @@
 #include <eza/process.h>
 #include <ipc/gen_port.h>
 #include <eza/signal.h>
+#include <eza/event.h>
 
 #define __set_exiting_flag(exiter)              \
   LOCK_TASK_STRUCT((exiter));                   \
@@ -123,7 +124,6 @@ void do_exit(int code,ulong_t flags)
   task_t *exiter=current_task();
   list_node_t *ln;
   list_head_t plist;
-  int i;
 
   if( !exiter->pid ) {
     panic( "do_exit(): Exiting from the idle task on CPU N%d !\n",
@@ -140,9 +140,11 @@ void do_exit(int code,ulong_t flags)
            cpu_id() );
   }
 
-  /* It's good to be undead ! */
-  zombify_task(exiter);
   __set_exiting_flag(exiter);
+  if( !(flags & EF_DISINTEGRATE) || is_thread(exiter) ) {
+    /* It's good to be undead ! */
+    zombify_task(exiter);
+  }
 
   /* Flush any pending uworks. */
   if( !(flags & EF_DISINTEGRATE) ) {
@@ -155,7 +157,6 @@ void do_exit(int code,ulong_t flags)
 
   if( !is_thread(exiter) ) {
     tg_leader_private_t *priv=exiter->tg_priv;
-    event_t eee;
 
     /* All process-related works are performed here. */
     if( !(flags & EF_DISINTEGRATE) ) {
@@ -179,30 +180,24 @@ void do_exit(int code,ulong_t flags)
         if( thread->cwaiter != __UNUSABLE_PTR ) {
           /* Take this thread into account. */
           atomic_inc(&priv->ce.counter);
-          kprintf( "+++++++\n" );
           thread->cwaiter=&priv->ce;
         }
         UNLOCK_TASK_STRUCT(thread);
 
         kprintf( "[F]: Sending disintegration request to 0x%X.\n", thread->tid );
-
         set_task_disintegration_request(thread);
         activate_task(thread);
-
         kprintf( "[F]: Done !\n" );
       }
 
-      //event_initialize(&priv->ce.e);
-      //event_set_task(&priv->ce.e,exiter);
+      event_initialize(&priv->ce.e);
+      event_set_task(&priv->ce.e,exiter);
       UNLOCK_TASK_CHILDS(exiter);
 
-      event_initialize(&eee);
-      event_set_task(&eee,current_task());
+      clear_task_disintegration_request(exiter);
 
-      kprintf( "[F]: ATOMIC=%d\n",in_atomic() );
-      kprintf("[F]: Waiting for all our threads to exit: %d.\n",
-              event_yield(&eee));
-      kprintf( "[F]: ATOMIC=%d\n",in_atomic() );
+      kprintf("[F]: Waiting for all our threads to exit.\n" );
+      event_yield(&priv->ce.e);
       kprintf("[F]: Done !\n");
     } else {
       /* No threads. */
@@ -251,10 +246,14 @@ void do_exit(int code,ulong_t flags)
     }
   }
 
+  /* Continue task termination. */
   __exit_resources(exiter,flags);
 
   if( !is_thread(exiter) ) {
     if( flags & EF_DISINTEGRATE ) {
+      event_initialize(&exiter->reinc_event);
+      event_set_task(&exiter->reinc_event,exiter);
+
       if( !__notify_disintegration_done(exiter->uworks_data.disintegration_descr,0) ) {
         /* OK, folks: for now we have no attached resources and userspace.
          * So we can't return from syscall until the process that initiated our
@@ -264,8 +263,7 @@ void do_exit(int code,ulong_t flags)
         kprintf("[F]: WAITING FOR REINCARNATION TO COMPLETE (%d) !\n",
                 exiter->pid);
         kprintf("[F]: REINCARNATION COMPLETE ! %d\n",
-                sched_change_task_state_mask(exiter,TASK_STATE_SUSPENDED,
-                                     TASK_STATE_ZOMBIE));
+                event_yield(&exiter->reinc_event));
         for(;;);
         return;
       }

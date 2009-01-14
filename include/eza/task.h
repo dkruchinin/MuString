@@ -191,6 +191,7 @@ typedef struct __task_struct {
   list_head_t jointed;
   countered_event_t *cwaiter;
   struct __task_struct *terminator;
+  event_t reinc_event;
 
   tg_leader_private_t *tg_priv;
 
