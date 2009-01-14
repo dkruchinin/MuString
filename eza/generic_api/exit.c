@@ -188,7 +188,7 @@ void do_exit(int code,ulong_t flags)
 
         set_task_disintegration_request(thread);
         activate_task(thread);
-          
+
         kprintf( "[F]: Done !\n" );
       }
 
