@@ -155,6 +155,7 @@ void do_exit(int code,ulong_t flags)
 
   if( !is_thread(exiter) ) {
     tg_leader_private_t *priv=exiter->tg_priv;
+    event_t eee;
 
     /* All process-related works are performed here. */
     if( !(flags & EF_DISINTEGRATE) ) {
@@ -170,31 +171,38 @@ void do_exit(int code,ulong_t flags)
        * for termination' threads.
        */
       atomic_set(&priv->ce.counter,0);
-      event_reset(&priv->ce.e);
-      event_set_task(&priv->ce.e,exiter);
 
       list_for_each(&exiter->threads,ln) {
         task_t *thread=container_of(ln,task_t,child_list);
 
-          LOCK_TASK_STRUCT(thread);
-          if( thread->cwaiter != __UNUSABLE_PTR ) {
-            /* Take this thread into account. */
-            atomic_inc(&priv->ce.counter);
-            thread->cwaiter=&priv->ce;
-          }
-          UNLOCK_TASK_STRUCT(thread);
+        LOCK_TASK_STRUCT(thread);
+        if( thread->cwaiter != __UNUSABLE_PTR ) {
+          /* Take this thread into account. */
+          atomic_inc(&priv->ce.counter);
+          kprintf( "+++++++\n" );
+          thread->cwaiter=&priv->ce;
+        }
+        UNLOCK_TASK_STRUCT(thread);
 
-          kprintf( "[F]: Sending disintegration request to 0x%X.\n", thread->tid );
+        kprintf( "[F]: Sending disintegration request to 0x%X.\n", thread->tid );
 
-          set_task_disintegration_request(thread);
-          activate_task(thread);
+        set_task_disintegration_request(thread);
+        activate_task(thread);
           
-          kprintf( "[F]: Done !\n" );
+        kprintf( "[F]: Done !\n" );
       }
+
+      //event_initialize(&priv->ce.e);
+      //event_set_task(&priv->ce.e,exiter);
       UNLOCK_TASK_CHILDS(exiter);
 
-      kprintf("[F]: Waiting for all our threads to exit.\n");
-      event_yield(&priv->ce.e);
+      event_initialize(&eee);
+      event_set_task(&eee,current_task());
+
+      kprintf( "[F]: ATOMIC=%d\n",in_atomic() );
+      kprintf("[F]: Waiting for all our threads to exit: %d.\n",
+              event_yield(&eee));
+      kprintf( "[F]: ATOMIC=%d\n",in_atomic() );
       kprintf("[F]: Done !\n");
     } else {
       /* No threads. */
@@ -231,10 +239,12 @@ void do_exit(int code,ulong_t flags)
     */
 
     /* Next, notify our parent in case he needs it. */
+    LOCK_TASK_CHILDS(exiter->group_leader);
     LOCK_TASK_STRUCT(exiter);
     ce=exiter->cwaiter;
     exiter->cwaiter=__UNUSABLE_PTR; /* We don't wake up anymore ! */
     UNLOCK_TASK_STRUCT(exiter);
+    UNLOCK_TASK_CHILDS(exiter->group_leader);
 
     if( ce ) {
       countered_event_raise(ce);
