@@ -173,12 +173,15 @@ static void __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
     task->ppid = parent->pid;
 
     if( (flags & CLONE_MM) && priv != TPL_KERNEL ) {
+      task->group_leader=parent->group_leader;
       LOCK_TASK_CHILDS(task->group_leader);
+      LOCK_TASK_STRUCT(task->group_leader);
+
+      parent->group_leader->tg_priv->num_threads++;
       list_add2tail(&parent->group_leader->threads,
                     &task->child_list);
+      UNLOCK_TASK_STRUCT(task->group_leader);
       UNLOCK_TASK_CHILDS(task->group_leader);
-
-      task->group_leader=parent->group_leader;
     } else {
       LOCK_TASK_CHILDS(parent);
       list_add2tail(&parent->children,
@@ -207,12 +210,21 @@ void cleanup_thread_data(void *t,ulong_t arg)
   free_kernel_stack(task->kernel_stack.id);
 }
 
-static task_t *__allocate_task_struct(void)
+static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
 {
-  task_t *task=alloc_pages_addr(1,AF_PGEN);
+  task_t *task=alloc_pages_addr(1,AF_PGEN | AF_ZERO);
 
   if( task ) {
-    memset(task,0,PAGE_SIZE);
+    if( !(flags & CLONE_MM) || priv == TPL_KERNEL ) {
+      task->tg_priv=memalloc(sizeof(tg_leader_private_t));
+
+      if( !task->tg_priv ) {
+        free_pages_addr(task);
+        return NULL;
+      }
+
+      memset(task->tg_priv,0,sizeof(tg_leader_private_t));
+    }
 
     list_init_node(&task->pid_list);
     list_init_node(&task->child_list);
@@ -223,9 +235,13 @@ static task_t *__allocate_task_struct(void)
 
     list_init_head(&task->task_events.my_events);
     list_init_head(&task->task_events.listeners);
+    list_init_head(&task->jointed);
+
+    event_initialize(&task->jointee.e);
+    list_init_node(&task->jointee.l);
 
     spinlock_initialize(&task->lock);
-    spinlock_initialize(&task->child_lock);
+    mutex_initialize(&task->child_lock);
     spinlock_initialize(&task->member_lock);
 
     task->flags = 0;
@@ -328,14 +344,14 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
     goto task_create_fault;
   }
 
-  task=__allocate_task_struct();
+  task=__allocate_task_struct(flags,priv);
   if( !task ) {
     goto free_pid;
   }
 
   task->pid=pid;
   task->tid=tid;
-  
+
   /* Create kernel stack for the new task. */
   r = allocate_kernel_stack(&task->kernel_stack);
   if( r != 0 ) {

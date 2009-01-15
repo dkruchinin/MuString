@@ -244,18 +244,17 @@ typedef struct __arch_context_t {
   uint16_t ldt_limit;
 } arch_context_t;
 
-#define ARCH_CTX_UWORS_SIGNALS_BIT_IDX  0
-
-#define arch_set_task_signals_pending(ctx)              \
+#define arch_set_uworks_bit(ctx,bit)                    \
   __asm__ __volatile__(                                 \
-  "bts %0,%1":: "r"(ARCH_CTX_UWORS_SIGNALS_BIT_IDX),    \
+    "bts %0,%1":: "r"((bit)),                           \
   "m" ((((arch_context_t *)(ctx))->uworks))  )
 
-#define arch_clear_task_signals_pending(ctx)              \
+#define arch_clear_uworks_bit(ctx,bit)                    \
   __asm__ __volatile__(                                   \
-    "btr %0,%1":: "r"(ARCH_CTX_UWORS_SIGNALS_BIT_IDX),    \
+    "btr %0,%1":: "r"((bit)),                             \
     "m"(((arch_context_t *)(ctx))->uworks)  )
 
+#define arch_read_pending_uworks(ctx) ((arch_context_t *)(ctx))->uworks
 
 /* Structure that represents GPRs on the stack upon entering
  * kernel mode during a system call.

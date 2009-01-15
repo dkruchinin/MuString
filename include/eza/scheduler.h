@@ -27,19 +27,31 @@
 
 #include <config.h>
 #include <eza/arch/types.h>
-#include <eza/resource.h>
 #include <eza/kstack.h>
 #include <eza/spinlock.h>
 #include <eza/arch/current.h>
 #include <ds/list.h>
 #include <eza/arch/preempt.h>
-#include <eza/task.h>
+
+struct __task_struct;
 
 /* Handler for extra check during the scheduling step.
  * If it returns true, target task will be rescheduled,
  * otherwise - it won't.
  */
 typedef bool (*deferred_sched_handler_t)(void *data);
+
+typedef enum __task_state {
+  TASK_STATE_RUNNING = 0x1,
+  TASK_STATE_RUNNABLE = 0x2,
+  TASK_STATE_JUST_BORN = 0x4,
+  TASK_STATE_SLEEPING = 0x8,   /**< Interruptible sleep. **/
+  TASK_STATE_STOPPED = 0x10,
+  TASK_STATE_SUSPENDED = 0x20,  /**< Non-interruptible sleep. **/
+  TASK_STATE_ZOMBIE = 0x8000,
+} task_state_t;
+
+#define __ALL_TASK_STATE_MASK  0x3F  /**< All possible task states exclude zombies */
 
 /* Abstract scheduler. */
 typedef struct __scheduler {
@@ -48,17 +60,17 @@ typedef struct __scheduler {
   cpu_id_t (*cpus_supported)(void);
   status_t (*add_cpu)(cpu_id_t cpu);
   void (*scheduler_tick)(void);
-  status_t (*add_task)(task_t *task);
-  status_t (*del_task)(task_t *task);
-  status_t (*move_task_to_cpu)(task_t *task,cpu_id_t cpu);
+  status_t (*add_task)(struct __task_struct *task);
+  status_t (*del_task)(struct __task_struct *task);
+  status_t (*move_task_to_cpu)(struct __task_struct *task,cpu_id_t cpu);
   void (*schedule)(void);
   void (*reset)(void);
-  status_t (*change_task_state)(task_t *task,task_state_t state,ulong_t mask);
-  status_t (*change_task_state_deferred)(task_t *task,task_state_t state,
+  status_t (*change_task_state)(struct __task_struct *task,ulong_t state,ulong_t mask);
+  status_t (*change_task_state_deferred)(struct __task_struct *task,ulong_t state,
                                          deferred_sched_handler_t handler,
                                          void *data,ulong_t mask);
-  status_t (*setup_idle_task)(task_t *task);
-  status_t (*scheduler_control)(task_t *task, ulong_t cmd,ulong_t arg);
+  status_t (*setup_idle_task)(struct __task_struct *task);
+  status_t (*scheduler_control)(struct __task_struct *task, ulong_t cmd,ulong_t arg);
 } scheduler_t;
 
 /* Main scheduling policies. */
@@ -86,11 +98,11 @@ void sched_timer_tick(void);
 
 void idle_loop(void);
 
-extern task_t *idle_tasks[CONFIG_NRCPUS];
+extern struct __task_struct *idle_tasks[CONFIG_NRCPUS];
 
-status_t sched_change_task_state_mask(task_t *task,task_state_t state,
+status_t sched_change_task_state_mask(struct __task_struct *task,ulong_t state,
                                       ulong_t mask);
-status_t sched_change_task_state_deferred_mask(task_t *task,task_state_t state,
+status_t sched_change_task_state_deferred_mask(struct __task_struct *task,ulong_t state,
                                                deferred_sched_handler_t handler,void *data,
                                                ulong_t appl_state);
 
@@ -101,11 +113,11 @@ status_t sched_change_task_state_deferred_mask(task_t *task,task_state_t state,
   sched_change_task_state_deferred_mask((task),(state),(hander),(data),      \
                                         __ALL_TASK_STATE_MASK)
 
-status_t sched_add_task(task_t *task);
-status_t sched_del_task(task_t *task);
-status_t sched_setup_idle_task(task_t *task);
+status_t sched_add_task(struct __task_struct *task);
+status_t sched_del_task(struct __task_struct *task);
+status_t sched_setup_idle_task(struct __task_struct *task);
 status_t sched_add_cpu(cpu_id_t cpu);
-status_t sched_move_task_to_cpu(task_t *task,cpu_id_t cpu);
+status_t sched_move_task_to_cpu(struct __task_struct *task,cpu_id_t cpu);
 void update_idle_tick_statistics(scheduler_cpu_stats_t *stats);
 
 extern scheduler_t *get_default_scheduler(void);
@@ -137,7 +149,7 @@ void schedule(void);
 
 status_t sys_yield(void);
 status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
-status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg);
+status_t do_scheduler_control(struct __task_struct *task, ulong_t cmd, ulong_t arg);
 status_t sleep(ulong_t ticks);
 
 #ifdef CONFIG_SMP
@@ -147,11 +159,11 @@ void migration_thread(void *data);
 
 #endif
 
-static inline void grab_task_struct(task_t *t)
+static inline void grab_task_struct(struct __task_struct *t)
 {
 }
 
-static inline void release_task_struct(task_t *t)
+static inline void release_task_struct(struct __task_struct *t)
 {
 }
 
@@ -173,9 +185,9 @@ static inline bool is_cpu_online(cpu_id_t cpu)
 
 #define cpu_affinity_ok(task,c) ( ((task)->cpu_affinity_mask & (1<<(c))) && is_cpu_online((c)) )
 
-#define activate_task(t) sched_change_task_state(t,TASK_STATE_RUNNABLE)
-#define stop_task(t) sched_change_task_state(t,TASK_STATE_STOPPED)
-#define suspend_task(t) sched_change_task_state(t,TASK_STATE_SUSPENDED)
+#define activate_task(t) sched_change_task_state((t),TASK_STATE_RUNNABLE)
+#define stop_task(t) sched_change_task_state((t),TASK_STATE_STOPPED)
+#define suspend_task(t) sched_change_task_state((t),TASK_STATE_SUSPENDED)
 
 #endif
 

@@ -3,8 +3,10 @@
 
 #include <eza/arch/types.h>
 #include <eza/spinlock.h>
-#include <eza/task.h>
 #include <eza/scheduler.h>
+#include <eza/arch/atomic.h>
+
+struct __task_struct;
 
 #define EVENT_OCCURED  0x1
 
@@ -20,11 +22,16 @@ typedef bool (*event_checker_t)(void *priv);
 
 typedef struct __event_t {
   spinlock_t __lock;
-  task_t *task;
+  struct __task_struct *task;
   ulong_t flags;
   void *private_data;
   event_checker_t ev_checker;
 } event_t;
+
+typedef struct __countered_event {
+  atomic_t counter;
+  event_t e;
+} countered_event_t;
 
 #define event_is_active(e)  ((e)->task != NULL)
 
@@ -54,7 +61,7 @@ static inline void event_set_checker(event_t *event,
   UNLOCK_EVENT(event);
 }
 
-static inline void event_set_task(event_t *event,task_t *task)
+static inline void event_set_task(event_t *event,struct __task_struct *task)
 {
   LOCK_EVENT(event);
   event->task = task;
@@ -72,9 +79,10 @@ static bool event_defered_sched_handler(void *data)
   return !(t->flags & EVENT_OCCURED);
 }
 
-static inline void event_yield(event_t *event)
+static inline int event_yield(event_t *event)
 {
-  task_t *t;
+  struct __task_struct *t;
+  status_t r=-EINVAL;
 
   LOCK_EVENT(event);
   t = event->task;
@@ -86,17 +94,18 @@ static inline void event_yield(event_t *event)
       if(!ec) {
         ec=event_defered_sched_handler;
       }
-      sched_change_task_state_deferred(t,TASK_STATE_SLEEPING,ec,event);
+      r=sched_change_task_state_deferred(t,TASK_STATE_SLEEPING,ec,event);
 
       if( !event->ev_checker ) {
         event->flags &= ~EVENT_OCCURED;
       }
   }
+  return r;
 }
 
 static inline void event_raise(event_t *event)
 {
-  task_t *t;
+  struct __task_struct *t;
 
   LOCK_EVENT(event);
   if( !event->ev_checker ) {
@@ -113,6 +122,13 @@ static inline void event_raise(event_t *event)
 
   if( t != NULL) {
     sched_change_task_state(t,TASK_STATE_RUNNABLE);    
+  }
+}
+
+static inline void countered_event_raise(countered_event_t *ce)
+{
+  if( atomic_dec_and_test(&ce->counter) ) {
+    event_raise(&ce->e);
   }
 }
 

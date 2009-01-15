@@ -430,6 +430,8 @@ static inline void __reschedule_task(task_t *t)
   }
 }
 
+int __big_verbose=0;
+
 static status_t __change_task_state(task_t *task,task_state_t new_state,
                                     deferred_sched_handler_t h,void *data,
                                     ulong_t mask)
@@ -478,7 +480,8 @@ static status_t __change_task_state(task_t *task,task_state_t new_state,
       case TASK_STATE_SLEEPING:
       case TASK_STATE_SUSPENDED:
         if( task->state == TASK_STATE_RUNNABLE
-            || task->state == TASK_STATE_RUNNING ) {
+            || task->state == TASK_STATE_RUNNING
+            || task->state == TASK_STATE_ZOMBIE ) {
 
           __remove_task_from_array(tdata->array,task);
           sched_data->stats->active_tasks--;

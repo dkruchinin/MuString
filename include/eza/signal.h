@@ -67,6 +67,7 @@ typedef struct __siginfo {
   int      si_fd;       /* File descriptor */
 } siginfo_t;
 
+
 #define INIT_SIGINFO_CURR(s)  do {              \
   memset((s),0,sizeof(siginfo_t));              \
   (s)->si_pid=current_task()->pid;              \

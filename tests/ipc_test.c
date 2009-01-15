@@ -580,9 +580,9 @@ static void __process_events_test(void *ctx)
 
 #define VECTORER_ID "[VECTORER] "
 
-#define MSG_HEADER_DATA_SIZE  715
-#define MSG_PART_DATA_SIZE    3419
-#define MSG_TAIL_DATA_SIZE   17918
+#define MSG_HEADER_DATA_SIZE  210    //  715
+#define MSG_PART_DATA_SIZE    912    // 3419
+#define MSG_TAIL_DATA_SIZE    300    //17918
 
 typedef struct __message_header {
   uint16_t data_base;
@@ -758,13 +758,15 @@ static void __vectored_messages_thread(void *ctx)
     watchline=(ulong_t*)(__vectored_msg_client_rcv_buf+size);
     *watchline=WL_PATTERN;
 
-    tf->printf(VECTORER_ID "Sending a message consisting of %d parts via %s.\n",
-               parts, (i & 0x1) ? "'sys_port_send_iov()'" : "'sys_port_send_iov_v()'" );
+    tf->printf(VECTORER_ID "Sending a message consisting of %d parts via %s. SIZE=%d\n",
+               parts, (i & 0x1) ? "'sys_port_send_iov()'" : "'sys_port_send_iov_v()'",
+               MESSAGE_SIZE(parts));
     if( i & 0x1 ) {
       r=sys_port_send_iov(channel,snd_iovecs,parts+2,
                           (uintptr_t)__vectored_msg_client_rcv_buf,
                           sizeof(__vectored_msg_client_rcv_buf) );
-      tf->printf(VECTORER_ID"Message was sent: r=%d\n",r );
+      tf->printf(VECTORER_ID"Message was sent: r=%d. RCV BUFSIZE=%d\n",r,
+                 sizeof(__vectored_msg_client_rcv_buf));
       if( r < 0 ) {
         tf->failed();
       }
@@ -772,7 +774,8 @@ static void __vectored_messages_thread(void *ctx)
       __setup_message_iovecs(__vectored_msg_client_rcv_buf,parts,rcv_iovecs);
       r=sys_port_send_iov_v(channel,snd_iovecs,parts+2,
                             rcv_iovecs,parts+2);
-      tf->printf(VECTORER_ID"Message was sent: r=%d\n",r );
+      tf->printf(VECTORER_ID"Message was sent: r=%d. RCV BUFSIZE=%d\n",r,
+                 sizeof(__vectored_msg_client_rcv_buf));
       if( r < 0 ) {
         tf->failed();
       }
@@ -927,11 +930,12 @@ static void __vectored_messages_test(void *ctx)
     watchline=(ulong_t*)(__vectored_msg_server_rcv_buf+size);
     *watchline=WL_PATTERN;
 
-    tf->printf(SERVER_THREAD"Receiving a message that has %d middle parts.\n",
-               parts);
+    tf->printf(SERVER_THREAD"Receiving a message that has %d middle parts. SIZE=%d\n",
+               parts,MESSAGE_SIZE(parts));
     r=sys_port_receive(port,IPC_BLOCKED_ACCESS,(ulong_t)__vectored_msg_server_rcv_buf,
                        sizeof(__vectored_msg_server_rcv_buf),&msg_info);
-    tf->printf(SERVER_THREAD"Vectored message received.\n");
+    tf->printf(SERVER_THREAD"Vectored message received. MESSAGE SIZE=%d\n",
+               msg_info.msg_len);
     __validate_retval(r,0,tf);
     FAIL_ON(!__validate_vectored_message(__vectored_msg_server_rcv_buf,parts,tf),tf);
 

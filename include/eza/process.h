@@ -27,15 +27,32 @@
 #include <eza/task.h>
 #include <eza/arch/types.h>
 #include <kernel/syscalls.h>
+#include <ipc/gen_port.h>
+#include <ipc/port.h>
 
-#define SYS_PR_CTL_SET_ENTRYPOINT 0x0
-#define SYS_PR_CTL_SET_STACK 0x1
-#define SYS_PR_CTL_GET_ENTRYPOINT 0x2
-#define SYS_PR_CTL_GET_STACK 0x3
+#define SYS_PR_CTL_SET_ENTRYPOINT      0x0
+#define SYS_PR_CTL_SET_STACK           0x1
+#define SYS_PR_CTL_GET_ENTRYPOINT      0x2
+#define SYS_PR_CTL_GET_STACK           0x3
 #define SYS_PR_CTL_ADD_EVENT_LISTENER  0x4
 #define SYS_PR_CTL_SET_PERTASK_DATA    0x5
+#define SYS_PR_CTL_DISINTEGRATE_TASK   0x6  /* Very strong spell. */
+#define SYS_PR_CTL_REINCARNATE_TASK    0x7  /* Another very strong spell. */
 
 #define LOOKUP_ZOMBIES  0x1
+
+typedef struct __disintegration_descr_t {
+  ipc_gen_port_t *port;
+  ipc_port_message_t *msg;
+} disintegration_descr_t;
+
+/* Data structure sent after performng 'SYS_PR_CTL_DISINTEGRATE_TASK' request. */
+typedef struct __disintegration_req_packet {
+  pid_t pid;
+  ulong_t status;
+} disintegration_req_packet_t;
+
+#define __DR_EXITED  1 /* Target task exited before disintegrating itself. */
 
 task_t *lookup_task(pid_t pid,ulong_t flags);
 
@@ -63,6 +80,12 @@ void spawn_percpu_threads(void);
 
 #define EXITCODE(s,ec) ((s))
 
-void do_exit(int code);
+typedef enum {
+  EF_DISINTEGRATE=0x1,
+} exit_flags_t;
+
+void do_exit(int code,ulong_t flags,ulong_t exitval);
+
+void perform_disintegrate_work(void);
 
 #endif
