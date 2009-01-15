@@ -117,13 +117,12 @@ static void __exit_resources(task_t *exiter,ulong_t flags)
   }
 }
 
-#define __UNUSABLE_PTR (void *)0x007
-
 void do_exit(int code,ulong_t flags,ulong_t exitval)
 {
   task_t *exiter=current_task();
   list_node_t *ln;
   list_head_t plist;
+  disintegration_descr_t *dreq;
 
   if( !exiter->pid ) {
     panic( "do_exit(): Exiting from the idle task on CPU N%d !\n",
@@ -156,6 +155,9 @@ void do_exit(int code,ulong_t flags,ulong_t exitval)
 
   /* Perform general exit()-related works. */
   __exit_mm(exiter);
+
+  /* Clear any pending extra termination requests. */
+  clear_task_disintegration_request(exiter);
 
   if( !is_thread(exiter) ) { /* All process-related works are performed here. */
     tg_leader_private_t *priv=exiter->tg_priv;
@@ -195,9 +197,6 @@ void do_exit(int code,ulong_t flags,ulong_t exitval)
       event_set_task(&priv->ce.e,exiter);
       UNLOCK_TASK_CHILDS(exiter);
 
-      /* Clear any pending extra termination requests. */
-      clear_task_disintegration_request(exiter);
-
       /* Wait for all out threads to terminate. */
       event_yield(&priv->ce.e);
     } else {
@@ -234,6 +233,11 @@ void do_exit(int code,ulong_t flags,ulong_t exitval)
     LOCK_TASK_STRUCT(exiter);
     ce=exiter->cwaiter;
     exiter->cwaiter=__UNUSABLE_PTR; /* We don't wake up anymore ! */
+
+    /* Remove us from parent's list. */
+    exiter->group_leader->tg_priv->num_threads--;
+    list_del(&exiter->child_list);
+
     UNLOCK_TASK_STRUCT(exiter);
     UNLOCK_TASK_CHILDS(exiter->group_leader);
 
@@ -259,6 +263,11 @@ void do_exit(int code,ulong_t flags,ulong_t exitval)
          */
         event_yield(&exiter->reinc_event);
 
+        /* Tell the world that we can be targeted for disintegration again. */
+        LOCK_TASK_STRUCT(exiter);
+        exiter->uworks_data.disintegration_descr=NULL;
+        UNLOCK_TASK_STRUCT(exiter);
+
         /* OK, reincarnation complete.
          * So leave invisible mode, recalculate pending signals and return
          * to let the new process to execute.
@@ -268,6 +277,21 @@ void do_exit(int code,ulong_t flags,ulong_t exitval)
         return;
       }
       /* In case of errors just fallthrough and deattach from scheduler. */
+    } else {
+      /* Tricky situation: we were targeted for termination _after_ starting
+       * executing logic that invokes 'do_exit()' normally - for example,
+       * during executing 'sys_exit()'. In such a case pending termination
+       * requests will never be acknowledged. So we perform additional check
+       * even for tasks that weren't forced to terminate itself.
+       */
+      LOCK_TASK_STRUCT(exiter);
+      dreq=exiter->uworks_data.disintegration_descr;
+      exiter->uworks_data.disintegration_descr=NULL;
+      UNLOCK_TASK_STRUCT(exiter);
+
+      if( dreq ) {
+        __notify_disintegration_done(dreq,__DR_EXITED);
+      }
     }
   }
 
@@ -288,6 +312,5 @@ void sys_thread_exit(int code)
 
 void perform_disintegrate_work(void)
 {
-  kprintf("** DISINTEGRATING TASK 0x%X\n",current_task()->tid);
   do_exit(0,EF_DISINTEGRATE,0);
 }

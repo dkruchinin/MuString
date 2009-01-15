@@ -255,13 +255,16 @@ static status_t __disintegrate_task(task_t *target,ulong_t pnum)
 
   LOCK_TASK_STRUCT(target);
   if( !check_task_flags(target,TF_EXITING)
-      && !set_and_check_task_flag(target,__TF_DISINTEGRATION_BIT) ) {
-    set_task_disintegration_request(target);
-    target->terminator=current_task();
+      && !check_task_flags(target,TF_DISINTEGRATING) ) {
+
     target->uworks_data.disintegration_descr=descr;
+    target->terminator=current_task();
+    set_task_flags(target,TF_DISINTEGRATING);
+
+    set_task_disintegration_request(target);
     r=0;
   } else {
-    r=-EBUSY;
+    r=-ESRCH;
   }
   UNLOCK_TASK_STRUCT(target);
 

@@ -349,4 +349,6 @@ void cleanup_thread_data(void *t,ulong_t arg);
 #define read_task_pending_uworks(t)             \
   arch_read_pending_uworks( &(((task_t*)(t))->arch_context[0]) )
 
+#define __UNUSABLE_PTR (void *)0x007  /* Target pointer is not usable now. */
+
 #endif
