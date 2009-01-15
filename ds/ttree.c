@@ -32,6 +32,7 @@
 #include <mlibc/string.h>
 #include <mlibc/assert.h>
 #include <mlibc/kprintf.h>
+#include <mlibc/stddef.h>
 #include <mlibc/types.h>
 
 /*
@@ -854,4 +855,3 @@ void ttree_print(ttree_t *ttree)
 {
   __print_tree(ttree->root, 0);
 }
-

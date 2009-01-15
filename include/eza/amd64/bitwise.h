@@ -91,7 +91,6 @@ static always_inline int arch_bit_test_and_set(volatile void *bitmap, int bit)
   return val;
 }
 
-
 #define ARCH_BIT_FIND_LSF
 static always_inline long arch_bit_find_lsf(unsigned long word)
 {
@@ -102,12 +101,31 @@ static always_inline long arch_bit_find_lsf(unsigned long word)
   return word;
 }
 
+#define ARCH_ZERO_BIT_FIND_LSF
+static always_inline long arch_zero_bit_find_lsf(unsigned long word)
+{
+  __asm__ ("bsf %1, %2\n\t"
+           : "=r" (word)
+           : "r" (~word), "r" ((long)-1));
+
+  return word;
+}
+
 #define ARCH_BIT_FIND_MSF
 static always_inline long arch_bit_find_msf(unsigned long word)
 {
   __asm__ ("bsr %1, %2\n\t"
            : "=r" (word)
            : "r" (word), "r" ((long)-1));
+  return word;
+}
+
+#define ARCH_ZERO_BIT_FIND_MSF
+static always_inline long arch_zero_bit_find_msf(unsigned long word)
+{
+  __asm__ ("bsr %1, %2\n\t"
+           : "=r" (word)
+           : "r" (~word), "r" ((long)-1));
   return word;
 }
 

@@ -27,10 +27,11 @@
 #include <mm/pfalloc.h>
 #include <eza/arch/types.h>
 
-page_frame_t *alloc_pages(int n, pfalloc_flags_t flags)
+page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
 {
   page_frame_t *pages = NULL;
   mm_pool_t *pool;
+  page_idx_t i;
 
   if (!(flags & PAGE_POOLS_MASK))
     flags |= AF_PGEN;
@@ -48,6 +49,8 @@ page_frame_t *alloc_pages(int n, pfalloc_flags_t flags)
     goto out;
   if (flags & AF_ZERO) /* fill page block with zeros */
     pframe_memnull(pages, n);
+  for (i = 0; i < n; i++)
+    atomic_set(&pages[i].refcount, 1);
 
   /* done */
   out:

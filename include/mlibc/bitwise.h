@@ -151,6 +151,12 @@ static inline long bit_find_lsf(unsigned long word)
 #define bit_find_lsf(word) arch_bit_find_lsf(word)
 #endif /* ARCH_BIT_FIND_LSF */
 
+#ifndef ARCH_ZERO_BIT_FIND_LSF
+#define zero_bit_find_lsf(word) bit_find_lsf(~(word))
+#else
+#define zero_bit_find_lsf(word) arch_zero_bit_find_lsf(word)
+#endif /* ARCH_ZERO_BIT_FIND_LSF */
+
 /**
  * @fn static inline long bit_find_msf(unsigned long word)
  * Find most significant set bit in the @a word.
@@ -173,6 +179,12 @@ static inline long bit_find_msf(unsigned long word)
 #else
 #define bit_find_msf(word) arch_bit_find_msf(word)
 #endif /* ARCH_BIT_FIND_MSF */
+
+#define ARCH_ZERO_BIT_FIND_MSF
+#define zero_bit_find_msf(word) bit_find_msf(~(word))
+#else
+#define zero_bit_find_msf(word) arch_zero_bit_find_msf(word)
+#endif /* ARCH_ZERO_BIT_FIND_MSF */
 
 /**
  * @fn static inline void bits_or(void *word, unsigned long flags)

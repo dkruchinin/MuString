@@ -35,7 +35,6 @@
 #include <mm/page.h>
 #include <mm/mmpool.h>
 #include <mm/idalloc.h>
-#include <mm/mmap.h>
 #include <mm/vmm.h>
 #include <eza/kernel.h>
 #include <eza/arch/mm.h>

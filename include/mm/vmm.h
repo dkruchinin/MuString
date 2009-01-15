@@ -26,6 +26,7 @@
 
 #include <ds/iterator.h>
 #include <mm/page.h>
+#include <mm/memobj.h>
 #include <mlibc/types.h>
 #include <eza/arch/mm_types.h>
 
@@ -35,6 +36,46 @@ typedef struct __mmap_info {
   page_frame_iterator_t *pfi;
   uint_t ptable_flags;
 } mmap_info_t;
+
+#define VMR_PROTO_MASK 0x0F
+
+typedef enum __vmrange_flags {
+  VMR_READ     = 0x001,
+  VMR_WRITE    = 0x002,
+  VMR_EXEC     = 0x004,
+  VMR_NOCACHE  = 0x008,
+  VMR_FIXED    = 0x010,
+  VMR_ANON     = 0x020,
+  VMR_PRIVATE  = 0x040,
+  VMR_SHARED   = 0x080,
+  VMR_PHYS     = 0x100,
+  VMR_STACK    = 0x200,
+  VMR_POPULATE = 0x400,
+  VMR_GENERIC  = 0x800,
+} vmrange_flags_t;
+
+struct __vmm;
+
+typedef struct __vmragnge {
+  struct {
+    uintptr_t space_start;
+    uintptr_t space_end;
+  } range_bounds;
+  struct __vmm *parent_vmm;
+  memobj_t *memobj;
+  void *private;
+  pid_t pf_handler;
+  vmrange_flags_t flags;
+} vmrange_t;
+
+typedef struct __vmm {
+  ttree_t vmranges;
+  vmrange_t *lru_range;
+  atomic_t vmm_users;
+  rpd_t *prd;
+  uintptr_t aspace_start;
+  unsigned long num_vmrs;
+} vmm_t;
 
 rpd_t kernel_rpd;
 

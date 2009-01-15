@@ -24,6 +24,8 @@
 #ifndef __MMAP_H__
 #define __MMAP_H__
 
+#include <config.h>
+#include <ds/ttree.h>
 #include <mlibc/string.h>
 #include <mm/page.h>
 #include <mlibc/types.h>
@@ -39,21 +41,43 @@
  */
 typedef unsigned int mmap_flags_t;
 
-enum {
-  PROT_READ    = 0x01,
-  PROT_WRITE   = 0x02,
-  PROT_NONE    = 0x04,
-  PROT_EXEC    = 0x08,
-  PROT_NOCACHE = 0x10,
-};
+typedef struct __mem_object {
+} mem_object_t;
 
-enum {
-  MAP_FIXED   = 0x01,
-  MAP_ANON    = 0x02,
-  MAP_PRIVATE = 0x04,
-  MAP_SHARED  = 0x08,
-  MAP_PHYS    = 0x10,
-};
+#define VMR_PROTO_MASK 0x0F
+
+typedef enum __vmrange_flags {
+  VMR_READ     = 0x001,
+  VMR_WRITE    = 0x002,
+  VMR_EXEC     = 0x004,
+  VMR_NOCACHE  = 0x008,
+  VMR_FIXED    = 0x010,
+  VMR_ANON     = 0x020,
+  VMR_PRIVATE  = 0x040,
+  VMR_SHARED   = 0x080,
+  VMR_PHYS     = 0x100,
+  VMR_STACK    = 0x200,
+  VMR_POPULATE = 0x400,
+  VMR_GENERIC  = 0x800,
+} vmrange_flags_t;
+
+struct __vmm;
+
+typedef struct __vmragnge {
+  struct {
+    uintptr_t vmr_start;
+    uintptr_t vmr_end;
+  } range_bounds;
+  struct __vmm *parent_vmm;
+  vmrange_flags_t flags;
+  pid_t pf_handler;  
+} vmrange_t;
+
+typedef struct __vmm {
+  ttree_t mmap_tree;
+  rpd_t *rpd;
+  
+} vmm_t;
 
 status_t mmap_kern(uintptr_t va, page_idx_t first_page, int npages,
                    uint_t proto, uint_t flags);
