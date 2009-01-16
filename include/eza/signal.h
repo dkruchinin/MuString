@@ -199,4 +199,6 @@ bool update_pending_signals(task_t *task);
 status_t send_task_siginfo_forced(task_t *task,siginfo_t *info);
 sighandlers_t * allocate_signal_handlers(void);
 
+#define task_was_interrupted(t)  ( read_task_pending_uworks((t)) != 0 || pending_signals_present((t)) )
+
 #endif

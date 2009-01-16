@@ -332,14 +332,17 @@ out_unlock:
 }
 
 /* FIXME: [mt] potential deadlock problem ! [R] */
-static void __put_receiver_into_sleep(task_t *receiver,ipc_gen_port_t *port)
+static status_t __put_receiver_into_sleep(task_t *receiver,ipc_gen_port_t *port)
 {
   wqueue_task_t w;
+  status_t r;
 
   IPC_TASK_ACCT_OPERATION(receiver);
   waitqueue_prepare_task(&w,receiver);
-  waitqueue_push(&port->waitqueue,&w);
+  r=waitqueue_push(&port->waitqueue,&w);
   IPC_TASK_UNACCT_OPERATION(receiver);
+
+  return r;
 }
 
 static status_t __transfer_message_data_to_receiver(ipc_port_message_t *msg,
@@ -403,8 +406,12 @@ recv_cycle:
          */
         IPC_UNLOCK_PORT_W(port);
 
-        __put_receiver_into_sleep(owner,port);
-        goto recv_cycle;
+        r=__put_receiver_into_sleep(owner,port);
+        if( !r ) {
+          goto recv_cycle;
+        } else {
+          goto out_err;
+        }
       } else {
         r = -EWOULDBLOCK;
       }
@@ -415,6 +422,7 @@ recv_cycle:
   }
   IPC_UNLOCK_PORT_W(port);
 
+out_err:
   if( msg != NULL ) {
     r=__transfer_message_data_to_receiver(msg,iovec,numvec,msg_info);
     if(r) {
