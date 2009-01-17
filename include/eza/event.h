@@ -89,16 +89,21 @@ static inline int event_yield(event_t *event)
   UNLOCK_EVENT(event);
 
   if( t != NULL ) {    
-      event_checker_t ec=event->ev_checker;
+    event_checker_t ec=event->ev_checker;
 
-      if(!ec) {
-        ec=event_defered_sched_handler;
-      }
-      r=sched_change_task_state_deferred(t,TASK_STATE_SLEEPING,ec,event);
+    if(!ec) {
+      ec=event_defered_sched_handler;
+    }
+    r=sched_change_task_state_deferred(t,TASK_STATE_SLEEPING,ec,event);
 
-      if( !event->ev_checker ) {
-        event->flags &= ~EVENT_OCCURED;
-      }
+    LOCK_EVENT(event);
+    if( event->flags & EVENT_OCCURED ) {
+      event->flags &= ~EVENT_OCCURED;
+      r=0;
+    } else {
+      r=1;
+    }
+    UNLOCK_EVENT(event);
   }
   return r;
 }
@@ -110,7 +115,6 @@ static inline void event_raise(event_t *event)
   LOCK_EVENT(event);
   if( !event->ev_checker ) {
     if( !(event->flags & EVENT_OCCURED) ) {
-      event->flags |= EVENT_OCCURED;
       t=event->task;
     } else {
       t=NULL;
@@ -118,11 +122,12 @@ static inline void event_raise(event_t *event)
   } else {
     t=event->task;
   }
-  UNLOCK_EVENT(event);
 
   if( t != NULL) {
     sched_change_task_state(t,TASK_STATE_RUNNABLE);    
+    event->flags |= EVENT_OCCURED;
   }
+  UNLOCK_EVENT(event);
 }
 
 static inline void countered_event_raise(countered_event_t *ce)
