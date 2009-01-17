@@ -39,6 +39,7 @@
 #include <mm/slab.h>
 #include <ipc/gen_port.h>
 #include <eza/event.h>
+#include <eza/signal.h>
 
 static ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf,
                                                  ulong_t snd_size,bool copy_data)
@@ -418,6 +419,9 @@ recv_cycle:
     } else {
       /* Got something ! */
       msg=msg_ops->extract_message(port,flags);
+      if( msg ) {
+        msg->state=MSG_STATE_RECEIVED;
+      }
     }
   }
   IPC_UNLOCK_PORT_W(port);
@@ -599,10 +603,53 @@ status_t ipc_port_send_iov(struct __ipc_gen_port *port,
 
   /* Sender should wait for the reply, so put it into sleep here. */
   if( sync_send ) {
+    bool b;
+    status_t ir=0;
+
+  wait_for_reply:
     IPC_TASK_ACCT_OPERATION(sender);
     event_yield(&msg->event);
     IPC_TASK_UNACCT_OPERATION(sender);
-    event_reset(&msg->event);
+
+    if( task_was_interrupted(sender) ) {
+      /* No luck: we were interrupted asynchronously.
+       * So try to remove our message from the port's queue, if possible.
+       */
+      ir=-EINTR;
+      b=true;
+
+      IPC_LOCK_PORT_W(port);
+      switch(msg->state) {
+        case MSG_STATE_NOT_PROCESSED:
+          /* If server neither received nor replied to our message, we can
+           * remove it from the queue without any problems.
+           */
+          msg_ops->remove_message(port,msg->id);
+          break;
+        case MSG_STATE_DATA_TRANSFERRED:
+          /* Server successfully received data from our message but not replied yet,
+           * so we should remove message in port-specific way.
+           */
+          msg_ops->dequeue_message(port,msg);
+          break;
+        case MSG_STATE_REPLY_BEGIN:
+        case MSG_STATE_RECEIVED:
+          /* Can't remove message right now, must wait for server to change
+           * state of the message
+           */
+          b=r;
+          break;
+        case MSG_STATE_REPLIED:
+          break; /* Message was replied - do nothing. */
+      }
+      IPC_UNLOCK_PORT_W(port);
+
+      if( !b ) {
+        /* No luck, need to repeat event wait one more time. */
+        kprintf( "Beeee !\n" );
+        goto wait_for_reply;
+      }
+    }
 
     r=msg->replied_size;
     if( r > 0 ) {
@@ -646,7 +693,7 @@ status_t ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
     if( event_is_active(&msg->event) ) {
       event_raise(&msg->event);
     }
-  }
+ }
 
   return r;
 }

@@ -42,6 +42,14 @@ struct __ipc_port_t;
 
 #define IPC_PORT_SHUTDOWN  0x800
 
+typedef enum __ipc_msg_state {
+  MSG_STATE_NOT_PROCESSED,
+  MSG_STATE_RECEIVED,
+  MSG_STATE_DATA_TRANSFERRED,
+  MSG_STATE_REPLY_BEGIN,
+  MSG_STATE_REPLIED,
+} ipc_msg_state_t;
+
 typedef struct __ipc_port_messsage_t {
   ulong_t data_size,reply_size,id;
   long replied_size;
@@ -51,8 +59,8 @@ typedef struct __ipc_port_messsage_t {
   struct __ipc_port_t *port;
   ipc_user_buffer_t *snd_buf, *rcv_buf;
   ulong_t num_send_bufs,num_recv_buffers;
-  task_t *receiver;  /* To handle 'reply()' properly. */
   task_t *sender;
+  ipc_msg_state_t state;
 } ipc_port_message_t;
 
 typedef struct __ipc_port_t {

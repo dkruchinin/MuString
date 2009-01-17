@@ -154,6 +154,11 @@ static ipc_port_message_t *def_remove_head_message(struct __ipc_gen_port *port)
   return NULL;
 }
 
+static void def_dequeue_message(struct __ipc_gen_port *port,
+                                ipc_port_message_t *msg)
+{
+}
+
 ipc_port_msg_ops_t def_port_msg_ops = {
   .init_data_storage=def_init_data_storage,
   .insert_message=def_insert_message,
@@ -162,4 +167,5 @@ ipc_port_msg_ops_t def_port_msg_ops = {
   .requeue_message=def_requeue_message,
   .remove_message=def_remove_message,
   .remove_head_message=def_remove_head_message,
+  .dequeue_message=def_dequeue_message,
 };
