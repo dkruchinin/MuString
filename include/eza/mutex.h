@@ -26,20 +26,23 @@
 
 #include <ds/waitqueue.h>
 #include <eza/spinlock.h>
-#include <eza/task.h>
 #include <eza/arch/types.h>
 
 /* TODO DK: implement priority inheritance and priority ceiling mutex protocol */
+
+struct __task_struct;
 
 /**
  * @brief General mutex structure
  *
  */
-typedef struct __mutex {
+struct __mutex {
   spinlock_t lock;
-  wqueue_t wq;
-  task_t *executer;
-} mutex_t;
+  struct __wait_queue wq;
+  struct __task_struct *executer;
+};
+
+typedef struct __mutex mutex_t;
 
 static inline bool mutex_is_locked(mutex_t *mutex)
 {

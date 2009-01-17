@@ -117,5 +117,6 @@ status_t ipc_port_send_iov(struct __ipc_gen_port *port,
   } while(0)
 
 #define put_ipc_port_message(m)  memfree((m))
+#define ipc_message_data(m) ((m)->data_size <= IPC_NB_MESSAGE_MAXLEN ? (void *)(m)->send_buffer : NULL )
 
 #endif

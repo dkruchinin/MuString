@@ -32,6 +32,8 @@
 #define __LOCK_EVENT(e) spinlock_lock(&(e)->__lock)
 #define __UNLOCK_EVENT(e) spinlock_unlock(&(e)->__lock)
 
+extern int __big_verbose;
+
 static status_t __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
 {
   sync_uevent_t *e=__UEVENT_OBJ(obj);
@@ -45,7 +47,9 @@ static status_t __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t a
         __UNLOCK_EVENT(e);
 
         waitqueue_prepare_task(&wt,current_task());
+        wt.private=e;
         waitqueue_push(&e->__wq,&wt);
+
         __LOCK_EVENT(e);
       }
       e->__ecount=0;
