@@ -371,6 +371,8 @@ static status_t __transfer_message_data_to_receiver(ipc_port_message_t *msg,
       if( copy_to_user(stats,&info,sizeof(info)) ) {
         r=-EFAULT;
       }
+  } else {
+    r=-EFAULT;
   }
 
   return r;
@@ -429,34 +431,40 @@ recv_cycle:
 out_err:
   if( msg != NULL ) {
     r=__transfer_message_data_to_receiver(msg,iovec,numvec,msg_info);
-    if(r) {
-      /* It was impossible to copy message to the buffer, so insert it
-       * to the queue again.
-       */
-      IPC_LOCK_PORT_W(port);
-      if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
-        msg_ops->requeue_message(port,msg);
-      } else {
-        r=-EPIPE;
-      }
-      IPC_UNLOCK_PORT_W(port);
-    } else {
-      bool free;
-      /* OK, message was successfully transferred, so remove it from the port
-       * in case it is a non-blocking transfer.
-       */
-      IPC_LOCK_PORT_W(port);
-      if( !(port->flags & IPC_PORT_SHUTDOWN) &&
-          !(port->flags & IPC_BLOCKED_ACCESS) ) {
-        msg_ops->remove_message(port,msg->id);
-        free=true;
-      } else {
-        free=false;
-      }
-      IPC_UNLOCK_PORT_W(port);
+    bool free;
 
-      if(free) {
-        put_ipc_port_message(msg);
+    /* OK, message was successfully transferred, so remove it from the port
+     * in case it is a non-blocking transfer.
+     */
+    IPC_LOCK_PORT_W(port);
+    if( !(port->flags & IPC_PORT_SHUTDOWN) &&
+        !(port->flags & IPC_BLOCKED_ACCESS) ) {
+      msg_ops->remove_message(port,msg->id);
+      free=true;
+    } else {
+      free=false;
+    }
+    IPC_UNLOCK_PORT_W(port);
+
+    if( free ) {
+      put_ipc_port_message(msg);
+    } else {
+      if( r ) {
+        /* Failed to transfer message data, so notify client. */
+        msg->replied_size=r;
+        event_raise(&msg->event);
+      } else {
+        IPC_LOCK_PORT_W(port);
+        if( task_was_interrupted(msg->sender) ) {
+          r=-EPIPE;
+        } else {
+          msg->state=MSG_STATE_DATA_TRANSFERRED;
+        }
+        IPC_UNLOCK_PORT_W(port);
+
+        if( r ) {
+          event_raise(&msg->event); /* Wakeup client in case of error. */
+        }
       }
     }
   }
@@ -646,16 +654,19 @@ status_t ipc_port_send_iov(struct __ipc_gen_port *port,
 
       if( !b ) {
         /* No luck, need to repeat event wait one more time. */
-        kprintf( "Beeee !\n" );
         goto wait_for_reply;
       }
     }
 
-    r=msg->replied_size;
-    if( r > 0 ) {
-      r=__transfer_reply_data_iov(msg,iovecs,numvecs,false,reply_len);
-      if( !r ) {
-        r=msg->replied_size;
+    if( ir ) {
+      r=ir;
+    } else {
+      r=msg->replied_size;
+      if( r > 0 ) {
+        r=__transfer_reply_data_iov(msg,iovecs,numvecs,false,reply_len);
+        if( !r ) {
+          r=msg->replied_size;
+        }
       }
     }
   } else {
