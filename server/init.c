@@ -211,7 +211,7 @@ void server_run_tasks(void)
 
   if( i > 0 ) {
     kprintf("[SRV] Starting servers: %d ... \n",i);
-    //kconsole->disable();
+    kconsole->disable();
   }
 
   for(a=0;a<i;a++) {

@@ -234,8 +234,6 @@ status_t ipc_close_port(task_t *owner,ulong_t port)
   if( p ) {
     IPC_LOCK_PORT_W(p);
     shutdown=atomic_dec_and_test(&p->own_count);
-//  kprintf( ">> __ipc_close_port(%p): USE=%d, OWN=%d, SHUTDOWN: %d, IPC: %d\n",
-//           p,p->use_count,p->own_count,shutdown,ipc->use_count);
     if(shutdown) {
       p->flags |= IPC_PORT_SHUTDOWN;
       ipc->ports[port]=NULL;
@@ -246,7 +244,9 @@ status_t ipc_close_port(task_t *owner,ulong_t port)
 
   if( p ) {
     if( shutdown ) {
-      __shutdown_port(p);
+      /* For better efficiency wi will actually shutdown port after
+       * unlocking the IPC lock.
+       */
       linked_array_free_item(&ipc->ports_array,port);
       ipc->num_ports--;
     }
@@ -257,6 +257,9 @@ status_t ipc_close_port(task_t *owner,ulong_t port)
 out_unlock:
   UNLOCK_IPC(ipc);
   if( p ) {
+    if( shutdown ) {
+      __shutdown_port(p);
+    }
     __ipc_put_port(p);
   }
   release_task_ipc(ipc);
@@ -413,7 +416,7 @@ recv_cycle:
         if( !r ) {
           goto recv_cycle;
         } else {
-          goto out_err;
+          goto out;
         }
       } else {
         r = -EWOULDBLOCK;
@@ -428,7 +431,7 @@ recv_cycle:
   }
   IPC_UNLOCK_PORT_W(port);
 
-out_err:
+out:
   if( msg != NULL ) {
     r=__transfer_message_data_to_receiver(msg,iovec,numvec,msg_info);
     bool free;
@@ -439,7 +442,7 @@ out_err:
     IPC_LOCK_PORT_W(port);
     if( !(port->flags & IPC_PORT_SHUTDOWN) &&
         !(port->flags & IPC_BLOCKED_ACCESS) ) {
-      msg_ops->remove_message(port,msg->id);
+      msg_ops->remove_message(port,msg->id,NULL);
       free=true;
     } else {
       free=false;
@@ -449,11 +452,7 @@ out_err:
     if( free ) {
       put_ipc_port_message(msg);
     } else {
-      if( r ) {
-        /* Failed to transfer message data, so notify client. */
-        msg->replied_size=r;
-        event_raise(&msg->event);
-      } else {
+      if( !r ) {
         IPC_LOCK_PORT_W(port);
         if( task_was_interrupted(msg->sender) ) {
           r=-EPIPE;
@@ -461,10 +460,16 @@ out_err:
           msg->state=MSG_STATE_DATA_TRANSFERRED;
         }
         IPC_UNLOCK_PORT_W(port);
+      }
 
-        if( r ) {
-          event_raise(&msg->event); /* Wakeup client in case of error. */
-        }
+      /* In case of errors remove message and wakeup client. */
+      if( r ) {
+        IPC_LOCK_PORT_W(port);
+        msg_ops->remove_message(port,msg->id,NULL);
+        IPC_UNLOCK_PORT_W(port);
+
+        msg->replied_size=r;
+        event_raise(&msg->event); /* Wakeup client in case of error. */
       }
     }
   }
@@ -502,7 +507,6 @@ void __ipc_put_port(ipc_gen_port_t *p)
   UNREF_PORT(p);
 
   if( !atomic_get(&p->use_count) ) {
-//  kprintf( "> FREEING A PORT: %p\n",p );
     memfree(p);
   }
 }
@@ -573,7 +577,8 @@ status_t ipc_port_send_iov(struct __ipc_gen_port *port,
   status_t msg_size=0,r=0;
   task_t *sender=current_task();
 
-  if( !msg_ops->insert_message ) {
+  if( !msg_ops->insert_message ||
+      (sync_send && !msg_ops->dequeue_message) ) {
     return -EINVAL;
   }
 
@@ -616,7 +621,7 @@ status_t ipc_port_send_iov(struct __ipc_gen_port *port,
 
   wait_for_reply:
     IPC_TASK_ACCT_OPERATION(sender);
-    event_yield(&msg->event);
+    r=event_yield(&msg->event);
     IPC_TASK_UNACCT_OPERATION(sender);
 
     if( task_was_interrupted(sender) ) {
@@ -632,7 +637,7 @@ status_t ipc_port_send_iov(struct __ipc_gen_port *port,
           /* If server neither received nor replied to our message, we can
            * remove it from the queue without any problems.
            */
-          msg_ops->remove_message(port,msg->id);
+          msg_ops->remove_message(port,msg->id,NULL);
           break;
         case MSG_STATE_DATA_TRANSFERRED:
           /* Server successfully received data from our message but not replied yet,
@@ -690,9 +695,9 @@ status_t ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
   msg=NULL;
   IPC_LOCK_PORT_W(port);
   if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
-    msg=port->msg_ops->remove_message(port,msg_id);
-    if( !msg ) {
-      r=-EINVAL;
+    r=port->msg_ops->remove_message(port,msg_id,&msg);
+    if( msg ) {
+      msg->state=MSG_STATE_REPLY_BEGIN;
     }
   } else {
     r=-EPIPE;
@@ -701,9 +706,10 @@ status_t ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
 
   if( msg ) {
     r=__transfer_reply_data_iov(msg,reply_iov,numvecs,true,reply_len);
-    if( event_is_active(&msg->event) ) {
-      event_raise(&msg->event);
-    }
+
+    /* Update message state and wakeup client. */
+    msg->state=MSG_STATE_REPLIED;
+    event_raise(&msg->event);
  }
 
   return r;
