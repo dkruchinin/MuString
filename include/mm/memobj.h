@@ -12,18 +12,20 @@
 #define CONFIG_MEMOBJS_MAX (PAGE_SIZE << 3)
 #endif /* CONFIG_MEMOBJS_MAX */
 
-typedef unsigned long memobj_id;
+typedef unsigned long memobj_id_t;
 
 typedef enum __memobj_nature {
   MEMOBJ_SHARED     = 0x01,
   MEMOBJ_TYPED      = 0x02,
   MEMOBJ_PERSISTENT = 0x04,
+  MEMOBJ_FIXEDADDR  = 0x08,
+  MEMOBJ_IMMORTAL   = 0x10,
 } memobj_nature_t;
 
 struct __memobj_ops;
 
 typedef struct __memobj {
-  memobj_id id;
+  memobj_id_t id;
   ttree_t pages_cache;
   list_head_t pagelist_lru;
   struct __memobj_ops mops;
@@ -39,5 +41,8 @@ typedef struct __memobj_ops {
   status_t (*putpage)(memobj_t *memobj);
   status_t (*getpage)(memobj_t *memobj);
 } memobj_ops_t;
+
+void memobj_subsystem_initialize(void);
+memobj_t *memobj_find_by_id(memobj_id_t memobj_id);
 
 #endif /* __MEMOBJ_H__ */

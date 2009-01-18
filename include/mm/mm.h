@@ -51,6 +51,12 @@ static inline void unpin_page_frame(page_frame_t *pf)
     free_pages(pf);
 }
 
+static inline bool uspace_varange_is_valid(uintptr_t va_start, uintptr_t length)
+{
+  return ((va_start >= USER_START_VIRT) &&
+          ((va_start + length) < USER_END_VIRT));
+}
+
 /**
  * @brief Initialize mm internals
  * @note It's an initcall, so it should be called only once during system boot stage.

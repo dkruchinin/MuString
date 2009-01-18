@@ -94,7 +94,7 @@ extern page_frame_t *page_frames_array;
  */
 DEFINE_ITERATOR(page_frame,
                 status_t error;
-                page_idx_t pf_idx);
+                page_idx_t pf_idx;);
 
 /**
  * Page frame iterator supported types
@@ -105,7 +105,8 @@ DEFINE_ITERATOR_TYPES(page_frame,
                       PF_ITER_INDEX,  /**< Index-based iterator */
                       PF_ITER_LIST,   /**< List-based iterator */
                       PF_ITER_ALLOC,  /**< Each next item of ALLOC iterator is dynamically allocated */
-                      PF_ITER_PTABLE  /**< Page table iterator */
+                      PF_ITER_PTABLE, /**< Page table iterator */
+                      PF_ITER_PBLOCK, /**< Iterate through list of page blocks */
                       );
 
 static inline void *pframe_to_virt(page_frame_t *frame)

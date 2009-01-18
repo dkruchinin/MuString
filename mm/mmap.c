@@ -39,120 +39,208 @@
 
 rpd_t kernel_rpd;
 
-#if 0
-#define DEFAULT_MAPDIR_FLAGS (MAP_READ | MAP_WRITE | MAP_EXEC | MAP_USER)
+#include <config.h>
+#include <ds/list.h>
+#include <ds/ttree.h>
+#include <mm/page.h>
+#include <mm/pfalloc.h>
+#include <mm/slab.h>
+#include <mm/memobj.h>
+#include <mm/vmm.h>
+#include <mlibc/kprintf.h>
+#include <mlibc/types.h>
 
-static memcache_t *__rpd_memcache = NULL;
+static LIST_DEFINE(mandmaps_lst);
+static int __mandpas_total = 0;
+static memcache_t __vmms_cache = NULL;
+static memcache_t __vmrs_cache = NULL;
 
-static inline int __number_of_entries(uintptr_t va_diff, int start_pde_idx, uintptr_t range)
+static int __vmranges_cmp(void *r1, void *r2)
 {
-  if (va_diff >=  pgt_get_range(level))
-    return (PTABLE_DIR_ENTRIES - start_idx);
+  struct range_bounds *range1, *range2;
+  long diff;
+
+  range1 = (struct range_bounds *)r1;
+  range2 = (struct range_bounds *)r2;
+  if ((diff = range1.space_start - range2.space_end) < 0) {
+    if ((diff = range2.space_start - range1.space_end) > 0)
+      return -1;
+
+    return 0;
+  }
   else
-    return (pgt_vaddr2idx(va_diff, level) + 1);
+    return !!diff;
 }
 
-static status_t __check_va(root_pagedir_t *root_dir, uintptr_t va, /* OUT */uintptr_t *entry_addr)
+static vmrange_t *create_vmrange(vmm_t *parent_vmm, uintptr_t va_start, int npages, vmrange_flags_t flags)
 {
-  pdir_level_t level;
-  page_frame_t *cur_dir = root_dir->dir;
-  pde_t *pde;
+  vmrange_t *vmr;
 
-  for (level = PTABLE_LEVEL_LAST; level > PTABLE_LEVEL_FIRST; level--) {
-    pde = pgt_fetch_entry(cur_dir, pgt_vaddr2idx(va, level));    
-    if (!pgt_pde_is_mapped(pde)) {
-      if (entry_addr)
-        *entry_addr = (uintptr_t)pde;
-      
-      return -EADDRNOTAVAIL;
+  vmr = alloc_from_memcache(__vmrs_cache);
+  if (!vmr)
+    return NULL;
+
+  vmr->parent_vmm = parent_vmm;
+  vmr->flags = flags;
+  vmr->bounds.space_start = va_start;
+  vmr->bounds.space_end = va_start + (1 << npages);
+  vmr->memobj = vmr->private = NULL;
+  parent_vmm->num_vmrs++;
+
+  return vmr;
+}
+
+void vmm_subsystem_initialize(void)
+{
+  kprintf("[MM] Initializing VMM subsystem...");
+  __vmms_cache = memcache_create("VMM objects cache", sizeof(vmm_t),
+                                 DEFAULT_SLAB_PAGES, SMCF_PGEN | SMCF_GENERIC);
+  if (!__vmms_cache)
+    panic("vmm_subsystem_initialize: Can not create memory cache for VMM objects. ENOMEM");
+
+  __vmrs_cache = memcache_create("Vmrange objects cache", sizeof(vmrange_t),
+                                 DEFAULT_SLAB_PAGES, SMCF_PGEN | SMCF_GENERIC);
+  if (!__vmrs_cache)
+    panic("vmm_subsystem_initialize: Can not create memory cache for vmrange objects. ENOMEM.");
+}
+
+void register_mandmap(vm_mandmap_t *mandmap, uintptr_t va_from, uintptr_t va_to, vmrange_flags_t vm_flags)
+{
+  memset(mandmap, 0, sizeof(mandmap));
+  mandmap->bounds.space_start = PAGE_ALIGN_DOWN(va_from);
+  mandmap->bounds.space_end = PAGE_ALIGN(va_to);
+  mandmap->vmr_flags = flags;
+  list_add2tail(&mandmaps_lst, &mandmap->node);
+  __mandmaps_total++;
+}
+
+void unregister_manmap(vm_mandmap_t *mandmap)
+{
+  list_del(&mandmap->node);
+  __mandmaps_total--;
+}
+
+vmm_t *vmm_create(void)
+{
+  vmm_t *vmm;
+
+  vmm = alloc_from_memcache(&__vmms_cache);
+  if (!vmm)
+    return NULL;
+
+  memset(vmm, 0, sizeof(*vmm));
+  ttree_init(&vmm->vmranges, __vmranges_cmpf, vmrange_t, bounds);
+  atomic_set(&vmm->vmm_users, 1);
+  return vmm;
+}
+
+
+uintptr_t find_suitable_vmrange(vmm_t *vmm, uintptr_t length, ttree_iterator_t *ttree_iter)
+{
+  ttree_iterator_t tti;
+  uintptr_t start = USER_START_VIRT;
+  struct range_bounds *bounds;
+
+  ttree_iterator_init(vmm->ttree, &tti, NULL, NULL);
+  iterate_forward(&tti) {
+    bounds = tnode_key(tti.meta_cur.tnode, tti.meta_cur.idx);
+    if ((bounds.space_start - start) >= length) {
+      if (ttree_iter)
+        ttree_iterator_init(&vmm->ttree, ttree_iter, &tti.meta_cur, NULL);
+
+      return bounds.space_start;
     }
 
-    cur_dir = pgt_pde_fetch_subdir(pde);
+    start = bounds.space_end;
   }
-
-  pde = pgt_fetch_entry(cur_dir, pgt_vaddr2idx(va, PTABLE_LEVEL_FIRST));
-  if (entry_addr)
-    *entry_addr = (uintptr_t)pde;
-  if (!pgt_pde_is_mapped(pde))
-    return -EADDRNOTAVAIL;
 
   return 0;
 }
 
-
-status_t mm_check_va_range(root_pagedir_t *root_dir, uintptr_t va_from,
-                           uintptr_t va_to, /* OUT */uintptr_t *entry_addr)
+vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, ttree_iterator_t *tti)
 {
-  uintptr_t va;
-  status_t ret = 0;
+  if (unlikely(!vmm->num_vmrs)) {    
+    if (tti) {
+      memset(tti, 0, sizeof(*tti));
+      tti->state = ITER_LIE;
+    }
 
-  pin_root_pagedir(root_dir, RPD_PIN_RDONLY);
-  for (va = PAGE_ALIGN_DOWN(va_from); va < va_to; va += PAGE_SIZE) {
-    ret = __check_va(root_dir, va, entry_addr);
-    if (ret)
-      goto out;
+    return NULL;
+  }
+  else {
+    struct range_bounds bounds;
+    tnode_meta_t meta;
+    vmrange_t *vmr;
+
+    bounds.space_start = va_start;
+    bounds.space_end = va_end;
+    vmr = ttree_lookup(&vmm->vmranges_tree, &bounds, &meta);
+    if (tti)
+      ttree_iterator_init(&vmm->ttree, tti, meta->tnode, NULL);
+
+    return vmr;
+  }
+}
+
+long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
+                 vmrange_flags_t flags, int offs_pages)
+{
+  vmrange_t *vmr, *vmr_prev;
+  ttree_iterator_t tti;
+  status_t err = 0;
+
+  if (!(flags & VMR_PROTO_MASK)
+      || !(flags & (VMR_PRIVATE | VMR_SHARED))
+      || ((flags & (VMR_PRIVATE | VMR_SHARED)) == (VMR_PRIVATE | VMR_SHARED))
+      || !npages
+      || ((flags & VMR_NONE) && ((flags & VMR_PROTO_MASK) != VMR_NONE))) {
+    err = -EINVAL;
+    goto out;
+  }
+  if (addr) {
+    if (!uspace_varange_is_valid(addr, (1 << npages))) {
+      if (flags & VMR_FIXED) {
+        err = -ENOMEM;
+        goto out;
+      }
+    }
+    else {
+      vmr_prev = vmrange_find(vmm, addr, addr + (1 << npages), &tti);
+      if (vmr_prev) {
+        if (flags & VMR_FIXED) {
+          err = -EINVAL;
+          goto out;
+        }
+      }
+
+      goto create_vmrange;
+    }
   }
 
+  addr = find_suitable_vmrange(vmm, (1 << npages), &tti);
+  create_vmrange:
+  vmr = create_vmrange(vmm, addr, npages, flags);
+  if (!vmr) {
+    err = -ENOMEM;
+    goto out;
+  }
+  
+  ttree_insert_placeful(&vmm->ttree, &tti->meta_cur, &vmr->bounds);
+  if (flags & VMR_POPULATE) {
+    page_frame_t *pages;
+
+    /* FIXME DK: allocate pages regarding to memory limits of a particular task */
+    pages = alloc_pages4uspace(vmm, npages);
+  }
+  
   out:
-  unpin_root_pagedir(root_dir);
-  return ret;
-}
-
-status_t mm_check_va(root_pagedir_t *root_dir, uintptr_t va, /* OUT */uintptr_t *entry_addr)
-{
-  status_t ret;
+  if (vmr) {
+    vmr->parent_vmm->num_vmrs--;
+    memfree(vmr);
+  }
   
-  pin_root_pagedir(root_dir, RPD_PIN_RDONLY);
-  ret = __check_va(root_dir, va, entry_addr);
-  unpin_root_pagedir(root_dir);
-
-  return ret;
+  return err;
 }
-
-status_t pagedir_populate(pde_t *parent_pde, pde_flags_t flags)
-{
-}
-
-status_t pagedir_depopulate(pde_t *pde)
-{
-  page_frame_t *dir = pgt_pde2pagedir(pde);
-  
-  if (!pgt_pde_is_mapped(pde))
-    return -EALREADY;
-
-  ASSERT((pagedir_get_level(dir) >= PTABLE_LEVEL_FIRST) &&
-         (pagedir_get_level(dir) <= PTABLE_LEVEL_LAST));
-  pgt_pde_delete(pde);
-  if (!pagedir_get_entries(dir))
-    pagedir_free(dir);
-
-  return 0;
-}
-
-
-
-status_t mmap(root_pagedir_t *root_dir, uintptr_t va, page_idx_t first_page, int npages, mmap_flags_t flags)
-{  
-  page_idx_t idx;
-  mmapper_t mapper;
-  status_t ret;
-  page_frame_iterator_t pfi;
-  ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
-  
-  mapper.va_from = PAGE_ALIGN(va);
-  idx = virt_to_pframe_id((void *)mapper.va_from);
-  mapper.va_to = mapper.va_from + ((npages - 1) << PAGE_WIDTH);
-  mapper.flags = flags;
-  mm_init_pfiter_index(&pfi, &pfi_index_ctx, first_page, first_page + npages - 1);
-  mapper.pfi = &pfi;
-
-  pin_root_pagedir(root_dir, RPD_PIN_RW);
-  ret = __mmap_pages(root_dir->dir, &mapper, PTABLE_LEVEL_LAST);
-  unpin_root_pagedir(root_dir);
-  
-  return ret;
-}
-#endif
 
 status_t mmap_kern(uintptr_t va, page_idx_t first_page, int npages,
                    uint_t proto, uint_t flags)

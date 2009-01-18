@@ -44,13 +44,14 @@ typedef struct __rpd {
  */
 DEFINE_ITERATOR_CTX(page_frame, PF_ITER_ARCH,
                     e820memmap_t *mmap;
-                    uint32_t e820id);
+                    uint32_t e820id;
+                    );
 
 DEFINE_ITERATOR_CTX(page_frame, PF_ITER_PTABLE,
                     rpd_t *rpd;
                     uintptr_t va_cur;
                     uintptr_t va_from;                    
-                    uintptr_t va_to);
+                    uintptr_t va_to;
+                    );
 
 #endif /* __ARCH_MM_TYPES_H__ */
-

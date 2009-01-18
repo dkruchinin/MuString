@@ -39,6 +39,9 @@ extern int _kernel_start;
 extern int _low_kernel_end;
 extern uintptr_t _kernel_extended_end;
 
+#define USER_END_VIRT    (1 << 40UL)   /* 16 Terabytes */
+#define USER_START_VIRT  0x1001000UL
+#define USER_VA_SIZE     (USER_END_VIRT - USER_START_VIRT)
 #define LAST_BIOS_PAGE (BIOS_END_ADDR >> PAGE_WIDTH)
 #define KERNEL_FIRST_FREE_ADDRESS ((void *)PAGE_ALIGN(_kernel_extended_end))
 #define KERNEL_FIRST_ADDRESS ((void *)&_kernel_end)

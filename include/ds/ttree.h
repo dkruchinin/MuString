@@ -37,11 +37,12 @@
 #define __TTREE_H__
 
 #include <config.h>
-#include <eza/cache.h>
+#include <ds/iterator.h>
+#include <eza/cpucache.h>
 #include <mlibc/stddef.h>
 #include <mlibc/types.h>
 
-#define TTREE_DEFAULT_NUMKEYS (L1_CACHE_BYTES / sizeof(void *)) /**< Default number of keys per T*-tree node */
+#define TTREE_DEFAULT_NUMKEYS (L1_CACHE_SIZE / sizeof(void *)) /**< Default number of keys per T*-tree node */
 #define TNODE_ITEMS_MIN 2         /**< Minimum allowable number of keys per T*-tree node */
 #define TNODE_ITEMS_MAX (1 << 11) /**< Maximum allowable numebr of keys per T*-tree node */
 
@@ -115,6 +116,14 @@ typedef struct __tnode_meta {
   int side;            /**< T*-tree node side. Used when item is inserted. */
 } tnode_meta_t;
 
+DEFINE_ITERATOR(ttree,
+                tnode_meta_t meta_cur;
+                ttree_node_t *tnode_start;
+                ttree_node_t *tnode_end;
+                ttree_t *dst_tree;
+                int start_idx;
+                int end_idx;
+                );
 /**
  * @brief Get real size of T*-tree node in bytes
  * @paran ttree - A pointer to T*-tree
@@ -382,6 +391,8 @@ int ttree_replace(ttree_t *ttree, void *key, void *new_item);
  */
 void ttree_print(ttree_t *ttree);
 
+void ttree_iterator_init(ttree_t *ttree, tnode_meta_t *start, tnode_meta_t *end);
+
 #ifdef CONFIG_DEBUG_TTREE
 /**
  * @brief This debugging function allows to check T*-tree for balance.
@@ -403,21 +414,29 @@ void ttree_check_depth_dbg(ttree_node_t *tnode);
  */
 static inline ttree_node_t *__tnode_sidemost(ttree_node_t *tnode, int side)
 {
-  ttree_node_t *n;
-
-  for (n = tnode; n->sides[side]; n = n->sides[side]);
-  return n;
-}
-
-static inline tree_node_t *__tnode_get_bound(ttree_node_t *tnode, int side)
-{
-  if (!tnode->sides[side])
+  if (!tnode)
     return NULL;
   else {
-    ttree_node_t *bnode;
+    ttree_node_t *n;
 
-    for (bnode = tnode->sides[side]; bnode->sides[!side]; bnode = bnode->sides[!side]);    
-    return bnode;
+    for (n = tnode; n->sides[side]; n = n->sides[side]);
+    return n;
+  }
+}
+
+static inline ttree_node_t *__tnode_get_bound(ttree_node_t *tnode, int side)
+{
+  if (!tnode)
+    return NULL;
+  else {
+    if (!tnode->sides[side])
+      return NULL;
+    else {
+      ttree_node_t *bnode;
+
+      for (bnode = tnode->sides[side]; bnode->sides[!side]; bnode = bnode->sides[!side]);    
+      return bnode;
+    }
   }
 }
 

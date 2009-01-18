@@ -180,7 +180,7 @@ static inline long bit_find_msf(unsigned long word)
 #define bit_find_msf(word) arch_bit_find_msf(word)
 #endif /* ARCH_BIT_FIND_MSF */
 
-#define ARCH_ZERO_BIT_FIND_MSF
+#ifndef ARCH_ZERO_BIT_FIND_MSF
 #define zero_bit_find_msf(word) bit_find_msf(~(word))
 #else
 #define zero_bit_find_msf(word) arch_zero_bit_find_msf(word)

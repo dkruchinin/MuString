@@ -42,7 +42,7 @@
  */
 DEFINE_ITERATOR_CTX(page_frame, PF_ITER_INDEX,
                     page_idx_t first;
-                    page_idx_t last);
+                    page_idx_t last;);
 
 /**
  * @brief Initialize page frame index iterator
@@ -78,7 +78,7 @@ void pfi_index_init(page_frame_iterator_t *pfi,
 DEFINE_ITERATOR_CTX(page_frame, PF_ITER_LIST,
                     list_node_t *first_node;
                     list_node_t *cur;
-                    list_node_t *last_node);
+                    list_node_t *last_node;);
 
 
 /**
@@ -121,10 +121,24 @@ void pfi_list_init(page_frame_iterator_t *pfi,
  * @see ITERATOR_CTX
  */
 void pfi_arch_init(page_frame_iterator_t *pfi,
-                   ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx);
+                   ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx;);
 
 void pfi_ptable_init(page_frame_iterator_t *pfi,
                      ITERATOR_CTX(page_frame, PF_ITER_PTABLE) *ctx,
                      rpd_t *rpd, uintptr_t va_from, int npages);
+
+DEFINE_ITERATOR_CTX(page_frame, PF_ITER_PBLOCK,
+                    list_node_t *first_node;
+                    list_node_t *cur_node;
+                    list_node_t *last_node;
+                    page_idx_t cur_idx;
+                    page_idx_t first_idx;
+                    page_idx_t last_idx;
+                    );
+
+void pfi_pblock_init(page_frame_iterator_t *pfi,
+                     ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx,
+                     list_node_t *fnode, page_idx_t fidx,
+                     list_node_t *lnode, page_idx_t lidx);
 
 #endif /* __PFI_H__ */

@@ -65,7 +65,7 @@ static void __init_page(page_frame_t *page)
 static void __initialize_mandatory_areas(void)
 {
   /* Create an area for userspace trampolines. */
-  static vm_range_t utrampl_va;
+  /*static vm_range_t utrampl_va;
   int id=0;
 
   utrampl_va.phys_addr=virt_to_phys(__userspace_trampoline_codepage);
@@ -79,7 +79,7 @@ static void __initialize_mandatory_areas(void)
 
   return;
 do_panic:
-  panic( "__initialize_mandatory_areas(): can't create area N %d !\n", id );
+panic( "__initialize_mandatory_areas(): can't create area N %d !\n", id );*/
 }
 
 void mm_init(void)
@@ -143,6 +143,7 @@ void mm_init(void)
   idalloc_meminfo.virt_top=kernel_min_vaddr;
   kernel_min_vaddr-=IDALLOC_VPAGES*PAGE_SIZE;
 
+  memobj_subsystem_initialize();
   kprintf("[MM] All pages were successfully remapped.\n");
   __initialize_mandatory_areas();
   kprintf("[MM] All mandatory user areas were successfully created.\n");
@@ -294,6 +295,52 @@ void pfi_list_init(page_frame_iterator_t *pfi,
   memset(ctx, 0, sizeof(*ctx));
   ctx->first_node = first_node;
   ctx->last_node = last_node;
+  pfi->pf_idx = PAGE_IDX_INVAL;
+  pfi->state = ITER_LIE;
+  pfi->error = 0;
+  iter_set_ctx(pfi, ctx);
+}
+
+static void __pfiter_pblock_first(page_frame_iterator_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx;
+
+  ASSERT(pfi->type == PF_ITER_PBLOCK);
+  ctx = iter_fetch_ctx(pfi);
+  ctx->cur_node = ctx->first_node;
+  ctx->cur_idx = ctx->first_idx;
+  pfi->pf_idx =
+    pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->first_idx);
+  if (unlikely((ctx->first_node == ctx->last_node) && (ctx->first_idx == ctx->last_idx)))
+    pfi->state = ITER_END | ITER_START;
+  else
+    pfi->state = ITER_START;
+}
+
+static void __pfiter_pblock_last(page_frame_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx;
+
+  ASSERT(pfi->type == PF_ITER_PBLOCK);
+  ctx->cur_node = ctx->last_node;
+  ctx->
+}
+
+void pfi_pblock_init(page_frame_iterator_t *pfi,
+                     ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx,
+                     list_node_t *fnode, page_idx_t fidx,
+                     list_node_t *lnode, page_idx_t lidx)
+{
+  pfi->first = __pfiter_pblock_first;
+  pfi->last = __pfiter_pblock_last;
+  pfi->next = __pfiter_pblock_next;
+  pfi->prev = __pfiter_pblock_prev;
+  iter_init(pfi, PF_ITER_PBLOCK);
+  memset(ctx, 0, sizeof(*ctx));
+  ctx->first_node = fnode;
+  ctx->first_idx = fidx;
+  ctx->last_node = lnode;
+  ctx->last_idx = lidx;
   pfi->pf_idx = PAGE_IDX_INVAL;
   pfi->state = ITER_LIE;
   pfi->error = 0;

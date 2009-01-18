@@ -27,6 +27,7 @@
  */
 
 #include <config.h>
+#include <ds/iterator.h>
 #include <ds/ttree.h>
 #include <mm/slab.h>
 #include <mlibc/string.h>
@@ -854,4 +855,92 @@ static void __print_tree(ttree_node_t *tnode, int offs)
 void ttree_print(ttree_t *ttree)
 {
   __print_tree(ttree->root, 0);
+}
+
+static void __tti_first(ttree_iterator_t *tti)
+{
+  tti->meta_cur.tnode = tti->tnode_start;
+  tti->meta_cur.idx = tti->start_idx;
+  if (unlikely((tti->tnode_start == tti->tnode_end) && (tnode_num_keys(tti->tnode_start) == 1)))
+    tti->state = ITER_STOP;
+  else
+    tti->state = ITER_RUN;
+}
+
+static void __tti_last(ttree_iterator_t *tti)
+{
+  tti->meta_cur.tnode = tti->tnode_end;
+  tti->meta_cur.idx = tti->end_idx;
+  if (unlikely(tti->tnode_start == tti->tnode_end) && (tnode_num_keys(tti->tnode_end) == 1))
+    tti->state = ITER_STOP;
+  else
+    tti->state = ITER_RUN;
+}
+
+static void __tti_next(ttree_iterator_t *tti)
+{
+  if (!iter_isrunning(tti))
+    iter_first(tti);
+
+  tti->meta_cur.tnode->idx++;
+  if (unlikely((tti->meta_cur.tnode == tti->tnode_end) &&
+               (tti->meta_cur.tnode->idx == tti->end_idx))) {
+    tti->state = ITER_STOP;
+    return;
+  }
+  if (unlikely(tti->meta_cur.tnode->idx == tti->meta_cur->tnode->max_idx)) {
+    tti->meta_cur.tnode = tti->meta_cur.tnode->successor;
+    tti->meta_cur.idx = tti->meta_cur.tnode->min_idx;
+  }
+}
+
+static void __tti_prev(ttree_iterator_t *tti)
+{
+  panic("T*-tree iterator doesn't support \"prev\" method!");
+}
+
+void ttree_iterator_init(ttree_t *ttree, ttree_iterator_t *tti, tnode_meta_t *start, tnode_meta_t *end)
+{
+  ASSERT(ttree->root != NULL);
+  tti->first = __tti_first;
+  tti->last = __tti_last;
+  tti->next = __tti_next;
+  tti->prev = __tti_prev;
+  tti->state = ITER_LIE;
+  iter_init(tti, ITERATOR_TYPE_VOID);
+  if (start) {
+    if (start->side = TNODE_BOUND) {
+      tti->tnode_start = start->tnode;
+      tti->start_idx = start->idx;
+    }
+    else {
+      tti->tnode_start = start->tnode->parent;
+      tti->start_idx = (start->side == TNODE_LEFT) ?
+        tti->tnode_start->min_idx : tti->tnode_start->max_idx;
+    }
+  }
+  else {
+    tti->tnode_start = ttree_tnode_leftmost(ttree.root);
+    tti->start_idx = tti->tnode_start->min_idx;
+  }
+  if (end) {
+    if (end->side == TNODE_BOUND) {
+      tti->tnode_end = end->tnode;
+      tti->end_idx = end->idx;
+    }
+    else {
+      tti->tnode_end = end->tnode->parent;
+      tti->end_idx = (end->side == TNODE_LEFT) ?
+        tti->tnode_end->min_idx : tti->tnode_end->max_idx;
+    }
+  }
+  else {
+    tti->tnode_end = ttree_tnode_rightmost(ttree.root);
+    tti->end_idx = tti->tnode_end->max_idx;
+  }
+  
+  memset(&tti->meta_cur, 0, sizeof(tti->meta_cur));
+  tti->meta_cur.side = TNODE_BOUND;
+  tti->dst_tree = ttree;
+  iter_set_ctx(tti, ITERATOR_CTX_VOID);  
 }

@@ -50,10 +50,11 @@
  * @enum iter_state
  * Possible iterator states.
  */
-enum iter_state {
-  ITER_RUN = 1, /**< Iterator is in "running" state. This means iteration can be continued */
-  ITER_STOP,    /**< Iterator was stopped. This means either iteration wasn't started or was finished */
-  ITER_LIE,     /**< Iterator is not both stopped and runned. This means that no one iterator method was called */
+enum iter_state {  
+  ITER_START = 0x01,
+  ITER_END   = 0x02,
+  ITER_RUN   = 0x04, /**< Iterator is in "running" state. This means iteration can be continued */
+  ITER_LIE   = 0x08  /**< Iterator is not both stopped and runned. This means that no one iterator method was called */
 };
 
 /**
@@ -85,7 +86,7 @@ enum iter_state {
  */
 #define DEFINE_ITERATOR(name, members...)                   \
     typedef struct __iterator_##name {                      \
-        members;                                            \
+        members                                             \
         void (*first)(struct __iterator_##name *iter);      \
         void (*last)(struct __iterator_##name *iter);       \
         void (*next)(struct __iterator_##name *iter);       \
@@ -117,7 +118,7 @@ enum iter_state {
  */
 #define DEFINE_ITERATOR_TYPES(name, types...)   \
   enum __iterator_##name##_type {               \
-    types,                                      \
+    types                                       \
   }                                             \
 
 /**
@@ -142,8 +143,11 @@ enum iter_state {
  */
 #define DEFINE_ITERATOR_CTX(iter_name, ctx_type, members...)    \
     ITERATOR_CTX(iter_name, ctx_type) {                         \
-        members;                                                \
+        members                                                 \
     }
+
+#define ITERATOR_CTX_VOID  NULL
+#define ITERATOR_TYPE_VOID -1
 
 /**
  * @def ITERATOR_CTX(iter_name, ctx_type)
@@ -242,7 +246,8 @@ enum iter_state {
  * @see iter_islying
  * @see iter_state
  */
-#define iter_isstopped(iter) ((iter)->state == ITER_STOP)
+#define iter_isend(iter)   ((iter)->state & ITER_END)
+#define iter_isstart(iter) ((iter)->state & ITER_START)
 
 /**
  * @def iter_islying(iter)

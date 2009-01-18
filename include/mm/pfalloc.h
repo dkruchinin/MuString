@@ -31,6 +31,7 @@
 #define __PFALLOC_H__ 
 
 #include <mm/page.h>
+#include <mm/vmm.h>
 #include <eza/arch/types.h>
 
 /* Allocation flags */
@@ -59,10 +60,13 @@ typedef enum __pfalloc_type {
  * Page frame allocator abstract type
  */
 typedef struct __pf_allocator {
-  page_frame_t *(*alloc_pages)(int n, void *data);      /**< A pointer to function that can alloc n pages */
-  void (*free_pages)(page_frame_t *pframe, void *data); /**< A pointer to function that can free pages */
-  void *alloc_ctx;                                      /**< Internal allocator private data */
-  pfalloc_type_t type;                                  /**< Allocator type */
+  page_frame_t *(*alloc_pages)(int n, void *data);                 /**< A pointer to function that can alloc n pages */
+  void (*free_pages)(page_frame_t *pframe, void *data);            /**< A pointer to function that can free pages */
+  status_t (*pages_block_size)(page_frame_t *pages_block_start);   /**< Get size of pages block starting from pages_block_start */ 
+  void *alloc_ctx;                                                 /**< Internal allocator private data */
+  page_idx_t block_sz_min;
+  page_idx_t block_sz_max;
+  pfalloc_type_t type;                                             /**< Allocator type */
 } pf_allocator_t;
 
 /**
@@ -94,6 +98,8 @@ page_frame_t *alloc_pages(int n, pfalloc_flags_t flags);
  *       the very first page frame in block.
  */
 void free_pages(page_frame_t *pages);
+status_t pages_block_size(page_frame_t *first_page);
+page_frame_t *alloc_pages4uspace(vmm_t *vmm, page_idx_t npages);
 
 static inline void *alloc_pages_addr(int n, pfalloc_flags_t flags)
 {

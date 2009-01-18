@@ -512,6 +512,30 @@ static void __free_pages(page_frame_t *pages, void *data)
   spinlock_unlock(&tlsf->lock);
 }
 
+static status_t __get_pblock_size(page_frame_t *pages_block_start)
+{
+  status_t ret = 0;
+  
+  spinlock_lock(&tlsf->lock);
+  if (bit_test(&pages_block_start->_private, bitnumber(TLSF_PB_MARK))) {
+    kprintf(KO_WARNING "TLSF: Attemption to get size of non-tlsf block, frame #%d\n",
+            pframe_number(pages_block_start));
+    ret = -EINVAL;
+  }
+  else {
+    if (bit_test(&pages_block_start->_private, bitnumber(TLSF_PB_HEAD))) {
+      kprintf(KO_WARNING "TLSF: Attemption to get a size of free TLSF pages block, frame %d\n",
+              pframe_number(pages_block_start));
+      ret = -EINVAL;
+    }
+    else
+      ret = __block_size(pages_block_start);
+  }
+  
+  spinlock_unlock(&tlsf->lock);
+  return ret;
+}
+
 static page_frame_t *__alloc_pages(int n, void *data)
 {
   tlsf_t *tlsf = data;
@@ -617,6 +641,9 @@ void tlsf_alloc_init(mm_pool_t *pool)
   pool->allocator.alloc_ctx = tlsf;
   pool->allocator.alloc_pages = __alloc_pages;
   pool->allocator.free_pages = __free_pages;
+  pool->allocator.pages_block_size = __get_pblock_size;
+  pool->allocator.block_sz_min = 1;
+  pool->allocator.block_sz_max = MAX_BLOCK_SIZE;
   kprintf("[MM] Pool \"%s\" initialized TLSF O(1) allocator\n",
           mmpools_get_pool_name(pool->type));
 }
