@@ -34,7 +34,7 @@ typedef struct __mmap_info {
   uintptr_t va_from;
   uintptr_t va_to;
   page_frame_iterator_t *pfi;
-  uint8_t ptable_flags;
+  uint32_t ptable_flags;
 } mmap_info_t;
 
 #define VMR_PROTO_MASK (VMR_NONE | VMR_READ | VMR_WRITE | VMR_EXEC)
@@ -56,12 +56,12 @@ typedef enum __vmrange_flags {
 } vmrange_flags_t;
 
 struct __vmm;
-struct {
+struct range_bounds {
   uintptr_t space_start;
   uintptr_t space_end;
-} range_bounds;
+};
 
-typedef __vm_mandmap {
+typedef struct __vm_mandmap {
   list_node_t node;
   struct range_bounds bounds;
   vmrange_flags_t vmr_flags;
@@ -70,7 +70,7 @@ typedef __vm_mandmap {
 } vm_mandmap_t;
 
 typedef struct __vmragnge {
-  struct range_buounds bounds;
+  struct range_bounds bounds;
   struct __vmm *parent_vmm;
   memobj_t *memobj;
   void *private;
@@ -86,15 +86,14 @@ typedef struct __vmm {
   rpd_t *prd;
   uintptr_t aspace_start;
   ulong_t num_vmrs;
-  ulong_t num_pages;
-  ulong_t max_pages;
+  page_idx_t num_pages;
+  page_idx_t max_pages;
 } vmm_t;
 
 rpd_t kernel_rpd;
 
 void register_mandmap(vm_mandmap_t *mandmap, uintptr_t va_from, uintptr_t va_to, vmrange_flags_t vm_flags);
 void unregister_mandmap(vm_mandmap_t *mandmap);
-void vmranges_set_next(vmranges_set_t *vmrs_set);
 vmm_t *vmm_create(void);
 
 #endif /* __VMM_H__ */

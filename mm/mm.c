@@ -153,56 +153,49 @@ static void __pfiter_idx_first(page_frame_iterator_t *pfi)
 {
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
   
-  ASSERT(pfi->type == PF_ITER_INDEX);
+  ITER_DBG_CHECK_TYPE(pfi, F_ITER_INDEX);
   ctx = iter_fetch_ctx(pfi);
   pfi->pf_idx = ctx->first;
-  pfi->state = (pfi->pf_idx != ctx->last) ?
-    ITER_RUN : ITER_STOP;
+  pfi->state = ITER_RUN;
 }
 
 static void __pfiter_idx_last(page_frame_iterator_t *pfi)
 {
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
   
-  ASSERT(pfi->type == PF_ITER_INDEX);  
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_INDEX);  
   ctx = iter_fetch_ctx(pfi);
   pfi->pf_idx = ctx->last;
-  pfi->state = (pfi->pf_idx != ctx->first) ?
-    ITER_RUN : ITER_STOP;
+  pfi->state = ITER_RUN;
 }
 
 static void __pfiter_idx_next(page_frame_iterator_t *pfi)
 {  
-  ASSERT(pfi->type == PF_ITER_INDEX);    
-  if (!iter_isrunning(pfi))
-    iter_first(pfi);
-  else {
-    ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
+  ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
 
-    ctx = iter_fetch_ctx(pfi);
-    if (++pfi->pf_idx >= ctx->last) {
-      pfi->state = ITER_STOP;
-      return;
-    }
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_INDEX);
+  ctx = iter_fetch_ctx(pfi);
+  if (unlikely(pfi->pf_idx >= ctx->last)) {
+    pfi->pf_idx = PAGE_IDX_INVAL;
+    pfi->state = ITER_STOP;
+    return;
   }
+
+  pfi->pf_idx++;
 }
 
 static void __pfiter_idx_prev(page_frame_iterator_t *pfi)
-{  
-  ASSERT(pfi->type == PF_ITER_INDEX);  
-  if (!iter_isrunning(pfi))
-    iter_last(pfi);
-  else {
-    ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
+{
+  ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
 
-    ctx = iter_fetch_ctx(pfi);
-    if (pfi->pf_idx)
-      pfi->pf_idx--;
-    if (pfi->pf_idx <= ctx->first) {
-      pfi->state = ITER_STOP;
-      return;
-    }
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_INDEX);
+  ctx = iter_fetch_ctx(pfi);
+  if (unlikely(pfi->pf_idx <= ctx->first)) {
+    pfi->pf_idx = PAGE_IDX_INVAL;
+    pfi->state = ITER_STOP;
   }
+  else
+    pfi->pf_idx--;
 }
 
 void pfi_index_init(page_frame_iterator_t *pfi,
@@ -218,7 +211,6 @@ void pfi_index_init(page_frame_iterator_t *pfi,
   ctx->first = start_pfi;
   ctx->last = end_pfi;
   pfi->pf_idx = PAGE_IDX_INVAL;
-  pfi->state = ITER_LIE;
   pfi->error = 0;
   iter_set_ctx(pfi, ctx);
 }
@@ -227,59 +219,57 @@ static void __pfiter_list_first(page_frame_iterator_t *pfi)
 {
   ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
 
-  ASSERT(pfi->type == PF_ITER_LIST);
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_LIST);
   ctx = iter_fetch_ctx(pfi);
   ctx->cur = ctx->first_node;
   pfi->pf_idx =
     pframe_number(list_entry(ctx->cur, page_frame_t, node));
-  pfi->state = (ctx->cur != ctx->last_node) ?
-    ITER_RUN : ITER_STOP;
+  pfi->state = ITER_RUN;
 }
 
 static void __pfiter_list_last(page_frame_iterator_t *pfi)
 {
   ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
 
-  ASSERT(pfi->type == PF_ITER_LIST);
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_LIST);
   ctx = iter_fetch_ctx(pfi);
   ctx->cur = ctx->last_node;
   pfi->pf_idx =
     pframe_number(list_entry(ctx->cur, page_frame_t, node));
-  pfi->state = (ctx->cur != ctx->first_node) ?
-    ITER_RUN : ITER_STOP;
+  pfi->state = ITER_RUN;
 }
 
 static void __pfiter_list_next(page_frame_iterator_t *pfi)
 {
-  ASSERT(pfi->type == PF_ITER_LIST);
-  if (!iter_isrunning(pfi))
-    iter_first(pfi);
-  else {
-    ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
+  ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
 
-    ctx = iter_fetch_ctx(pfi);
+  ITER_DBG_CHECK_TYPE(page_frame, PF_ITER_LIST);
+  ctx = iter_fetch_ctx(pfi);
+  if (likely(ctx->cur != ctx->last_node)) {
     ctx->cur = ctx->cur->next;
     pfi->pf_idx =
       pframe_number(list_entry(ctx->cur, page_frame_t, node));
-    if (unlikely(ctx->cur == ctx->last_node))
-      pfi->state = ITER_STOP;
+  }
+  else {
+    pfi->pf_idx = PAGE_IDX_INVAL;
+    pfi->state = ITER_STOP;
   }
 }
 
 static void __pfiter_list_prev(page_frame_iterator_t *pfi)
 {
-  ASSERT(pfi->type == PF_ITER_LIST);
-  if (!iter_isrunning(pfi))
-    iter_last(pfi);
-  else {
-    ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
+  ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
 
-    ctx = iter_fetch_ctx(pfi);
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_LIST);
+  ctx = iter_tetch_ctx(pfi);
+  if (likely(ctx->cur != ctx->first_node)) {
     ctx->cur = ctx->cur->prev;
     pfi->pf_idx =
       pframe_number(list_entry(ctx->cur, page_frame_t, node));
-    if (ctx->cur == ctx->first_node)
-      pfi->state = ITER_STOP;
+  }
+  else {
+    pfi->pf_idx = PAGE_IDX_INVAL;
+    pfi->state = ITER_STOP;
   }
 }
 
@@ -296,7 +286,6 @@ void pfi_list_init(page_frame_iterator_t *pfi,
   ctx->first_node = first_node;
   ctx->last_node = last_node;
   pfi->pf_idx = PAGE_IDX_INVAL;
-  pfi->state = ITER_LIE;
   pfi->error = 0;
   iter_set_ctx(pfi, ctx);
 }
@@ -310,11 +299,8 @@ static void __pfiter_pblock_first(page_frame_iterator_t *pfi)
   ctx->cur_node = ctx->first_node;
   ctx->cur_idx = ctx->first_idx;
   pfi->pf_idx =
-    pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->first_idx);
-  if (unlikely((ctx->first_node == ctx->last_node) && (ctx->first_idx == ctx->last_idx)))
-    pfi->state = ITER_END | ITER_START;
-  else
-    pfi->state = ITER_START;
+    pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->cur_idx);
+  pfi->stet = ITER_RUN;
 }
 
 static void __pfiter_pblock_last(page_frame_t *pfi)
@@ -323,7 +309,55 @@ static void __pfiter_pblock_last(page_frame_t *pfi)
 
   ASSERT(pfi->type == PF_ITER_PBLOCK);
   ctx->cur_node = ctx->last_node;
-  ctx->
+  ctx->cur_idx = ctx->last_idx;
+  pfi->pf_idx =
+    pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->cur_idx);
+  pfi->state = ITER_RUN;
+}
+
+static void __pfiter_pblock_next(page_frame_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx;
+
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_PBLOCK);
+  ctx = iter_fetch_ctx(pfi);
+  if (unlikely((ctx->cur_node == ctx->last_node) &&
+               (ctx->cur_idx >= ctx->last_idx))) {
+    pfi->pf_idx = PAGE_IDX_INVAL;
+    pfi->state = ITER_STOP;
+  }
+  else {
+    ctx->cur_idx++;
+    if (ctx->cur_idx >= pages_block_size(list_entry(ctx->cur_node, page_frame_t, node))) {
+      ctx->cur_node = ctx->cur_node->next;
+      ctx->cur_idx = 0;
+    }
+
+    pfi->pf_idx =
+      pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->cur_idx);
+  }
+}
+
+static void __pfiter_pblock_prev(page_frame_iterator_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx;
+
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_PBLOCK);
+  ctx = iter_fetch_ctx(pfi);
+  if (unlikely((ctx->cur_node == ctx->first_node) &&
+               (ctx->cur_idx <= ctx->first_idx))) {
+    pfi->pf_idx = PAGE_IDX_INVAL;
+    pfi->state = ITER_STOP;
+  }
+  else {
+    if (!ctx->cur_idx)
+      ctx->cur_node = ctx->cur_node->prev;
+    else
+      ctx->cur_idx--;
+
+    pfi->pf_idx =
+      pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->cur_idx);
+  }
 }
 
 void pfi_pblock_init(page_frame_iterator_t *pfi,
@@ -342,7 +376,6 @@ void pfi_pblock_init(page_frame_iterator_t *pfi,
   ctx->last_node = lnode;
   ctx->last_idx = lidx;
   pfi->pf_idx = PAGE_IDX_INVAL;
-  pfi->state = ITER_LIE;
   pfi->error = 0;
   iter_set_ctx(pfi, ctx);
 }

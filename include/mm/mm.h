@@ -33,6 +33,7 @@
 #include <ds/iterator.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
+#include <eza/arch/mm.h>
 #include <eza/arch/types.h>
 
 extern page_frame_t *page_frames_array; /**< An array of all available physical pages */

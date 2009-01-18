@@ -22,25 +22,25 @@ typedef enum __memobj_nature {
   MEMOBJ_IMMORTAL   = 0x10,
 } memobj_nature_t;
 
-struct __memobj_ops;
+struct __memobj;
+/* TODO DK: extends basic memobjs operations... */
+typedef struct __memobj_ops {
+  status_t (*synchronize)(struct __memobj *memobj);
+  status_t (*truncate)(struct __memobj *memobj);
+  status_t (*putpage)(struct __memobj *memobj);
+  status_t (*getpage)(struct __memobj *memobj);
+} memobj_ops_t;
+
 
 typedef struct __memobj {
   memobj_id_t id;
   ttree_t pages_cache;
   list_head_t pagelist_lru;
-  struct __memobj_ops mops;
+  memobj_ops_t mops;
   task_t *backend;
   atomic_t users_count;
   memobj_nature_t nature;
 } memobj_t;
-
-/* TODO DK: extends basic memobjs operations... */
-typedef struct __memobj_ops {
-  status_t (*synchronize)(memobj_t *memobj);
-  status_t (*truncate)(memobj_t *memobj);
-  status_t (*putpage)(memobj_t *memobj);
-  status_t (*getpage)(memobj_t *memobj);
-} memobj_ops_t;
 
 void memobj_subsystem_initialize(void);
 memobj_t *memobj_find_by_id(memobj_id_t memobj_id);

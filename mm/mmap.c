@@ -195,13 +195,13 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
       || !npages
       || ((flags & VMR_NONE) && ((flags & VMR_PROTO_MASK) != VMR_NONE))) {
     err = -EINVAL;
-    goto out;
+    goto err;
   }
   if (addr) {
     if (!uspace_varange_is_valid(addr, (1 << npages))) {
       if (flags & VMR_FIXED) {
         err = -ENOMEM;
-        goto out;
+        goto err;
       }
     }
     else {
@@ -209,7 +209,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
       if (vmr_prev) {
         if (flags & VMR_FIXED) {
           err = -EINVAL;
-          goto out;
+          goto err;
         }
       }
 
@@ -222,20 +222,45 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
   vmr = create_vmrange(vmm, addr, npages, flags);
   if (!vmr) {
     err = -ENOMEM;
-    goto out;
+    goto err;
   }
   
   ttree_insert_placeful(&vmm->ttree, &tti->meta_cur, &vmr->bounds);
   if (flags & VMR_POPULATE) {
     page_frame_t *pages;
-
-    /* FIXME DK: allocate pages regarding to memory limits of a particular task */
+    
     pages = alloc_pages4uspace(vmm, npages);
+    if (!pages) {
+      err = -ENOMEM;
+      goto err;
+    }
+    else {
+      mmap_info_t minfo;
+      page_frame_iterator_t pfi;      
+      ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) pblock_ctx;
+
+      pfi_pblock_init(&pfi, &pblock_ctx, list_node_first(&pages->head), 0,
+                      list_node_last(&pages->head),
+                      pages_block_size(list_entry(list_node_last(&pages->head), page_frame_t, node)));
+      iter_first(&pfi);
+      minfo.va_from = addr;
+      minfo.va_to = addr + (1 << npages);
+      minfo.ptable_flags = mpf2ptf(flags);
+      minfo.pfi = &pfi;
+      err = ptable_map(vmm->rpd, &minfo);
+      if (err) {
+        ptable_unmap(vmm->rpd, addr, npages);
+        goto err;
+      }
+    }
   }
+
+  return addr;
   
-  out:
+  err:
   if (vmr) {
     vmr->parent_vmm->num_vmrs--;
+    ttree_delete_placeful(&vmm->ttree, &tti->meta_cur);
     memfree(vmr);
   }
   
@@ -253,6 +278,7 @@ status_t mmap_kern(uintptr_t va, page_idx_t first_page, int npages,
   minfo.va_to = minfo.va_from + ((npages - 1) << PAGE_WIDTH);
   minfo.ptable_flags = mpf2ptf(proto, flags);
   pfi_index_init(&pfi, &pf_idx_ctx, first_page, first_page + npages - 1);
+  iter_first(&pfi);
   minfo.pfi = &pfi;
   return ptable_map(&kernel_rpd, &minfo);
 }

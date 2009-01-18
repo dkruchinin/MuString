@@ -26,6 +26,7 @@
 
 #include <mm/page.h>
 #include <mm/pfi.h>
+#include <mm/vmm.h>
 #include <mlibc/types.h>
 #include <eza/arch/mm_types.h>
 
@@ -174,7 +175,7 @@ static inline uintptr_t pde_get_va_range(int pde_level)
  * @param mmap_flags - MMAP flags mask
  * @return Page table flags
  */
-inline uint_t mpf2ptf(uint_t mmap_prot, uint_t mmap_flags);
+inline uint32_t mpf2ptf(unsigned long flags)
 
 /**
  * @brief Initialize root page table directory (PML4)
@@ -242,8 +243,6 @@ status_t ptable_populate_pagedir(pde_t *parent_pde, uint_t flags);
  */
 void ptable_depopulate_pagedir(pde_t *dir);
 
-struct __mmap_info;
-
 /**
  * @brief Map pages into the given root page directory.
  * @param rpd   - A pointer to root page directory pages will be mapped to
@@ -252,7 +251,7 @@ struct __mmap_info;
  * @see rpd_t
  * @see mmap_info_t
  */
-status_t ptable_map(rpd_t *prd, struct __mmap_info *minfo);
+status_t ptable_map(rpd_t *prd, mmap_info_t *minfo);
 
 /**
  * @brief Unmap pages from the given root page directory

@@ -129,15 +129,14 @@ static void do_ptable_unmap(page_frame_t *dir, uintptr_t va_from, uintptr_t va_t
   }
 }
 
-inline uint_t mpf2ptf(uint_t mmap_prot, uint_t mmap_flags)
+inline uint32_t mpf2ptf(unsingned long flags)
 {
-  uint_t ptable_flags = 0;
+  uint32_t ptable_flags = 0;
 
-  ptable_flags |= (!!(mmap_prot & PROT_WRITE) << bitnumber(pow2(PDE_RW)));
-  ptable_flags |= (!(mmap_prot & PROT_NONE) << bitnumber(pow2(PDE_US)));
-  ptable_flags |= (!!(mmap_prot & PROT_NOCACHE) << bitnumber(pow2(PDE_PCD)));
-  ptable_flags |= (!(mmap_prot & PROT_EXEC) << bitnumber(pow2(PDE_NX)));
-  ptable_flags |= (!!(mmap_flags & MAP_PHYS) << bitnumber(pow2(PDE_PHYS)));
+  ptable_flags |= (!!(flags & PROT_WRITE) << pow2(PDE_RW);
+  ptable_flags |= (!(flags & PROT_NONE) << pow2(PDE_US));
+  ptable_flags |= (!!(flags & PROT_NOCACHE) << pow2(PDE_PCD));
+  ptable_flags |= (!(mmap_prot & PROT_EXEC) << pow2(PDE_NX)) ;
   
   return ptable_flags;
 }
@@ -171,9 +170,9 @@ void ptable_map_entries(pde_t *pde_start, int num_entries,
   while (num_entries--) {
     if (pde->flags & PDE_PRESENT)
       panic("ptable_map_entries: PDE %p is already mapped!", pde);
-
-    ASSERT(!iter_isstopped(pfi));
+    
     iter_next(pfi);
+    ASSERT(!iter_isstopped(pfi));
     if (pfi->pf_idx == PAGE_IDX_INVAL)
       panic("ptable_map_entries: Unexpected page index. ERR = %d", pfi->error);
     pde_set_flags(pde, flags | PDE_PRESENT);
@@ -250,11 +249,10 @@ void pfi_ptable_init(page_frame_iterator_t *pfi,
   pfi->last = pfi->prev = NULL;
   iter_init(pfi, PF_ITER_PTABLE);
   memset(ctx, 0, sizeof(*ctx));
-  ctx->va_from = ctx->va_cur = va_from;
+  ctx->va_from = va_from;
   ctx->va_to = va_from + (npages << PAGE_WIDTH);
   ctx->rpd = rpd;  
   pfi->pf_idx = PAGE_IDX_INVAL;
-  pfi->state = ITER_LIE;
   pfi->error = 0;
   iter_set_ctx(pfi, ctx);
 }
@@ -262,40 +260,38 @@ void pfi_ptable_init(page_frame_iterator_t *pfi,
 static void __pfi_first(page_frame_iterator_t *pfi)
 {
   ITERATOR_CTX(page_frame, PF_ITER_PTABLE) *ctx;
-  
-  ASSERT(pfi->type == PF_ITER_PTABLE);
+
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_PTABLE);
   ctx = iter_fetch_ctx(pfi);
-  pfi->pf_idx = mm_vaddr2page_idx(ctx->rpd, ctx->va_from);
-  if (pfi->state == PAGE_IDX_INVAL) {
+  ctx->va_cur = ctx->va_from;
+  pfi->pf_idx = mm_vaddr2page_idx(ctx->rpd, ctx->va_cur);
+  if (pfi->pf_idx == PAGE_IDX_INVAL) {
     pfi->error = -EFAULT;
     pfi->state = ITER_STOP;
-    return;
   }
   else {
     pfi->error = 0;
-    ctx->va_cur = ctx->va_from;
+    pfi->state = ITER_RUN;
   }
-  
-  pfi->state = (ctx->va_cur < ctx->va_to) ?
-    ITER_RUN : ITER_STOP;
 }
 
 static void __pfi_next(page_frame_iterator_t *pfi)
 {
-  ASSERT(pfi->type == PF_ITER_PTABLE);
-  if (!iter_isrunning(pfi))
-    iter_first(pfi);
+  ITERATOR_CTX(page_frame, PF_ITER_PTABLE) *ctx;
+
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_PTABLE);
+  ctx = iter_fetch_ctx(pfi);
+  if (ctx->va_cur >= ctx->va_to) {
+    pfi->error = 0;
+    pfi->state = ITER_STOP;
+    pfi->pf_idx = PAGE_IDX_INVAL;
+  }
   else {
-    ITERATOR_CTX(page_frame, PF_ITER_PTABLE) *ctx;    
-    ctx = iter_fetch_ctx(pfi);
     ctx->va_cur += PAGE_SIZE;
     pfi->pf_idx = mm_vaddr2page_idx(ctx->rpd, ctx->va_cur);
     if (pfi->pf_idx == PAGE_IDX_INVAL) {
       pfi->error = -EFAULT;
       pfi->state = ITER_STOP;
-      return;
     }
-    if (ctx->va_cur >= ctx->va_to)
-      pfi->state = ITER_STOP;
   }
 }

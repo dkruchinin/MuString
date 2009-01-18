@@ -211,7 +211,7 @@ static void __pfiter_first(page_frame_iterator_t *pfi)
 {
   ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx;
 
-  ASSERT(pfi->type == PF_ITER_ARCH);
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_ARCH);
   pfi->pf_idx = 0;
   pfi->state = ITER_RUN;
   ctx = iter_fetch_ctx(pfi);
@@ -227,9 +227,11 @@ static void __pfiter_next(page_frame_iterator_t *pfi)
 {
   ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx;
 
-  ASSERT(pfi->type == PF_ITER_ARCH);
-  if (pfi->pf_idx >= swks.mem_total_pages)
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_ARCH);
+  if (pfi->pf_idx >= swks.mem_total_pages) {
     pfi->state = ITER_STOP;
+    pfi->pf_idx = PAGE_IDX_INVAL;
+  }
   else {
     ctx = iter_fetch_ctx(pfi);
     pfi->pf_idx++;
@@ -246,9 +248,8 @@ void pfi_arch_init(page_frame_iterator_t *pfi,
 {
   static bool __arch_iterator_init = false;
 
-  if (__arch_iterator_init) {
+  if (__arch_iterator_init)
     panic("pfi_arch_init: Platform-specific page frame iterator may be initialized only one time!");
-  }
   
   pfi->first = __pfiter_first;
   pfi->next = __pfiter_next;
@@ -273,6 +274,7 @@ void arch_mm_remap_pages(void)
   minfo.va_to = minfo.va_from + ((IDENT_MAP_PAGES - 1) << PAGE_WIDTH);
   minfo.ptable_flags = PDE_RW;
   pfi_index_init(&pfi, &pfi_index_ctx, 1, IDENT_MAP_PAGES - 1);
+  iter_first(&pfi);
   minfo.pfi = &pfi;
   ret = ptable_map(&kernel_rpd, &minfo);
   if (ret) {
@@ -287,6 +289,7 @@ void arch_mm_remap_pages(void)
   minfo.va_to = minfo.va_from + (swks.mem_total_pages << PAGE_WIDTH);
   minfo.ptable_flags = PDE_RW;
   pfi_index_init(&pfi, &pfi_index_ctx, 0, swks.mem_total_pages);
+  iter_first(&pfi);
   minfo.pfi = &pfi;
   ret = ptable_map(&kernel_rpd, &minfo);
   if (ret)

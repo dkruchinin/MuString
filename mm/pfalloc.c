@@ -113,6 +113,7 @@ page_frame_t *alloc_pages4uspace(vmm_t *vmm, page_idx_t npages)
       if (unlikely(!pages)) {
         pages = ap;
         list_init_head(&pages->head);
+        list_add2tail(&pages->head, &pages->node);
       }
       else
         list_add2tail(&pages->head, &ap->node);
@@ -129,8 +130,6 @@ page_frame_t *alloc_pages4uspace(vmm_t *vmm, page_idx_t npages)
 
     list_for_each_safe(&pages->head, iter, safe)
       free_pages(list_entry(iter, page_frame_t, node));
-
-    free_pages(pages);
   }
   
   out:

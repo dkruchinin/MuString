@@ -3,7 +3,7 @@
 
 #include <ds/list.h>
 #include <eza/spinlock.h>
-#include <mm/mmap.h>
+#include <mm/vmm.h>
 #include <eza/task.h>
 #include <mlibc/types.h>
 

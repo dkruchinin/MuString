@@ -33,7 +33,7 @@
 #include <eza/smp.h>
 #include <eza/vm.h>
 #include <kernel/vm.h>
-#include <mm/mmap.h>
+#include <mm/vmm.h>
 
 /* Here it is ! */
 swks_t swks  __attribute__((aligned(PAGE_SIZE)));
