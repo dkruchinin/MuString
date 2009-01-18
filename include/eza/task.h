@@ -88,6 +88,7 @@ struct __task_ipc_priv;
 struct __task_mutex_locks;
 struct __task_sync_data;
 struct __mutex;
+struct __posix_stuff;
 
 /* Per-task signal descriptors. */
 struct __sighandlers;
@@ -192,6 +193,9 @@ typedef struct __task_struct {
   countered_event_t *cwaiter;
   struct __task_struct *terminator;
   event_t reinc_event;
+
+  /* POSIX items related stuff. */
+  struct __posix_stuff *posix_stuff;
 
   tg_leader_private_t *tg_priv;
 

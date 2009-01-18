@@ -5,4 +5,4 @@ ifdef $(SUP_ARCH)
 endif
 
 obj-y += stdlib.o ctype.o kprintf.o unistd.o index_array.o \
-	linked_array.o waitqueue.o rbtree.o
+	linked_array.o waitqueue.o rbtree.o index_allocator.o

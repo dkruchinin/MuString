@@ -107,6 +107,8 @@ typedef struct __kern_sigaction {
   int sa_flags;
 } kern_sigaction_t;
 
+#define SIGEV_SIGNAL  0
+
 typedef struct __sighandlers {
   atomic_t use_count;
   kern_sigaction_t actions[NR_SIGNALS];
