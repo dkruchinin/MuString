@@ -109,9 +109,10 @@ void register_mandmap(vm_mandmap_t *mandmap, uintptr_t va_from, uintptr_t va_to,
   memset(mandmap, 0, sizeof(mandmap));
   mandmap->bounds.space_start = PAGE_ALIGN_DOWN(va_from);
   mandmap->bounds.space_end = PAGE_ALIGN(va_to);
-  mandmap->vmr_flags = flags;
+  mandmap->vmr_flags = flags | VMR_FIXED;
   list_add2tail(&mandmaps_lst, &mandmap->node);
   __mandmaps_total++;
+  mandmap->map = mandmap->unmap = NULL;
 }
 
 void unregister_manmap(vm_mandmap_t *mandmap)
@@ -267,8 +268,9 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
   return err;
 }
 
-status_t mmap_kern(uintptr_t va, page_idx_t first_page, int npages,
-                   uint_t proto, uint_t flags)
+#define MMAP_KERN_FLAGS_MASK ()
+
+status_t mmap_kern(uintptr_t va, page_idx_t first_page, int npages, kmap_flags_t flags)
 {
   mmap_info_t minfo;
   page_frame_iterator_t pfi;
@@ -276,7 +278,7 @@ status_t mmap_kern(uintptr_t va, page_idx_t first_page, int npages,
 
   minfo.va_from = PAGE_ALIGN_DOWN(va);
   minfo.va_to = minfo.va_from + ((npages - 1) << PAGE_WIDTH);
-  minfo.ptable_flags = mpf2ptf(proto, flags);
+  minfo.ptable_flags = mpf2ptf(flags & KMAP_FLAGS_MASK);
   pfi_index_init(&pfi, &pf_idx_ctx, first_page, first_page + npages - 1);
   iter_first(&pfi);
   minfo.pfi = &pfi;

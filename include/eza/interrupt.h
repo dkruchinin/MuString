@@ -27,7 +27,7 @@
 
 #include <ds/list.h>
 #include <eza/arch/interrupt.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 
 /* Structure that describes abstract hardware interrupt controller.
  */

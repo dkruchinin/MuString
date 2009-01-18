@@ -44,7 +44,7 @@
 #include <eza/arch/mm_types.h>
 
 /* Initial kernel top-level page directory record. */
-uintptr_t _kernel_extended_end;
+uintptr_t _kernel_extended_end, _user_va_start, _user_va_end;
 uint8_t e820count;
 uint8_t k_entries[PAGE_SIZE] __attribute__((aligned(PAGE_SIZE)));
 
@@ -173,6 +173,8 @@ void arch_mm_init(void)
     PAGE_ALIGN((uintptr_t)page_frames_array + sizeof(page_frame_t) * swks.mem_total_pages);
   kprintf(" Scanned: %ldM, %ld pages\n", (long)_b2mb(max_phys_addr - min_phys_addr),
           (long)swks.mem_total_pages);
+  _user_va_start = USER_START_VIRT;
+  _user_va_end = USER_END_VIRT;
 }
 
 static int prepare_page(page_idx_t idx, ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx)

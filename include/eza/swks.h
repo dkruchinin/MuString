@@ -28,11 +28,10 @@
 #ifndef __SWKS_H__
 #define __SWKS_H__ 
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/interrupt.h>
 #include <eza/scheduler.h>
-#include <mm/mm.h>
-#include <eza/arch/page.h>
+//#include <eza/arch/page.h>
 
 enum __swks_constants {
   INITIAL_TICKS_VALUE = 0,

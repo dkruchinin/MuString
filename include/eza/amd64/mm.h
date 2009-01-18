@@ -38,10 +38,12 @@ extern int _kernel_end;
 extern int _kernel_start;
 extern int _low_kernel_end;
 extern uintptr_t _kernel_extended_end;
+extern uintptr_t _user_va_start;
+extern uintptr_t _user_va_end;
 
 #define USER_END_VIRT    (1UL << 40UL)   /* 16 Terabytes */
 #define USER_START_VIRT  0x1001000UL
-#define USER_VA_SIZE     (USER_END_VIRT - USER_START_VIRT)
+#define USER_VA_SIZE     (_user_va_start - _user_va_end)
 #define LAST_BIOS_PAGE (BIOS_END_ADDR >> PAGE_WIDTH)
 #define KERNEL_FIRST_FREE_ADDRESS ((void *)PAGE_ALIGN(_kernel_extended_end))
 #define KERNEL_FIRST_ADDRESS ((void *)&_kernel_end)
@@ -58,6 +60,13 @@ static inline bool is_kernel_addr(void *a)
   }
   return ((k2p(addr) >= (uintptr_t)(BOOT_OFFSET - AP_BOOT_OFFSET)) &&
           (addr < (uintptr_t)&_kernel_start));
+}
+
+static inline uintptr_t cut_from_usr_top_va(page_idx_t npages)
+{
+  _user_va_end -= (1 << npages);
+  ASSERT(_user_va_end > _user_va_start);
+  return _user_va_end;
 }
 
 void arch_mm_init(void);

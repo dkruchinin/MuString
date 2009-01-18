@@ -32,7 +32,7 @@
 
 #include <mm/page.h>
 #include <mm/vmm.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 
 /* Allocation flags */
 #define __AF_PLAST PF_PGEN

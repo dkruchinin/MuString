@@ -21,7 +21,6 @@
  */
 
 #include <eza/task.h>
-#include <mm/mmap.h>
 #include <eza/smp.h>
 #include <eza/kstack.h>
 #include <eza/errno.h>

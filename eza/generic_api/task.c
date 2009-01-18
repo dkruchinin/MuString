@@ -27,7 +27,7 @@
 #include <eza/errno.h>
 #include <mm/mm.h>
 #include <mm/pfalloc.h>
-#include <mm/mmap.h>
+#include <mm/vmm.h>
 #include <eza/amd64/context.h>
 #include <eza/arch/scheduler.h>
 #include <eza/arch/types.h>
@@ -356,7 +356,7 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
   }
 
   r = mmap_kern(task->kernel_stack.low_address, pframe_number(stack_pages), KERNEL_STACK_PAGES,
-                PROT_READ | PROT_WRITE, MAP_FIXED);
+                KMAP_READ | KMAP_WRITE | KMAP_KERN);
   if( r != 0 ) {
     goto free_stack_pages;
   }

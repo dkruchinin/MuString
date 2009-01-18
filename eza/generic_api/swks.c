@@ -27,26 +27,22 @@
 #include <mlibc/types.h>
 #include <eza/arch/interrupt.h>
 #include <eza/arch/timer.h>
+#include <eza/arch/mm.h>
+#include <mm/vmm.h>
 #include <eza/swks.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/string.h>
 #include <eza/smp.h>
-#include <eza/vm.h>
-#include <kernel/vm.h>
-#include <mm/vmm.h>
 
 /* Here it is ! */
-swks_t swks  __attribute__((aligned(PAGE_SIZE)));
-static vm_range_t swks_area;
+swks_t swks __attribute__((__aligned__(PAGE_SIZE)));
+static vm_mandmap_t swks_mandmap;
 
 void initialize_swks(void)
 {
-  int i;
-  char *p = (char *)&swks;
-  for (i = 0; i < sizeof(swks); i++) {
-    *p++ = 0;
-  }
-
+  uintptr_t swks_va;
+  
+  memset(&swks, 0, sizeof(swks));
   swks.system_ticks_64 = INITIAL_TICKS_VALUE;
   swks.nr_cpus = CONFIG_NRCPUS;
   swks.timer_frequency = HZ;
@@ -55,13 +51,7 @@ void initialize_swks(void)
   kprintf("%ld.\n",swks.delay_loop);*/
 
   arch_initialize_swks();
-
-  /* Make the SWKS be mapped into every user address space. */
-  swks_area.phys_addr=k2p(&swks) & PAGE_ADDR_MASK;
-  swks_area.virt_addr=SWKS_VIRT_ADDR;
-  swks_area.num_pages=SWKS_PAGES;
-  //swks_area.map_proto = PROT_READ | PROT_WRITE;
-  //swks_area.map_flags = MAP_FIXED;
-
-  vm_register_user_mandatory_area(&swks_area);
+  swks_va = cut_from_usr_top_va(SWKS_PAGES);
+  register_mandmap(&swks_mandmap, swks_va, swks_va + SWKS_PAGES,
+                   VMR_READ | VMR_GENERIC | VMR_FIXED);
 }

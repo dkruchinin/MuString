@@ -3,12 +3,12 @@
 
 #include <ds/list.h>
 #include <eza/spinlock.h>
-#include <mm/vmm.h>
+#include <mm/mm.h>
 #include <eza/task.h>
 #include <mlibc/types.h>
 
 /* TODO: [mt] lock/unlock task VM via semaphores ! */
-#define LOCK_TASK_VM(t)
+/*#define LOCK_TASK_VM(t)
 #define UNLOCK_TASK_VM(t)
 
 typedef struct __vm_range {
@@ -27,6 +27,6 @@ status_t vm_initialize_task_mm( task_t *orig, task_t *target,
 
 status_t vm_map_mandatory_areas(task_t *task);
 
-status_t arch_vm_map_kernel_area(task_t *task);
+status_t arch_vm_map_kernel_area(task_t *task);*/
 
 #endif

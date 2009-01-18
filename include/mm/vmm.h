@@ -25,6 +25,8 @@
 #define __VMM_H__
 
 #include <ds/iterator.h>
+#include <ds/list.h>
+#include <ds/ttree.h>
 #include <mm/page.h>
 #include <mm/memobj.h>
 #include <mlibc/types.h>
@@ -54,6 +56,15 @@ typedef enum __vmrange_flags {
   VMR_POPULATE = 0x0800,
   VMR_GENERIC  = 0x1000,
 } vmrange_flags_t;
+
+typedef vmrange_flags_t kmap_flags_t;
+
+#define KMAP_KERN    VMR_NONE
+#define KMAP_READ    VMR_READ
+#define KMAP_WRITE   VMR_WRITE
+#define KMAP_EXEC    VMR_EXEC
+#define KMAP_NOCACHE VMR_NOCACHE
+#define KMAP_FLAGS_MASK (KMAP_KMAP_READ | KMAP_WRITE | KMAP_EXEC | KMAP_NOCACHE)
 
 struct __vmm;
 struct range_bounds {
@@ -95,5 +106,6 @@ rpd_t kernel_rpd;
 void register_mandmap(vm_mandmap_t *mandmap, uintptr_t va_from, uintptr_t va_to, vmrange_flags_t vm_flags);
 void unregister_mandmap(vm_mandmap_t *mandmap);
 vmm_t *vmm_create(void);
+status_t mmap_kern(uintptr_t va, page_idx_t first_page, int npages, kmap_flags_t flags);
 
 #endif /* __VMM_H__ */
