@@ -34,17 +34,16 @@
 
 extern int _kernel_end;
 extern int _kernel_start;
-extern int _low_kernel_end;
-extern uintptr_t _kernel_extended_end;
+extern uintptr_t _kernel_first_free_addr;
 extern uintptr_t _user_va_start;
 extern uintptr_t _user_va_end;
 
-#define LAST_BIOS_PAGE (BIOS_END_ADDR >> PAGE_WIDTH)
-#define KERNEL_FIRST_FREE_ADDRESS ((void *)PAGE_ALIGN(_kernel_extended_end))
-#define KERNEL_FIRST_ADDRESS      ((void *)&_kernel_end)
+#define KERNEL_FIRST_FREE_ADDRESS (PAGE_ALIGN(_kernel_first_free_addr))
+#define KERNEL_START_ADDRESS      ((uintptr_t)&_kernel_start)
+#define KERNEL_END_ADDRESS        ((uintptr_t)&_kernel_end)
 #define USPACE_VA_START           _user_va_start
 #define USPACE_VA_END             _user_va_end
-#define IDENT_MAP_PAGES (_mb2b(2) >> PAGE_WIDTH)
+#define IDENT_MAP_PAGES           (_mb2b(2) >> PAGE_WIDTH)
 
 #define INVALID_ADDRESS (~0UL)
 #define __user
@@ -53,11 +52,11 @@ static inline bool is_kernel_addr(void *a)
 {
   uintptr_t addr = (uintptr_t)a;
 
-  if (addr >= (uintptr_t)&_kernel_start) {
-    return (addr <= _kernel_extended_end);
+  if (addr >= KERNEL_START_ADDRESS) {
+    return (addr <= KERNEL_FIRST_FREE_ADDRESS);
   }
   return ((k2p(addr) >= (uintptr_t)(BOOT_OFFSET - AP_BOOT_OFFSET)) &&
-          (addr < (uintptr_t)&_kernel_start));
+          (addr < KERNEL_START_ADDRESS));
 }
 
 static inline uintptr_t cut_from_usr_top_va(page_idx_t npages)
@@ -70,7 +69,6 @@ static inline uintptr_t cut_from_usr_top_va(page_idx_t npages)
 void arch_mm_init(void);
 void arch_mm_remap_pages(void);
 void arch_smp_mm_init(int cpu);
-page_idx_t mm_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr);
 
 #endif /* __ARCH_MM_H__ */
 

@@ -32,8 +32,12 @@
 #include <mm/vmm.h>
 #include <eza/arch/mm_types.h>
 #include <eza/limits.h>
-#include <eza/tevent.h>
 #include <eza/sigqueue.h>
+
+typedef uint32_t time_slice_t;
+typedef int32_t pid_t;
+typedef uint16_t uid_t;
+typedef uint64_t tid_t;
 
 #define INVALID_PID  ((pid_t)~0) 
 /* TODO: [mt] Manage NUM_PIDS properly ! */
@@ -65,12 +69,40 @@
 
 #define LOCK_TASK_MEMBERS(t) spinlock_lock(&t->member_lock)
 #define UNLOCK_TASK_MEMBERS(t) spinlock_unlock(&t->member_lock)
+#define TASK_EVENT_TERMINATION  0x1
+#define NUM_TASK_EVENTS  1
+#define ALL_TASK_EVENTS_MASK  ((1<<NUM_TASK_EVENTS)-1)
+#define LOCK_TASK_EVENTS_R(t)
+#define UNLOCK_TASK_EVENTS_R(t)
+#define LOCK_TASK_EVENTS_W(t)
+#define UNLOCK_TASK_EVENTS_W(t)
 
 
-typedef uint32_t time_slice_t;
-typedef int32_t pid_t;
-typedef uint16_t uid_t;
-typedef uint64_t tid_t;
+typedef struct __task_event_ctl_arg {
+  ulong_t ev_mask;
+  ulong_t port;
+} task_event_ctl_arg;
+
+typedef struct __task_event_descr {
+  pid_t pid;
+  tid_t tid;
+  ulong_t ev_mask;
+} task_event_descr_t;
+
+struct __ipc_gen_port;
+
+typedef struct __task_event_listener {
+  struct __ipc_gen_port *port;
+  struct __task_struct *listener;
+  list_node_t owner_list;
+  list_node_t llist;
+  ulong_t events;
+} task_event_listener_t;
+
+typedef struct __task_events {
+  list_head_t my_events;
+  list_head_t listeners;
+} task_events_t;
 
 typedef enum __task_creation_flag_t {
   CLONE_MM=0x1,
@@ -118,6 +150,11 @@ typedef struct __signal_struct {
 #define __TF_USPC_BLOCKED_BIT  0
 #define __TF_UNDER_MIGRATION_BIT  1
 #define __TF_EXITING_BIT  2
+
+typedef enum __task_privilege {
+  TPL_KERNEL = 0,  /* Kernel task - the most serious level. */
+  TPL_USER = 1,    /* User task - the least serious level */
+} task_privelege_t;
 
 typedef enum __task_flags {
   TF_USPC_BLOCKED=(1<<__TF_USPC_BLOCKED_BIT),/**< Block facility to change task's static priority outside the kernel **/
@@ -300,6 +337,12 @@ void free_task_struct(task_t *task);
 #define is_thread(task)  ((task)->group_leader && (task)->group_leader != (task))
 
 void cleanup_thread_data(void *t,ulong_t arg);
+
+void task_event_notify(ulong_t events);
+status_t task_event_attach(struct __task_struct *target,
+                           struct __task_struct *listener,
+                           task_event_ctl_arg *ctl_arg);
+void exit_task_events(struct __task_struct *target);
 
 /* Default kernel threads flags. */
 #define KERNEL_THREAD_FLAGS  (CLONE_MM)

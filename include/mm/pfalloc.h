@@ -101,6 +101,19 @@ void free_pages(page_frame_t *pages);
 status_t pages_block_size(page_frame_t *first_page);
 page_frame_t *alloc_pages4uspace(vmm_t *vmm, page_idx_t npages);
 
+static inline void pin_page_frame(page_frame_t *pf)
+{
+  atomic_inc(&pf->refcount);
+}
+
+static inline void unpin_page_frame(page_frame_t *pf)
+{
+  ASSERT(atomic_get(&pf->refcount) > 0);
+  atomic_dec(&pf->refcount);
+  if (!atomic_get(&pf->refcount))
+    free_pages(pf);
+}
+
 static inline void *alloc_pages_addr(int n, pfalloc_flags_t flags)
 {
   page_frame_t *pf = alloc_pages(n,flags);

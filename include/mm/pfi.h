@@ -27,7 +27,7 @@
 #include <ds/iterator.h>
 #include <mm/page.h>
 #include <mlibc/types.h>
-#include <eza/arch/mm_types.h>
+#include <eza/arch/ptable.h>
 
 /****************
  * PF_ITER_INDEX
@@ -123,9 +123,11 @@ void pfi_list_init(page_frame_iterator_t *pfi,
 void pfi_arch_init(page_frame_iterator_t *pfi,
                    ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx;);
 
+struct __rpd;
+
 void pfi_ptable_init(page_frame_iterator_t *pfi,
                      ITERATOR_CTX(page_frame, PF_ITER_PTABLE) *ctx,
-                     rpd_t *rpd, uintptr_t va_from, int npages);
+                     struct __rpd *rpd, uintptr_t va_from, int npages);
 
 DEFINE_ITERATOR_CTX(page_frame, PF_ITER_PBLOCK,
                     list_node_t *first_node;

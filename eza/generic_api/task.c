@@ -26,7 +26,6 @@
 #include <eza/smp.h>
 #include <eza/kstack.h>
 #include <eza/errno.h>
-#include <mm/mm.h>
 #include <mm/pfalloc.h>
 #include <mm/vmm.h>
 #include <mm/slab.h>

@@ -31,7 +31,7 @@
 #include <mlibc/types.h>
 #include <eza/interrupt.h>
 #include <eza/scheduler.h>
-#if 0 /* Do we *really* need SWKS page? */
+
 enum __swks_constants {
   INITIAL_TICKS_VALUE = 0,
 };
@@ -53,23 +53,20 @@ typedef struct __swks {
   uint8_t nr_cpus;
   cpu_stats_t cpu_stat[CONFIG_NRCPUS];
 
+#if 0
   /* Memory-related statistics. */
   page_idx_t mem_total_pages, mem_pages_in_use;
 
   /* Processes-related information. */
   pid_t total_processes, runnable_processes;
-  pid_t sleeping_processes, zombies;
-
-  /* clock settings */
-  uint64_t delay_loop;
-
   /* version info */
   uint16_t version;
   uint16_t sub_version;
   uint16_t release;
 
   /* IO ports stuff. */
-  ulong_t ioports_available;  
+  ulong_t ioports_available;
+#endif
 } swks_t;
 
 
@@ -81,6 +78,5 @@ void arch_initialize_swks(void);
 
 #define SWKS_PAGES  ((sizeof(swks)>>PAGE_WIDTH)+1)
 
-#endif
 #endif
 

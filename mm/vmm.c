@@ -3,11 +3,13 @@
 #include <ds/ttree.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
+#include <mm/mmpools.h>
 #include <mm/slab.h>
 #include <mm/memobj.h>
 #include <mm/vmm.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/types.h>
+#include <eza/arch/mm.h>
 
 static LIST_DEFINE(mandmaps_lst);
 static int __mandpas_total = 0;
@@ -28,6 +30,73 @@ static int __vmranges_cmp(void *r1, void *r2)
   }
   else
     return !!diff;
+}
+
+void vmm_initialize(void)
+{
+  mm_pool_t *pool;
+  page_frame_iterator_t pfi;
+  ITERATOR_CTX(page_frame, PF_ITER_ARCH) pfi_arch_ctx;
+
+  arch_mm_init();
+  mmpools_init();
+
+  /*
+   * PF_ITER_ARCH page frame iterator iterates through page_frame_t 
+   * structures located in the page_frames_array. It starts from the
+   * very first page and iterates forward until the last page available
+   * in the system is handled. On each iteration it returns an
+   * index of initialized by arhitecture-dependent level page frame.
+   */
+  pfi_arch_init(&pfi, &pfi_arch_ctx);
+  
+  /* initialize page and add it to the related pool */
+  iterate_forward(&pfi) {
+    page_frame_t *page = pframe_by_number(pfi.pf_idx);
+    __init_page(page);
+    mmpools_add_page(page);
+  }
+
+  kprintf("[MM] Memory pools were initialized\n");
+  
+  /*
+   * Now we may initialize "init data allocator"
+   * Note: idalloc allocator will cut from general pool's
+   * pages no more than CONFIG_IDALLOC_PAGES. After initialization
+   * is done, idalloc must be explicitely disabled.
+   */
+  pool = mmpools_get_pool(POOL_GENERAL);
+  ASSERT(pool->free_pages);
+  idalloc_enable(pool);
+  kprintf("[MM] Init-data memory allocator was initialized.\n");
+  kprintf(" idalloc available pages: %ld\n", idalloc_meminfo.npages);  
+  for_each_active_mm_pool(pool) {
+    char *name = mmpools_get_pool_name(pool->type);
+    
+    kprintf("[MM] Pages statistics of pool \"%s\":\n", name);
+    kprintf(" | %-8s %-8s %-8s |\n", "Total", "Free", "Reserved");
+    kprintf(" | %-8d %-8d %-8d |\n", pool->total_pages,
+            atomic_get(&pool->free_pages), pool->reserved_pages);
+    mmpools_init_pool_allocator(pool);
+  }
+  if (ptable_rpd_initialize(&kernel_rpd))
+    panic("mm_init: Can't initialize kernel root page directory!");
+  
+  /* Now we can remap available memory */
+  arch_mm_remap_pages();
+
+  /* After all memory has been remapped, we can reserve some space
+   * for initial virtual memory range allocation.
+   */
+  idalloc_meminfo.num_vpages=IDALLOC_VPAGES;
+  idalloc_meminfo.avail_vpages=IDALLOC_VPAGES;
+  idalloc_meminfo.virt_top=kernel_min_vaddr;
+  kernel_min_vaddr-=IDALLOC_VPAGES*PAGE_SIZE;
+
+  memobj_subsystem_initialize();
+  kprintf("[MM] All pages were successfully remapped.\n");
+  __initialize_mandatory_areas();
+  kprintf("[MM] All mandatory user areas were successfully created.\n");
 }
 
 void vmm_subsystem_initialize(void)

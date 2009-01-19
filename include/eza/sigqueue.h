@@ -7,6 +7,8 @@
 #include <eza/arch/bitwise.h>
 #include <mlibc/assert.h>
 
+typedef uint64_t sigset_t;
+
 #define __SQ_SHIFT  3
 #define __SQ_GRANULARITY  (1<<__SQ_SHIFT)
 #define __SQ_MAXID  (sizeof(sigset_t)*8)

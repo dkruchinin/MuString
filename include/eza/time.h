@@ -25,8 +25,10 @@
 #ifndef __TIME_H__
 #define __TIME_H__ 
 
-#include <eza/arch/types.h>
 #include <eza/swks.h>
+#include <mlibc/types.h>
+
+#define system_ticks  (swks.system_ticks_64)
 
 typedef long clock_t;
 
@@ -38,8 +40,6 @@ typedef struct __timeval {
   ulong_t tv_sec;   /* seconds */
   ulong_t tv_nsec;  /* microseconds */
 } timeval_t;
-
-#define system_ticks  swks.system_ticks_64
 
 #define NANOSLEEP_MAX_SECS  1000000000
 

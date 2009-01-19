@@ -24,11 +24,9 @@
 #ifndef __ARCH_PTABLE_H__
 #define __ARCH_PTABLE_H__
 
+#include <ds/iterator.h>
 #include <mm/page.h>
-#include <mm/pfi.h>
-#include <mm/vmm.h>
 #include <mlibc/types.h>
-#include <eza/arch/mm_types.h>
 
 enum {
   PDE_PRESENT = 0x0001, /**< PDE is present. I.e. corresponding page content is holding in main memory */
@@ -73,6 +71,13 @@ typedef struct __pde {
   unsigned avail      :11;
   unsigned nx          :1;
 } __attribute__((packed)) pde_t;
+
+DEFINE_ITERATOR_CTX(page_frame, PF_ITER_PTABLE,
+                    rpd_t *rpd;
+                    uintptr_t va_cur;
+                    uintptr_t va_from;                    
+                    uintptr_t va_to;
+                    );
 
 #define PTABLE_DIR_ENTRIES 0x200 /**< Number of entries per page table directory */
 #define PTABLE_LEVEL_FIRST 0     /**< Level of the lowest pde */
@@ -250,6 +255,8 @@ status_t ptable_populate_pagedir(pde_t *parent_pde, uint_t flags);
  */
 void ptable_depopulate_pagedir(pde_t *dir);
 
+struct __mmap_info;
+
 /**
  * @brief Map pages into the given root page directory.
  * @param rpd   - A pointer to root page directory pages will be mapped to
@@ -258,7 +265,7 @@ void ptable_depopulate_pagedir(pde_t *dir);
  * @see rpd_t
  * @see mmap_info_t
  */
-status_t ptable_map(rpd_t *prd, mmap_info_t *minfo);
+status_t ptable_map(rpd_t *prd, struct __mmap_info *minfo);
 
 /**
  * @brief Unmap pages from the given root page directory
@@ -269,5 +276,7 @@ status_t ptable_map(rpd_t *prd, mmap_info_t *minfo);
  * @see rpd_t
  */
 status_t ptable_unmap(rpd_t *rpd, uintptr_t va_from, int npages);
+
+page_idx_t mm_pin_vaddr(rpd_t *rpd, uintptr_t vaddr);
 
 #endif /* __ARCH_PTABLE_H__ */

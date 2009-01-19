@@ -26,14 +26,12 @@
 #include <mlibc/kprintf.h>
 #include <eza/scheduler.h>
 #include <eza/kernel.h>
-#include <eza/swks.h>
 #include <eza/smp.h>
 #include <eza/arch/scheduler.h>
 #include <eza/arch/types.h>
 #include <eza/arch/bits.h>
 #include <eza/task.h>
 #include <eza/scheduler.h>
-#include <eza/swks.h>
 #include <eza/kstack.h>
 #include <mlibc/index_array.h>
 #include <eza/task.h>

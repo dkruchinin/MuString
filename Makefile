@@ -94,6 +94,8 @@ clean:
 	$(Q)$(RM) -rf $(ODIR)
 	$(Q)$(RM) -f muielf vmuielf boot.img
 	$(Q)$(MAKE) -C. $(addprefix clean_, $(GENERICS))
+
+clean_host:
 	$(call echo-header,"Cleaning host")
 	$(Q)$(MAKE) -C kbuild clean
 

@@ -25,14 +25,11 @@
  */
 
 #include <mlibc/types.h>
-#include <eza/arch/interrupt.h>
 #include <eza/arch/timer.h>
-#include <eza/arch/mm.h>
-#include <mm/vmm.h>
 #include <eza/swks.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/string.h>
-#include <eza/smp.h>
+#include <eza/arch/mm.h>
 
 /* Here it is ! */
 swks_t swks __attribute__((__aligned__(PAGE_SIZE)));
@@ -52,6 +49,6 @@ void initialize_swks(void)
 
   arch_initialize_swks();
   swks_va = cut_from_usr_top_va(SWKS_PAGES);
-  register_mandmap(&swks_mandmap, swks_va, swks_va + SWKS_PAGES,
+  register_mandmap(&swks_mandmap, swks_va, SWKS_PAGES, p2k(&swks),
                    VMR_READ | VMR_GENERIC | VMR_FIXED);
 }

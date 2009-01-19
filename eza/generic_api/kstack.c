@@ -28,7 +28,6 @@
 #include <mlibc/stddef.h>
 #include <eza/arch/page.h>
 #include <eza/kstack.h>
-#include <mm/mm.h>
 
 static kernel_stack_allocator_context_t main_stack_ctx;
 
