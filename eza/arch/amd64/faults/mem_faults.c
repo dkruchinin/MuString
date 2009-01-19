@@ -90,7 +90,7 @@ static bool __read_user_safe(uintptr_t addr,uintptr_t *val)
     return false;
   }
 
-  p=(uintptr_t*)(pframe_id_to_virt(pidx)+(addr & PAGE_OFFSET_MASK));
+  p=(uintptr_t*)(pframe_id_to_virt(pidx)+(addr & PAGE_MASK));
   *val=*p;
   return true;
 }

@@ -7,8 +7,7 @@
 #include <eza/spinlock.h>
 #include <mm/slab.h>
 #include <eza/smp.h>
-#include <kernel/vm.h>
-#include <eza/vm.h>
+#include <mm/page.h>
 #include <mm/pfalloc.h>
 #include <mm/mm.h>
 #include <mm/vmm.h>
@@ -160,7 +159,7 @@ status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   ulong_t *kaddr;
 
   if( !irq_array || !irqs || irqs > MAX_IRQS_PER_THREAD ||
-      (addr & PAGE_OFFSET_MASK) ) {
+      (addr & PAGE_MASK) ) {
     return -EINVAL;
   }
 

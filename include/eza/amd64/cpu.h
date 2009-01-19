@@ -54,6 +54,48 @@
 #define INTEL_SSE2           26
 #define INTEL_FXSAVE         24
 
+#define IDT_ITEMS  256  /* interrupt descriptors */
+#define GDT_ITEMS  8   /* GDT */
+
+#define NIL_DES  0  /* nil(null) descriptor */
+#define KTEXT_DES    1 /* kernel space */
+#define KDATA_DES    2
+#define UDATA_DES    3 /* user space */
+#define UTEXT_DES    4
+#define KTEXT32_DES  5 /* it's requered while bootstrap in 32bit mode */
+#define TSS_DES      6
+
+#define PL_KERNEL  0
+#define PL_USER    3
+
+#define AR_PRESENT    (1<<7)  /* avialable*/
+#define AR_DATA       (2<<3)
+#define AR_CODE       (3<<3)
+#define AR_WRITEABLE  (1<<1)
+#define AR_READABLE   (1<<1)
+#define AR_TSS        (0x9)   /* task state segment */
+#define AR_INTR       (0xe)   /* interrupt */
+#define AR_TRAP       (0xf)
+
+#define DPL_KERNEL  (PL_KERNEL<<5)
+#define DPL_USPACE  (PL_USER<<5)
+
+#define TSS_BASIC_SIZE  104
+#define TSS_IOMAP_SIZE  ((4*4096)+1)  /* 16k&nil for mapping */
+#define TSS_DEFAULT_LIMIT  (TSS_BASIC_SIZE-1)
+#define TSS_IOPORTS_PAGES  1
+#define TSS_IOPORTS_LIMIT  (PAGE_SIZE-1)
+
+#define IO_PORTS        (IDT_ITEMS*1024)
+
+/* bootstrap macros */
+#define idtselector(des)  ((des) << 4)
+#define gdtselector(des)  ((des) << 3)
+
+/* Macros for defining task selectors. */
+#define USER_SELECTOR(s) (gdtselector(s) | PL_USER)
+#define KERNEL_SELECTOR(s) gdtselector(s)
+
 #ifndef __ASM__
 
 #include <config.h>

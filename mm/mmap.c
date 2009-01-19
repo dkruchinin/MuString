@@ -327,9 +327,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
   return err;
 }
 
-#define MMAP_KERN_FLAGS_MASK ()
-
-status_t mmap_kern(uintptr_t va, page_idx_t first_page, int npages, kmap_flags_t flags)
+status_t mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, int npages, kmap_flags_t flags)
 {
   mmap_info_t minfo;
   page_frame_iterator_t pfi;
@@ -341,5 +339,5 @@ status_t mmap_kern(uintptr_t va, page_idx_t first_page, int npages, kmap_flags_t
   pfi_index_init(&pfi, &pf_idx_ctx, first_page, first_page + npages - 1);
   iter_first(&pfi);
   minfo.pfi = &pfi;
-  return ptable_map(&kernel_rpd, &minfo);
+  return ptable_map(rpd, &minfo);
 }

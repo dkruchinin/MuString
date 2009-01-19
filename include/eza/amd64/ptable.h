@@ -50,6 +50,14 @@ enum {
 };
 
 /**
+ * @struct rpd_t
+ * @brief Root page directory structures (AMD64-specific)
+ */
+typedef struct __rpd {
+  page_frame_t *pml4;
+} rpd_t;
+
+/**
  * @struct pde_t
  * @brief AMD64-specific Page Directory Entry.
  *

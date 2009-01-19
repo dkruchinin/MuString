@@ -30,9 +30,7 @@
 #include <eza/arch/types.h>
 #include <mm/mm.h>
 #include <mm/page.h>
-#include <mm/mmap.h>
 #include <mm/idalloc.h>
-#include <eza/arch/page.h>
 #include <eza/errno.h>
 #include <eza/actbl.h>
 
@@ -153,7 +151,7 @@ static struct acpi_madt *find_madt(uint32_t *phys_addrs, int cnt, uintptr_t va)
 			p = (uint8_t*)va;
 		} else {
 			j = 1;
-			base = phys_addrs[i] & PAGE_ADDR_MASK;
+			base = phys_addrs[i] & ~PAGE_MASK;
 			p = pframe_id_to_virt(phys_addrs[i] >> PAGE_WIDTH);
 		}	
 
@@ -226,7 +224,7 @@ int get_acpi_lapic_info(uint32_t *lapic_base, uint8_t *lapic_ids, int size, int 
 	} else
 		p = pframe_id_to_virt(s);
 
-	rsdt = (struct acpi_rsdt*)(p + (rsdp->rsdt_addr & PAGE_OFFSET_MASK));
+	rsdt = (struct acpi_rsdt*)(p + (rsdp->rsdt_addr & PAGE_MASK));
 	if (verify_checksum((uint8_t*)rsdt, rsdt->header.len)) {
 		s = (rsdt->header.len - sizeof(rsdt->header)) / sizeof(rsdt->tbl_addrs);
 		madt = find_madt(rsdt->tbl_addrs, s, va1);

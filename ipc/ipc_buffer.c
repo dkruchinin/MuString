@@ -26,13 +26,12 @@
 #include <kernel/vm.h>
 #include <eza/errno.h>
 #include <ipc/ipc.h>
+#include <mm/page.h>
 #include <mm/pfalloc.h>
 #include <mm/mmap.h>
 #include <ds/linked_array.h>
 #include <eza/limits.h>
 #include <eza/vm.h>
-#include <eza/arch/page.h>
-#include <mm/page.h>
 #include <kernel/vm.h>
 #include <mlibc/stddef.h>
 #include <ipc/gen_port.h>
@@ -62,7 +61,7 @@ status_t ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
     }
 
     pchunk=buf->chunks;
-    adr=(start_addr+PAGE_SIZE) & PAGE_ADDR_MASK;
+    adr=PAGE_ALIGN(start_addr);
     first=adr-start_addr;
     if( size <= first ) {
       first = size;
@@ -89,11 +88,10 @@ ipc_user_buffer_t *ipc_get_buffer(task_t *owner,ulong_t buf_id)
     buf = ipc->user_buffers[buf_id];
     if( buf != NULL ) {
       REF_BUFFER(buf);
->>>>>>> .merge_file_6d1pLT
     }
 
     buf->first=first;
-    *pchunk=(uintptr_t)pframe_id_to_virt(idx)+(start_addr & ~PAGE_ADDR_MASK);
+    *pchunk=(uintptr_t)pframe_id_to_virt(idx)+(start_addr & ~PAGE_MASK);
 
     size-=first;
     start_addr+=first;

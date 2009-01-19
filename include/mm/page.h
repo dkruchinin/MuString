@@ -37,6 +37,9 @@
 #include <eza/arch/page.h>
 #include <eza/arch/atomic.h>
 
+#define PAGE_ALIGN(addr) (((addr) + PAGE_SIZE) & ~PAGE_MASK)
+#define PAGE_ALIGN_DOWN(addr) ((addr) & ~PAGE_MASK)
+
 #define NOF_MM_POOLS 2 /**< Number of MM pools in system */
 
 /**
@@ -44,6 +47,8 @@
  * Page index.
  */
 typedef int page_idx_t;
+
+#define PAGE_IDX_INVAL (~0U)
 
 /**
  * @typedef uint16_t page_flags_t;
@@ -82,9 +87,6 @@ typedef struct __page_frame {
 
 extern page_frame_t *page_frames_array;
 
-#define PAGE_IDX_INVAL (~0U)
-#define PAGE_ALIGN(addr) align_up((uintptr_t)(addr), PAGE_SIZE)
-#define PAGE_ALIGN_DOWN(addr) align_down((uintptr_t)(addr), PAGE_SIZE)
 #define pframe_pool_type(page) (__pool_type((page)->flags & PAGE_POOLS_MASK))
 
 /**

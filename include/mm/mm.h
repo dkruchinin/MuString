@@ -39,6 +39,13 @@
 extern page_frame_t *page_frames_array; /**< An array of all available physical pages */
 extern uintptr_t kernel_min_vaddr; /**< The bottom address of kernel virtual memory space. */
 
+typedef struct __vm_mandmap {
+  list_node_t node;
+  uintptr_t va_start;
+  page_idx_t npages;
+  uintptr_t phys_addr;
+} vm_mandmap_t;
+
 static inline void pin_page_frame(page_frame_t *pf)
 {
   atomic_inc(&pf->refcount);
@@ -46,7 +53,7 @@ static inline void pin_page_frame(page_frame_t *pf)
 
 static inline void unpin_page_frame(page_frame_t *pf)
 {
-  ASSERT(atomic_get(&pf->refcount) != 0);
+  ASSERT(atomic_get(&pf->refcount) > 0);
   atomic_dec(&pf->refcount);
   if (!atomic_get(&pf->refcount))
     free_pages(pf);

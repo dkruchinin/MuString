@@ -28,6 +28,20 @@
 #include <mlibc/types.h>
 #include <eza/arch/context.h>
 
+/* The most sensetive bits in RFLAGS.  */
+#define RFLAGS_IOPL_BIT 12
+#define RFLAGS_INT_BIT 9
+
+/* Default RFLAGS: IOPL=0, all interrupts are enabled. */
+#define DEFAULT_RFLAGS_VALUE (0 | (1 << RFLAGS_INT_BIT))
+
+/* Initial RFLAGS value for new user tasks. */
+#define USER_RFLAGS DEFAULT_RFLAGS_VALUE
+
+/* Initial RFLAGS value for new kernel tasks: IOPL=3. */
+#define KERNEL_RFLAGS (DEFAULT_RFLAGS_VALUE | (3 << RFLAGS_IOPL_BIT))
+
+
 extern int arch_context_save(context_t *c);
 extern void arch_context_restore(context_t *c) __attribute__ ((noreturn));
 

@@ -72,15 +72,6 @@ struct range_bounds {
   uintptr_t space_end;
 };
 
-typedef struct __vm_mandmap {
-  list_node_t node;
-  struct range_bounds bounds;  
-  void (*map)(struct __vmm *vmm, struct __vm_mandmap *mandmap);
-  void (*unmap)(struct __vmm *vmm, struct __vm_mandmap *mandmap);
-  uintptr_t phys_addr;
-  vmrange_flags_t vmr_flags;
-} vm_mandmap_t;
-
 typedef struct __vmragnge {
   struct range_bounds bounds;
   struct __vmm *parent_vmm;
@@ -103,10 +94,14 @@ typedef struct __vmm {
 
 rpd_t kernel_rpd;
 
-void register_mandmap(vm_mandmap_t *mandmap, uintptr_t va_from, uintptr_t va_to, vmrange_flags_t vm_flags);
+#define mmap_kern(va, first_page, npages, flags)    \
+  mmap_core(&kernel_rpd, va, first_page, npages, flags)
+
+void register_mandmap(vm_mandmap_t *mandmap, uintptr_t va_from, uintptr_t va_to,
+                      uintptr_t phys_addr, vmrange_flags_t vm_flags);
 void unregister_mandmap(vm_mandmap_t *mandmap);
 status_t mandmaps_roll_forward(vmm_t *target_mm);
 vmm_t *vmm_create(void);
-status_t mmap_kern(uintptr_t va, page_idx_t first_page, int npages, kmap_flags_t flags);
+int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, int npages, kmap_flags_t flags);
 
 #endif /* __VMM_H__ */
