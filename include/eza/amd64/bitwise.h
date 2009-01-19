@@ -32,9 +32,7 @@
 #ifndef __ARCH_BITWISE_H__
 #define __ARCH_BITWISE_H__
 
-#include <config.h>
 #include <mlibc/types.h>
-#include <eza/arch/asm.h>
 
 #define ARCH_BIT_SET
 /* Atomic operation */

@@ -45,6 +45,8 @@
 #define valid_signal(n)  ((n)>=0 && (n) <= SIGRTMAX )
 #define rt_signal(n)  ((n)>=SIGRTMIN && (n) <= SIGRTMAX)
 
+typedef uint64_t sigset_t;
+
 typedef union sigval {
   int sival_int;
   void *sival_ptr;

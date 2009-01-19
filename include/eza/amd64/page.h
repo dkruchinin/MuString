@@ -34,18 +34,13 @@
 #define KERNEL_INVALID_ADDRESS   0x100  /* Address that is never mapped. */
 #define KERNEL_PHYS_START        0x100000
 #define MIN_PHYS_MEMORY_REQUIRED 0x1800000
-#define USER_END_VIRT            (1UL << 40UL) /* 16 Terabytes */
-#define USER_START_VIRT          0x1001000UL
+#define USPACE_VA_BOTTOM         (1UL << 40UL) /* 16 Terabytes */
+#define USPACE_VA_TOP            0x1001000UL
 
 #ifndef __ASM__
 #include <eza/arch/types.h>
 
-extern int _kernel_end;
-extern int _kernel_start;
-extern int _low_kernel_end;
-extern uintptr_t _kernel_extended_end;
-extern uintptr_t _user_va_start;
-extern uintptr_t _user_va_end;
+#define USER_VASPACE_SIZE (_user_va_end - _user_va_start)
 
 static inline uintptr_t _k2p(uintptr_t p)
 {

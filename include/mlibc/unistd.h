@@ -30,6 +30,7 @@
 #include <eza/arch/asm.h>
 
 extern uint32_t delay_loop;
+typedef uint32_t usec_t;
 
 void atom_usleep(usec_t usecs);
 

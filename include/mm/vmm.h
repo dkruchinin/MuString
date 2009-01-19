@@ -97,9 +97,9 @@ rpd_t kernel_rpd;
 #define mmap_kern(va, first_page, npages, flags)    \
   mmap_core(&kernel_rpd, va, first_page, npages, flags)
 
-void register_mandmap(vm_mandmap_t *mandmap, uintptr_t va_from, uintptr_t va_to,
-                      uintptr_t phys_addr, vmrange_flags_t vm_flags);
-void unregister_mandmap(vm_mandmap_t *mandmap);
+/*void register_mandmap(vm_mandmap_t *mandmap, uintptr_t va_from, uintptr_t va_to,
+  uintptr_t phys_addr, vmrange_flags_t vm_flags);
+  void unregister_mandmap(vm_mandmap_t *mandmap);*/
 status_t mandmaps_roll_forward(vmm_t *target_mm);
 vmm_t *vmm_create(void);
 int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, int npages, kmap_flags_t flags);

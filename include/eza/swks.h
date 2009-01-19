@@ -31,8 +31,7 @@
 #include <mlibc/types.h>
 #include <eza/interrupt.h>
 #include <eza/scheduler.h>
-//#include <eza/arch/page.h>
-
+#if 0 /* Do we *really* need SWKS page? */
 enum __swks_constants {
   INITIAL_TICKS_VALUE = 0,
 };
@@ -82,5 +81,6 @@ void arch_initialize_swks(void);
 
 #define SWKS_PAGES  ((sizeof(swks)>>PAGE_WIDTH)+1)
 
+#endif
 #endif
 

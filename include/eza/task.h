@@ -68,6 +68,9 @@
 
 
 typedef uint32_t time_slice_t;
+typedef int32_t pid_t;
+typedef uint16_t uid_t;
+typedef uint64_t tid_t;
 
 typedef enum __task_creation_flag_t {
   CLONE_MM=0x1,

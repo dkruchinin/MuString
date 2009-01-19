@@ -102,6 +102,8 @@
 #include <eza/arch/page.h>
 #include <eza/arch/types.h>
 
+typedef uint32_t cpu_id_t;
+
 typedef enum __prot_ring {
   PROT_RING_0 = 0,
   PROT_RING_1 = 1,

@@ -70,6 +70,7 @@
 #define SC_SIGPROCMASK         32
 
 #ifndef __ASM__
+typedef uint32_t shm_id_t; /* FIXME: remove after merging */
 
 /**
  * @fn status_t sys_get_pid(void)

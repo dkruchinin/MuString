@@ -28,7 +28,6 @@
 
 #include <ds/iterator.h>
 #include <mm/page.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/e820map.h>
 #include <eza/arch/boot.h>
 #include <mlibc/types.h>
@@ -40,12 +39,11 @@ extern uintptr_t _kernel_extended_end;
 extern uintptr_t _user_va_start;
 extern uintptr_t _user_va_end;
 
-#define USER_END_VIRT    (1UL << 40UL)   /* 16 Terabytes */
-#define USER_START_VIRT  0x1001000UL
-#define USER_VA_SIZE     (_user_va_start - _user_va_end)
 #define LAST_BIOS_PAGE (BIOS_END_ADDR >> PAGE_WIDTH)
 #define KERNEL_FIRST_FREE_ADDRESS ((void *)PAGE_ALIGN(_kernel_extended_end))
-#define KERNEL_FIRST_ADDRESS ((void *)&_kernel_end)
+#define KERNEL_FIRST_ADDRESS      ((void *)&_kernel_end)
+#define USPACE_VA_START           _user_va_start
+#define USPACE_VA_END             _user_va_end
 #define IDENT_MAP_PAGES (_mb2b(2) >> PAGE_WIDTH)
 
 #define INVALID_ADDRESS (~0UL)
@@ -74,5 +72,5 @@ void arch_mm_remap_pages(void);
 void arch_smp_mm_init(int cpu);
 page_idx_t mm_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr);
 
-#endif
+#endif /* __ARCH_MM_H__ */
 

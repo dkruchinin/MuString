@@ -42,6 +42,8 @@
 
 //#endif
 
+typedef uint64_t ipl_t;
+
 /* AMD 64 interrupt/exception stack frame */
 typedef struct __interrupt_stack_frame {
   uint64_t rip, cs;
@@ -58,6 +60,19 @@ typedef struct __interrupt_stack_frame_err {
   (struct __gpr_regs *)(((uintptr_t)(s))-sizeof(struct __gpr_regs)-8)
 
 extern volatile cpu_id_t online_cpus;
+
+static inline ipl_t interrupts_read(void)
+{
+  ipl_t o;
+
+  __asm__ volatile (
+		    "pushfq\n"
+		    "popq %0\n"
+		    : "=r" (o)
+		    );
+
+  return o;
+}
 
 /* interrupts_enable(): enabling interrupts and return
  * previous EFLAGS value.
@@ -93,7 +108,6 @@ static inline ipl_t interrupts_disable(void)
 
   return o;
 }
-
 
 static inline void count_interrupt(void)
 {

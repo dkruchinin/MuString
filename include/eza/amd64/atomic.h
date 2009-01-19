@@ -31,9 +31,7 @@
 #ifndef __ARCH_ATOMIC_H__
 #define __ARCH_ATOMIC_H__
 
-#include <config.h>
 #include <mlibc/types.h>
-#include <eza/arch/asm.h>
 
 typedef volatile long atomic_t;
 

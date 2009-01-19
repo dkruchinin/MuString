@@ -24,11 +24,8 @@
 #ifndef __ARCH_TYPES_H__
 #define __ARCH_TYPES_H__
 
-/* Some macro to make life a bit easier. */
-#define KB(x) ((x)*1024)
-#define MB(x) ((x)*1024*1024)
+#include <config.h>
 
-/* simple typedefs */
 typedef signed char int8_t;
 typedef signed short int16_t;
 typedef signed int int32_t;
@@ -37,37 +34,28 @@ typedef unsigned char uint8_t; /* unsigned */
 typedef unsigned short uint16_t;
 typedef unsigned int uint32_t;
 typedef unsigned long long uint64_t;
-/* system used types */
 typedef unsigned long uintptr_t;
-typedef int32_t pid_t;
-typedef uint16_t uid_t;
-typedef uint64_t tid_t;
-typedef uint32_t usec_t;
 typedef int32_t status_t;
-typedef uint32_t shm_id_t;
-
-typedef uint64_t sigset_t;
-
-/* abstraction typedef */
-typedef uint64_t unative_t;
-typedef uint64_t native_t;
-typedef uint64_t ipl_t;
-
-typedef unsigned long lock_t;
 
 /* bit-related types. */
 typedef uint32_t bit_idx_t;
 
-/* SMP-related stuff. */
-typedef uint32_t cpu_id_t;
-
-typedef enum __task_privilege {
-  TPL_KERNEL = 0,  /* Kernel task - the most serious level. */
-  TPL_USER = 1,    /* User task - the least serious level */
-} task_privelege_t;
-
 #define TYPE_LONG_SHIFT  6
 #define BITS_PER_LONG  64
 
-#endif
+#ifdef CONFIG_SMP
+/*
+ * x86 and x86_64(amd64) architectures provide lock prefix
+ * that guaranty atomic execution limited set of operations
+ * such as:
+ * ADC, ADD, AND, BTC, BTR, BTS, CMPXCHG, CMPXCHG8B, CMPXCHG16B, DEC,
+ * INC, NEG, NOT, OR, SBB, SUB, XADD, XCHG, and XOR
+ * (list of operations supporting lock prefix was taken from amd64 manual,
+ * volume 3)
+ */
+#define __LOCK_PREFIX "lock "
+#else
+#define __LOCK_PREFIX
+#endif /* CONFIG_SMP */
 
+#endif /* __ARCH_TYPES_H__ */

@@ -36,6 +36,8 @@
 #define __SPINLOCK_LOCKED_V   1
 #define __SPINLOCK_UNLOCKED_V 0
 
+typedef unsigned long lock_t;
+
 #ifdef CONFIG_SMP
 typedef struct __spinlock_type {
     lock_t __spin_val;

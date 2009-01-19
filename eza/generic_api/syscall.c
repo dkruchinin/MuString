@@ -27,10 +27,10 @@
 
 /* real syscall handler */
 /* TODO: fix it and implement */
-unative_t syscall_handler(unative_t yy0,unative_t yy1,unative_t yy2,
-			  unative_t yy3,unative_t yy4,unative_t yy5)
+uintptr_t syscall_handler(uintptr_t yy0,uintptr_t yy1,uintptr_t yy2,
+			  uintptr_t yy3,uintptr_t yy4,uintptr_t yy5)
 {
-  unative_t o;
+  uintptr_t o;
 
   return o;
 }
