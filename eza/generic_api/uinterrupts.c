@@ -11,7 +11,7 @@
 #include <eza/vm.h>
 #include <mm/pfalloc.h>
 #include <mm/mm.h>
-#include <mm/mmap.h>
+#include <mm/vmm.h>
 #include <eza/scheduler.h>
 #include <eza/kconsole.h>
 #include <eza/arch/mm.h>

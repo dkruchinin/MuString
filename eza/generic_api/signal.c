@@ -25,8 +25,8 @@
 #include <eza/process.h>
 #include <eza/errno.h>
 #include <eza/arch/context.h>
-#include <kernel/vm.h>
 #include <eza/signal.h>
+#include <mm/mm.h>
 #include <mm/slab.h>
 #include <mm/pfalloc.h>
 #include <eza/security.h>
@@ -301,7 +301,7 @@ status_t sys_sigprocmask(int how,const sigset_t *set,sigset_t *oldset)
   }
 
   if( set != NULL ) {
-    if( copy_from_user(&kset,set,sizeof(kset)) ) {
+    if( copy_from_user(&kset,(void *)set,sizeof(kset)) ) {
       return -EFAULT;
     }
     kset &= ~UNTOUCHABLE_SIGNALS;

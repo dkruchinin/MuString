@@ -5,7 +5,6 @@
 #include <ds/ttree.h>
 #include <ds/list.h>
 #include <mm/page.h>
-#include <eza/task.h>
 #include <mlibc/types.h>
 
 #ifndef CONFIG_MEMOBJS_MAX
@@ -37,7 +36,6 @@ typedef struct __memobj {
   ttree_t pages_cache;
   list_head_t pagelist_lru;
   memobj_ops_t mops;
-  task_t *backend;
   atomic_t users_count;
   memobj_nature_t nature;
 } memobj_t;

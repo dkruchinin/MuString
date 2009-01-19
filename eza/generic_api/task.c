@@ -21,6 +21,7 @@
  */
 
 #include <ds/list.h>
+#include <mlibc/index_array.h>
 #include <eza/task.h>
 #include <eza/smp.h>
 #include <eza/kstack.h>
@@ -28,22 +29,21 @@
 #include <mm/mm.h>
 #include <mm/pfalloc.h>
 #include <mm/vmm.h>
-#include <eza/amd64/context.h>
-#include <eza/arch/scheduler.h>
-#include <eza/arch/types.h>
+#include <mm/slab.h>
 #include <eza/kernel.h>
 #include <eza/arch/task.h>
-#include <mlibc/index_array.h>
 #include <eza/spinlock.h>
 #include <eza/arch/preempt.h>
-#include <eza/vm.h>
 #include <eza/limits.h>
 #include <ipc/ipc.h>
 #include <eza/uinterrupt.h>
-#include <mm/slab.h>
 #include <eza/sync.h>
 #include <eza/signal.h>
 #include <eza/sigqueue.h>
+#include <eza/arch/ptable.h>
+#include <eza/arch/context.h>
+#include <eza/arch/scheduler.h>
+#include <mlibc/types.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
@@ -307,6 +307,28 @@ static status_t __setup_signals(task_t *task,task_t *parent,ulong_t flags)
   return 0;
 }
 
+static status_t initialize_task_mm(task_t *orig, task_t *target,
+                                   task_creation_flags_t flags, task_privelege_t priv)
+{
+  status_t ret = 0;
+  
+  if (!orig || priv == TPL_KERNEL)
+    ptable_rpd_clone(&target->rpd, &kernel_rpd);
+  else if (flags & CLONE_MM) {
+    target->task_mm = orig->task_mm;
+    atomic_inc(&orig->task_mm->vmm_users);
+  }
+  else {
+    target->task_mm = vmm_create();
+    if (!target->task_mm)
+      ret = -ENOMEM;
+    else
+      ret = mandmaps_roll_forward(target->task_mm);
+  }
+
+  return ret;
+}
+
 status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t,
                          task_creation_attrs_t *attrs)
 {
@@ -343,7 +365,7 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
   }
 
   /* Initialize task's MM. */
-  r = vm_initialize_task_mm(parent,task,flags,priv);
+  r = initialize_task_mm(parent,task,flags,priv);
   if( r != 0 ) {
     goto free_stack;
   }

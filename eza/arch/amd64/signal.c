@@ -20,16 +20,15 @@
  * eza/arch/amd64/signal.c: AMD64-specific code for signal delivery.
  */
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <mlibc/kprintf.h>
+#include <mm/mm.h>
 #include <eza/smp.h>
 #include <eza/task.h>
 #include <eza/arch/context.h>
 #include <eza/signal.h>
-#include <kernel/vm.h>
 #include <eza/errno.h>
 #include <eza/arch/current.h>
-#include <kernel/vm.h>
 #include <eza/process.h>
 
 #define XMM_CTX_SIZE  512
@@ -121,41 +120,6 @@ static void __perform_default_action(int sig)
   }
   kprintf( "IGNORE\n" );
   for(;;);
-}
-
-static status_t __setup_syscall_context(uint64_t retcode,uintptr_t kstack,
-                                        siginfo_t *info,sa_sigaction_t act,
-                                        struct __signal_context **pctx)
-{
-  uintptr_t ustack;
-  struct __signal_context *ctx;
-  struct __gpr_regs *kpregs;
-
-  /* Perform user-specific action. First, save signal context in user stack.*/
-  ustack=get_userspace_stack_pointer();
-
-  /* Allocate signal context using user's stack area. */
-  ctx=(struct __signal_context *)(ustack-sizeof(struct __signal_context));
-
-  if( __setup_general_ctx(&ctx->gen_ctx,kstack,&kpregs) ) {
-    return -EFAULT;
-  }
-
-  if( __setup_trampoline_ctx(ctx,info,act) ) {
-    return -EFAULT;
-  }
-
-  if( copy_to_user(&ctx->retcode,&retcode,sizeof(retcode)) ) {
-    return -EFAULT;
-  }
-
-  /* Update user's stack to point at our context frame. */
-  set_userspace_stack_pointer(ctx);
-
-  /* Setup trampoline. */
-  kpregs->rcx=USPACE_TRMPL(trampoline_sighandler_invoker_sys);
-  *pctx=ctx;
-  return 0;
 }
 
 static status_t __setup_int_context(uint64_t retcode,uintptr_t kstack,

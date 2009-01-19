@@ -21,24 +21,6 @@
  *
  */
 
-#include <ds/iterator.h>
-#include <ds/list.h>
-#include <mlibc/kprintf.h>
-#include <mlibc/stddef.h>
-#include <mm/mm.h>
-#include <mm/page.h>
-#include <mm/mmap.h>
-#include <mm/pfalloc.h>
-#include <mm/vmm.h>
-#include <eza/mutex.h>
-#include <eza/errno.h>
-#include <eza/arch/page.h>
-#include <eza/arch/mm.h>
-#include <eza/arch/ptable.h>
-#include <eza/arch/types.h>
-
-rpd_t kernel_rpd;
-
 #include <config.h>
 #include <ds/list.h>
 #include <ds/ttree.h>
@@ -50,6 +32,7 @@ rpd_t kernel_rpd;
 #include <mlibc/kprintf.h>
 #include <mlibc/types.h>
 
+rpd_t kernel_rpd;
 static LIST_DEFINE(mandmaps_lst);
 static int __mandpas_total = 0;
 static memcache_t __vmms_cache = NULL;
@@ -90,6 +73,53 @@ static vmrange_t *create_vmrange(vmm_t *parent_vmm, uintptr_t va_start, int npag
   return vmr;
 }
 
+static status_t __mandmap_map_default(vmm_t *target_mm, mandmap_t *mandmap)
+{
+  vmrange_t *vmr;
+  tnode_meta_t tnode_meta;
+  page_idx_t npages;
+  status_t err = 0;
+
+  ASSERT(!(mandmap->bounds.space_start & ~PAGE_MASK) &&
+         !(mandmap->bounds.space_end & ~PAGE_MASK) &&
+         !(mandmap->phys_addr & ~PAGE_MASK));
+  vmr = ttree_lookup(&target_mm->ttree, &tnode_meta, &mandmap->bounds);
+  if (vmr) {
+    err = -EBUSY;
+    goto out;
+  }
+
+  npages = (mandmap->space_end - mandmap->space_start) >> PAGE_WIDTH;
+  vmr = create_vmrange(target_mm, mandmap->space_start, npages);
+  if (!vmr)
+    err = -ENOMEM;
+  else {
+    page_idx_t start_idx;
+    mmap_info_t minfo;
+    page_frame_iterator_t pfi;
+    ITERATOR_CTX(page_frame, PF_ITER_INDEX) iter_index_ctx;
+
+    ttree_insert_placeful(&target_mm->ttree, &tnode_meta, vmr);
+    start_idx = pframe_number(phys_to_pframe(mandmap->phys_addr));
+    minfo.va_from = vmr->bounds.space_start;
+    minfo.va_to = vmr->bounds.space_end;
+    minfo.ptable_flags = mpf2ptf(vmr->flags);
+    pfi_index_init(&pfi, &iter_index_ctx, start_idx, start_idx + npages);
+    iter_first(&pfi);
+    minfo.pfi = &pfi;
+    err = ptable_map(&target_mm->rpd, &minfo);
+    if (err) {
+      ptable_unmap(&target_mm->rpd, vmr->bounds.space_start, npages);
+      ttree_delete_placeful(&target_mm->ttree, &tnode_meta);
+      memfree(vmr);
+    }
+  }
+
+  out:
+  return err;
+}
+
+
 void vmm_subsystem_initialize(void)
 {
   kprintf("[MM] Initializing VMM subsystem...");
@@ -112,13 +142,37 @@ void register_mandmap(vm_mandmap_t *mandmap, uintptr_t va_from, uintptr_t va_to,
   mandmap->vmr_flags = flags | VMR_FIXED;
   list_add2tail(&mandmaps_lst, &mandmap->node);
   __mandmaps_total++;
-  mandmap->map = mandmap->unmap = NULL;
+  mandmap->map = __mandmap_map_default;
+  mandmap->unmap = NULL;
 }
 
 void unregister_manmap(vm_mandmap_t *mandmap)
 {
   list_del(&mandmap->node);
   __mandmaps_total--;
+}
+
+status_t mandmaps_roll_forward(vmm_t *target_mm)
+{
+  if (!__mandmaps_total)
+    return 0;
+  else {
+    vm_mandmap_t *mandmap;
+    status_t ret;
+
+    list_for_each_entry(&mandmaps_lst, mandmap, node) {
+      ret = mandmap->map(target_mm, mandmap);
+      if (ret) {
+        kprintf(KO_WARNING "mandmaps_roll_forward: Failed to create mandatory mapping from "
+                "%p to %p for VMM %p. ERR = %d",
+                mandmap->bounds.space_start, mandmap->bounds.space_end, target_mm, ret);
+
+        return ret;
+      }
+    }
+  }
+
+  return 0;
 }
 
 vmm_t *vmm_create(void)
@@ -132,6 +186,11 @@ vmm_t *vmm_create(void)
   memset(vmm, 0, sizeof(*vmm));
   ttree_init(&vmm->vmranges, __vmranges_cmpf, vmrange_t, bounds);
   atomic_set(&vmm->vmm_users, 1);
+  if (ptable_rpd_initialize(&vmm->rpd) < 0) {
+    memfree(vmm);
+    vmm = NULL;
+  }
+  
   return vmm;
 }
 
@@ -226,7 +285,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
     goto err;
   }
   
-  ttree_insert_placeful(&vmm->ttree, &tti->meta_cur, &vmr->bounds);
+  ttree_insert_placeful(&vmm->ttree, &tti->meta_cur, &vmr);
   if (flags & VMR_POPULATE) {
     page_frame_t *pages;
     

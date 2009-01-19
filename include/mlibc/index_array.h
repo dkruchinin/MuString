@@ -35,8 +35,8 @@
 #ifndef __INDEX_ARRAY_H__
 #define __INDEX_ARRAY_H__ 
 
-#include <eza/arch/types.h>
 #include <ds/list.h>
+#include <mlibc/types.h>
 #include <eza/arch/bits.h>
 #include <eza/arch/page.h>
 

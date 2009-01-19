@@ -58,11 +58,16 @@ static inline bool uspace_varange_is_valid(uintptr_t va_start, uintptr_t length)
           ((va_start + length) < USER_END_VIRT));
 }
 
+#define get_user(a,_uptr)  copy_from_user(&(a),_uptr,sizeof((a)))
+#define put_user(a,_uptr)  copy_to_user(_uptr,&(a),sizeof((a)))
+
 /**
  * @brief Initialize mm internals
  * @note It's an initcall, so it should be called only once during system boot stage.
  */
 void mm_init(void);
+status_t copy_to_user(void *dest,void *src,ulong_t size);
+status_t copy_from_user(void *dest,void *src,ulong_t size);
 
 #endif /* __MM_H__ */
 

@@ -29,6 +29,7 @@
 #include <eza/arch/context.h>
 #include <mlibc/index_array.h>
 #include <mm/page.h>
+#include <mm/vmm.h>
 #include <eza/arch/mm_types.h>
 #include <eza/limits.h>
 #include <eza/tevent.h>
@@ -134,7 +135,10 @@ typedef struct __task_struct {
   priority_t static_priority, priority, orig_priority;
 
   kernel_stack_t kernel_stack;
-  rpd_t rpd;
+  union {
+    rpd_t rpd;
+    vmm_t *task_mm;
+  };
   list_node_t pid_list;
   task_flags_t flags;
 

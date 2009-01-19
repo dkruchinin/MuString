@@ -23,7 +23,7 @@
 
 #include <eza/arch/types.h>
 #include <eza/resource.h>
-#include <mm/mmap.h>
+#include <mm/vmm.h>
 #include <mm/pfalloc.h>
 #include <eza/kstack.h>
 #include <eza/spinlock.h>

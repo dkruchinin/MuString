@@ -32,8 +32,6 @@
 #include <mlibc/string.h>
 #include <mm/page.h>
 #include <mm/pfi.h>
-#include <mm/mmpool.h>
-#include <mm/mmap.h>
 #include <mm/vmm.h>
 #include <eza/kernel.h>
 #include <eza/errno.h>
@@ -41,7 +39,6 @@
 #include <eza/swks.h>
 #include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
-#include <eza/arch/mm_types.h>
 
 /* Initial kernel top-level page directory record. */
 uintptr_t _kernel_extended_end, _user_va_start, _user_va_end;
@@ -51,7 +48,7 @@ uint8_t k_entries[PAGE_SIZE] __attribute__((aligned(PAGE_SIZE)));
 static page_idx_t dma_pages = 0;
 static uint64_t min_phys_addr = 0, max_phys_addr = 0;
 
-static vm_range_t direct_mapping_area;
+static vm_mandmap_t identity_mapping;
 uintptr_t kernel_min_vaddr;
 
 #ifdef CONFIG_DEBUG_MM

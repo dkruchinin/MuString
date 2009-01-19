@@ -28,11 +28,10 @@
 
 #include <ds/iterator.h>
 #include <mm/page.h>
-#include <mm/vmm.h>
-#include <mlibc/types.h>
 #include <eza/arch/mm_types.h>
 #include <eza/arch/e820map.h>
 #include <eza/arch/boot.h>
+#include <mlibc/types.h>
 
 extern int _kernel_end;
 extern int _kernel_start;
@@ -50,6 +49,7 @@ extern uintptr_t _user_va_end;
 #define IDENT_MAP_PAGES (_mb2b(2) >> PAGE_WIDTH)
 
 #define INVALID_ADDRESS (~0UL)
+#define __user
 
 static inline bool is_kernel_addr(void *a)
 {

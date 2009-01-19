@@ -47,7 +47,6 @@ enum {
   PDE_NX      = 0x2000, /**< When the NX bit is set to 1, code cannot be executed from the mapped
                            physical pages. See “No Execute (NX) Bit” on page 143 of AMD architecture programmers
                            manual vol. 2 for more info. */
-  PDE_PHYS    = 0x4000, /**< Given PDE has not associated with it page frame. */
 };
 
 /**
@@ -175,7 +174,7 @@ static inline uintptr_t pde_get_va_range(int pde_level)
  * @param mmap_flags - MMAP flags mask
  * @return Page table flags
  */
-inline uint32_t mpf2ptf(unsigned long flags)
+inline uint32_t mpf2ptf(unsigned long flags);
 
 /**
  * @brief Initialize root page table directory (PML4)
