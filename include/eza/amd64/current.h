@@ -42,10 +42,12 @@ typedef struct __cpu_sched_stat {
 #define CPU_SCHED_STAT_USER_PTD_OFFT  0x70
 
 /* Task flags indexes  */
-#define CPU_SCHED_NEED_RESCHED_F_IDX 0
+#define CPU_SCHED_NEED_RESCHED_F_IDX  0
+#define CPU_SCHED_DEF_WORKS_F_IDX     1
 
 /* Task flags masks. */
 #define CPU_SCHED_NEED_RESCHED_F_MASK (1 << CPU_SCHED_NEED_RESCHED_F_IDX)
+#define CPU_SCHED_DEF_WORKS_F_MASK    (1 << CPU_SCHED_DEF_WORKS_F_IDX)
 
 #ifndef __ASM__
 
@@ -83,6 +85,16 @@ static inline void arch_sched_set_current_need_resched(void)
 static inline void arch_sched_reset_current_need_resched(void)
 {
   reset_css_task_flag(CPU_SCHED_NEED_RESCHED_F_IDX);
+}
+
+static inline void arch_sched_set_def_works_pending(void)
+{
+  set_css_task_flag(CPU_SCHED_DEF_WORKS_F_IDX);
+}
+
+static inline void arch_sched_reset_def_works_pending(void)
+{
+  reset_css_task_flag(CPU_SCHED_DEF_WORKS_F_IDX);
 }
 
 extern cpu_sched_stat_t __percpu_var_cpu_sched_stat[];

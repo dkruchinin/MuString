@@ -43,6 +43,7 @@
 #include <eza/gc.h>
 #include <ipc/gen_port.h>
 #include <ipc/channel.h>
+#include <eza/def_actions.h>
 
 #ifdef CONFIG_TEST
 #include <test.h>
@@ -58,6 +59,44 @@ ulong_t syscall_counter = 0;
 task_t *server_task;
 status_t server_port,server_port2,server_port3;
 
+deffered_irq_action_t da1,da2,da3,da4,da5;
+task_t t1,t2,t3;
+
+static void test_def_actions(void)
+{
+  kprintf("Testing deffered actions.\n");
+
+  t1.static_priority=10;
+  t2.static_priority=3;
+  t3.static_priority=89;
+
+  DEFFERED_ACTION_INIT(da1,DEF_ACTION_EVENT,__DEF_ACT_SINGLETON_MASK);
+  da1.target=&t1;
+
+  DEFFERED_ACTION_INIT(da2,DEF_ACTION_EVENT,__DEF_ACT_SINGLETON_MASK);
+  da2.target=&t1;
+
+  DEFFERED_ACTION_INIT(da3,DEF_ACTION_EVENT,__DEF_ACT_SINGLETON_MASK);
+  da3.target=&t2;
+
+
+  DEFFERED_ACTION_INIT(da4,DEF_ACTION_EVENT,__DEF_ACT_SINGLETON_MASK);
+  da4.target=&t3;
+
+  DEFFERED_ACTION_INIT(da5,DEF_ACTION_EVENT,__DEF_ACT_SINGLETON_MASK);
+  da5.target=&t3;
+
+  schedule_deffered_action(&da1);
+  schedule_deffered_action(&da2);
+  schedule_deffered_action(&da3);
+  schedule_deffered_action(&da4);
+  schedule_deffered_action(&da5);
+
+  kprintf( "+ Firing actions...\n" );
+  fire_deffered_actions();
+  kprintf("Finished testing deffered actions.\n");
+  for(;;);
+}
 
 void idle_loop(void)
 {
@@ -68,6 +107,10 @@ void idle_loop(void)
     run_tests();
   }
 #endif
+
+//  if( !cpu_id() ) {
+//    test_def_actions();
+//  }
 
   for( ;; ) {
    

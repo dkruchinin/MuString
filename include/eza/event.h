@@ -5,6 +5,7 @@
 #include <eza/spinlock.h>
 #include <eza/scheduler.h>
 #include <eza/arch/atomic.h>
+#include <eza/errno.h>
 
 struct __task_struct;
 

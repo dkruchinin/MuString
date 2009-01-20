@@ -332,8 +332,9 @@ void cleanup_thread_data(void *t,ulong_t arg);
 #define set_and_check_task_flag(t,fb) (arch_bit_test_and_set(&(t)->flags,(fb)))
 #define clear_task_flag(t,f) ((t)->flags &= ~(f))
 
-#define ARCH_CTX_UWORS_SIGNALS_BIT_IDX  0
-#define ARCH_CTX_UWORS_DISINT_REQ_BIT_IDX  1
+#define ARCH_CTX_UWORS_SIGNALS_BIT_IDX      0
+#define ARCH_CTX_UWORS_DISINT_REQ_BIT_IDX   1
+#define ARCH_CTX_UWORS_DEF_ACTIONS_BIT_IDX  2
 
 #define ARCH_CTX_UWORKS_SIGNALS_MASK  (1<<ARCH_CTX_UWORS_SIGNALS_BIT_IDX)
 #define ARCH_CTX_UWORKS_DISINT_REQ_MASK  (1<<ARCH_CTX_UWORS_DISINT_REQ_BIT_IDX)
