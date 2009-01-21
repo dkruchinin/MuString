@@ -8,6 +8,7 @@
 #include <ds/list.h>
 #include <eza/spinlock.h>
 #include <eza/mutex.h>
+#include <eza/def_actions.h>
 
 #define MAX_IRQS_PER_THREAD  32
 
@@ -22,13 +23,16 @@ typedef struct __uintr_descr {
   irq_listener_t listener;
 } uintr_descr_t;
 
+#define __IRQ_ARRAY_ACTIVE_BIT  0
+
 typedef struct __irq_counter_array {
-  event_t event;    /* also contains pointer to the owner. */
+  deffered_irq_action_t de;    /* also contains pointer to the owner. */
   irq_event_mask_t *event_mask;
   irq_counter_t *base_addr;
   void *map_addr;
   list_head_t counter_handlers;
-  ulong_t num_counters;  
+  ulong_t num_counters;
+  ulong_t flags;
 } irq_counter_array_t;
 
 typedef struct __irq_counter_handler {

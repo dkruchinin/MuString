@@ -1,3 +1,25 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ *
+ * eza/generic_api/def_actions.c: implementation of IRQ deferred actions.
+ */
+
 #include <eza/arch/types.h>
 #include <eza/def_actions.h>
 #include <config.h>
@@ -6,6 +28,7 @@
 #include <eza/task.h>
 #include <eza/arch/bitwise.h>
 #include <eza/arch/current.h>
+#include <eza/event.h>
 
 static percpu_def_actions_t cpu_actions[CONFIG_NRCPUS];
 
@@ -16,6 +39,7 @@ void initialize_deffered_actions(void)
   for(i=0;i<CONFIG_NRCPUS;i++) {
     percpu_def_actions_t *a=&cpu_actions[i];
     a->num_actions=0;
+    a->executers=0;
     list_init_head(&a->pending_actions);
     spinlock_initialize(&a->lock);
   }
@@ -50,6 +74,8 @@ void schedule_deffered_action(deffered_irq_action_t *a) {
           next=next->next;
         } while( next != list_head(&acts->pending_actions) );
 
+        a->host=acts;
+
         if( !inserted ) {
           if( prev != NULL ) {
             a->node.next=prev->next;
@@ -66,10 +92,25 @@ void schedule_deffered_action(deffered_irq_action_t *a) {
   } else {
   }
 
-  if( acts->num_actions != old_acts ) {
-    //arch_sched_set_def_works_pending();
+  /* Current task needs to be rescheduled as soon as possible. */
+  if( acts->num_actions != old_acts &&
+      a->target->static_priority <= current_task()->priority ) {
+    arch_sched_set_def_works_pending();
   }
   spinlock_unlock_irqrestore(&acts->lock,is);
+}
+
+void execute_deffered_action(deffered_irq_action_t *a)
+{
+  switch( a->type ) {
+    case DEF_ACTION_EVENT:
+      event_raise(&a->d._event);
+      break;
+    case DEF_ACTION_SIGACTION:
+      break;
+  }
+
+  arch_bit_clear(&a->flags,__DEF_ACT_PENDING_BIT_IDX);
 }
 
 void fire_deffered_actions(void)
@@ -77,7 +118,16 @@ void fire_deffered_actions(void)
   percpu_def_actions_t *acts=&cpu_actions[cpu_id()];
   long is;
   deffered_irq_action_t *action;
-  task_t *current;
+
+  /* To prevent recursive invocations. */
+  spinlock_lock_irqsave(&acts->lock,is);
+  if( acts->executers || !acts->num_actions ) {
+    spinlock_unlock_irqrestore(&acts->lock,is);
+    return;
+  } else {
+    acts->executers++;
+  }
+  spinlock_unlock_irqrestore(&acts->lock,is);
 
   do {
     action=NULL;
@@ -87,42 +137,39 @@ void fire_deffered_actions(void)
       action=container_of(list_node_first(&acts->pending_actions),
                           deffered_irq_action_t,node);
 
-//      if( (current=current_task())->priority > action->target->static_priority ) {
-
-      if( !list_is_empty(&action->head) ) {
-          list_node_t *next;
-
-          next=action->head.head.next;
+      if( current_task()->priority >= action->target->static_priority ) {
+        if( !list_is_empty(&action->head) ) {
+          list_node_t *next=action->head.head.next;
 
           action->head.head.prev->next=next;
           next->prev=action->head.head.prev;
-
           list_add2head(&acts->pending_actions,next);
-      }
+        }
 
-      if( !acts->num_actions ) {
-        //arch_sched_set_def_works_pending();
+        acts->num_actions--;
+        list_del(&action->node);
+        action->host=NULL;
+        arch_sched_set_def_works_pending();
+      } else {
+        /* Bad luck - current thread has higher priority than any of pending
+         * deffered actions.
+         */
+        action=NULL;
       }
-
-      acts->num_actions--;
-      list_del(&action->node);
     }
-//      }
 
+    if( !action ) {
+      /* No valid actions found. */
+      arch_sched_reset_def_works_pending();
+    }
     spinlock_unlock_irqrestore(&acts->lock,is);
 
     if( action ) {
-      kprintf(" * ACTION: %p, PRIO: %d\n",action,
-              action->target->static_priority);
-
-      /* Process action. */
-      switch( action->type ) {
-        case DEF_ACTION_EVENT:
-          break;
-        case DEF_ACTION_SIGACTION:
-          break;
-      }
+      execute_deffered_action(action);
     }
+  } while(action != NULL);
 
-  } while(action);
+  spinlock_lock_irqsave(&acts->lock,is);
+  acts->executers--;
+  spinlock_unlock_irqrestore(&acts->lock,is);
 }

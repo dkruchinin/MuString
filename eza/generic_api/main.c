@@ -95,7 +95,7 @@ static void main_routine_stage1(void)
 
   /* OK, we can proceed. */
   spawn_percpu_threads();
-  //server_run_tasks();
+  server_run_tasks();
 
   /* Enter idle loop. */
   kprintf( "CPU #0 is entering idle loop. Current task: %p, CPU ID: %d\n",
