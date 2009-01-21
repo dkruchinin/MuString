@@ -30,6 +30,10 @@
 
 typedef long clock_t;
 
+typedef enum {
+  CLOCK_REALTIME,
+} clockid_t;
+
 uint32_t delay_loop;
 
 void timer_tick(void);

@@ -88,9 +88,6 @@ static void init_sw_timers(void)
 {
   list_init_head(&active_sw_timers);
   list_init_head(&pending_sw_timers);
-
-  init_deffered_irq_action(&timer_action);
-  timer_action.action=__timer_action_handler;
 }
 
 void hw_timer_register (hw_timer_t *ctrl)

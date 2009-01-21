@@ -14,6 +14,7 @@
 #include <mm/mmap.h>
 #include <eza/scheduler.h>
 #include <eza/kconsole.h>
+#include <eza/def_actions.h>
 
 static SPINLOCK_DEFINE(descrs_lock);
 static uintr_descr_t descriptors[NUM_IRQS];
@@ -125,13 +126,17 @@ static irq_counter_array_t *__allocate_irq_counter_array(task_t *task,ulong_t nc
 
   if( array ) {
     array->num_counters=nc;
+    DEFFERED_ACTION_INIT(array->de,DEF_ACTION_EVENT,__DEF_ACT_SINGLETON_MASK);
+    array->de.target=task;
+
     list_init_head(&array->counter_handlers);
-    event_initialize(&array->event);
-    event_set_checker(&array->event,__irq_array_event_checker,
+    event_initialize(&array->de.d._event);
+    event_set_checker(&array->de.d._event,__irq_array_event_checker,
                       &array->event_mask);
 
     array->map_addr=NULL;
     array->event_mask=0;
+    array->flags=0;
   }
   return array;
 }
@@ -142,7 +147,9 @@ static void __raw_irq_array_handler(irq_t irq,void *priv)
 
   *h->array->event_mask |= h->mask_to_set;
   (*h->counter)++;
-  event_raise(&h->array->event);
+  if( arch_bit_test(&h->array->flags,__IRQ_ARRAY_ACTIVE_BIT) ) {
+    schedule_deffered_action(&h->array->de);
+  }
 }
 
 status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
@@ -282,18 +289,18 @@ status_t sys_wait_on_irq_array(ulong_t id)
   }
 
   interrupts_disable();
-  event_reset(&array->event);
-  event_set_task(&array->event,current_task());
+  event_reset(&array->de.d._event);
+  event_set_task(&array->de.d._event,current_task());
+  arch_bit_set(&array->flags,__IRQ_ARRAY_ACTIVE_BIT);
   interrupts_enable();
 
   /* Check the event mask first time. */
   if( !*array->event_mask ) {
-    event_yield(&array->event);
+    event_yield(&array->de.d._event);
   }
 
-  interrupts_disable();
-  event_reset(&array->event);
-  interrupts_enable();
+  arch_bit_clear(&array->flags,__IRQ_ARRAY_ACTIVE_BIT);
+  event_reset(&array->de.d._event);
 
   return 0;
 }

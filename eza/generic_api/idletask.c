@@ -21,43 +21,18 @@
  */
 
 #include <eza/kernel.h>
-#include <mlibc/kprintf.h>
-#include <ds/waitqueue.h>
-#include <eza/smp.h>
-#include <eza/arch/scheduler.h>
-#include <eza/arch/types.h>
 #include <eza/task.h>
-#include <eza/scheduler.h>
 #include <eza/swks.h>
-#include <mlibc/string.h>
-#include <eza/arch/mm_types.h>
-#include <eza/arch/preempt.h>
-#include <eza/spinlock.h>
-#include <ipc/ipc.h>
-#include <ipc/port.h>
-#include <eza/arch/asm.h>
-#include <eza/arch/preempt.h>
-#include <kernel/syscalls.h>
-#include <eza/uinterrupt.h>
-#include <ipc/poll.h>
-#include <eza/gc.h>
-#include <ipc/gen_port.h>
-#include <ipc/channel.h>
 
 #ifdef CONFIG_TEST
 #include <test.h>
 #endif
-
 
 task_t *idle_tasks[CONFIG_NRCPUS];
 #define STEP 600
 #define TICKS_TO_WAIT 300
 
 ulong_t syscall_counter = 0;
-
-task_t *server_task;
-status_t server_port,server_port2,server_port3;
-
 
 void idle_loop(void)
 {
