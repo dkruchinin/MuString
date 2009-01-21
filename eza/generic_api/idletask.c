@@ -23,6 +23,7 @@
 #include <eza/kernel.h>
 #include <eza/task.h>
 #include <eza/swks.h>
+#include <eza/smp.h>
 
 #ifdef CONFIG_TEST
 #include <test.h>

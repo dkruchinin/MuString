@@ -88,7 +88,9 @@ void __ipc_put_port(ipc_gen_port_t *p);
 status_t __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
                           ulong_t reply_buf,ulong_t reply_len);
 status_t ipc_close_port(task_t *owner,ulong_t port);
+
 extern ipc_port_msg_ops_t def_port_msg_ops;
+extern ipc_port_msg_ops_t prio_port_msg_ops;
 /****************************************************************************/
 
 poll_event_t ipc_port_get_pending_events(ipc_gen_port_t *port);

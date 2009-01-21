@@ -171,9 +171,8 @@ static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
 
   memset(p,0,sizeof(*p));
 
-  /* TODO: [mt] Support flags during IPC port creation. */
   if( flags & IPC_PRIORITIZED_PORT_QUEUE ) {
-    return -EINVAL;
+    p->msg_ops=&prio_port_msg_ops;
   } else {
     p->msg_ops=&def_port_msg_ops;
   }
@@ -653,6 +652,12 @@ status_t ipc_port_send_iov(struct __ipc_gen_port *port,
           b=r;
           break;
         case MSG_STATE_REPLIED:
+          /* If server finished 'REPLY' phase while we have pending signals,
+           * we assume that we weren't actually interrupted by signals.
+           * Because server got no errors after performing reply while we have
+           * pending signals, reporting error to the client may cause confuses.
+           */
+          ir=0;
           break; /* Message was replied - do nothing. */
       }
       IPC_UNLOCK_PORT_W(port);
