@@ -27,7 +27,6 @@
 #include <eza/time.h>
 #include <eza/arch/8259.h>
 #include <eza/arch/apic.h>
-#include <eza/arch/mm_types.h>
 #include <eza/kernel.h>
 #include <eza/arch/interrupt.h>
 #include <eza/smp.h>

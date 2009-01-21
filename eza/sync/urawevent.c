@@ -23,8 +23,8 @@
 #include <eza/arch/types.h>
 #include <eza/mutex.h>
 #include <eza/sync.h>
-#include <kernel/vm.h>
 #include <eza/task.h>
+#include <eza/usercopy.h>
 #include <mm/slab.h>
 #include <eza/arch/atomic.h>
 #include <eza/mutex.h>

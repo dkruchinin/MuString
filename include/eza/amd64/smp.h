@@ -26,7 +26,6 @@
 
 #include <eza/arch/types.h>
 #include <eza/arch/gdt.h>
-#include <eza/arch/mm_types.h>
 
 #ifdef CONFIG_SMP
 extern void ap_boot(void);

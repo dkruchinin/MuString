@@ -28,7 +28,6 @@
 #include <eza/task.h>
 #include <ipc/ipc.h>
 #include <eza/security.h>
-#include <eza/tevent.h>
 
 static void __exit_ipc(task_t *exiter) {
   task_ipc_t *ipc;

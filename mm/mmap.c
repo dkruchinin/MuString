@@ -73,52 +73,36 @@ static vmrange_t *create_vmrange(vmm_t *parent_vmm, uintptr_t va_start, int npag
   return vmr;
 }
 
-static status_t __mandmap_map_default(vmm_t *target_mm, mandmap_t *mandmap)
+static void destroy_vmrange(vmrange_t *vmr)
 {
-  vmrange_t *vmr;
-  tnode_meta_t tnode_meta;
-  page_idx_t npages;
-  status_t err = 0;
-
-  ASSERT(!(mandmap->bounds.space_start & ~PAGE_MASK) &&
-         !(mandmap->bounds.space_end & ~PAGE_MASK) &&
-         !(mandmap->phys_addr & ~PAGE_MASK));
-  vmr = ttree_lookup(&target_mm->ttree, &tnode_meta, &mandmap->bounds);
-  if (vmr) {
-    err = -EBUSY;
-    goto out;
-  }
-
-  npages = (mandmap->space_end - mandmap->space_start) >> PAGE_WIDTH;
-  vmr = create_vmrange(target_mm, mandmap->space_start, npages);
-  if (!vmr)
-    err = -ENOMEM;
-  else {
-    page_idx_t start_idx;
-    mmap_info_t minfo;
-    page_frame_iterator_t pfi;
-    ITERATOR_CTX(page_frame, PF_ITER_INDEX) iter_index_ctx;
-
-    ttree_insert_placeful(&target_mm->ttree, &tnode_meta, vmr);
-    start_idx = pframe_number(phys_to_pframe(mandmap->phys_addr));
-    minfo.va_from = vmr->bounds.space_start;
-    minfo.va_to = vmr->bounds.space_end;
-    minfo.ptable_flags = mpf2ptf(vmr->flags);
-    pfi_index_init(&pfi, &iter_index_ctx, start_idx, start_idx + npages);
-    iter_first(&pfi);
-    minfo.pfi = &pfi;
-    err = ptable_map(&target_mm->rpd, &minfo);
-    if (err) {
-      ptable_unmap(&target_mm->rpd, vmr->bounds.space_start, npages);
-      ttree_delete_placeful(&target_mm->ttree, &tnode_meta);
-      memfree(vmr);
-    }
-  }
-
-  out:
-  return err;
+  vmr->parent_vmm->num_vmrs--;
+  memfree(vmr);
 }
 
+static int __mandmap_map_default(vm_mandmap_t *mandmap, vmm_t *vmm)
+{
+  int rc;
+  vmrange_t *vmr;
+  ttree_iterator_t tti;
+
+  vmr = vmrange_find(vmm, mandmap->va_start, mandmap->num_pages << PAGE_WIDTH, &tti);
+  if (vmr)
+    return -EBUSY;
+
+  vmr = create_vmrange(vmm, mandmap->va_start, mandmap->num_pages, mandmap->flags);
+  if (!vmr)
+    return -ENOMEM;
+
+  ttree_insert_placeful(&vmm->ttree, &tti->meta_cur, &vmr);
+  rc = mmap_core(&vmm->rpd, mandmap->va_start, mandmap->phys_addr >> PAGE_WIDTH,
+                 mandmap->num_pages, mandmap->flags & KMAP_FLAGS_MASK);
+  if (rc) {
+    destroy_vmrange(vmr);
+    munmap_core(&vmm->rpd, mandmap->va_start, mandmap->num_pages);
+  }
+
+  return rc;
+}
 
 void vmm_subsystem_initialize(void)
 {
@@ -152,7 +136,7 @@ void unregister_manmap(vm_mandmap_t *mandmap)
   __mandmaps_total--;
 }
 
-status_t mandmaps_roll_forward(vmm_t *target_mm)
+int mandmaps_roll_forward(vmm_t *target_mm)
 {
   if (!__mandmaps_total)
     return 0;
@@ -327,7 +311,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
   return err;
 }
 
-status_t mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, int npages, kmap_flags_t flags)
+int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages, kmap_flags_t flags)
 {
   mmap_info_t minfo;
   page_frame_iterator_t pfi;

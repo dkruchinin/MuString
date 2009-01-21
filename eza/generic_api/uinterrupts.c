@@ -9,17 +9,18 @@
 #include <eza/smp.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
-#include <mm/mm.h>
 #include <mm/vmm.h>
 #include <eza/scheduler.h>
 #include <eza/kconsole.h>
-#include <eza/arch/mm.h>
+#include <eza/usercopy.h>
 
 static SPINLOCK_DEFINE(descrs_lock);
 static uintr_descr_t descriptors[NUM_IRQS];
 
 #define LOCK_DESCRIPTORS spinlock_lock(&descrs_lock)
 #define UNLOCK_DESCRIPTORS spinlock_unlock(&descrs_lock)
+#define LOCK_TASK_VM(t)
+#define UNLOCK_TASK_VM(t)
 
 static void __raw_uinterrupt_handler(void *priv)
 {
@@ -173,7 +174,7 @@ status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   caller=current_task();
 
   LOCK_TASK_VM(caller);
-  pfn = mm_vaddr2page_idx(&caller->rpd, addr);
+  pfn = mm_pin_vaddr(task_get_rpd(caller), addr);
   if(pfn != PAGE_IDX_INVAL) {
     pframe = pframe_by_number(pfn);
     pin_page_frame(pframe);

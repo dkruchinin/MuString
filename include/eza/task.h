@@ -30,7 +30,6 @@
 #include <mlibc/index_array.h>
 #include <mm/page.h>
 #include <mm/vmm.h>
-#include <eza/arch/mm_types.h>
 #include <eza/limits.h>
 #include <eza/sigqueue.h>
 
@@ -205,7 +204,7 @@ typedef struct __task_struct {
 
   /* Limits-related stuff. */
   task_limits_t *limits;
-
+  task_privelege_t priv;
   /* Lock for protecting changing and outer access the following fields:
    *   ipc,ipc_priv,limits
    */
@@ -241,6 +240,14 @@ typedef struct __task_creation_attrs {
   task_attrs_t task_attrs;
   exec_attrs_t exec_attrs;
 } task_creation_attrs_t;
+
+static inline rpd_t *task_get_rpd(task_t *task)
+{
+  if (likely(task->priv != TPL_KERNEL))
+    return &task->task_mm->rpd;
+
+  return &task->rpd;
+}
 
 /**
  * @fn void initialize_task_subsystem(void)

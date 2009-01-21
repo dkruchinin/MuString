@@ -20,11 +20,11 @@
  * eza/sync/topevel.c: Core logic for userspace synchronization subsystem.
  */
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/mutex.h>
 #include <eza/sync.h>
-#include <kernel/vm.h>
 #include <eza/task.h>
+#include <eza/usercopy.h>
 #include <mm/slab.h>
 
 static status_t __sync_allocate_id(struct __task_struct *task,

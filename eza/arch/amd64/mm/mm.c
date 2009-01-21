@@ -31,22 +31,28 @@
 #include <mlibc/kprintf.h>
 #include <mlibc/string.h>
 #include <mm/page.h>
+#include <mm/vmm.h>
 #include <mm/pfi.h>
 #include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
+#include <eza/arch/bios.h>
 
-/* Initial kernel top-level page directory record. */
-uintptr_t _kernel_first_foree_addr, _user_va_start, _user_va_end;
 uint8_t e820count;
-
-static page_idx_t total_pages = 0;
-static uint64_t min_phys_addr = 0, max_phys_addr = 0;
-
-static vm_mandmap_t identity_mapping;
-uintptr_t kernel_min_vaddr;
+page_frame_t *page_frames_array = NULL;
+page_idx_t num_phys_pages = 0;
 
 #ifndef CONFIG_IOMMU
 static page_idx_t dma_pages = 0;
+
+static inline void __determine_page_pool(page_frame_t *pframe)
+{
+  if (pframe_number(pframe) < dma_pages)
+    pframe->flags = PF_PDMA;
+  else
+    pframe->flags = PF_PGEN;
+}
+#else
+#define __determine_page_pool(pframe) ((pframe)->flags = PF_PGEN)
 #endif /* CONFIG_IOMMU */
 
 #ifdef CONFIG_DEBUG_MM
@@ -80,12 +86,25 @@ static void verify_mapping(const char *descr, uintptr_t start_addr,
 #define verify_mapping(descr, start_addr, num_pages, start_idx)
 #endif /* CONFIG_DEBUG_MM */
 
+static int __map_kernel_area(vm_mandmap_t *mandmap, vmm_t *vmm)
+{
+  pde_t *src_pml4, *dst_pml4;
+  page_idx_t eidx = vaddr2pde_idx(KERNEL_BASE, PTABLE_LEVEL_LAST);
+
+  src_pml4 = pde_fetch(kernel_rpd.pml4, eidx);
+  dst_pml4 = pde_fetch(vmm->rpd.pml4, eidx);
+  *dst_pml4 = *src_pml4;
+
+  return 0;
+}
+
 static void scan_phys_mem(void)
 {
   int idx, found;  
   char *types[] = { "(unknown)", "(usable)", "(reserved)", "(ACPI reclaimable)",
                     "(ACPI non-volatile)", "(BAD)" };
 
+  kprintf("[MM] Scanning physical memory...\n");  
   kprintf("E820 memory map:\n"); 
   for( idx = 0, found = 0; idx < e820count; idx++ ) {
     e820memmap_t *mmap = &e820table[idx];
@@ -127,20 +146,16 @@ void arch_mm_init(void)
 {
   uintptr_t addr;
   
-  kprintf("[MM] Scanning physical memory...\n");
-  
   scan_phys_mem();
   total_pages = max_phys_addr >> PAGE_WIDTH;
   addr = server_get_end_phy_addr();
-  _kernel_first_free_addr = addr ?
-    (uintptr_t)PAGE_ALIGN(p2k_code(addr)) : KERNEL_END_ADDRESS;
-  page_frames_array = KERNEL_FIRST_FREE_ADDRESS;  
-  _kernel_extended_end =
-    PAGE_ALIGN((uintptr_t)page_frames_array + sizeof(page_frame_t) * total_pages);
+  page_frames_array = addr ?
+    (page_frame_t *)PAGE_ALIGN(p2k_code(addr)) : (page_frame_t *)KERNEL_END_ADDRESS;
+  _kernel_first_free_addr = (uintptr_t)page_frames_array + sizeof(page_frame_t) * total_pages;
   kprintf(" Scanned: %ldM, %ld pages\n", (long)_b2mb(max_phys_addr - min_phys_addr),
           (long)total_pages);
-  _user_va_start = USER_START_VIRT;
-  _user_va_end = USER_END_VIRT;
+  _user_va_start = USPACE_VA_BOTTOM;
+  _user_va_end = USPACE_VA_TOP;
 }
 
 static int prepare_page(page_idx_t idx, ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx)
@@ -153,19 +168,15 @@ static int prepare_page(page_idx_t idx, ITERATOR_CTX(page_frame, PF_ITER_ARCH) *
 
   memset(page, 0, sizeof(*page));
   page->idx = idx;
-  if (page->idx < dma_pages)
-    page->flags = PF_PDMA;
-  else
-    page->flags = PF_PGEN;
+  __determine_page_pool(page);
   if ((uintptr_t)pframe_phys_addr(page) > mmap_end) { /* switching to the next e820 map */
     if (ctx->e820id < e820count) {
       ctx->mmap = mmap = &e820table[++ctx->e820id];
       mmap_end = mmap->base_address + (((uintptr_t)mmap->length_high << 32) | mmap->length_low);
       mmap_type = mmap->type;
     }
-    else { /* it seems that we've received a page with invalid idx... */
+    else /* it seems that we've received a page with invalid idx... */
       return -1;
-    }
   }
   if ((mmap_type != E820_USABLE) || is_kernel_addr(pframe_to_virt(page)) ||
       (page->idx < LAST_BIOS_PAGE)) {
@@ -210,7 +221,6 @@ static void __pfiter_next(page_frame_iterator_t *pfi)
   }
 }
 
-
 void pfi_arch_init(page_frame_iterator_t *pfi,
                    ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx)
 {
@@ -233,35 +243,20 @@ void pfi_arch_init(page_frame_iterator_t *pfi,
 void arch_mm_remap_pages(void)
 {
   int ret;
-  mmap_info_t minfo;
-  page_frame_iterator_t pfi;
-  ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
 
   /* Create identity mapping */
-  minfo.va_from = 0x1000;
-  minfo.va_to = minfo.va_from + ((IDENT_MAP_PAGES - 1) << PAGE_WIDTH);
-  minfo.ptable_flags = PDE_RW;
-  pfi_index_init(&pfi, &pfi_index_ctx, 1, IDENT_MAP_PAGES - 1);
-  iter_first(&pfi);
-  minfo.pfi = &pfi;
-  ret = ptable_map(&kernel_rpd, &minfo);
+  ret = mmap_kern(0x1000, 1, (IDENT_MAP_PAGES - 1) << PAGE_WIDTH, KMAP_READ | KMAP_WRITE);
   if (ret) {
-    panic("arch_mm_remap_pages(): Can't create identity mapping (%p -> %p)! [errcode=%d]",
+    panic("arch_mm_remap_pages: Can't create identity mapping (%p -> %p)! [errcode=%d]",
           0x1000, IDENT_MAP_PAGES << PAGE_WIDTH, ret);
   }
 
-  verify_mapping("identity mapping", 0x1000, IDENT_MAP_PAGES - 1, 1);
-  
-  /* Now we should remap all available physical memory starting at 'KERNEL_BASE'. */
-  minfo.va_from = KERNEL_BASE;
-  minfo.va_to = minfo.va_from + (total_pages << PAGE_WIDTH);
-  minfo.ptable_flags = PDE_RW;
-  pfi_index_init(&pfi, &pfi_index_ctx, 0, total_pages);
-  iter_first(&pfi);
-  minfo.pfi = &pfi;
-  ret = ptable_map(&kernel_rpd, &minfo);
-  if (ret)
-    panic("arch_mm_remap_pages(): Can't remap physical pages !");
+  verify_mapping("identity mapping", 0x1000, IDENT_MAP_PAGES - 1, 1);  
+  ret = mmap_kern(KERNEL_BASE, 0, total_pages << PAGE_WIDTH, KMAP_READ | KMAP_WRITE | KMAP_EXEC);
+  if (ret) {
+    panic("arch_mm_remap_pages: Can't create kernel mapping (%p -> %p)! [errcode=%d]",
+          KERNEL_BASE, total_pages << PAGE_WIDTH, ret);
+  }
 
   /* Verify that mappings are valid. */  
   verify_mapping("general mapping", KERNEL_BASE, total_pages, 0);
@@ -269,12 +264,10 @@ void arch_mm_remap_pages(void)
   /* Now we should register our direct mapping area and kernel area
    * to allow them be mapped as mandatory areas in user memory space.
    */
-  direct_mapping_area.phys_addr=0x1000;
-  direct_mapping_area.virt_addr=0x1000;
-  direct_mapping_area.num_pages=IDENT_MAP_PAGES - 1;
-  direct_mapping_area.map_proto = PROT_READ | PROT_WRITE;
-  direct_mapping_area.map_flags= MAP_FIXED;
-  vm_register_user_mandatory_area(&direct_mapping_area);
+  register_mandmap(&kernel_area_mandmap, 0, 0, 0, 0);
+  kernel_area_mandmap.map = __map_kernel_area;
+  register_mandmap(&identity_mandmap, 0x1000, IDENT_MAP_PAGES - 1, 0x1000,
+                   KMAP_READ | KMAP_WRITE | KMAP_EXEC);
 
   /* TODO: [mt] redesign 'kernel_min_vaddr'. */
   kernel_min_vaddr=KERNEL_BASE;
@@ -282,25 +275,10 @@ void arch_mm_remap_pages(void)
   /* All CPUs must initially reload their CR3 registers with already
    * initialized Level-4 page directory.
    */
-  arch_smp_mm_init(0);  
+  arch_smp_mm_init(0);
 }
 
-/* FIXME DK: move this fucking stuff to another(better) place... */
-status_t arch_vm_map_kernel_area(task_t *task)
-{
-  pde_t *src_pml4, *dst_pml4;
-  pde_idx_t eidx = vaddr2pde_idx(KERNEL_BASE, PTABLE_LEVEL_LAST);
-
-  src_pml4 = pde_fetch(kernel_rpd.pml4, eidx);
-  dst_pml4 = pde_fetch(task->rpd.pml4, eidx);
-
-  /* Just copy PML4 entry from kernel page directoy to user one. */
-  *dst_pml4 = *src_pml4;
-
-  return 0;
-}
-
-void arch_smp_mm_init(int cpu)
+void arch_smp_mm_init(cpu_id_t cpu)
 {  
   load_cr3(_k2p((uintptr_t)pframe_to_virt(kernel_rpd.pml4)), 1, 1);
 }

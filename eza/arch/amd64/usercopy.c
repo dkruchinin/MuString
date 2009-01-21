@@ -1,4 +1,4 @@
-#include <kernel/vm.h>
+#include <eza/usercopy.h>
 #include <mlibc/string.h>
 
 status_t copy_user(void *dest,void *src,ulong_t size)

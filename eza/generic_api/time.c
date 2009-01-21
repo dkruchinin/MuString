@@ -23,7 +23,7 @@
  */
 
 #include <eza/time.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/swks.h>
 #include <eza/arch/timer.h>
 #include <eza/scheduler.h>
@@ -31,9 +31,9 @@
 #include <eza/arch/current.h>
 #include <eza/arch/apic.h>
 #include <eza/timer.h>
+#include <eza/usercopy.h>
 #include <kernel/syscalls.h>
 #include <eza/time.h>
-#include <kernel/vm.h>
 #include <eza/arch/interrupt.h>
 #include <eza/errno.h>
 #include <eza/signal.h>

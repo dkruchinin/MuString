@@ -27,9 +27,7 @@
 #include <mlibc/string.h>
 #include <eza/arch/page.h>
 #include <mlibc/kprintf.h>
-#include <mm/mm.h>
 #include <mm/page.h>
-#include <mm/mmap.h>
 #include <mm/vmm.h>
 #include <eza/errno.h>
 #include <mlibc/string.h>
@@ -40,6 +38,7 @@
 #include <eza/arch/scheduler.h>
 #include <eza/arch/current.h>
 #include <eza/process.h>
+#include <eza/arch/context.h>
 #include <eza/arch/profile.h>
 #include <eza/arch/ptable.h>
 

@@ -1,36 +1,14 @@
-#include <config.h>
+#include <ds/iterator.h>
 #include <ds/list.h>
-#include <ds/ttree.h>
 #include <mm/page.h>
+#include <mm/mmpool.h>
 #include <mm/pfalloc.h>
-#include <mm/mmpools.h>
-#include <mm/slab.h>
-#include <mm/memobj.h>
+#include <mm/pfi.h>
 #include <mm/vmm.h>
-#include <mlibc/kprintf.h>
-#include <mlibc/types.h>
+#include <mm/memobj.h>
 #include <eza/arch/mm.h>
-
-static LIST_DEFINE(mandmaps_lst);
-static int __mandpas_total = 0;
-static memcache_t __vmms_cache = NULL;
-
-static int __vmranges_cmp(void *r1, void *r2)
-{
-  struct range_bounds *range1, *range2;
-  long diff;
-
-  range1 = (struct range_bounds *)r1;
-  range2 = (struct range_bounds *)r2;
-  if ((diff = range1.space_start - range2.space_end) < 0) {
-    if ((diff = range2.space_start - range1.space_end) > 0)
-      return -1;
-
-    return 0;
-  }
-  else
-    return !!diff;
-}
+#include <eza/arch/ptable.h>
+#include <mlibc/types.h>
 
 void vmm_initialize(void)
 {
@@ -94,66 +72,248 @@ void vmm_initialize(void)
   kernel_min_vaddr-=IDALLOC_VPAGES*PAGE_SIZE;
 
   memobj_subsystem_initialize();
+  vmm_subsystem_initialize();
   kprintf("[MM] All pages were successfully remapped.\n");
   __initialize_mandatory_areas();
   kprintf("[MM] All mandatory user areas were successfully created.\n");
 }
 
-void vmm_subsystem_initialize(void)
+/* initialize opne page */
+static void __init_page(page_frame_t *page)
 {
-  kprintf("[MM] Initializing VMM subsystem...");
-  __vmms_cache = memcache_create("VMM objects cache", sizeof(vmm_t),
-                                 DEFAULT_SLAB_PAGES, SMCF_PGEN | SMCF_GENERIC);
-  if (!__vmms_cache)
-    panic("vmm_subsystem_initialize: Can not create memory cache for VMM objects. ENOMEM");
+  list_init_head(&page->head);
+  list_init_node(&page->node);
+  atomic_set(&page->refcount, 0);
+  page->_private = 0;
 }
 
-void register_mandmap(vm_mandmap_t *mandmap, uintptr_t va_from, uintptr_t va_to, vmrange_flags_t vm_flags)
+static void __pfiter_idx_first(page_frame_iterator_t *pfi)
 {
-  memset(mandmap, 0, sizeof(mandmap));
-  mandmap->bounds.space_start = PAGE_ALIGN_DOWN(va_from);
-  mandmap->bounds.space_end = PAGE_ALIGN(va_to);
-  mandmap->vmr_flags = flags;
-  list_add2tail(&mandmaps_lst, &mandmap->node);
-  __mandmaps_total++;
+  ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
+  
+  ITER_DBG_CHECK_TYPE(pfi, F_ITER_INDEX);
+  ctx = iter_fetch_ctx(pfi);
+  pfi->pf_idx = ctx->first;
+  pfi->state = ITER_RUN;
 }
 
-void unregister_manmap(vm_mandmap_t *mandmap)
+static void __pfiter_idx_last(page_frame_iterator_t *pfi)
 {
-  list_del(&mandmap->node);
-  __mandmaps_total--;
+  ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
+  
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_INDEX);  
+  ctx = iter_fetch_ctx(pfi);
+  pfi->pf_idx = ctx->last;
+  pfi->state = ITER_RUN;
 }
 
-vmm_t *vmm_create(void)
-{
-  vmm_t *vmm;
+static void __pfiter_idx_next(page_frame_iterator_t *pfi)
+{  
+  ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
 
-  vmm = alloc_from_memcache(&__vmms_cache);
-  if (!vmm)
-    return NULL;
-
-  memset(vmm, 0, sizeof(*vmm));
-  ttree_init(&vmm->vmranges, __vmranges_cmpf, vmrange_t, bounds);
-  atomic_set(&vmm->vmm_users, 1);
-  return vmm;
-}
-
-uintptr_t vmrange_map(memobj_t *memobj, void *addr, int npages, vmrange_flags_t flags, off_t offset)
-{
-  vmm_t *vmm = current_task()->vmm;
-  vmrange_t *vmrange_prev;
-  uintptr_t addr;
-  int err = -EINVAL;
-  tnode_meta_t vmr_tnode_meta;  
-
-  if (addr) {
-    struct range_bounds bounds;
-    
-    bounds.space_start = (uintptr_t)addr;
-    bounds.space_end = bounds.space_start + (1UL << npages);
-    vmrange_prev = ttree_lookup(&vmm->ttree, &bounds, &vmr_tnode_meta);
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_INDEX);
+  ctx = iter_fetch_ctx(pfi);
+  if (unlikely(pfi->pf_idx >= ctx->last)) {
+    pfi->pf_idx = PAGE_IDX_INVAL;
+    pfi->state = ITER_STOP;
+    return;
   }
 
-  error:
-  return err;
+  pfi->pf_idx++;
+}
+
+static void __pfiter_idx_prev(page_frame_iterator_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx;
+
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_INDEX);
+  ctx = iter_fetch_ctx(pfi);
+  if (unlikely(pfi->pf_idx <= ctx->first)) {
+    pfi->pf_idx = PAGE_IDX_INVAL;
+    pfi->state = ITER_STOP;
+  }
+  else
+    pfi->pf_idx--;
+}
+
+void pfi_index_init(page_frame_iterator_t *pfi,
+                    ITERATOR_CTX(page_frame, PF_ITER_INDEX) *ctx,
+                    page_idx_t start_pfi, page_idx_t end_pfi)
+{
+  pfi->first = __pfiter_idx_first;
+  pfi->last = __pfiter_idx_last;
+  pfi->next = __pfiter_idx_next;
+  pfi->prev = __pfiter_idx_prev;
+  iter_init(pfi, PF_ITER_INDEX);
+  memset(ctx, 0, sizeof(*ctx));
+  ctx->first = start_pfi;
+  ctx->last = end_pfi;
+  pfi->pf_idx = PAGE_IDX_INVAL;
+  pfi->error = 0;
+  iter_set_ctx(pfi, ctx);
+}
+
+static void __pfiter_list_first(page_frame_iterator_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
+
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_LIST);
+  ctx = iter_fetch_ctx(pfi);
+  ctx->cur = ctx->first_node;
+  pfi->pf_idx =
+    pframe_number(list_entry(ctx->cur, page_frame_t, node));
+  pfi->state = ITER_RUN;
+}
+
+static void __pfiter_list_last(page_frame_iterator_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
+
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_LIST);
+  ctx = iter_fetch_ctx(pfi);
+  ctx->cur = ctx->last_node;
+  pfi->pf_idx =
+    pframe_number(list_entry(ctx->cur, page_frame_t, node));
+  pfi->state = ITER_RUN;
+}
+
+static void __pfiter_list_next(page_frame_iterator_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
+
+  ITER_DBG_CHECK_TYPE(page_frame, PF_ITER_LIST);
+  ctx = iter_fetch_ctx(pfi);
+  if (likely(ctx->cur != ctx->last_node)) {
+    ctx->cur = ctx->cur->next;
+    pfi->pf_idx =
+      pframe_number(list_entry(ctx->cur, page_frame_t, node));
+  }
+  else {
+    pfi->pf_idx = PAGE_IDX_INVAL;
+    pfi->state = ITER_STOP;
+  }
+}
+
+static void __pfiter_list_prev(page_frame_iterator_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
+
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_LIST);
+  ctx = iter_tetch_ctx(pfi);
+  if (likely(ctx->cur != ctx->first_node)) {
+    ctx->cur = ctx->cur->prev;
+    pfi->pf_idx =
+      pframe_number(list_entry(ctx->cur, page_frame_t, node));
+  }
+  else {
+    pfi->pf_idx = PAGE_IDX_INVAL;
+    pfi->state = ITER_STOP;
+  }
+}
+
+void pfi_list_init(page_frame_iterator_t *pfi,
+                   ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx,
+                   list_node_t *first_node, list_node_t *last_node)
+{
+  pfi->first = __pfiter_list_first;
+  pfi->last = __pfiter_list_last;
+  pfi->next = __pfiter_list_next;
+  pfi->prev = __pfiter_list_prev;
+  iter_init(pfi, PF_ITER_LIST);
+  memset(ctx, 0, sizeof(*ctx));
+  ctx->first_node = first_node;
+  ctx->last_node = last_node;
+  pfi->pf_idx = PAGE_IDX_INVAL;
+  pfi->error = 0;
+  iter_set_ctx(pfi, ctx);
+}
+
+static void __pfiter_pblock_first(page_frame_iterator_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx;
+
+  ASSERT(pfi->type == PF_ITER_PBLOCK);
+  ctx = iter_fetch_ctx(pfi);
+  ctx->cur_node = ctx->first_node;
+  ctx->cur_idx = ctx->first_idx;
+  pfi->pf_idx =
+    pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->cur_idx);
+  pfi->stet = ITER_RUN;
+}
+
+static void __pfiter_pblock_last(page_frame_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx;
+
+  ASSERT(pfi->type == PF_ITER_PBLOCK);
+  ctx->cur_node = ctx->last_node;
+  ctx->cur_idx = ctx->last_idx;
+  pfi->pf_idx =
+    pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->cur_idx);
+  pfi->state = ITER_RUN;
+}
+
+static void __pfiter_pblock_next(page_frame_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx;
+
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_PBLOCK);
+  ctx = iter_fetch_ctx(pfi);
+  if (unlikely((ctx->cur_node == ctx->last_node) &&
+               (ctx->cur_idx >= ctx->last_idx))) {
+    pfi->pf_idx = PAGE_IDX_INVAL;
+    pfi->state = ITER_STOP;
+  }
+  else {
+    ctx->cur_idx++;
+    if (ctx->cur_idx >= pages_block_size(list_entry(ctx->cur_node, page_frame_t, node))) {
+      ctx->cur_node = ctx->cur_node->next;
+      ctx->cur_idx = 0;
+    }
+
+    pfi->pf_idx =
+      pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->cur_idx);
+  }
+}
+
+static void __pfiter_pblock_prev(page_frame_iterator_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx;
+
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_PBLOCK);
+  ctx = iter_fetch_ctx(pfi);
+  if (unlikely((ctx->cur_node == ctx->first_node) &&
+               (ctx->cur_idx <= ctx->first_idx))) {
+    pfi->pf_idx = PAGE_IDX_INVAL;
+    pfi->state = ITER_STOP;
+  }
+  else {
+    if (!ctx->cur_idx)
+      ctx->cur_node = ctx->cur_node->prev;
+    else
+      ctx->cur_idx--;
+
+    pfi->pf_idx =
+      pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->cur_idx);
+  }
+}
+
+void pfi_pblock_init(page_frame_iterator_t *pfi,
+                     ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx,
+                     list_node_t *fnode, page_idx_t fidx,
+                     list_node_t *lnode, page_idx_t lidx)
+{
+  pfi->first = __pfiter_pblock_first;
+  pfi->last = __pfiter_pblock_last;
+  pfi->next = __pfiter_pblock_next;
+  pfi->prev = __pfiter_pblock_prev;
+  iter_init(pfi, PF_ITER_PBLOCK);
+  memset(ctx, 0, sizeof(*ctx));
+  ctx->first_node = fnode;
+  ctx->first_idx = fidx;
+  ctx->last_node = lnode;
+  ctx->last_idx = lidx;
+  pfi->pf_idx = PAGE_IDX_INVAL;
+  pfi->error = 0;
+  iter_set_ctx(pfi, ctx);
 }

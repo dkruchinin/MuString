@@ -193,6 +193,21 @@ label:	;\
 #include <mlibc/types.h>
 #include <eza/arch/cpu.h>
 
+#define KERNEL_RFLAGS (DEFAULT_RFLAGS_VALUE | (3 << RFLAGS_IOPL_BIT))
+     /* The most sensetive bits in RFLAGS.  */
+#define RFLAGS_IOPL_BIT 12
+#define RFLAGS_INT_BIT 9
+
+/* Default RFLAGS: IOPL=0, all interrupts are enabled. */
+#define DEFAULT_RFLAGS_VALUE (0 | (1 << RFLAGS_INT_BIT))
+
+/* Initial RFLAGS value for new user tasks. */
+#define USER_RFLAGS DEFAULT_RFLAGS_VALUE
+
+/* Initial RFLAGS value for new kernel tasks: IOPL=3. */
+#define KERNEL_RFLAGS (DEFAULT_RFLAGS_VALUE | (3 << RFLAGS_IOPL_BIT))
+
+     
 typedef struct __context_t { /* others don't interesting... */
   uintptr_t sp;
   uintptr_t pc;

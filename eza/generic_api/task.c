@@ -421,6 +421,7 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
   task->scheduler = NULL;
   task->sched_data = NULL;
   task->flags = 0;
+  task->priv = priv;
 
   __add_to_parent(task,parent,flags,priv);
 

@@ -28,7 +28,6 @@
 #include <eza/arch/apic.h>
 #include <eza/interrupt.h>
 #include <eza/timer.h>
-#include <mm/mm.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
 #include <mm/pfalloc.h>

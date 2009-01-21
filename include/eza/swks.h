@@ -52,7 +52,8 @@ typedef struct __swks {
   /* CPU-related statistics. */
   uint8_t nr_cpus;
   cpu_stats_t cpu_stat[CONFIG_NRCPUS];
-
+  /* IO ports stuff. */
+  ulong_t ioports_available;
 #if 0
   /* Memory-related statistics. */
   page_idx_t mem_total_pages, mem_pages_in_use;
@@ -63,9 +64,6 @@ typedef struct __swks {
   uint16_t version;
   uint16_t sub_version;
   uint16_t release;
-
-  /* IO ports stuff. */
-  ulong_t ioports_available;
 #endif
 } swks_t;
 

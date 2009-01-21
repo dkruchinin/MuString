@@ -1,5 +1,6 @@
 #include <eza/arch/context.h>
 #include <eza/arch/page.h>
+#include <eza/arch/cpu.h>
 #include <eza/arch/current.h>
 
 .code64

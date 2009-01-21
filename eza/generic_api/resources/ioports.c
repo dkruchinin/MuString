@@ -21,7 +21,7 @@
  *
  */
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/errno.h>
 #include <eza/security.h>
 #include <eza/smp.h>

@@ -28,8 +28,10 @@
 #include <ds/list.h>
 #include <ds/ttree.h>
 #include <mm/page.h>
+#include <mm/pfalloc.h>
 #include <mm/memobj.h>
 #include <mlibc/types.h>
+#include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
 
 typedef struct __mmap_info {
@@ -38,6 +40,16 @@ typedef struct __mmap_info {
   page_frame_iterator_t *pfi;
   uint32_t ptable_flags;
 } mmap_info_t;
+
+typedef struct __mm_info {  
+  uintptr_t kernel_start_phys;
+  uintptr_t kernel_end_phys;
+  uintptr_t kernel_start_virt;
+  uintptr_t kernel_end_virt;
+  uintptr_t user_start_virt;
+  uintptr_t user_end_virt;
+  page_idx_t num_phys_pages;
+} mm_info_t;
 
 #define VMR_PROTO_MASK (VMR_NONE | VMR_READ | VMR_WRITE | VMR_EXEC)
 
@@ -64,7 +76,7 @@ typedef vmrange_flags_t kmap_flags_t;
 #define KMAP_WRITE   VMR_WRITE
 #define KMAP_EXEC    VMR_EXEC
 #define KMAP_NOCACHE VMR_NOCACHE
-#define KMAP_FLAGS_MASK (KMAP_READ | KMAP_WRITE | KMAP_EXEC | KMAP_NOCACHE)
+#define KMAP_FLAGS_MASK (KMAP_KERN | KMAP_READ | KMAP_WRITE | KMAP_EXEC | KMAP_NOCACHE)
 
 struct __vmm;
 struct range_bounds {
@@ -74,9 +86,10 @@ struct range_bounds {
 
 typedef struct __vm_mandmap {
   uintptr_t phys_addr;
-  uintptr_t va_start;
+  uintptr_t va_start;  
   page_idx_t num_pages;
   list_node_t node;
+  int (*map)(struct __vm_mandmap *mandmap, struct __vmm *vmm);
   kmap_flags_t flags;
 } vm_mandmap_t;
 
@@ -93,15 +106,37 @@ typedef struct __vmm {
   vmrange_t *cached_vmr;
   vmrange_t *lru_range;
   atomic_t vmm_users;
-  rpd_t prd;
+  rpd_t rpd;
   uintptr_t aspace_start;
   ulong_t num_vmrs;
   page_idx_t num_pages;
   page_idx_t max_pages;
 } vmm_t;
 
-rpd_t kernel_rpd;
-extern page_frame_t *page_frames_array; /**< An array of all available physical pages */
+extern rpd_t kernel_rpd;
+extern mm_info_t mminfo;
+
+#define valid_user_address(va)                  \
+  valid_user_address_range(va, 0)
+
+static inline bool valid_user_address_range(uintptr_t va_start, uintptr_t length)
+{
+  return ((va_start >= USPACE_VA_START) &&
+          ((va_start + length) < USPACE_VA_END));
+}
+
+static inline void unpin_page_frame(page_frame_t *pf)
+{
+  ASSERT(atomic_get(&pf->refcount) > 0);
+  atomic_dec(&pf->refcount);
+  if (!atomic_get(&pf->refcount))
+    free_pages(pf);
+}
+
+static inline void pin_page_frame(page_frame_t *pf)
+{
+  atomic_inc(&pf->refcount);
+}
 
 #define mmap_kern(va, first_page, npages, flags)    \
   mmap_core(&kernel_rpd, va, first_page, npages, flags)
@@ -114,8 +149,13 @@ void vmm_initialize(void);
 void register_mandmap(vm_mandmap_t *mandmap, uintptr_t va_from, uintptr_t va_to,
                       uintptr_t phys_addr, vmrange_flags_t vm_flags);
 void unregister_mandmap(vm_mandmap_t *mandmap);
-status_t mandmaps_roll_forward(vmm_t *target_mm);
+int mandmaps_roll_forward(vmm_t *target_mm);
 vmm_t *vmm_create(void);
-int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, int npages, kmap_flags_t flags);
+int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages, kmap_flags_t flags);
+
+static inline void munmap_core(rpd_t *rpd, uintptr_t va, page_idx_t npages)
+{
+  ptable_unmap(rpd, va, npages);
+}
 
 #endif /* __VMM_H__ */

@@ -31,7 +31,6 @@
 #include <eza/arch/gdt.h>
 #include <eza/errno.h>
 #include <eza/interrupt.h>
-#include <mm/mm.h>
 #include <eza/arch/mm.h>
 
 /* Global per-CPU GDT entries. */

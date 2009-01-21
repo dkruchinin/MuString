@@ -139,7 +139,7 @@ void idalloc_deinit(void)
   spinlock_unlock(&idalloc_meminfo.lock);
 }
 
-void *idalloc_allocate_vregion(ulong_t pages)
+void *idalloc_vregion(page_idx_t pages)
 {
   void *vaddr=NULL;
 

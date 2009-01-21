@@ -20,6 +20,8 @@
  * eza/generic_api/process.c: base system process-related functions.
  */
 
+#include <config.h>
+#include <mm/vmm.h>
 #include <eza/task.h>
 #include <eza/smp.h>
 #include <eza/kstack.h>
@@ -27,7 +29,7 @@
 #include <eza/amd64/context.h>
 #include <mlibc/kprintf.h>
 #include <eza/arch/scheduler.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/kernel.h>
 #include <eza/arch/task.h>
 #include <eza/arch/preempt.h>
@@ -36,9 +38,8 @@
 #include <eza/arch/current.h>
 #include <eza/spinlock.h>
 #include <kernel/syscalls.h>
-#include <kernel/vm.h>
 #include <eza/kconsole.h>
-#include <eza/tevent.h>
+#include <eza/usercopy.h>
 
 typedef uint32_t hash_level_t;
 
@@ -193,7 +194,7 @@ status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       }
       break;
     case SYS_PR_CTL_ADD_EVENT_LISTENER:
-      if( copy_from_user(&te_ctl,arg,sizeof(te_ctl) ) ) {
+        if(copy_from_user(&te_ctl,(void *)arg,sizeof(te_ctl) ) ) {
         return -EFAULT;
       }
       return task_event_attach(target,current_task(),&te_ctl);

@@ -26,9 +26,9 @@
 
 #include <ds/iterator.h>
 #include <mm/page.h>
-#include <mlibc/types.h>
+#include <eza/arch/types.h>
 
-enum {
+typedef enum __ptable_flags {
   PDE_PRESENT = 0x0001, /**< PDE is present. I.e. corresponding page content is holding in main memory */
   PDE_RW      = 0x0002, /**< PDE is accessible for read and write operations */
   PDE_US      = 0x0004, /**< User/suptervisor flag. If set, PDE is accessible from user-space. */
@@ -45,7 +45,9 @@ enum {
   PDE_NX      = 0x2000, /**< When the NX bit is set to 1, code cannot be executed from the mapped
                            physical pages. See “No Execute (NX) Bit” on page 143 of AMD architecture programmers
                            manual vol. 2 for more info. */
-};
+} ptable_flags_t;
+
+typedef uint32_t pde_idx_t;
 
 /**
  * @struct rpd_t
@@ -154,9 +156,9 @@ static inline pde_t *pde_fetch(page_frame_t *dir, int eidx)
  * @return An index of PDE according to @a pde_level
  * @see pde_idx2vaddr
  */
-static inline int vaddr2pde_idx(uintptr_t vaddr, int pde_level)
+static inline pde_idx_t vaddr2pde_idx(uintptr_t vaddr, int pde_level)
 {
-  return (int)((vaddr >> (PAGE_WIDTH + 9 * pde_level)) & 0x1FF);
+  return (pde_idx_t)((vaddr >> (PAGE_WIDTH + 9 * pde_level)) & 0x1FF);
 }
 
 /**
@@ -182,12 +184,11 @@ static inline uintptr_t pde_get_va_range(int pde_level)
 }
 
 /**
- * @brief Translate mmap protocol and mmap flags to the arch dependent page table flags.
- * @param mmap_prot  - MMAP protocol mask
- * @param mmap_flags - MMAP flags mask
+ * @brief Translate kernel map flags to relevant page table flags
+ * @param kmap_flags - Kerenel map flags
  * @return Page table flags
  */
-inline uint32_t mpf2ptf(unsigned long flags);
+ptable_flags_t kmap_to_ptable_flags(ulong_t kmap_flags);
 
 /**
  * @brief Initialize root page table directory (PML4)
@@ -195,7 +196,7 @@ inline uint32_t mpf2ptf(unsigned long flags);
  * @return 0 on success, -ENOMEM if page allocation failed.
  * @see rpd_t
  */
-status_t ptable_rpd_initialize(rpd_t *rpd);
+int ptable_rpd_initialize(rpd_t *rpd);
 
 /**
  * @brief Deinitialize root page table directory (PML4)
@@ -246,7 +247,7 @@ void ptable_unmap_entries(pde_t *pde_start, int num_entries);
  * @return 0 on success, -ENOMEM if page allocation failed.
  * @see pde_t
  */
-status_t ptable_populate_pagedir(pde_t *parent_pde, uint_t flags);
+int ptable_populate_pagedir(pde_t *parent_pde, uint_t flags);
 
 /**
  * @brief Depopulate page direcotry
@@ -265,7 +266,7 @@ struct __mmap_info;
  * @see rpd_t
  * @see mmap_info_t
  */
-status_t ptable_map(rpd_t *prd, struct __mmap_info *minfo);
+int ptable_map(rpd_t *prd, struct __mmap_info *minfo);
 
 /**
  * @brief Unmap pages from the given root page directory
@@ -275,7 +276,7 @@ status_t ptable_map(rpd_t *prd, struct __mmap_info *minfo);
  * @return 0 on success, -EINVAL on error.
  * @see rpd_t
  */
-status_t ptable_unmap(rpd_t *rpd, uintptr_t va_from, int npages);
+void ptable_unmap(rpd_t *rpd, uintptr_t va_from, int npages);
 
 page_idx_t mm_pin_vaddr(rpd_t *rpd, uintptr_t vaddr);
 

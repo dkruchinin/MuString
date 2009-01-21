@@ -25,7 +25,6 @@
 #include <eza/arch/types.h>
 #include <eza/arch/page.h>
 #include <eza/arch/fault.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/interrupt.h>
 #include <eza/kernel.h>
 #include <mlibc/kprintf.h>

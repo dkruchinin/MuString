@@ -24,16 +24,14 @@
 #include <eza/arch/types.h>
 #include <eza/scheduler.h>
 #include <eza/process.h>
-#include <eza/arch/mm.h>
 #include <mm/mm.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
-#include <mm/mmap.h>
+#include <mm/vmm.h>
 #include <eza/arch/elf.h>
 #include <eza/kconsole.h>
 #include <eza/errno.h>
 #include <kernel/elf.h>
-#include <kernel/vm.h>
 #include <mlibc/kprintf.h>
 #include <server.h>
 #include <mlibc/unistd.h>

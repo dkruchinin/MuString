@@ -103,23 +103,6 @@ static inline uint64_t read_msr(uint32_t msr)
   return ((uint64_t)dx << 32) | ax;
 }
 
-/* CR3 management. See manual for details about 'PCD' and 'PWT' fields. */
-static inline void load_cr3( uintptr_t phys_addr, uint8_t pcd, uint8_t pwt )
-{
-  uintptr_t cr3_val = ( ((pwt & 1) << 3) | ((pcd & 1) << 4) );
-  
-  /* Normalize new PML4 base. */
-  phys_addr >>= 12;
-
-  /* Setup 20 lowest bits of the PML4 base. */
-  cr3_val |= ((phys_addr & 0xfffff) << 12);
-
-  /* Setup highest 20 bits of the PML4 base. */
-  cr3_val |= ((phys_addr & (uintptr_t)0xfffff00000) << 12);
-
-  __asm__ volatile(  "movq %0, %%cr3" :: "r" (cr3_val) );
-}
-
 /* Load RSP with a given value. It MUST NOT be a function since after
  * stack switch it won't be possible to return.
  */

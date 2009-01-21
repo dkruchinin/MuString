@@ -20,11 +20,9 @@
  * eza/generic_api/tevent.c: implementation of functions related to task events.
  */
 
-#include <eza/task.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <kernel/syscalls.h>
 #include <eza/spinlock.h>
-#include <eza/tevent.h>
 #include <eza/errno.h>
 #include <mm/slab.h>
 #include <ds/list.h>

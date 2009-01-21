@@ -30,7 +30,6 @@
 #include <eza/scheduler.h>
 #include <eza/swks.h>
 #include <mlibc/string.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/preempt.h>
 #include <eza/spinlock.h>
 #include <ipc/ipc.h>
@@ -60,9 +59,7 @@ status_t server_port,server_port2,server_port3;
 
 
 void idle_loop(void)
-{
-  uint64_t target_tick = swks.system_ticks_64 + 100;
-
+{  
 #ifdef CONFIG_TEST
   if( !cpu_id() ) {
     run_tests();
@@ -72,10 +69,14 @@ void idle_loop(void)
   for( ;; ) {
 
 #ifndef CONFIG_TEST
-    if( swks.system_ticks_64 >= target_tick ) {
+    {
+      uint64_t target_tick = swks.system_ticks_64 + 100;
+      
+      if( swks.system_ticks_64 >= target_tick ) {
 //      kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
 //               cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
-      target_tick += STEP;
+        target_tick += STEP;
+      }
     }
 #endif
 

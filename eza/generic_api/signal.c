@@ -26,10 +26,10 @@
 #include <eza/errno.h>
 #include <eza/arch/context.h>
 #include <eza/signal.h>
-#include <mm/mm.h>
 #include <mm/slab.h>
 #include <mm/pfalloc.h>
 #include <eza/security.h>
+#include <eza/usercopy.h>
 
 static memcache_t *sigq_cache;
 
@@ -362,7 +362,7 @@ out:
   return r;
 }
 
-static status_t sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
+static int sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
                           int sig) {
   task_t *caller=current_task();
   sa_sigaction_t s=sact->a.sa_sigaction;
@@ -406,10 +406,10 @@ static status_t sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
   return 0;
 }
 
-status_t sys_signal(int sig,sa_handler_t handler)
+long sys_signal(int sig,sa_handler_t handler)
 {
   kern_sigaction_t act,oact;
-  status_t r;
+  int r;
 
   if( (sig == SIGKILL || sig == SIGSTOP) && (sa_sigaction_t)handler != SIG_DFL ) {
     return -EINVAL;
@@ -422,7 +422,7 @@ status_t sys_signal(int sig,sa_handler_t handler)
   r=sigaction(&act,&oact,sig);
   kprintf( "sys_signal(%d,%p): %d\n",
            sig,handler,r);
-  return !r ? (status_t)oact.a.sa_sigaction : r;
+  return !r ? (long)oact.a.sa_sigaction : r;
 }
 
 status_t sys_sigaction(int signum,sigaction_t *act,

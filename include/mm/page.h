@@ -65,8 +65,6 @@ typedef uint16_t page_flags_t;
 #define PAGE_POOLS_MASK (PF_PGEN | PF_PDMA)
 #define PAGE_PRESENT_MASK (PAGE_POOL_MASK | PF_RESERVED)
 
-typedef uint8_t pd_flags_t;
-
 /**
  * @struct page_frame_t
  * @brief Describes one physical page.
@@ -131,11 +129,6 @@ static inline void *pframe_phys_addr(page_frame_t *frame)
   return (void *)((uintptr_t)frame->idx << PAGE_WIDTH);
 }
 
-static inline void *virt_to_phys(void *virt)
-{
-  return virt - KERNEL_BASE;
-}
-
 static inline void *pframe_id_to_virt( page_idx_t idx )
 {
   return (void *)(KERNEL_BASE + (idx << PAGE_WIDTH));
@@ -143,8 +136,7 @@ static inline void *pframe_id_to_virt( page_idx_t idx )
 
 static inline page_idx_t virt_to_pframe_id(void *virt)
 {
-  page_idx_t idx = ((uintptr_t)virt - KERNEL_BASE) >> PAGE_WIDTH;
-  return idx;
+  return ((uintptr_t)virt - KERNEL_BASE) >> PAGE_WIDTH;
 }
 
 static inline page_frame_t *virt_to_pframe( void *addr )
@@ -161,13 +153,13 @@ static inline page_frame_t *virt_to_pframe( void *addr )
 #ifndef ARCH_PAGE_MEMNULL
 static inline void pframe_memnull(page_frame_t *start, int block_size)
 {
-  register int sz = block_size;
-
-  while (--sz >= 0)
-    memset(pframe_to_virt(start), 0, PAGE_SIZE * block_size);
+  memset(pframe_to_virt(start), 0, PAGE_SIZE * block_size);
 }
 #else
 #define pframe_memnull(start, block_size) arch_page_memnull(start, block_size)
 #endif /* ARCH_PAGE_MEMNULL */
+
+extern page_frame_t *page_frames_array; /**< An array of all available physical pages */
+extern page_idx_t num_phys_pages;       /**< Number of physical pages in system */
 
 #endif /* __PAGE_H__ */
