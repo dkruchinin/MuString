@@ -95,11 +95,11 @@ typedef struct __migration_action_t {
   task_t *task;
   event_t e;
   list_node_t l;
-  status_t status;
+  int status;
   cpu_id_t target_cpu;
 } migration_action_t;
 
-status_t schedule_task_migration(migration_action_t *a,cpu_id_t cpu);
+int schedule_task_migration(migration_action_t *a,cpu_id_t cpu);
 
 #endif
 

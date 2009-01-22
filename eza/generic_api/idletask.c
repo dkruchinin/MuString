@@ -23,22 +23,7 @@
 #include <eza/kernel.h>
 #include <eza/task.h>
 #include <eza/swks.h>
-<<<<<<< HEAD:eza/generic_api/idletask.c
-#include <mlibc/string.h>
-#include <eza/arch/preempt.h>
-#include <eza/spinlock.h>
-#include <ipc/ipc.h>
-#include <ipc/port.h>
-#include <eza/arch/asm.h>
-#include <eza/arch/preempt.h>
-#include <kernel/syscalls.h>
-#include <eza/uinterrupt.h>
-#include <ipc/poll.h>
-#include <eza/gc.h>
-#include <ipc/gen_port.h>
-#include <ipc/channel.h>
-=======
->>>>>>> zzz:eza/generic_api/idletask.c
+#include <eza/smp.h>
 
 #ifdef CONFIG_TEST
 #include <test.h>

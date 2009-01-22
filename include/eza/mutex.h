@@ -36,13 +36,11 @@ struct __task_struct;
  * @brief General mutex structure
  *
  */
-struct __mutex {
+typedef struct __mutex {
   spinlock_t lock;
-  struct __wait_queue wq;
+  wqueue_t wq;
   struct __task_struct *executer;
-};
-
-typedef struct __mutex mutex_t;
+} mutex_t;
 
 static inline bool mutex_is_locked(mutex_t *mutex)
 {

@@ -73,7 +73,7 @@ task_t *lookup_task(pid_t pid,ulong_t flags);
  *    EACCESS - calling process is not allowed to perform the command
  *              requested;
  */
-status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg);
+long do_task_control(task_t *target,ulong_t cmd, ulong_t arg);
 
 void zombify_task(task_t *target);
 void spawn_percpu_threads(void);

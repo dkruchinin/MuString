@@ -204,10 +204,10 @@ void initialize_idle_tasks(void)
   }
 }
 
-status_t kernel_thread(void (*fn)(void *), void *data, task_t **out_task)
+int kernel_thread(void (*fn)(void *), void *data, task_t **out_task)
 {
   task_t *newtask;
-  status_t r;
+  int r;
 
   r = create_task(current_task(),KERNEL_THREAD_FLAGS,TPL_KERNEL,&newtask,
                   NULL);
@@ -308,7 +308,7 @@ static void __apply_task_exec_attrs(regs_t *regs,exec_attrs_t *exec_attrs,
   task_ctx->per_task_data=exec_attrs->per_task_data;
 }
 
-status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
+int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
                                  task_privelege_t priv,task_t *parent,
                                  task_creation_attrs_t *attrs)
 {
@@ -380,10 +380,10 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   return 0;
 }
 
-status_t arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
+int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
 {
   regs_t *regs=(regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
-  status_t r=0;
+  int r=0;
   arch_context_t *arch_ctx;
   exec_attrs_t *attrs;
   ulong_t l;

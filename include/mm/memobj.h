@@ -24,10 +24,10 @@ typedef enum __memobj_nature {
 struct __memobj;
 /* TODO DK: extends basic memobjs operations... */
 typedef struct __memobj_ops {
-  status_t (*synchronize)(struct __memobj *memobj);
-  status_t (*truncate)(struct __memobj *memobj);
-  status_t (*putpage)(struct __memobj *memobj);
-  status_t (*getpage)(struct __memobj *memobj);
+  int (*synchronize)(struct __memobj *memobj);
+  int (*truncate)(struct __memobj *memobj);
+  int (*putpage)(struct __memobj *memobj);
+  int (*getpage)(struct __memobj *memobj);
 } memobj_ops_t;
 
 

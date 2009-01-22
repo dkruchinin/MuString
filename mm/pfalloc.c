@@ -71,7 +71,7 @@ void free_pages(page_frame_t *pages)
   __pool_free_pages(pool, pages);
 }
 
-status_t pages_block_size(page_frame_t *first_page)
+page_idx_t pages_block_size(page_frame_t *first_page)
 {
   mm_pool_t *pool = mmpools_get_pool(pframe_pool_type(first_page));
 

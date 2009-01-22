@@ -67,7 +67,7 @@ ulong_t time_to_ticks(timeval_t *tv)
   return tv->tv_sec*HZ + tv->tv_nsec / (1000000000/HZ);
 }
 
-status_t sys_nanosleep(timeval_t *in,timeval_t *out)
+int sys_nanosleep(timeval_t *in,timeval_t *out)
 {
   timeval_t tv;
   ulong_t ticks;

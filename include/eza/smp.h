@@ -27,7 +27,7 @@
 
 #include <config.h>
 #include <eza/arch/cpu.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/arch/scheduler.h>
 
 extern volatile cpu_id_t online_cpus;

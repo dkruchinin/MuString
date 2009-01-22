@@ -29,12 +29,12 @@
 #include <mlibc/stddef.h>
 #include <eza/arch/interrupt.h>
 
-status_t arch_allocate_ioports(task_t *task,ulong_t start_port,
-                               ulong_t end_port)
+int arch_allocate_ioports(task_t *task,ulong_t start_port,
+                          ulong_t end_port)
 {
   arch_context_t *ctx = (arch_context_t*)&(task->arch_context[0]);
   tss_t *tss, *master_tss;
-  status_t r;
+  int r;
   ulong_t start_idx,end_idx,start_bit,end_bit;
 
   //LOCK_TASK_VM(task);
@@ -100,12 +100,12 @@ out_unlock:
   return r;
 }
 
-status_t arch_free_ioports(task_t *task,ulong_t start_port,
+int arch_free_ioports(task_t *task,ulong_t start_port,
                            ulong_t end_port)
 {
   arch_context_t *ctx = (arch_context_t*)&(task->arch_context[0]);
   tss_t *tss;
-  status_t r;
+  int r;
   ulong_t start_idx,end_idx,start_bit,end_bit;
 
   //LOCK_TASK_VM(task);

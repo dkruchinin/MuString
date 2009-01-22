@@ -113,12 +113,11 @@ static inline bool waitqueue_is_empty(wqueue_t *wq)
  * the following three functions are internals
  * they must never be called explicitly
  */
-status_t __waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t dop);
+int __waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t dop);
 bool __wq_sleep_if_needful(void *data);
 void __wq_pre_wakeup(void *data);
 
 /**
- * @fn status_t waitqueue_push(wqueue_t *wq, wqueueu_task_t *wq_task)
  * @beief Insert @a wq_task into the @a wq wait queue and force task to sleep
  * @param wq      - A pointer to the wait queue task will be inserted to
  * @param wq_task - A pointer the task wrapped by wqueue_task_t that will be inserted
@@ -135,7 +134,7 @@ void __wq_pre_wakeup(void *data);
  *
  * @return 0 on success, negative error code on error.
  */
-status_t waitqueue_pop(wqueue_t *wq, struct __task_struct **task);
+int waitqueue_pop(wqueue_t *wq, struct __task_struct **task);
   
 /**
  * @brief Initialize a wait queue
@@ -168,7 +167,7 @@ void waitqueue_prepare_task(wqueue_task_t *wq_task, struct __task_struct *task);
  * @return 0 on success, negative error code on failure
  * @see wqueue_insop_t
  */
-status_t waitqueue_insert(wqueue_t *wq, wqueue_task_t *wq_task, wqueue_insop_t iop);
+int waitqueue_insert(wqueue_t *wq, wqueue_task_t *wq_task, wqueue_insop_t iop);
 
 /**
  * @brief Dlete task from the wait queue
@@ -178,10 +177,10 @@ status_t waitqueue_insert(wqueue_t *wq, wqueue_task_t *wq_task, wqueue_insop_t i
  * @return 0 on success, negative error code value on error
  * @see wqueue_delop_t
  */
-static inline status_t waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t dop)
+static inline int waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t dop)
 {
   wqueue_t *wq = wq_task->q;
-  status_t ret = 0;
+  int ret = 0;
 
   if( !wq ) {
     return 0;

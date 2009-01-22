@@ -39,13 +39,9 @@
 #include <eza/spinlock.h>
 #include <kernel/syscalls.h>
 #include <eza/kconsole.h>
-<<<<<<< HEAD:eza/generic_api/process.c
 #include <eza/usercopy.h>
-=======
-#include <eza/tevent.h>
 #include <ipc/gen_port.h>
 #include <ipc/ipc.h>
->>>>>>> zzz:eza/generic_api/process.c
 
 typedef uint32_t hash_level_t;
 
@@ -165,11 +161,11 @@ found_something:
   return task;
 }
 
-status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
+int create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
                      task_t **newtask,task_creation_attrs_t *attrs)
 {
   task_t *new_task;
-  status_t r;
+  int r;
 
   r = create_new_task(parent,flags,priv,&new_task,attrs);
   if(r == 0) {
@@ -224,11 +220,11 @@ static bool __check_task_exec_attrs(exec_attrs_t *ea)
   return valid;
 }
 
-static status_t __disintegrate_task(task_t *target,ulong_t pnum)
+static int __disintegrate_task(task_t *target,ulong_t pnum)
 {
   ipc_gen_port_t *port;
   disintegration_descr_t *descr;
-  status_t r;
+  int r;
   iovec_t iov;
   disintegration_req_packet_t drp;
 
@@ -288,10 +284,10 @@ put_port:
   return r;
 }
 
-static status_t __reincarnate_task(task_t *target,ulong_t arg)
+static int __reincarnate_task(task_t *target,ulong_t arg)
 {
   exec_attrs_t attrs;
-  status_t r;
+  int r;
 
   /* Check if target task is a zombie. */
   LOCK_TASK_STRUCT(target);
@@ -304,7 +300,7 @@ static status_t __reincarnate_task(task_t *target,ulong_t arg)
   UNLOCK_TASK_STRUCT(target);
 
   if( !r ) {
-    if( arg == 0 || copy_from_user(&attrs,arg,sizeof(attrs)) ) {
+    if( arg == 0 || copy_from_user(&attrs,(void*)arg,sizeof(attrs)) ) {
       r=-EFAULT;
     } else {
       if( !__check_task_exec_attrs(&attrs) ) {
@@ -339,7 +335,7 @@ static status_t __reincarnate_task(task_t *target,ulong_t arg)
   return r;
 }
 
-status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
+long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
 {
   task_event_ctl_arg te_ctl;
 
@@ -382,9 +378,9 @@ status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
   return -EINVAL;
 }
 
-status_t sys_task_control(pid_t pid, ulong_t cmd, ulong_t arg)
+int sys_task_control(pid_t pid, ulong_t cmd, ulong_t arg)
 {
-  status_t r;
+  int r;
   task_t *task;
   ulong_t lookup_flags=0;
 
@@ -414,10 +410,10 @@ out_release:
   return r;
 }
 
-status_t sys_create_task(ulong_t flags,task_creation_attrs_t *a)
+long sys_create_task(ulong_t flags,task_creation_attrs_t *a)
 {
   task_t *task;
-  status_t r;
+  long r;
   task_creation_attrs_t attrs,*pa;
 
   if( !security_ops->check_create_process(flags) ) {
@@ -449,12 +445,12 @@ status_t sys_create_task(ulong_t flags,task_creation_attrs_t *a)
 
 extern ulong_t syscall_counter;
 
-status_t sys_get_pid(void)
+long sys_get_pid(void)
 {
   return current_task()->pid;
 }
 
-status_t sys_get_tid(void)
+long sys_get_tid(void)
 {
   return current_task()->tid;
 }

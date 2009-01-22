@@ -34,7 +34,7 @@
 
 extern int __big_verbose;
 
-static status_t __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
+static int __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
 {
   sync_uevent_t *e=__UEVENT_OBJ(obj);
   wqueue_task_t wt;
@@ -80,7 +80,7 @@ static bool __uevent_sched_handler(void *data)
   return !e->__ecount;
 }
 
-status_t sync_create_uevent(kern_sync_object_t **obj,void *uobj,
+int sync_create_uevent(kern_sync_object_t **obj,void *uobj,
                             uint8_t *attrs,ulong_t flags)
 {
   sync_uevent_t *e=memalloc(sizeof(*e));

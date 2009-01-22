@@ -28,9 +28,6 @@
 #include <eza/task.h>
 #include <ipc/ipc.h>
 #include <eza/security.h>
-<<<<<<< HEAD:eza/generic_api/exit.c
-=======
-#include <eza/tevent.h>
 #include <eza/process.h>
 #include <ipc/gen_port.h>
 #include <eza/signal.h>
@@ -45,7 +42,6 @@
   LOCK_TASK_STRUCT((exiter));                   \
   clear_task_flag((exiter),TF_EXITING);          \
   UNLOCK_TASK_STRUCT((exiter))
->>>>>>> zzz:eza/generic_api/exit.c
 
 static void __exit_ipc(task_t *exiter) {
   task_ipc_t *ipc;

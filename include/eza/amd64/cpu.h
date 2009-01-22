@@ -86,7 +86,12 @@
 #define TSS_IOPORTS_PAGES  1
 #define TSS_IOPORTS_LIMIT  (PAGE_SIZE-1)
 
+#define PTD_SELECTOR  1  /* LDT selector that refers to per-task data. */
+
 #define IO_PORTS        (IDT_ITEMS*1024)
+#define LDT_DES      8
+#define LDT_ITEMS  2    /* Default number of LDT entries (must include 'nil') */
+#define AR_LDT        (0x2)   /* 64-bit LDT descriptor */
 
 /* bootstrap macros */
 #define idtselector(des)  ((des) << 4)
@@ -152,6 +157,8 @@ struct __tss_descriptor { /* task state segments descriptor */
   unsigned  : 32;
 } __attribute__ ((packed));
 typedef struct __tss_descriptor tss_descriptor_t;
+
+typedef struct __tss_descriptor ldt_descriptor_t;
 
 struct __intrdescriptor { /* interrupt descriptor */
   unsigned offset_0_15: 16;
@@ -221,6 +228,7 @@ extern void tss_init(tss_t *tp);
 /* context switching - related functions. */
 void load_tss(cpu_id_t cpu,tss_t *new_tss,uint16_t limit);
 void copy_tss(tss_t *dst_tss,tss_t *src_tss);
+void load_ldt(cpu_id_t cpu,uintptr_t ldt,uint16_t limit);
 
 /* gdt related misc functions */
 extern void gdt_tss_setbase(descriptor_t *p,uintptr_t baddre);
@@ -235,6 +243,7 @@ int install_trap_gate( uint32_t slot, uintptr_t handler,
                        prot_ring_t dpl, ist_stack_frame_t ist );
 int install_interrupt_gate( uint32_t slot, uintptr_t handler,
                             prot_ring_t dpl, ist_stack_frame_t ist );
+void descriptor_set_base(descriptor_t *d,uint32_t base);
 
 /* varios CPU functions from cpu.c */
 void arch_cpu_init(cpu_id_t cpu);

@@ -57,7 +57,7 @@ typedef enum __sync_object_type {
 struct __kern_sync_object;
 
 typedef struct __sync_obj_ops {
-  status_t (*control)(struct __kern_sync_object *obj,ulong_t cmd,ulong_t arg);
+  int (*control)(struct __kern_sync_object *obj,ulong_t cmd,ulong_t arg);
   void (*dtor)(void *obj);
 } sync_obj_ops_t;
 
@@ -128,7 +128,7 @@ static inline void release_task_sync_data(task_sync_data_t *sync_data)
 }
 
 task_sync_data_t *allocate_task_sync_data(void);
-status_t dup_task_sync_data(task_sync_data_t *sync_data);
+int dup_task_sync_data(task_sync_data_t *sync_data);
 
 #define LOCK_SYNC_DATA_R(l)  mutex_lock(&(l)->mutex)
 #define UNLOCK_SYNC_DATA_R(l)  mutex_unlock(&(l)->mutex)
@@ -179,8 +179,8 @@ typedef struct {
 #define __UMUTEX_OBJ(ksync_obj) (container_of((ksync_obj),      \
                                               sync_umutex_t,k_syncobj))
 
-status_t sync_create_mutex(kern_sync_object_t **obj,void *uobj,
-                           uint8_t *attrs,ulong_t flags);
+int sync_create_mutex(kern_sync_object_t **obj,void *uobj,
+                      uint8_t *attrs,ulong_t flags);
 
 /* Userspace raw sync events - related stuff. */
 typedef struct __sync_uevent {
@@ -190,8 +190,8 @@ typedef struct __sync_uevent {
   ulong_t __ecount;
 } sync_uevent_t;
 
-status_t sync_create_uevent(kern_sync_object_t **obj,void *uobj,
-                            uint8_t *attrs,ulong_t flags);
+int sync_create_uevent(kern_sync_object_t **obj,void *uobj,
+                       uint8_t *attrs,ulong_t flags);
 
 enum {
   __SYNC_CMD_EVENT_WAIT=0x200,    /**< Wait for target event to arrive. **/

@@ -41,7 +41,7 @@
 /*TODO: ak, redesign it according to mm changes */
 
 /* system call used to map memory pages, ``memory'' means a regular area */
-status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_t offset)
+long sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_t offset)
 {
 #if 0
   page_frame_t *aframe;

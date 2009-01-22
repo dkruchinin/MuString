@@ -29,14 +29,10 @@
 #include <eza/arch/page.h>
 #include <eza/scheduler.h>
 #include <eza/kstack.h>
+#include <eza/task.h>
 #include <eza/amd64/context.h>
 #include <eza/arch/current.h>
 #include <eza/smp.h>
-<<<<<<< HEAD:include/eza/amd64/scheduler.h
-=======
-#include <eza/arch/mm_types.h>
-#include <eza/task.h>
->>>>>>> zzz:include/eza/amd64/scheduler.h
 
 static inline cpu_id_t cpu_id(void)
 {

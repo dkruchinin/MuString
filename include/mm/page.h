@@ -95,7 +95,7 @@ extern page_frame_t *page_frames_array;
  * @see DEFINE_ITERATOR
  */
 DEFINE_ITERATOR(page_frame,
-                status_t error;
+                int error;
                 page_idx_t pf_idx;);
 
 /**

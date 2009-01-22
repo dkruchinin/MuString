@@ -27,7 +27,7 @@
 #include <eza/usercopy.h>
 #include <mm/slab.h>
 
-static status_t __sync_allocate_id(struct __task_struct *task,
+static int __sync_allocate_id(struct __task_struct *task,
                                    bool shared_id,sync_id_t *p_id)
 {
   if( task->sync_data->numobjs < (MAX_PROCESS_SYNC_OBJS-1) ) {
@@ -72,12 +72,12 @@ static kern_sync_object_t *__lookup_sync(task_t *owner,sync_id_t id)
   return t;
 }
 
-status_t sys_sync_create_object(sync_object_type_t obj_type,
+int sys_sync_create_object(sync_object_type_t obj_type,
                                 void *uobj,uint8_t *attrs,
                                 ulong_t flags)
 {
   kern_sync_object_t *kobj=NULL;
-  status_t r;
+  int r;
   sync_id_t id;
   task_t *caller=current_task();
   uint8_t shared;
@@ -153,11 +153,11 @@ put_sync_data:
 
 extern int __big_verbose;
 
-status_t sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg)
+int sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg)
 {
   task_t *caller=current_task();
   kern_sync_object_t *kobj=__lookup_sync(caller,id);
-  status_t r;
+  int r;
 
   if( !kobj ) {
     return -EINVAL;
@@ -168,7 +168,7 @@ status_t sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg)
   return r;
 }
 
-status_t sys_sync_destroy(sync_id_t id)
+int sys_sync_destroy(sync_id_t id)
 {
   task_t *caller=current_task();
   kern_sync_object_t *kobj=__lookup_sync(caller,id);
@@ -180,13 +180,13 @@ status_t sys_sync_destroy(sync_id_t id)
   return 0;
 }
 
-status_t sys_sync_condvar_wait(sync_id_t ucondvar,
-                               sync_id_t umutex)
+int sys_sync_condvar_wait(sync_id_t ucondvar,
+                          sync_id_t umutex)
 {
   return 0;
 }
 
-status_t dup_task_sync_data(task_sync_data_t *sync_data)
+int dup_task_sync_data(task_sync_data_t *sync_data)
 {
   ulong_t i;
 

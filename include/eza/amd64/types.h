@@ -35,25 +35,6 @@ typedef unsigned short uint16_t;
 typedef unsigned int uint32_t;
 typedef unsigned long long uint64_t;
 typedef unsigned long uintptr_t;
-<<<<<<< HEAD:include/eza/amd64/types.h
-typedef int32_t status_t;
-=======
-typedef int32_t pid_t;
-typedef uint16_t uid_t;
-typedef int32_t tid_t;
-typedef uint32_t usec_t;
-typedef long status_t;
-typedef uint32_t shm_id_t;
-
-typedef uint64_t sigset_t;
-
-/* abstraction typedef */
-typedef uint64_t unative_t;
-typedef uint64_t native_t;
-typedef uint64_t ipl_t;
-
-typedef ulong_t lock_t;
->>>>>>> zzz:include/eza/amd64/types.h
 
 /* bit-related types. */
 typedef uint32_t bit_idx_t;

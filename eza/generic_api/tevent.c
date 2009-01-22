@@ -83,12 +83,12 @@ void task_event_notify(ulong_t events)
   UNLOCK_TASK_EVENTS_R(te);
 }
 
-status_t task_event_attach(task_t *target,task_t *listener,
+int task_event_attach(task_t *target,task_t *listener,
                            task_event_ctl_arg *ctl_arg)
 {
   ipc_gen_port_t *port;
   task_event_listener_t *l;
-  status_t r=-EINVAL;
+  int r=-EINVAL;
   list_node_t *n;
 
   if( !ctl_arg->ev_mask || (ctl_arg->ev_mask & ~(ALL_TASK_EVENTS_MASK)) ) {

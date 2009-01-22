@@ -196,9 +196,9 @@ sigq_item_t *extract_one_signal_from_queue(task_t *task);
 
 #define pending_signals_present(t) ((t)->siginfo.pending != 0)
 
-status_t send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery);
+int send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery);
 bool update_pending_signals(task_t *task);
-status_t send_task_siginfo_forced(task_t *task,siginfo_t *info);
+int send_task_siginfo_forced(task_t *task,siginfo_t *info);
 sighandlers_t * allocate_signal_handlers(void);
 
 #define task_was_interrupted(t)  ( read_task_pending_uworks((t)) != 0 || pending_signals_present((t)) )

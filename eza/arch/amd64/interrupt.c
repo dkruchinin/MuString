@@ -47,7 +47,7 @@ static void install_generic_irq_handlers(void)
 static void install_smp_irq_handlers(void)
 {
   const idt_t *idt;
-  status_t r;
+  long r;
 
   idt = get_idt();
   r = idt->install_handler(smp_local_timer_interrupt_handler,

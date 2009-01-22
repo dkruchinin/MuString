@@ -49,14 +49,14 @@
 struct __ipc_gen_port;
 
 typedef struct __ipc_port_msg_ops {
-  status_t (*init_data_storage)(struct __ipc_gen_port *port,task_t *owner);
-  status_t (*insert_message)(struct __ipc_gen_port *port,
+  int (*init_data_storage)(struct __ipc_gen_port *port,task_t *owner);
+  int (*insert_message)(struct __ipc_gen_port *port,
                              ipc_port_message_t *msg);
   ipc_port_message_t *(*extract_message)(struct __ipc_gen_port *port,
                                          ulong_t flags);
   void (*free_data_storage)(struct __ipc_gen_port *port);
   void (*dequeue_message)(struct __ipc_gen_port *port,ipc_port_message_t *msg);
-  status_t (*remove_message)(struct __ipc_gen_port *port,
+  int (*remove_message)(struct __ipc_gen_port *port,
                              ulong_t msg_id,ipc_port_message_t **m);
   ipc_port_message_t *(*remove_head_message)(struct __ipc_gen_port *port);
 } ipc_port_msg_ops_t;
@@ -78,16 +78,16 @@ typedef struct __iovec {
   size_t iov_len;
 } iovec_t;
 
-status_t __ipc_create_port(task_t *owner,ulong_t flags);
-status_t ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
+int __ipc_create_port(task_t *owner,ulong_t flags);
+int ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
                           iovec_t *iovec,ulong_t numvec,
                           port_msg_info_t *msg_info);
 
 ipc_gen_port_t *__ipc_get_port(task_t *task,ulong_t port);
 void __ipc_put_port(ipc_gen_port_t *p);
-status_t __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
+int __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
                           ulong_t reply_buf,ulong_t reply_len);
-status_t ipc_close_port(task_t *owner,ulong_t port);
+int ipc_close_port(task_t *owner,ulong_t port);
 extern ipc_port_msg_ops_t def_port_msg_ops;
 /****************************************************************************/
 
@@ -100,10 +100,10 @@ ipc_port_message_t *ipc_create_port_message_iov_v(iovec_t *snd_kiovecs,ulong_t s
                                                   ipc_user_buffer_t *snd_bufs,
                                                   ipc_user_buffer_t *rcv_bufs,
                                                   ulong_t rcv_size);
-status_t ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
+int ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
                             iovec_t *reply_iov,ulong_t numvecs,
                             ulong_t reply_size);
-status_t ipc_port_send_iov(struct __ipc_gen_port *port,
+int ipc_port_send_iov(struct __ipc_gen_port *port,
                            ipc_port_message_t *msg,bool sync_send,
                            iovec_t *iovecs,ulong_t numvecs,
                            ulong_t reply_len);

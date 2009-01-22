@@ -37,9 +37,8 @@
 #include <eza/scheduler.h>
 
 typedef uint32_t time_slice_t;
-typedef int32_t pid_t;
 typedef uint16_t uid_t;
-typedef uint64_t tid_t;
+
 
 #define INVALID_PID  ((pid_t)~0) 
 /* TODO: [mt] Manage NUM_PIDS properly ! */
@@ -90,7 +89,6 @@ typedef struct __task_event_descr {
   ulong_t ev_mask;
 } task_event_descr_t;
 
-<<<<<<< HEAD:include/eza/task.h
 struct __ipc_gen_port;
 
 typedef struct __task_event_listener {
@@ -105,9 +103,6 @@ typedef struct __task_events {
   list_head_t my_events;
   list_head_t listeners;
 } task_events_t;
-=======
-typedef uint32_t time_slice_t;
->>>>>>> zzz:include/eza/task.h
 
 typedef enum __task_creation_flag_t {
   CLONE_MM=0x1,
@@ -310,7 +305,7 @@ void initialize_task_subsystem(void);
  *                   May be NULL if no descriptor required et all.
  * @return Return codes are identical to the 'create_task()' function.
  */
-status_t kernel_thread(void (*fn)(void *), void *data, task_t **out_task);
+int kernel_thread(void (*fn)(void *), void *data, task_t **out_task);
 
 /**
  * @fn status_t arch_setup_task_context(task_t *newtask,
@@ -328,9 +323,9 @@ status_t kernel_thread(void (*fn)(void *), void *data, task_t **out_task);
  * @param priv - Privilege level of target task.
  * @param attrs - Attributes of new task.
  */
-status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t flags,
-                                 task_privelege_t priv,task_t *parent,
-                                 task_creation_attrs_t *attrs);
+int arch_setup_task_context(task_t *newtask,task_creation_flags_t flags,
+                            task_privelege_t priv,task_t *parent,
+                            task_creation_attrs_t *attrs);
 
 /**
  * @fn arch_process_context_control(task_t *task,ulong_t cmd,ulong_t arg)
@@ -345,11 +340,11 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t flags,
  * Note: See 'sys_process_control' for the list of available commands and their
  *       detailed symantics.
  */
-status_t arch_process_context_control(task_t *task,ulong_t cmd,ulong_t arg);
+int arch_process_context_control(task_t *task,ulong_t cmd,ulong_t arg);
 
 
-status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
-                     task_t **new_task,task_creation_attrs_t *attrs);
+int create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
+                task_t **new_task,task_creation_attrs_t *attrs);
 
 /**
  * @fn status_t create_new_task(task_t *parent, task_t **t,
@@ -361,8 +356,8 @@ status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
  * doesn't register new task in the scheduler.
  * See 'create_task()' for details.
  */
- status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv,
-                          task_t **t,task_creation_attrs_t *attrs);
+int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv,
+                    task_t **t,task_creation_attrs_t *attrs);
 
 /**
  * @fn void free_task_struct(task_t *task)
@@ -380,8 +375,8 @@ void free_task_struct(task_t *task);
 void cleanup_thread_data(void *t,ulong_t arg);
 
 void task_event_notify(ulong_t events);
-status_t task_event_attach(struct __task_struct *target,
-                           struct __task_struct *listener,
+int task_event_attach(struct __task_struct *target,
+                      struct __task_struct *listener,
                            task_event_ctl_arg *ctl_arg);
 void exit_task_events(struct __task_struct *target);
 

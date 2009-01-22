@@ -119,7 +119,7 @@ static void __free_tid(tid_t tid,task_t *group_leader)
 {
 }
 
-static status_t __alloc_pid_and_tid(task_t *parent,ulong_t flags,
+static int __alloc_pid_and_tid(task_t *parent,ulong_t flags,
                                     pid_t *ppid, tid_t *ptid,
                                     task_privelege_t priv)
 {
@@ -128,7 +128,7 @@ static status_t __alloc_pid_and_tid(task_t *parent,ulong_t flags,
 
   /* Init task ? */
   if( flags & TASK_INIT ) {
-    status_t r;
+    int r;
 
     LOCK_PID_ARRAY;
     if( !init_launched ) {
@@ -250,9 +250,9 @@ static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
   return task;
 }
 
-static status_t __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
+static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
 {
-  status_t r;
+  int r;
 
   if( flags & CLONE_IPC ) {
     if( !parent->ipc ) {
@@ -271,7 +271,7 @@ static status_t __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
   }
 }
 
-static status_t __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags,
+static int __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags,
                                        task_privelege_t priv)
 {
   if( flags & CLONE_MM ) {
@@ -288,7 +288,7 @@ static status_t __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags
   return task->sync_data ? 0 : -ENOMEM;
 }
 
-static status_t __setup_signals(task_t *task,task_t *parent,ulong_t flags)
+static int __setup_signals(task_t *task,task_t *parent,ulong_t flags)
 {
   sighandlers_t *shandlers=NULL;
   sigset_t blocked=0,ignored=DEFAULT_IGNORED_SIGNALS;
@@ -322,10 +322,10 @@ static status_t __setup_signals(task_t *task,task_t *parent,ulong_t flags)
   return 0;
 }
 
-static status_t initialize_task_mm(task_t *orig, task_t *target,
-                                   task_creation_flags_t flags, task_privelege_t priv)
+static int initialize_task_mm(task_t *orig, task_t *target,
+                              task_creation_flags_t flags, task_privelege_t priv)
 {
-  status_t ret = 0;
+  int ret = 0;
   
   if (!orig || priv == TPL_KERNEL)
     ptable_rpd_clone(&target->rpd, &kernel_rpd);
@@ -346,11 +346,11 @@ static status_t initialize_task_mm(task_t *orig, task_t *target,
   return ret;
 }
 
-status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t,
+int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t,
                          task_creation_attrs_t *attrs)
 {
   task_t *task;
-  status_t r = -ENOMEM;
+  int r = -ENOMEM;
   page_frame_t *stack_pages;
   pid_t pid;
   tid_t tid;

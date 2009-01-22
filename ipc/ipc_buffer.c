@@ -35,14 +35,14 @@
 #define LOCK_TASK_VM(x)
 #define UNLOCK_TASK_VM(x)
 
-status_t ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
+int ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
                                 uintptr_t *addr_array,ipc_user_buffer_t *bufs)
 {
   rpd_t *rpd = task_get_rpd(owner);
   page_idx_t idx;
   page_idx_t pfn;
   ulong_t chunk_num;
-  status_t r=-EFAULT;
+  int r=-EFAULT;
   uintptr_t adr,*pchunk;
 
   LOCK_TASK_VM(owner);

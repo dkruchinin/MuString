@@ -22,6 +22,7 @@
  */
 
 #include <eza/arch/page.h>
+#include <eza/arch/cpu.h>
 
 #define GDT_CPU_ENTRIES  { \
    { 0,0,0,0,0,0,0,0,0,0 }, /* nil descriptor */ \

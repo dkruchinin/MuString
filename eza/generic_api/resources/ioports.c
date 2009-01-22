@@ -85,7 +85,7 @@ static bool __check_ioports_range(ulong_t first_port,ulong_t last_port,
   return avail;
 }
 
-static status_t __free_ioports_range(ulong_t start_port,ulong_t last_port)
+static int __free_ioports_range(ulong_t start_port,ulong_t last_port)
 {
   struct rb_node *parent=NULL;
   struct rb_node **p=&ioports_root.rb_node;
@@ -136,7 +136,7 @@ static status_t __free_ioports_range(ulong_t start_port,ulong_t last_port)
   return 0;
 }
 
-static status_t __add_ioports_range(ulong_t start_port,ulong_t last_port,
+static int __add_ioports_range(ulong_t start_port,ulong_t last_port,
                                     ioport_range_t **out_r,task_t **owner)
 {
   struct rb_node *parent=NULL;
@@ -192,7 +192,7 @@ out:
   return 0;
 }
 
-static status_t __check_ioports( task_t *task,ulong_t first_port,
+static int __check_ioports( task_t *task,ulong_t first_port,
                                  ulong_t end_port)
 {
   if( !security_ops->check_access_ioports(current_task(),
@@ -208,9 +208,9 @@ static status_t __check_ioports( task_t *task,ulong_t first_port,
   return 0;
 }
 
-status_t sys_allocate_ioports(ulong_t first_port,ulong_t num_ports)
+int sys_allocate_ioports(ulong_t first_port,ulong_t num_ports)
 {
-  status_t r;
+  int r;
   task_t *port_owner,*caller;
   ioport_range_t *range;
   ulong_t end_port=first_port+num_ports-1;
@@ -251,9 +251,9 @@ out:
   return r;
 }
 
-status_t sys_free_ioports(ulong_t first_port,ulong_t num_ports)
+int sys_free_ioports(ulong_t first_port,ulong_t num_ports)
 {
-  status_t r;
+  int r;
   task_t *port_owner,*caller;
   ulong_t end_port;
 

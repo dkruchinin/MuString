@@ -513,9 +513,9 @@ static void __free_pages(page_frame_t *pages, void *data)
   spinlock_unlock(&tlsf->lock);
 }
 
-static status_t __get_pblock_size(page_frame_t *pages_block_start, void *data)
+static page_idx_t __get_pblock_size(page_frame_t *pages_block_start, void *data)
 {
-  status_t ret = 0;
+  page_idx_t ret = 0;
   tlsf_t *tlsf = data;
   
   spinlock_lock(&tlsf->lock);

@@ -33,7 +33,7 @@ static inline void sigqueue_initialize(sigqueue_t *sq,sigset_t *pmask)
   }
 }
 
-static inline status_t sigqueue_add_item(sigqueue_t *sq,sq_header_t *item)
+static inline int sigqueue_add_item(sigqueue_t *sq,sq_header_t *item)
 {
   if( item->idx >= __SQ_MAXID ) {
     return -EINVAL;

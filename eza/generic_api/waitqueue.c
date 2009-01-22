@@ -117,9 +117,9 @@ void waitqueue_prepare_task(wqueue_task_t *wq_task, task_t *task)
   spinlock_unlock(&task->member_lock);
 }
 
-status_t waitqueue_insert(wqueue_t *wq, wqueue_task_t *wq_task, wqueue_insop_t iop)
+int waitqueue_insert(wqueue_t *wq, wqueue_task_t *wq_task, wqueue_insop_t iop)
 {
-  status_t ret = 0;
+  int ret = 0;
 
   spinlock_lock(&wq->q_lock);
   ASSERT(wq->acts.sleep_if_needful != NULL);
@@ -133,9 +133,9 @@ status_t waitqueue_insert(wqueue_t *wq, wqueue_task_t *wq_task, wqueue_insop_t i
   return ret;
 }
 
-status_t waitqueue_pop(wqueue_t *wq, task_t **task)
+int waitqueue_pop(wqueue_t *wq, task_t **task)
 {
-  status_t ret = 0;
+  int ret = 0;
   wqueue_task_t *wq_t;
   
   spinlock_lock(&wq->q_lock);
@@ -161,9 +161,9 @@ status_t waitqueue_pop(wqueue_t *wq, task_t **task)
  * if you really want to use it directly, don't forget to lock wq_task's
  * parent wait queue by yourself.
  */
-status_t __waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t dop)
+int __waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t dop)
 {
-  status_t ret = 0;
+  int ret = 0;
   wqueue_t *wq = wq_task->q;
 
   if (waitqueue_is_empty(wq))

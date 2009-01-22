@@ -34,6 +34,8 @@
 #include <eza/arch/preempt.h>
 
 struct __task_struct;
+typedef int32_t pid_t;
+typedef uint64_t tid_t;
 
 /* Handler for extra check during the scheduling step.
  * If it returns true, target task will be rescheduled,
@@ -58,19 +60,19 @@ typedef struct __scheduler {
   const char *id;
   list_node_t l;
   cpu_id_t (*cpus_supported)(void);
-  status_t (*add_cpu)(cpu_id_t cpu);
+  int (*add_cpu)(cpu_id_t cpu);
   void (*scheduler_tick)(void);
-  status_t (*add_task)(struct __task_struct *task);
-  status_t (*del_task)(struct __task_struct *task);
-  status_t (*move_task_to_cpu)(struct __task_struct *task,cpu_id_t cpu);
+  int (*add_task)(struct __task_struct *task);
+  int (*del_task)(struct __task_struct *task);
+  int (*move_task_to_cpu)(struct __task_struct *task,cpu_id_t cpu);
   void (*schedule)(void);
   void (*reset)(void);
-  status_t (*change_task_state)(struct __task_struct *task,ulong_t state,ulong_t mask);
-  status_t (*change_task_state_deferred)(struct __task_struct *task,ulong_t state,
+  int (*change_task_state)(struct __task_struct *task,ulong_t state,ulong_t mask);
+  int (*change_task_state_deferred)(struct __task_struct *task,ulong_t state,
                                          deferred_sched_handler_t handler,
                                          void *data,ulong_t mask);
-  status_t (*setup_idle_task)(struct __task_struct *task);
-  status_t (*scheduler_control)(struct __task_struct *task, ulong_t cmd,ulong_t arg);
+  int (*setup_idle_task)(struct __task_struct *task);
+  int (*scheduler_control)(struct __task_struct *task, ulong_t cmd,ulong_t arg);
 } scheduler_t;
 
 /* Main scheduling policies. */
@@ -100,9 +102,9 @@ void idle_loop(void);
 
 extern struct __task_struct *idle_tasks[CONFIG_NRCPUS];
 
-status_t sched_change_task_state_mask(struct __task_struct *task,ulong_t state,
+int sched_change_task_state_mask(struct __task_struct *task,ulong_t state,
                                       ulong_t mask);
-status_t sched_change_task_state_deferred_mask(struct __task_struct *task,ulong_t state,
+int sched_change_task_state_deferred_mask(struct __task_struct *task,ulong_t state,
                                                deferred_sched_handler_t handler,void *data,
                                                ulong_t appl_state);
 
@@ -113,11 +115,11 @@ status_t sched_change_task_state_deferred_mask(struct __task_struct *task,ulong_
   sched_change_task_state_deferred_mask((task),(state),(hander),(data),      \
                                         __ALL_TASK_STATE_MASK)
 
-status_t sched_add_task(struct __task_struct *task);
-status_t sched_del_task(struct __task_struct *task);
-status_t sched_setup_idle_task(struct __task_struct *task);
-status_t sched_add_cpu(cpu_id_t cpu);
-status_t sched_move_task_to_cpu(struct __task_struct *task,cpu_id_t cpu);
+int sched_add_task(struct __task_struct *task);
+int sched_del_task(struct __task_struct *task);
+int sched_setup_idle_task(struct __task_struct *task);
+int sched_add_cpu(cpu_id_t cpu);
+int sched_move_task_to_cpu(struct __task_struct *task,cpu_id_t cpu);
 void update_idle_tick_statistics(scheduler_cpu_stats_t *stats);
 
 extern scheduler_t *get_default_scheduler(void);
@@ -147,10 +149,10 @@ void schedule(void);
 
 #define SCHEDULER_MAX_COMMON_IOCTL SYS_SCHED_CTL_SET_CPU
 
-status_t sys_yield(void);
-status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
-status_t do_scheduler_control(struct __task_struct *task, ulong_t cmd, ulong_t arg);
-status_t sleep(ulong_t ticks);
+int sys_yield(void);
+long sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
+long do_scheduler_control(struct __task_struct *task, ulong_t cmd, ulong_t arg);
+int sleep(ulong_t ticks);
 
 #ifdef CONFIG_SMP
 

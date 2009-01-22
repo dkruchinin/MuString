@@ -12,11 +12,8 @@
 #include <mm/vmm.h>
 #include <eza/scheduler.h>
 #include <eza/kconsole.h>
-<<<<<<< HEAD:eza/generic_api/uinterrupts.c
 #include <eza/usercopy.h>
-=======
 #include <eza/def_actions.h>
->>>>>>> zzz:eza/generic_api/uinterrupts.c
 
 static SPINLOCK_DEFINE(descrs_lock);
 static uintr_descr_t descriptors[NUM_IRQS];
@@ -50,10 +47,10 @@ static void __unregister_interrupt_listener(irq_t irq,void *private_data)
   __clean_interrupt_descriptor(irq);
 }
 
-status_t static register_interrupt_listener(irq_t irq,irq_listener_t listener,
+static long register_interrupt_listener(irq_t irq,irq_listener_t listener,
                                             void *private_data)
 {
-  status_t r;
+  long r;
   uintr_descr_t *descr;
 
   if( irq >= NUM_IRQS || !listener ) {
@@ -156,10 +153,10 @@ static void __raw_irq_array_handler(irq_t irq,void *priv)
   }
 }
 
-status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
+long sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
                                       ulong_t addr,ulong_t flags)
 {
-  status_t id;
+  long id;
   irq_counter_array_t *array;
   page_idx_t pfn;
   ulong_t *ids;
@@ -284,7 +281,7 @@ static irq_counter_array_t *__get_irq_array(task_t *task,ulong_t id)
   return NULL;
 }
 
-status_t sys_wait_on_irq_array(ulong_t id)
+int sys_wait_on_irq_array(ulong_t id)
 {
   irq_counter_array_t *array=__get_irq_array(current_task(),id);
 

@@ -23,18 +23,18 @@
 #include <kernel/syscalls.h>
 #include <eza/posix.h>
 #include <eza/task.h>
-#include <kernel/vm.h>
 #include <eza/errno.h>
+#include <eza/usercopy.h>
 #include <eza/signal.h>
 
-status_t sys_timer_create(clockid_t clockid,struct sigevent *evp,
+int sys_timer_create(clockid_t clockid,struct sigevent *evp,
                           posixid_t *timerid)
 {
   task_t *caller=current_task();
   posix_stuff_t *stuff;
   struct sigevent kevp;
   long id;
-  status_t r;
+  int r;
   posix_timer_t *ptimer;
 
   if( evp ) {

@@ -89,11 +89,11 @@ bool update_pending_signals(task_t *task)
  *   1: signal wasn't queued since it was ignored.
  * -ENOMEM: no memory for a new queue item.
  */
-static status_t __send_task_siginfo(task_t *task,siginfo_t *info,
+static int __send_task_siginfo(task_t *task,siginfo_t *info,
                                     bool force_delivery)
 {
   int sig=info->si_signo;
-  status_t r;
+  int r;
   bool send_signal;
 
   if( force_delivery ) {
@@ -146,9 +146,9 @@ static void __send_siginfo_postlogic(task_t *task,siginfo_t *info)
   }
 }
 
-status_t send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery)
+int send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery)
 {
-  status_t r;
+  int r;
 
   LOCK_TASK_SIGNALS(task);
   r=__send_task_siginfo(task,info,force_delivery);
@@ -163,7 +163,7 @@ status_t send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery)
   return r < 0 ? r : 0;
 }
 
-static status_t __send_signal_to_process(pid_t pid,siginfo_t *siginfo)
+static int __send_signal_to_process(pid_t pid,siginfo_t *siginfo)
 {
   task_t *root=pid_to_task(pid);
   task_t *target=NULL;
@@ -241,9 +241,9 @@ send_signal:
   return 0;
 }
 
-status_t sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
+int sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
 {
-  status_t r;
+  int r;
   siginfo_t k_siginfo;
 
   if( !valid_signal(sig) ) {
@@ -287,7 +287,7 @@ status_t sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
   return r;
 }
 
-status_t sys_sigprocmask(int how,const sigset_t *set,sigset_t *oldset)
+long sys_sigprocmask(int how,const sigset_t *set,sigset_t *oldset)
 {
   task_t *target=current_task();
   sigset_t kset,wset;
@@ -335,10 +335,10 @@ status_t sys_sigprocmask(int how,const sigset_t *set,sigset_t *oldset)
   return 0;
 }
 
-status_t sys_thread_kill(pid_t process,tid_t tid,int sig)
+long sys_thread_kill(pid_t process,tid_t tid,int sig)
 {
   task_t *target;
-  status_t r;
+  long r;
   siginfo_t k_siginfo;
 
   if( !valid_signal(sig) || !is_tid(tid) ) {
@@ -431,12 +431,12 @@ long sys_signal(int sig,sa_handler_t handler)
   return !r ? (long)oact.a.sa_sigaction : r;
 }
 
-status_t sys_sigaction(int signum,sigaction_t *act,
+int sys_sigaction(int signum,sigaction_t *act,
                        sigaction_t *oldact)
 {
   kern_sigaction_t kact,koact;
   sigaction_t uact;
-  status_t r;
+  int r;
 
   if( !valid_signal(signum) || signum == SIGKILL ||
       signum == SIGSTOP ) {

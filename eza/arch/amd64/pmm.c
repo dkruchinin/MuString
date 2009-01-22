@@ -22,9 +22,11 @@
  *
  */
 
+#include <config.h>
 #include <eza/arch/types.h>
 #include <eza/arch/page.h>
 #include <eza/arch/cpu.h>
+#include <eza/arch/gdt.h>
 #include <mlibc/string.h>
 #include <eza/arch/asm.h>
 #include <eza/smp.h>
