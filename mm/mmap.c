@@ -74,7 +74,22 @@ static vmrange_t *create_vmrange(vmm_t *parent_vmm, uintptr_t va_start, int npag
   return vmr;
 }
 
+<<<<<<< HEAD:mm/mmap.c
 static void destroy_vmrange(vmrange_t *vmr)
+=======
+void *mm_user_addr_to_kern_addr(page_frame_t *dir, uintptr_t va)
+{
+  page_idx_t pidx=mm_pin_virt_addr(dir,va);
+
+  if( pidx >= 0 ) {
+    return (char *)pframe_id_to_virt(pidx)+(va & PAGE_OFFSET_MASK);
+  }
+
+  return NULL;
+}
+
+void mm_pagedir_initialize(page_frame_t *new_dir, page_frame_t *parent, pdir_level_t level)
+>>>>>>> zzz:mm/mmap.c
 {
   vmr->parent_vmm->num_vmrs--;
   memfree(vmr);

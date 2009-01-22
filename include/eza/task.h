@@ -32,6 +32,9 @@
 #include <mm/vmm.h>
 #include <eza/limits.h>
 #include <eza/sigqueue.h>
+#include <eza/mutex.h>
+#include <eza/event.h>
+#include <eza/scheduler.h>
 
 typedef uint32_t time_slice_t;
 typedef int32_t pid_t;
@@ -62,9 +65,8 @@ typedef uint64_t tid_t;
 #define LOCK_TASK_STRUCT(t) spinlock_lock(&t->lock)
 #define UNLOCK_TASK_STRUCT(t) spinlock_unlock(&t->lock)
 
-/*   */
-#define LOCK_TASK_CHILDS(t) spinlock_lock(&t->child_lock)
-#define UNLOCK_TASK_CHILDS(t) spinlock_unlock(&t->child_lock)
+#define LOCK_TASK_CHILDS(t) mutex_lock(&(t)->child_lock) 
+#define UNLOCK_TASK_CHILDS(t) mutex_unlock(&(t)->child_lock)
 
 #define LOCK_TASK_MEMBERS(t) spinlock_lock(&t->member_lock)
 #define UNLOCK_TASK_MEMBERS(t) spinlock_unlock(&t->member_lock)
@@ -88,6 +90,7 @@ typedef struct __task_event_descr {
   ulong_t ev_mask;
 } task_event_descr_t;
 
+<<<<<<< HEAD:include/eza/task.h
 struct __ipc_gen_port;
 
 typedef struct __task_event_listener {
@@ -102,6 +105,9 @@ typedef struct __task_events {
   list_head_t my_events;
   list_head_t listeners;
 } task_events_t;
+=======
+typedef uint32_t time_slice_t;
+>>>>>>> zzz:include/eza/task.h
 
 typedef enum __task_creation_flag_t {
   CLONE_MM=0x1,
@@ -110,18 +116,6 @@ typedef enum __task_creation_flag_t {
 } task_creation_flags_t;
 
 #define TASK_FLAG_UNDER_STATE_CHANGE  0x1
-
-typedef enum __task_state {
-  TASK_STATE_RUNNING = 0x1,
-  TASK_STATE_RUNNABLE = 0x2,
-  TASK_STATE_JUST_BORN = 0x4,
-  TASK_STATE_SLEEPING = 0x8,   /**< Interruptible sleep. **/
-  TASK_STATE_STOPPED = 0x10,
-  TASK_STATE_ZOMBIE = 0x20,
-  TASK_STATE_SUSPENDED = 0x40,  /**< Non-interruptible sleep. **/
-} task_state_t;
-
-#define __ALL_TASK_STATE_MASK  0x7F  /**< All possible task states. */
 
 typedef uint32_t priority_t;
 typedef uint32_t cpu_array_t;
@@ -134,6 +128,8 @@ struct __userspace_events_data;
 struct __task_ipc_priv;
 struct __task_mutex_locks;
 struct __task_sync_data;
+struct __mutex;
+struct __posix_stuff;
 
 /* Per-task signal descriptors. */
 struct __sighandlers;
@@ -149,6 +145,7 @@ typedef struct __signal_struct {
 #define __TF_USPC_BLOCKED_BIT  0
 #define __TF_UNDER_MIGRATION_BIT  1
 #define __TF_EXITING_BIT  2
+#define __TF_DISINTEGRATION_BIT  3
 
 typedef enum __task_privilege {
   TPL_KERNEL = 0,  /* Kernel task - the most serious level. */
@@ -158,8 +155,29 @@ typedef enum __task_privilege {
 typedef enum __task_flags {
   TF_USPC_BLOCKED=(1<<__TF_USPC_BLOCKED_BIT),/**< Block facility to change task's static priority outside the kernel **/
   TF_UNDER_MIGRATION=(1<<__TF_UNDER_MIGRATION_BIT), /**< Task is currently being migrated. Don't disturb. **/
-  TF_EXITING=(1<<__TF_EXITING_BIT) /**< Task is exiting to avoid faults during 'sys_exit()' **/
+  TF_EXITING=(1<<__TF_EXITING_BIT), /**< Task is exiting to avoid faults during 'sys_exit()' **/
+  TF_DISINTEGRATING=(1<<__TF_DISINTEGRATION_BIT) /**< Task is being disintegrated **/
 } task_flags_t;
+
+struct __disintegration_descr_t;
+typedef struct __uwork_data {
+  struct __disintegration_descr_t *disintegration_descr;
+} uworks_data_t;
+
+/* Task that waits another task to exit. */
+typedef struct __jointee {
+  event_t e;
+  list_node_t l;
+  union {
+    void *exit_ptr;
+    int exit_int;
+  } u;
+} jointee_t;
+
+typedef struct __tg_leader_private {
+  countered_event_t ce;
+  ulong_t num_threads;
+} tg_leader_private_t;
 
 /* Abstract object for scheduling. */
 typedef struct __task_struct {
@@ -185,8 +203,8 @@ typedef struct __task_struct {
 
   /* Children/threads - related stuff. */
   struct __task_struct *group_leader;
-  spinlock_t child_lock;
-  list_head_t children,threads; 
+  mutex_t child_lock;
+  list_head_t children,threads;
   list_node_t child_list;
 
   /* Scheduler-related stuff. */
@@ -206,7 +224,7 @@ typedef struct __task_struct {
   task_limits_t *limits;
   task_privelege_t priv;
   /* Lock for protecting changing and outer access the following fields:
-   *   ipc,ipc_priv,limits
+   * ipc,ipc_priv,limits
    */
   spinlock_t member_lock;
 
@@ -217,6 +235,21 @@ typedef struct __task_struct {
 
   /* Signal-related stuff. */
   signal_struct_t siginfo;
+
+  /* 'wait()'-related stuff. */
+  jointee_t jointee;
+  list_head_t jointed;
+  countered_event_t *cwaiter;
+  struct __task_struct *terminator;
+  event_t reinc_event;
+
+  /* POSIX items related stuff. */
+  struct __posix_stuff *posix_stuff;
+
+  tg_leader_private_t *tg_priv;
+
+  /* Userspace works-reated stuff. */
+  uworks_data_t uworks_data;
 
   /* Arch-dependent context is located here */
   uint8_t arch_context[256];
@@ -234,6 +267,7 @@ typedef struct __task_attrs {
 
 typedef struct __exec_attrs {
   uintptr_t stack,entrypoint,arg;
+  uintptr_t per_task_data;
 } exec_attrs_t;
 
 typedef struct __task_creation_attrs {
@@ -358,11 +392,31 @@ void exit_task_events(struct __task_struct *target);
 
 #define set_task_flags(t,f) ((t)->flags |= (f))
 #define check_task_flags(t,f) ((t)->flags & (f) )
+#define set_and_check_task_flag(t,fb) (arch_bit_test_and_set(&(t)->flags,(fb)))
+#define clear_task_flag(t,f) ((t)->flags &= ~(f))
 
-#define set_task_signals_pending(t)             \
-  arch_set_task_signals_pending( &(((task_t*)(t))->arch_context[0]) )
+#define ARCH_CTX_UWORS_SIGNALS_BIT_IDX      0
+#define ARCH_CTX_UWORS_DISINT_REQ_BIT_IDX   1
+#define ARCH_CTX_UWORS_DEF_ACTIONS_BIT_IDX  2
+
+#define ARCH_CTX_UWORKS_SIGNALS_MASK  (1<<ARCH_CTX_UWORS_SIGNALS_BIT_IDX)
+#define ARCH_CTX_UWORKS_DISINT_REQ_MASK  (1<<ARCH_CTX_UWORS_DISINT_REQ_BIT_IDX)
+
+#define set_task_signals_pending(t)                                    \
+  arch_set_uworks_bit( &(((task_t*)(t))->arch_context[0]),ARCH_CTX_UWORS_SIGNALS_BIT_IDX )
 
 #define clear_task_signals_pending(t)             \
-  arch_clear_task_signals_pending( &(((task_t*)(t))->arch_context[0]) )
+  arch_clear_uworks_bit( &(((task_t*)(t))->arch_context[0]),ARCH_CTX_UWORS_SIGNALS_BIT_IDX )
+
+#define set_task_disintegration_request(t)      \
+  arch_set_uworks_bit( &(((task_t*)(t))->arch_context[0]),ARCH_CTX_UWORS_DISINT_REQ_BIT_IDX )
+
+#define clear_task_disintegration_request(t)      \
+  arch_clear_uworks_bit( &(((task_t*)(t))->arch_context[0]),ARCH_CTX_UWORS_DISINT_REQ_BIT_IDX )
+
+#define read_task_pending_uworks(t)             \
+  arch_read_pending_uworks( &(((task_t*)(t))->arch_context[0]) )
+
+#define __UNUSABLE_PTR (void *)0x007  /* Target pointer is not usable now. */
 
 #endif

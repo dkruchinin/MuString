@@ -18,6 +18,8 @@
 
 #define DEF_PORT_QUEUE_SIZE  ((PAGE_SIZE)/sizeof(long))
 
+#define __MSG_WAS_DEQUEUED  (ipc_port_message_t *)0x007
+
 typedef struct __def_port_data_storage {
   list_head_t new_messages,all_messages;
   ipc_port_message_t **message_ptrs;
@@ -98,35 +100,40 @@ static void def_free_data_storage(struct __ipc_gen_port *port)
 {
 }
 
-static void def_requeue_message(struct __ipc_gen_port *port,ipc_port_message_t *msg)
+static status_t def_remove_message(struct __ipc_gen_port *port,
+                                   ulong_t msg_id,ipc_port_message_t **m)
 {
-  def_port_data_storage_t *ds=(def_port_data_storage_t*)port->data_storage;
+  status_t r=-EINVAL;
+  ipc_port_message_t *msg=NULL;
 
-  list_add2head(&ds->new_messages,&msg->l);
-  ds->message_ptrs[msg->id]=msg;
-  port->avail_messages++;
-}
-
-static ipc_port_message_t *def_remove_message(struct __ipc_gen_port *port,
-                                              ulong_t msg_id)
-{
   if( msg_id < DEF_PORT_QUEUE_SIZE ) {
     def_port_data_storage_t *ds=(def_port_data_storage_t *)port->data_storage;
-    ipc_port_message_t *msg=ds->message_ptrs[msg_id];
+    msg=ds->message_ptrs[msg_id];
 
     if( msg != NULL ) {
-      ds->message_ptrs[msg_id]=NULL;
-      if( list_node_is_bound(&msg->l) ) {
-        port->avail_messages--;
-        list_del(&msg->l);
+      if( msg == __MSG_WAS_DEQUEUED ) { /* Message was dequeued by its sender. */
+        r=-ENXIO;
+        msg=NULL;
+      } else {
+        if( list_node_is_bound(&msg->l) ) {
+          port->avail_messages--;
+          list_del(&msg->l);
+        }
+        list_del(&msg->messages_list);
+        r=0;
       }
-      list_del(&msg->messages_list);
-      linked_array_free_item(&ds->msg_array,msg->id);
+
+      linked_array_free_item(&ds->msg_array,msg_id);
+      ds->message_ptrs[msg_id]=NULL;
       port->total_messages--;
-      return msg;
+    }
+
+    if( m ) {
+      *m=msg;
     }
   }
-  return NULL;
+
+  return r;
 }
 
 static ipc_port_message_t *def_remove_head_message(struct __ipc_gen_port *port)
@@ -154,12 +161,28 @@ static ipc_port_message_t *def_remove_head_message(struct __ipc_gen_port *port)
   return NULL;
 }
 
+static void def_dequeue_message(struct __ipc_gen_port *port,
+                                ipc_port_message_t *msg)
+{
+  def_port_data_storage_t *ds=(def_port_data_storage_t *)port->data_storage;
+
+  ASSERT(list_node_is_bound(&msg->messages_list));
+
+  if( list_node_is_bound(&msg->l) ) {
+    port->avail_messages--;
+    list_del(&msg->l);
+  }
+
+  list_del(&msg->messages_list);
+  ds->message_ptrs[msg->id]=__MSG_WAS_DEQUEUED;
+}
+
 ipc_port_msg_ops_t def_port_msg_ops = {
   .init_data_storage=def_init_data_storage,
   .insert_message=def_insert_message,
   .free_data_storage=def_free_data_storage,
   .extract_message=def_extract_message,
-  .requeue_message=def_requeue_message,
   .remove_message=def_remove_message,
   .remove_head_message=def_remove_head_message,
+  .dequeue_message=def_dequeue_message,
 };

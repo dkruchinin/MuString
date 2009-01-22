@@ -67,6 +67,7 @@ typedef struct __siginfo {
   int      si_fd;       /* File descriptor */
 } siginfo_t;
 
+
 #define INIT_SIGINFO_CURR(s)  do {              \
   memset((s),0,sizeof(siginfo_t));              \
   (s)->si_pid=current_task()->pid;              \
@@ -105,6 +106,8 @@ typedef struct __kern_sigaction {
   sigset_t sa_mask;
   int sa_flags;
 } kern_sigaction_t;
+
+#define SIGEV_SIGNAL  0
 
 typedef struct __sighandlers {
   atomic_t use_count;
@@ -197,5 +200,7 @@ status_t send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery);
 bool update_pending_signals(task_t *task);
 status_t send_task_siginfo_forced(task_t *task,siginfo_t *info);
 sighandlers_t * allocate_signal_handlers(void);
+
+#define task_was_interrupted(t)  ( read_task_pending_uworks((t)) != 0 || pending_signals_present((t)) )
 
 #endif

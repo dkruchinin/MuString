@@ -42,6 +42,7 @@ typedef struct __cpu_sched_stat {
   curtype_t user_stack;
   curtype_t user_es,user_fs,user_gs;
   curtype_t uspace_works;
+  curtype_t per_task_data;
 } cpu_sched_stat_t;
 
 #endif
@@ -61,12 +62,16 @@ typedef struct __cpu_sched_stat {
 #define CPU_SCHED_STAT_USER_FS_OFFT 0x58
 #define CPU_SCHED_STAT_USER_GS_OFFT 0x60
 #define CPU_SCHED_STAT_USER_WORKS_OFFT 0x68  /* It's a pointer ! */
+#define CPU_SCHED_STAT_USER_PTD_OFFT  0x70
 
 /* Task flags indexes  */
-#define CPU_SCHED_NEED_RESCHED_F_IDX 0
+#define CPU_SCHED_NEED_RESCHED_F_IDX          0
+#define CPU_SCHED_DEF_WORKS_F_IDX             1
+#define CPU_SCHED_DEF_WORKS_PROCESSING_F_IDX  2
 
 /* Task flags masks. */
 #define CPU_SCHED_NEED_RESCHED_F_MASK (1 << CPU_SCHED_NEED_RESCHED_F_IDX)
+#define CPU_SCHED_DEF_WORKS_F_MASK    (1 << CPU_SCHED_DEF_WORKS_F_IDX)
 
 #ifndef __ASM__
 
@@ -104,6 +109,16 @@ static inline void arch_sched_set_current_need_resched(void)
 static inline void arch_sched_reset_current_need_resched(void)
 {
   reset_css_task_flag(CPU_SCHED_NEED_RESCHED_F_IDX);
+}
+
+static inline void arch_sched_set_def_works_pending(void)
+{
+  set_css_task_flag(CPU_SCHED_DEF_WORKS_F_IDX);
+}
+
+static inline void arch_sched_reset_def_works_pending(void)
+{
+  reset_css_task_flag(CPU_SCHED_DEF_WORKS_F_IDX);
 }
 
 extern cpu_sched_stat_t __percpu_var_cpu_sched_stat[];

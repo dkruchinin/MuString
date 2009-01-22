@@ -56,6 +56,17 @@ typedef struct __list_head {
   list_node_t head; /**< Head element of the list */
 } list_head_t;
 
+/**
+ * @typedef struct __skiplist skip_list_t
+ * @struct __skiplist
+ * @brief Skiplist
+ * Represents one node for the 'skiplist' abstraction (i.e. for the list
+ * that can be both list head and list node).
+ */
+typedef struct __skiplist {
+  list_head_t head;
+  list_node_t node;
+} skiplist_t;
 
 /**
  * @def LIST_DEFINE(name)

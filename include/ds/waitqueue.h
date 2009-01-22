@@ -32,10 +32,11 @@
 
 #include <ds/list.h>
 #include <eza/scheduler.h>
-#include <eza/task.h>
 #include <eza/spinlock.h>
 #include <eza/errno.h>
 #include <mlibc/types.h>
+
+struct __task_struct;
 
 /**
  * @struct wqueue_t
@@ -71,7 +72,7 @@ typedef struct __wait_queue {
 typedef struct __wqueue_task {
   list_head_t head;  /**< A list of waiting tasts of the same priority */
   list_node_t node;  /**< A list node  */
-  task_t *task;      /**< The task itself */
+  struct __task_struct *task; /**< The task itself */
   wqueue_t *q;       /**< A pointer to parent wait queue */
   bool uspc_blocked; /**< Saved state of TF_USPC_BLOCKED flag */
   uint8_t eflags;    /**< Event flags. May be customized by user */ 
@@ -134,7 +135,7 @@ void __wq_pre_wakeup(void *data);
  *
  * @return 0 on success, negative error code on error.
  */
-status_t waitqueue_pop(wqueue_t *wq, task_t **task);
+status_t waitqueue_pop(wqueue_t *wq, struct __task_struct **task);
   
 /**
  * @brief Initialize a wait queue
@@ -154,7 +155,7 @@ void waitqueue_initialize(wqueue_t *wq);
  * @param wq_task - A pointer to wqueue_task_t which will "wrap" task_t
  * @param task    - task_t that will be "wrapped".
  */
-void waitqueue_prepare_task(wqueue_task_t *wq_task, task_t *task);
+void waitqueue_prepare_task(wqueue_task_t *wq_task, struct __task_struct *task);
 
 #define waitqueue_is_empty(wq) !((wq)->num_waiters)
 

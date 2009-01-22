@@ -26,6 +26,7 @@
 #include <eza/spinlock.h>
 #include <eza/scheduler.h>
 #include <eza/arch/types.h>
+#include <eza/signal.h>
 
 /* FIXME DK: should I move this stuff to the waitqueue.h?
  * default wait queue sleep/wakeup policy manipulates with only one flag
@@ -71,7 +72,11 @@ static void __insert_task(wqueue_t *wq, wqueue_task_t *wq_task)
 }
 
 static void __delete_task(wqueue_task_t *wq_task)
-{    
+{
+  if( !wq_task->q ) {
+    return;
+  }
+
   if (!list_is_empty(&wq_task->head)) {
     wqueue_task_t *t = list_entry(list_node_first(&wq_task->head),
                                       wqueue_task_t, node);
@@ -130,13 +135,20 @@ status_t waitqueue_insert(wqueue_t *wq, wqueue_task_t *wq_task, wqueue_insop_t i
       ret = sched_change_task_state_deferred(wq_task->task, TASK_STATE_SLEEPING,
                                              wq->acts.sleep_if_needful, wq_task);
       if( ret == -EAGAIN ) {
-         spinlock_lock(&wq->q_lock);
-	 __delete_task(wq_task);
-         spinlock_unlock(&wq->q_lock);
-         ret = 0;
+        ret=0;
+        goto remove_task;
       }
+      /* Check for pending actions. */
+      if( !task_was_interrupted(wq_task->task) ) {
+        goto out;
+      }
+      ret=-EINTR;
+    remove_task:
+      spinlock_lock(&wq->q_lock);
+      __delete_task(wq_task);
+      spinlock_unlock(&wq->q_lock);
   }
-
+out:
   return ret;
 }
 
@@ -171,6 +183,10 @@ status_t __waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t dop)
 {
   status_t ret = 0;
   wqueue_t *wq = wq_task->q;
+
+  if( wq_task->q == NULL ) {
+    return -EINVAL;
+  }
 
   if (waitqueue_is_empty(wq))
     panic("__waitqueue_delete: Hey! Someone is trying to remove task from an empty wait queue. Liar!\n");

@@ -39,7 +39,13 @@
 #include <eza/spinlock.h>
 #include <kernel/syscalls.h>
 #include <eza/kconsole.h>
+<<<<<<< HEAD:eza/generic_api/process.c
 #include <eza/usercopy.h>
+=======
+#include <eza/tevent.h>
+#include <ipc/gen_port.h>
+#include <ipc/ipc.h>
+>>>>>>> zzz:eza/generic_api/process.c
 
 typedef uint32_t hash_level_t;
 
@@ -81,7 +87,7 @@ task_t *lookup_task(pid_t pid, ulong_t flags)
 {
   tid_t tid;
   bool thread;
-  task_t *task=NULL;
+  task_t *t,*task=NULL;
   list_node_t *n;
 
   if( pid > NUM_PIDS ) {
@@ -97,17 +103,21 @@ task_t *lookup_task(pid_t pid, ulong_t flags)
 
     LOCK_PID_HASH_LEVEL_R(l);
     list_for_each(&pid_to_struct_hash[l],n) {
-      task_t *t = container_of(n,task_t,pid_list);
+      t=container_of(n,task_t,pid_list);
       if(t->pid == pid) {
-        if( t->state != TASK_STATE_ZOMBIE ||
-            (t->state == TASK_STATE_ZOMBIE && (flags & LOOKUP_ZOMBIES) ) ) {
-          grab_task_struct(t);
-          task=t;
-          break;
-        }
+        grab_task_struct(t);
+        task=t;
+        break;
       }
     }
     UNLOCK_PID_HASH_LEVEL_R(l);
+
+    /* Now we should check for task's invisibility.
+     * To avoid double-locking, we perform all task-related checks later.
+     */
+    if( task && !thread ) {
+      goto found_something;
+    }
   }
 
   if( task && thread ) {
@@ -115,7 +125,7 @@ task_t *lookup_task(pid_t pid, ulong_t flags)
 
     LOCK_TASK_CHILDS(task);
     list_for_each(&task->threads,n) {
-      task_t *t = container_of(n,task_t,child_list);
+      t=container_of(n,task_t,child_list);
       if(t->tid == tid) {
         grab_task_struct(t);
         target=t;
@@ -128,6 +138,30 @@ task_t *lookup_task(pid_t pid, ulong_t flags)
     task=target;
   }
 
+found_something:
+  if( task ) {
+    t=NULL;
+
+    LOCK_TASK_STRUCT(task);
+    if( task->state == TASK_STATE_ZOMBIE ) {
+      if( flags & LOOKUP_ZOMBIES ) {
+        t=task;
+      }
+    } else if( check_task_flags(task,TF_EXITING) ||
+               check_task_flags(task,TF_DISINTEGRATING) ) {
+      if( flags & LOOKUP_ZOMBIES ) {
+        t=task;
+      }
+    } else {
+      t=task;
+    }
+    UNLOCK_TASK_STRUCT(task);
+
+    if( !t ) {
+      release_task_struct(task);
+    }
+    task=t;
+  }
   return task;
 }
 
@@ -172,6 +206,139 @@ status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
   return r;
 }
 
+static bool __check_task_exec_attrs(exec_attrs_t *ea)
+{
+  bool valid;
+
+  valid=valid_user_address(ea->stack);
+  valid *=valid_user_address(ea->entrypoint);
+
+  if( ea->arg ) {
+    valid *=valid_user_address(ea->arg);
+  }
+
+  if( ea->per_task_data ) {
+    valid *=valid_user_address(ea->per_task_data);
+  }
+
+  return valid;
+}
+
+static status_t __disintegrate_task(task_t *target,ulong_t pnum)
+{
+  ipc_gen_port_t *port;
+  disintegration_descr_t *descr;
+  status_t r;
+  iovec_t iov;
+  disintegration_req_packet_t drp;
+
+  if( !(port=__ipc_get_port(current_task(),pnum)) ) {
+    return -EINVAL;
+  }
+
+  if( port->flags & IPC_BLOCKED_ACCESS ) {
+    r=-EINVAL;
+    goto put_port;
+  }
+
+  descr=memalloc(sizeof(*descr));
+  if( !descr ) {
+    r=-ENOMEM;
+    goto put_port;
+  }
+
+  iov.iov_base=&drp;
+  iov.iov_len=sizeof(drp);
+
+  descr->port=port;
+  descr->msg=ipc_create_port_message_iov_v(&iov,1,sizeof(drp),false,NULL,0,NULL,NULL,0);
+  if( !descr->msg ) {
+    r=-ENOMEM;
+    goto free_descr;
+  }
+
+  LOCK_TASK_STRUCT(target);
+  if( !check_task_flags(target,TF_EXITING)
+      && !check_task_flags(target,TF_DISINTEGRATING) ) {
+
+    target->uworks_data.disintegration_descr=descr;
+    target->terminator=current_task();
+    set_task_flags(target,TF_DISINTEGRATING);
+
+    set_task_disintegration_request(target);
+    r=0;
+  } else {
+    r=-ESRCH;
+  }
+  UNLOCK_TASK_STRUCT(target);
+
+  if( !r ) {
+    r=activate_task(target);
+    if( !r ) {
+      return r;
+    }
+    /* Fallthrough in case of error. */
+  }
+
+  put_ipc_port_message(descr->msg);
+free_descr:
+  memfree(descr);
+put_port:
+  __ipc_put_port(port);
+  return r;
+}
+
+static status_t __reincarnate_task(task_t *target,ulong_t arg)
+{
+  exec_attrs_t attrs;
+  status_t r;
+
+  /* Check if target task is a zombie. */
+  LOCK_TASK_STRUCT(target);
+  if( target->terminator == current_task() &&
+      check_task_flags(target,TF_DISINTEGRATING) ) {
+    r=0;
+  } else {
+    r=-EPERM;
+  }
+  UNLOCK_TASK_STRUCT(target);
+
+  if( !r ) {
+    if( arg == 0 || copy_from_user(&attrs,arg,sizeof(attrs)) ) {
+      r=-EFAULT;
+    } else {
+      if( !__check_task_exec_attrs(&attrs) ) {
+        r=-EINVAL;
+      } else {
+        r=arch_process_context_control(target,SYS_PR_CTL_REINCARNATE_TASK,
+                                       (ulong_t)&attrs);
+        if( !r ) {
+          /* OK, task context was restored, so we can activate the task.
+           * But first make sure we're not performing concurrent reincarnation
+           * requests.
+           */
+          LOCK_TASK_STRUCT(target);
+          if( target->terminator == current_task() &&
+              check_task_flags(target,TF_DISINTEGRATING) ) {
+            target->terminator=NULL;
+            clear_task_flag(target,TF_DISINTEGRATING);
+            r=0;
+          } else {
+            r=-EBUSY;
+          }
+          UNLOCK_TASK_STRUCT(target);
+
+          if( !r ) {
+            event_raise(&target->reinc_event);
+          }
+        }
+      }
+    }
+  }
+
+  return r;
+}
+
 status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
 {
   task_event_ctl_arg te_ctl;
@@ -198,6 +365,19 @@ status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
         return -EFAULT;
       }
       return task_event_attach(target,current_task(),&te_ctl);
+    case SYS_PR_CTL_SET_PERTASK_DATA:
+      if( !valid_user_address(arg) ) {
+        return -EFAULT;
+      }
+      return arch_process_context_control(target,SYS_PR_CTL_SET_PERTASK_DATA,
+                                          arg);
+    case SYS_PR_CTL_DISINTEGRATE_TASK:
+      if( target == current_task() ) {
+        return -EWOULDBLOCK;
+      }
+      return __disintegrate_task(target,arg);
+    case SYS_PR_CTL_REINCARNATE_TASK:
+      return __reincarnate_task(target,arg);
   }
   return -EINVAL;
 }
@@ -205,9 +385,21 @@ status_t do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
 status_t sys_task_control(pid_t pid, ulong_t cmd, ulong_t arg)
 {
   status_t r;
-  task_t *task=pid_to_task(pid);
+  task_t *task;
+  ulong_t lookup_flags=0;
 
-  if( task == NULL ) {
+  if( is_tid(pid) ) {
+    if( cmd == SYS_PR_CTL_DISINTEGRATE_TASK ) {
+      return -EINVAL;
+    }
+  }
+
+  /* Only reincarnation can target zombies. */
+  if( cmd == SYS_PR_CTL_REINCARNATE_TASK ) {
+    lookup_flags |= LOOKUP_ZOMBIES;
+  }
+
+  if( (task=lookup_task(pid,lookup_flags)) == NULL ) {
     return -ESRCH;
   }
 
@@ -220,21 +412,6 @@ status_t sys_task_control(pid_t pid, ulong_t cmd, ulong_t arg)
 out_release:
   release_task_struct(task);
   return r;
-}
-
-static bool __check_task_attrs(task_creation_attrs_t *attrs)
-{
-  exec_attrs_t *ea=&attrs->exec_attrs;
-  bool valid;
-
-  valid=valid_user_address(ea->stack);
-  valid *=valid_user_address(ea->entrypoint);
-
-  if( ea->arg ) {
-    valid *=valid_user_address(ea->arg);
-  }
-
-  return valid;
 }
 
 status_t sys_create_task(ulong_t flags,task_creation_attrs_t *a)
@@ -251,7 +428,7 @@ status_t sys_create_task(ulong_t flags,task_creation_attrs_t *a)
     if( copy_from_user(&attrs,a,sizeof(attrs) ) ) {
       return -EFAULT;
     }
-    if( !__check_task_attrs(&attrs) ) {
+    if( !__check_task_exec_attrs(&attrs.exec_attrs) ) {
       return -EINVAL;
     }
     pa=&attrs;

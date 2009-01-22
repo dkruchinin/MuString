@@ -134,27 +134,61 @@ return_from_common_interrupt:
    */
   cli
 
+  /* Zero on top of the stack tells us that we haven't performed
+   * userspace-related checks for current task.
+   */
+  pushq $0
+
   /* Tell the kernel that we've left interrupt context. */
   decq %gs:CPU_SCHED_STAT_IRQCNT_OFFT
-
-  /* Check for preemption flag */
-  movq %gs:CPU_SCHED_STAT_FLAGS_OFFT, %rax
-
-  bt $CPU_SCHED_NEED_RESCHED_F_IDX, %rax
-  jnc no_preemption_in_interrupt
-
-  /* Hmmmm, need to yield the CPU. Check if we're in atomic region.
-   * We're in atomic when either active IRQs counter or preemtion counter
-   * is not zero.
-   */
-  movq %gs:CPU_SCHED_STAT_IRQCNT_OFFT, %rax
-  or %gs:CPU_SCHED_STAT_PREEMPT_OFFT, %rax
   jnz no_preemption_in_interrupt
+
+  /* OK, left the last nested IRQ, so check for deffered actions. */
+process_irq_deffered_actions:
+  /* Now check if there are some pending deffered actions. */
+  bt $CPU_SCHED_DEF_WORKS_F_IDX, %gs:CPU_SCHED_STAT_FLAGS_OFFT
+  jnc no_irq_deffered_works
+
+  /* Avoid recursive processing of deffered works. */
+  bt $CPU_SCHED_DEF_WORKS_PROCESSING_F_IDX,%gs:CPU_SCHED_STAT_FLAGS_OFFT
+  jc no_irq_deffered_works
+
+  /* We're the only one processing deffered works during this IRQ processing. */
+  bts $CPU_SCHED_DEF_WORKS_PROCESSING_F_IDX,%gs:CPU_SCHED_STAT_FLAGS_OFFT
+  btr $CPU_SCHED_DEF_WORKS_F_IDX, %gs:CPU_SCHED_STAT_FLAGS_OFFT
+
+  /* We shouldn't be preempted while processing deffered actions. */
+  addq $1, %gs:CPU_SCHED_STAT_PREEMPT_OFFT
+
+  sti
+  call fire_deffered_actions
+  cli
+
+  /* Now we can be preempted. */
+  subq $1, %gs:CPU_SCHED_STAT_PREEMPT_OFFT
+
+  /* Report that we have finished processing deffered IRQ events. */
+  btr $CPU_SCHED_DEF_WORKS_PROCESSING_F_IDX, %gs:CPU_SCHED_STAT_FLAGS_OFFT
+
+  /* More prioritized deffered actions occured ? */
+  bt $CPU_SCHED_DEF_WORKS_F_IDX, %gs:CPU_SCHED_STAT_FLAGS_OFFT
+  jc process_irq_deffered_actions
+
+no_irq_deffered_works:
+  /* Check if preemption is possible right now. */
+  cmp $0, %gs:CPU_SCHED_STAT_PREEMPT_OFFT
+  jnz no_preemption_in_interrupt
+
+  bt $CPU_SCHED_NEED_RESCHED_F_IDX, %gs:CPU_SCHED_STAT_FLAGS_OFFT
+  jnc no_preemption_in_interrupt
 
   /* OK, reschedule current task. */
   call schedule
 
 no_preemption_in_interrupt:
+  /* Restore iteration flag. */
+  popq %rax
+
   /* Now let's see if we need to check for userspace works. */
   mov (%rsp), %rbx
   add $INT_FULL_OFFSET_TO_CS,%rbx
@@ -167,11 +201,24 @@ no_preemption_in_interrupt:
   cmp $0, (%rbx)
   je dont_check_int_works
 
-  /* Process deff  */
+  /* Check if have already performed userspace works for this task. */
+  orq %rax,%rax
+  jnz dont_check_int_works
+
+  /* Process userspace-related works. */
+  sti
   movq $__INT_UWORK, %rdi
   xorq %rsi, %rsi
   movq %rsp, %rdx
   call handle_uworks
+
+  cli
+  /* Since interrupts were enabled during executing userspace-related
+   * works, we must make sure that there are no pending deffered IRQ works
+   * with higher priorities than ours.
+   */
+   pushq $1
+   jmp process_irq_deffered_actions
 
 dont_check_int_works:
   RESTORE_ALL
@@ -187,19 +234,17 @@ dont_check_int_works:
    */
 userspace_ret_from_int:
   /* Restore user segment registers. */
-  mov %gs:(CPU_SCHED_STAT_USER_DS_OFFT),%ds
-  mov %gs:(CPU_SCHED_STAT_USER_ES_OFFT),%es
-  mov %gs:(CPU_SCHED_STAT_USER_FS_OFFT),%fs
+  RESTORE_USER_SEGMENT_REGISTERS
 
   /* Now restore user %gs */
+  cli
   mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
   swapgs
   mov %eax,%gs
 ret_from_int:
   popq %rax
 
-  /* Make sure IF is set after returning from interrupt context. 
-   */
+  /* Make sure IF is set after returning from interrupt context. */
   orq $RFLAGS_IF,HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
   iretq
 
@@ -209,24 +254,28 @@ return_from_syscall:
    */
   mov %gs:CPU_SCHED_STAT_USER_WORKS_OFFT, %rbx
 
-  cmp $0, (%rbx)
+  cmp $0,(%rbx)
   je no_works_after_syscall
 
+  pushq %rax
   movq $__SYCALL_UWORK, %rdi
   movq %rax, %rsi
   movq %rsp, %rdx
+  addq $8, %rdx  /* Skip just saved %rax */
   call handle_uworks
+  popq %rax
 
 no_works_after_syscall:
   RESTORE_ALL
-  cli
-  /* Restore back user stack pointer. Interrupts will be
-   * restored after performing the SYSRET command.
-   */
-  movq %gs:CPU_SCHED_STAT_USTACK_OFFT, %rsp
 
+  /* Now restore user %gs */
+  cli
+  RESTORE_USER_SEGMENT_REGISTERS
+  pushq %rax
+  mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
   swapgs
-  sysretq
+  mov %eax,%gs
+  jmp ret_from_int
 
 /* Here goes handlers for CPU-specific fault handlers ranged at [0 .. 31]
  */

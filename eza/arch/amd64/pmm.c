@@ -105,6 +105,26 @@ void gdt_tss_setlim(descriptor_t *p, uint32_t lim)
   return;
 }
 
+void load_ldt(cpu_id_t cpu,uintptr_t ldt,uint16_t limit)
+{
+  ldt_descriptor_t *ldt_dsc=(ldt_descriptor_t *)&gdt[cpu][LDT_DES];
+  ldt_dsc->present=1;
+  ldt_dsc->type=AR_LDT;
+  ldt_dsc->dpl=PL_KERNEL;
+
+  gdt_tss_setbase(&gdt[cpu][LDT_DES],ldt);
+  gdt_tss_setlim(&gdt[cpu][LDT_DES],limit);
+
+  ldtr_load(gdtselector(LDT_DES));
+}
+
+void descriptor_set_base(descriptor_t *d,uint32_t base)
+{
+  d->base_0_15=base & 0xffff;
+  d->base_16_23=(base >> 16) & 0xff;
+  d->base_24_31=(base >> 24) & 0xff;
+}
+
 void idt_set_offset(idescriptor_t *p, uintptr_t off)                             
 {
   p->offset_0_15=off & 0xffff;

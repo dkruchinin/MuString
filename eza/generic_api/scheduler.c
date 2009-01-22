@@ -157,7 +157,7 @@ bool sched_unregister_scheduler(scheduler_t *sched)
   return r;
 }
 
-status_t sched_change_task_state_mask(task_t *task,task_state_t state,
+status_t sched_change_task_state_mask(task_t *task,ulong_t state,
                                       ulong_t mask)
 {
   /* TODO: [mt] implement security check on task state change. */
@@ -167,7 +167,7 @@ status_t sched_change_task_state_mask(task_t *task,task_state_t state,
   return active_scheduler->change_task_state(task,state,mask);
 }
 
-status_t sched_change_task_state_deferred_mask(task_t *task,task_state_t state,
+status_t sched_change_task_state_deferred_mask(task_t *task,ulong_t state,
                                                deferred_sched_handler_t handler,void *data,
                                                ulong_t mask)
 {

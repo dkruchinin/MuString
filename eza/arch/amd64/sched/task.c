@@ -55,37 +55,53 @@ extern void user_fork_path(void);
 /* Per-CPU glabal structure that reflects the most important kernel states. */
 cpu_sched_stat_t PER_CPU_VAR(cpu_sched_stat);
 
-static void __arch_setup_ctx(task_t *newtask,uint64_t rsp)
+static void __setup_arch_segment_regs(arch_context_t *ctx,
+                                      task_privelege_t priv)
+{
+  uint64_t fs,es,gs,ds;
+
+  if( priv == TPL_KERNEL ) {
+    fs=KERNEL_SELECTOR(KDATA_DES);
+    es=fs;
+    gs=fs;
+    ds=fs;
+  } else {
+    fs=USER_SELECTOR(PTD_SELECTOR) | 0x4; /* First selector in LDT. */
+    es=USER_SELECTOR(UDATA_DES);
+    gs=es;
+    ds=es;
+  }
+  ctx->fs = fs;
+  ctx->es = es;
+  ctx->gs = gs;
+  ctx->ds = ds;
+}
+
+static void __arch_setup_ctx(task_t *newtask,uint64_t rsp,
+                             task_privelege_t priv)
 {
   arch_context_t *ctx = (arch_context_t*)&(newtask->arch_context[0]);
 
+  __setup_arch_segment_regs(ctx,priv);
+ 
+  ctx->rsp = rsp;
   /* Setup CR3 */
   ctx->cr3 = _k2p((uintptr_t)pframe_to_virt(newtask->rpd.pml4));
-  ctx->rsp = rsp;
-  ctx->fs = USER_SELECTOR(UDATA_DES);
-  ctx->es = USER_SELECTOR(UDATA_DES);
-  ctx->gs = USER_SELECTOR(UDATA_DES);
-  ctx->ds = USER_SELECTOR(UDATA_DES);
   ctx->user_rsp = 0;
 
   /* Default TSS value which means: use per-CPU TSS. */
   ctx->tss=NULL;
   ctx->tss_limit=TSS_DEFAULT_LIMIT;
+  ctx->ldt=0;
+  ctx->ldt_limit=0;
+  ctx->per_task_data=0;
 }
-
-extern long __t1;
-long __t2;
 
 void kernel_thread_helper(void (*fn)(void*), void *data)
 {
-//  __READ_TIMESTAMP_COUNTER(__t2);
-//  kprintf( "******* CONTEXT SWITCH TIME: %d\n", __t2 - __t1 );
-//  for(;;);
-
-    fn(data);
-    sys_exit(0);
+  fn(data);
+  sys_exit(0);
 }
-
 
 /* For initial stack filling. */
 static page_frame_t *next_frame;
@@ -173,7 +189,7 @@ void initialize_idle_tasks(void)
       panic( "initialize_idle_tasks(): Can't map kernel stack for idle task !" );
     }
     /* Setup arch-specific task context. */
-    __arch_setup_ctx(task,0);
+    __arch_setup_ctx(task,0,TPL_KERNEL);
   }
 
   /* Now initialize per-CPU scheduler statistics. */
@@ -257,6 +273,41 @@ static uint64_t __setup_user_task_context(task_t *task)
   return sizeof(regs_t);
 }
 
+/* NOTE: This function doesn't reload LDT ! */
+static void __setup_user_ldt( uintptr_t ldt )
+{
+  descriptor_t *ldt_root=(descriptor_t*)ldt;
+  descriptor_t *ldt_dsc;
+
+  if( !ldt ) {
+    return;
+  }
+
+  /* Zeroize the NIL descriptor. */
+  ldt_dsc=ldt_root;
+  memset(ldt_dsc,0,sizeof(*ldt_dsc));
+
+  /* Setup default PTD descriptor. */
+  ldt_dsc=&ldt_root[PTD_SELECTOR];
+  descriptor_set_base(ldt_dsc,0);
+  ldt_dsc->access=AR_PRESENT | AR_DATA | AR_WRITEABLE | (1 << 2) | DPL_USPACE;
+}
+
+static void __apply_task_exec_attrs(regs_t *regs,exec_attrs_t *exec_attrs,
+                                    arch_context_t *task_ctx)
+{
+  if( exec_attrs->stack ) {
+    regs->int_frame.old_rsp=exec_attrs->stack;
+  }
+  if( exec_attrs->entrypoint ) {
+    regs->int_frame.rip=exec_attrs->entrypoint;
+  }
+  if( exec_attrs->arg ) {
+    regs->gpr_regs.rdi=exec_attrs->arg;
+  }
+  task_ctx->per_task_data=exec_attrs->per_task_data;
+}
+
 status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
                                  task_privelege_t priv,task_t *parent,
                                  task_creation_attrs_t *attrs)
@@ -298,28 +349,32 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   }
 
   /* Now setup CR3 and _current_ value of new thread's stack. */
-  __arch_setup_ctx(newtask,(uint64_t)fsave);
+  __arch_setup_ctx(newtask,(uint64_t)fsave,priv);
 
   task_ctx=(arch_context_t*)&newtask->arch_context[0];
   tss=parent_ctx->tss;
   if( tss ) {
     task_ctx->tss=tss;
     task_ctx->tss_limit=parent_ctx->tss_limit;
-    kprintf( "Copying TSS (%p) from %d:%d\n",
-             tss,parent->pid,parent->tid);
+  }
+
+  if( priv == TPL_USER ) {
+    /* Allocate LDT for this task. */
+    task_ctx->ldt_limit=LDT_ITEMS*sizeof(descriptor_t);
+    task_ctx->ldt=(uintptr_t)memalloc(task_ctx->ldt_limit);
+
+    if( !task_ctx->ldt ) {
+      kprintf("** Can't allocate LDT for task %d/%d !\n",
+              newtask->pid,newtask->tid);
+      for(;;);
+      return -ENOMEM;
+    }
+    __setup_user_ldt(task_ctx->ldt);
   }
 
   /* Process attributes, if any. */
   if( attrs ) {
-    if( attrs->exec_attrs.stack ) {
-      regs->int_frame.old_rsp=attrs->exec_attrs.stack;
-    }
-    if( attrs->exec_attrs.entrypoint ) {
-      regs->int_frame.rip=attrs->exec_attrs.entrypoint;
-    }
-    if( attrs->exec_attrs.arg ) {
-      regs->gpr_regs.rdi=attrs->exec_attrs.arg;
-    }
+    __apply_task_exec_attrs(regs,&attrs->exec_attrs,task_ctx);
   }
 
   return 0;
@@ -327,9 +382,12 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
 
 status_t arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
 {
-  regs_t *regs = (regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
-  status_t r = 0;
-  
+  regs_t *regs=(regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
+  status_t r=0;
+  arch_context_t *arch_ctx;
+  exec_attrs_t *attrs;
+  ulong_t l;
+
   switch( cmd ) {
     case SYS_PR_CTL_SET_ENTRYPOINT:
       regs->int_frame.rip = arg;
@@ -342,6 +400,42 @@ status_t arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
       break;
     case SYS_PR_CTL_GET_STACK:
       r = regs->int_frame.old_rsp;
+      break;
+    case SYS_PR_CTL_SET_PERTASK_DATA:
+      arch_ctx=(arch_context_t*)&task->arch_context[0];
+      if( arch_ctx->ldt ) {
+        descriptor_t *ldt_dsc=(descriptor_t*)arch_ctx->ldt;
+        ldt_dsc=&ldt_dsc[PTD_SELECTOR];
+
+        arch_ctx->per_task_data=arg;
+        descriptor_set_base(ldt_dsc,arg);
+        ldt_dsc->access=AR_PRESENT | AR_DATA | AR_WRITEABLE | (1 << 2) | DPL_USPACE;
+
+        interrupts_disable();
+        if( task == current_task() ) {
+          load_ldt(cpu_id(),arch_ctx->ldt,arch_ctx->ldt_limit);
+        }
+        interrupts_enable();
+      } else {
+        r=-EINVAL;
+      }
+      break;
+    case SYS_PR_CTL_REINCARNATE_TASK:
+      attrs=(exec_attrs_t *)arg;
+      arch_ctx=(arch_context_t*)&task->arch_context[0];
+
+      /* Reset hardware context. */
+      __setup_arch_segment_regs(arch_ctx,TPL_USER);
+      __setup_user_task_context(task);
+      __apply_task_exec_attrs(regs,attrs,arch_ctx);
+
+      /* Setup XMM context. */
+      l=((ulong_t)regs-512) & 0xfffffffffffffff0;
+      memset( (char *)l, 0, 512 );
+
+      break;
+    default:
+      r=-EINVAL;
       break;
   }
   return r;

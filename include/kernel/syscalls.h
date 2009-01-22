@@ -68,6 +68,7 @@
 #define SC_SIGACTION           30
 #define SC_THREAD_KILL         31
 #define SC_SIGPROCMASK         32
+#define SC_THREAD_EXIT         33
 
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */
@@ -463,6 +464,8 @@ status_t sys_port_reply_iov(ulong_t port,ulong_t msg_id,
 status_t sys_thread_kill(pid_t prcess,tid_t tid,int sig);
 
 status_t sys_sigprocmask(int how,const sigset_t *set,sigset_t *oldset);
+
+void sys_thread_exit(int code);
 
 #endif
 

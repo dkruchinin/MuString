@@ -170,6 +170,7 @@ static status_t __send_signal_to_process(pid_t pid,siginfo_t *siginfo)
   int sig=siginfo->si_signo;
   int i,ab=SIGRTMAX;
   list_node_t *ln;
+  bool unlock_childs=false;
 
   if( !root ) {
     return -ESRCH;
@@ -200,8 +201,8 @@ static status_t __send_signal_to_process(pid_t pid,siginfo_t *siginfo)
       LOCK_TASK_SIGNALS(t);
       if( can_send_signal_to_task(sig,t) ) {
         if( can_deliver_signal_to_task(sig,t) ) {
+          unlock_childs=true;
           target=t;
-          UNLOCK_TASK_CHILDS(root);
           goto send_signal;
         }
         i=count_active_bits(t->siginfo.pending);
@@ -231,6 +232,11 @@ static status_t __send_signal_to_process(pid_t pid,siginfo_t *siginfo)
 send_signal:
   __send_task_siginfo(target,siginfo,false);
   UNLOCK_TASK_SIGNALS(target);
+
+  if( unlock_childs ) {
+    UNLOCK_TASK_CHILDS(root);
+  }
+
   __send_siginfo_postlogic(target,siginfo);
   return 0;
 }

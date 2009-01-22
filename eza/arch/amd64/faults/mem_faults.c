@@ -52,7 +52,7 @@ void segment_not_present_fault_handler_impl(interrupt_stack_frame_err_t *stack_f
     kprintf( "  [!!] #Segment not present exception raised !\n" );
 }
 
-static int __send_sigsegv_on_faults=1;
+static int __send_sigsegv_on_faults=0;
 
 void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
@@ -63,6 +63,7 @@ void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_fr
 
   kprintf( "[!!!] Unhandled GPF exception ! RIP: %p (CODE: %d) ...\n",
            stack_frame->rip, stack_frame->error_code );
+  interrupts_disable();
   l1: goto l1;
 }
 
@@ -125,6 +126,7 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
   if( __send_sigsegv_on_faults )
     goto send_sigsegv;
 
+  default_console()->enable();
   kprintf("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
   goto stop_cpu;
@@ -137,6 +139,7 @@ kernel_fault:
     return;
   }
 
+  default_console()->enable();
   kprintf("[CPU %d] Unhandled kernel-mode PF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
 stop_cpu:

@@ -55,8 +55,9 @@ typedef struct __ipc_port_msg_ops {
   ipc_port_message_t *(*extract_message)(struct __ipc_gen_port *port,
                                          ulong_t flags);
   void (*free_data_storage)(struct __ipc_gen_port *port);
-  void (*requeue_message)(struct __ipc_gen_port *port,ipc_port_message_t *msg);
-  ipc_port_message_t *(*remove_message)(struct __ipc_gen_port *port,ulong_t msg_id);
+  void (*dequeue_message)(struct __ipc_gen_port *port,ipc_port_message_t *msg);
+  status_t (*remove_message)(struct __ipc_gen_port *port,
+                             ulong_t msg_id,ipc_port_message_t **m);
   ipc_port_message_t *(*remove_head_message)(struct __ipc_gen_port *port);
 } ipc_port_msg_ops_t;
 
@@ -114,8 +115,10 @@ status_t ipc_port_send_iov(struct __ipc_gen_port *port,
     list_init_node(&(m)->messages_list);        \
     event_initialize(&(m)->event);              \
     event_set_task(&(m)->event,(t));            \
+    (m)->state=MSG_STATE_NOT_PROCESSED;         \
   } while(0)
 
 #define put_ipc_port_message(m)  memfree((m))
+#define ipc_message_data(m) ((m)->data_size <= IPC_NB_MESSAGE_MAXLEN ? (void *)(m)->send_buffer : NULL )
 
 #endif

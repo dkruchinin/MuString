@@ -30,10 +30,13 @@
 static status_t __sync_allocate_id(struct __task_struct *task,
                                    bool shared_id,sync_id_t *p_id)
 {
-  static sync_id_t __id=0;
-
-  *p_id=++__id;
-  return 0;
+  if( task->sync_data->numobjs < (MAX_PROCESS_SYNC_OBJS-1) ) {
+    *p_id=++task->sync_data->numobjs;
+    return 0;
+  } else {
+    *p_id=-1;
+    return -ENOMEM;
+  }
 }
 
 static void __sync_free_id(struct __task_struct *task,sync_id_t id)
@@ -45,7 +48,6 @@ static void __install_sync_object(task_t *task,kern_sync_object_t *obj,
 {
   obj->id=id;
   task->sync_data->sync_objects[id]=obj;
-  task->sync_data->numobjs++;
 }
 
 static kern_sync_object_t *__lookup_sync(task_t *owner,sync_id_t id)
@@ -148,6 +150,8 @@ put_sync_data:
   release_task_sync_data(sync_data);
   return r;
 }
+
+extern int __big_verbose;
 
 status_t sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg)
 {

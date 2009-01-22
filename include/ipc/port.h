@@ -25,6 +25,7 @@
 #define __IPC_PORT__
 
 #include <eza/arch/types.h>
+#include <eza/mutex.h>
 #include <eza/task.h>
 #include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
@@ -41,6 +42,14 @@ struct __ipc_port_t;
 
 #define IPC_PORT_SHUTDOWN  0x800
 
+typedef enum __ipc_msg_state {
+  MSG_STATE_NOT_PROCESSED,
+  MSG_STATE_RECEIVED,
+  MSG_STATE_DATA_TRANSFERRED,
+  MSG_STATE_REPLY_BEGIN,
+  MSG_STATE_REPLIED,
+} ipc_msg_state_t;
+
 typedef struct __ipc_port_messsage_t {
   ulong_t data_size,reply_size,id;
   long replied_size;
@@ -50,8 +59,8 @@ typedef struct __ipc_port_messsage_t {
   struct __ipc_port_t *port;
   ipc_user_buffer_t *snd_buf, *rcv_buf;
   ulong_t num_send_bufs,num_recv_buffers;
-  task_t *receiver;  /* To handle 'reply()' properly. */
   task_t *sender;
+  ipc_msg_state_t state;
 } ipc_port_message_t;
 
 typedef struct __ipc_port_t {
@@ -79,21 +88,5 @@ typedef struct __port_msg_info {
 #define IPC_UNLOCK_PORT_W(p) spinlock_unlock(&p->lock)
 
 void initialize_ipc(void);
-
-//void ipc_shutdown_port(ipc_port_t *port);
-//void ipc_put_port(ipc_port_t *p);
-//status_t ipc_get_port(task_t *task,ulong_t port,ipc_port_t **out_port);
-//void ipc_port_add_poller(ipc_port_t *port,task_t *poller, wait_queue_task_t *w);
-//void ipc_port_remove_poller(ipc_port_t *port,wait_queue_task_t *w);
-//poll_event_t ipc_port_get_pending_events(ipc_port_t *port);
-
-//status_t ipc_create_port(task_t *owner,ulong_t flags,ulong_t size);
-//status_t ipc_port_send(task_t *receiver,ulong_t port,uintptr_t snd_buf,
-//                       ulong_t snd_size,uintptr_t rcv_buf,ulong_t rcv_size);
-//status_t ipc_port_receive(task_t *owner,ulong_t port,ulong_t flags,
-//                          ulong_t recv_buf,ulong_t recv_len,
-//                          port_msg_info_t *msg_info);
-//status_t ipc_port_reply(task_t *owner, ulong_t port, ulong_t msg_id,
-//                        ulong_t reply_buf,ulong_t reply_len);
 
 #endif

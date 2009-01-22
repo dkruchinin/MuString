@@ -32,6 +32,11 @@
 #include <eza/amd64/context.h>
 #include <eza/arch/current.h>
 #include <eza/smp.h>
+<<<<<<< HEAD:include/eza/amd64/scheduler.h
+=======
+#include <eza/arch/mm_types.h>
+#include <eza/task.h>
+>>>>>>> zzz:include/eza/amd64/scheduler.h
 
 static inline cpu_id_t cpu_id(void)
 {
@@ -66,16 +71,21 @@ static inline void arch_activate_task(task_t *to)
 
   /* We should setup TSS to reflect new task's kernel stack. */
   tss->rsp0 = to->kernel_stack.high_address;
-
   /* Reload TSS. */
   load_tss(to->cpu,tss,tss_limit);
 
-  /* Let's jump ! */
-#ifdef CONFIG_TEST
-  kprintf( "** ACTIVATING TASK: 0x%X:0x%X (CPU: %d).\n",
-           to->pid,to->tid,to->cpu );
-#endif
+  /* Setup LDT for new task. */
+  if( to_ctx->ldt ) {
+    load_ldt(to->cpu,to_ctx->ldt,to_ctx->ldt_limit);
+  }
 
+#ifdef CONFIG_TEST
+  kprintf( "** ACTIVATING TASK: %d:0x%X (CPU: %d). FS=0x%X, LDT=%p,PTD=%p\n",
+           to->pid,to->tid,to->cpu,to_ctx->fs,
+           to_ctx->ldt,to_ctx->per_task_data);
+#endif
+  
+  /* Let's jump ! */
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
 }
 
