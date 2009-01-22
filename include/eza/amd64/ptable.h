@@ -93,7 +93,6 @@ DEFINE_ITERATOR_CTX(page_frame, PF_ITER_PTABLE,
 static inline void pde_set_flags(pde_t *pde, uint_t flags)
 {
   pde->flags = flags & 0x1FF;
-  pde->avail = flags >> 14;
   pde->nx = flags >> 13;
 }
 
@@ -104,7 +103,7 @@ static inline void pde_set_flags(pde_t *pde, uint_t flags)
  */
 static inline uint_t pde_get_flags(pde_t *pde)
 {
-  return (pde->flags | (pde->nx << 13) | ((pde->avail & 0x01) << 14));
+  return (pde->flags | (pde->nx << 13));
 }
 
 /**
@@ -256,17 +255,20 @@ int ptable_populate_pagedir(pde_t *parent_pde, uint_t flags);
  */
 void ptable_depopulate_pagedir(pde_t *dir);
 
-struct __mmap_info;
-
 /**
  * @brief Map pages into the given root page directory.
- * @param rpd   - A pointer to root page directory pages will be mapped to
- * @param minfo - A pointer to mmap_info_t containing all necessary information.
- * @return 0 on succes, -EINVAL or -ENOMEM on error.
+ * @param rpd     - A pointer to root page directory pages will be mapped to
+ * @param va_from - Virtual address showing where mapping must start.
+ * @param npages  - Number of pages to map.
+ * @param pfi     - Page frame iterator containing @a npages items.
+ * @param flags   - Page table flags
+ *
+ * @return 0 on succes, -ENOMEM if there is not enough memory.
  * @see rpd_t
- * @see mmap_info_t
+ * @see page_table_flags
  */
-int ptable_map(rpd_t *prd, struct __mmap_info *minfo);
+int ptable_map(rpd_t *prd, uintptr_t va_from, ulong_t npages,
+               page_frame_iterator_t *pfi, ptable_flags_t flags);
 
 /**
  * @brief Unmap pages from the given root page directory

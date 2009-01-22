@@ -235,8 +235,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
       goto err;
     }
     else {
-      mmap_info_t minfo;
-      page_frame_iterator_t pfi;      
+      /*page_frame_iterator_t pfi;      
       ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) pblock_ctx;
 
       pfi_pblock_init(&pfi, &pblock_ctx, list_node_first(&pages->head), 0,
@@ -251,7 +250,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
       if (err) {
         munmap_core(&vmm->rpd, addr, npages);
         goto err;
-      }
+        }*/
     }
   }
 
@@ -268,15 +267,13 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
 
 int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, ulong_t npages, kmap_flags_t flags)
 {
-  mmap_info_t minfo;
   page_frame_iterator_t pfi;
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) pf_idx_ctx;
 
-  minfo.va_from = PAGE_ALIGN_DOWN(va);
-  minfo.va_to = minfo.va_from + ((npages - 1) << PAGE_WIDTH);
-  minfo.ptable_flags = kmap_to_ptable_flags(flags & KMAP_FLAGS_MASK);
+  if ((va & PAGE_MASK) || !npages)
+    return -EINVAL;
+
   pfi_index_init(&pfi, &pf_idx_ctx, first_page, first_page + npages - 1);
   iter_first(&pfi);
-  minfo.pfi = &pfi;
-  return ptable_map(rpd, &minfo);
+  return ptable_map(rpd, va, npages, &pfi, kmap_to_ptable_flags(flags & KMAP_FLAGS_MASK));
 }

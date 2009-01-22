@@ -107,7 +107,6 @@ DEFINE_ITERATOR_TYPES(page_frame,
                       PF_ITER_ARCH,   /**< Architecture-dependent iterator used for page frames initialization */
                       PF_ITER_INDEX,  /**< Index-based iterator */
                       PF_ITER_LIST,   /**< List-based iterator */
-                      PF_ITER_ALLOC,  /**< Each next item of ALLOC iterator is dynamically allocated */
                       PF_ITER_PTABLE, /**< Page table iterator */
                       PF_ITER_PBLOCK, /**< Iterate through list of page blocks */
                       );

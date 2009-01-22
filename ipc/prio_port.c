@@ -6,7 +6,6 @@
 #include <mm/page.h>
 #include <ds/linked_array.h>
 #include <ipc/ipc.h>
-#include <eza/container.h>
 #include <ipc/buffer.h>
 #include <mm/slab.h>
 #include <ipc/gen_port.h>

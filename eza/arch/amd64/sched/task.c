@@ -29,6 +29,7 @@
 #include <mlibc/kprintf.h>
 #include <mm/page.h>
 #include <mm/vmm.h>
+#include <mm/pfi.h>
 #include <eza/errno.h>
 #include <mlibc/string.h>
 #include <eza/smp.h>
@@ -103,52 +104,13 @@ void kernel_thread_helper(void (*fn)(void*), void *data)
   sys_exit(0);
 }
 
-/* For initial stack filling. */
-static page_frame_t *next_frame;
-
-static void __iter_stub(page_frame_iterator_t *pfi)
-{
-  panic("unimplemented!");
-}
-
-static void acc_next_frame(page_frame_iterator_t *pfi)
-{
-  ASSERT(pfi->type == PF_ITER_ALLOC);
-
-  pfi->state = ITER_RUN;
-  if(next_frame != NULL ) {
-    pfi->pf_idx = pframe_number(next_frame);
-  } else {
-    page_frame_t *frame = alloc_page(AF_PGEN);
-    if( frame == NULL ) {
-      panic( "initialize_idle_tasks(): Can't allocate a page !" );
-    }
-
-    pfi->pf_idx = pframe_number(frame);
-  }
-}
-
-static void init_pfiter_alloc(page_frame_iterator_t *pfi)
-{
-  pfi->first = __iter_stub;
-  pfi->last = __iter_stub;
-  pfi->next = acc_next_frame;
-  pfi->prev = __iter_stub;
-  iter_init(pfi, PF_ITER_ALLOC);
-  iter_set_ctx(pfi, NULL);
-}
-
 void initialize_idle_tasks(void)
 {
   task_t *task;
   page_frame_t *ts_page;
   int r, cpu;
   cpu_sched_stat_t *sched_stat;
-  mmap_info_t minfo;
-  page_frame_iterator_t pfi;
 
-  memset(&minfo, 0, sizeof(minfo));
-  init_pfiter_alloc(&pfi);
   for( cpu = 0; cpu < CONFIG_NRCPUS; cpu++ ) {
     ts_page = alloc_page(AF_PGEN | AF_ZERO);
     if( ts_page == NULL ) {
@@ -179,14 +141,22 @@ void initialize_idle_tasks(void)
       panic( "initialize_idle_tasks(): Can't initialize kernel stack for idle task !" ); 
     }
 
-    next_frame = NULL;
-    minfo.va_from = task->kernel_stack.low_address;
-    minfo.va_to = minfo.va_from + ((KERNEL_STACK_PAGES - 1) << PAGE_WIDTH);
-    minfo.ptable_flags = PDE_RW | PDE_NX;
-    minfo.pfi = &pfi;
-    r = ptable_map(&task->rpd, &minfo);
-    if( r != 0 ) {
-      panic( "initialize_idle_tasks(): Can't map kernel stack for idle task !" );
+    /* FIXME DK: redisign! */
+    {
+        page_frame_t *pf = alloc_pages(KERNEL_STACK_PAGES, AF_PGEN);
+        page_frame_iterator_t pfi;
+        ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
+        
+        if (!pf)
+            panic("Can't allocate %d pages for kernel stack!", KERNEL_STACK_PAGES);
+
+        pfi_index_init(&pfi, &pfi_index_ctx, pframe_number(pf), pframe_number(pf) + KERNEL_STACK_PAGES - 1);
+        iter_first(&pfi);
+        r = ptable_map(&task->rpd, task->kernel_stack.low_address, KERNEL_STACK_PAGES,
+                       &pfi, PDE_RW | PDE_NX);
+        if( r != 0 ) {
+            panic("Can't map kernel stack for idle task !");
+        }
     }
     /* Setup arch-specific task context. */
     __arch_setup_ctx(task,0,TPL_KERNEL);

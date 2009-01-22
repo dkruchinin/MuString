@@ -34,13 +34,6 @@
 #include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
 
-typedef struct __mmap_info {
-  uintptr_t va_from;
-  uintptr_t va_to;
-  page_frame_iterator_t *pfi;
-  uint32_t ptable_flags;
-} mmap_info_t;
-
 #define VMR_PROTO_MASK (VMR_NONE | VMR_READ | VMR_WRITE | VMR_EXEC)
 
 typedef enum __vmrange_flags {
@@ -125,6 +118,9 @@ static inline void *user_to_kernel_vaddr(rpd_t *rpd, uintptr_t addr)
 
 static inline void unpin_page_frame(page_frame_t *pf)
 {
+  if (pf->flags & PF_RESERVED)
+    return;
+  
   ASSERT(atomic_get(&pf->refcount) > 0);
   atomic_dec(&pf->refcount);
   if (!atomic_get(&pf->refcount))
@@ -133,7 +129,8 @@ static inline void unpin_page_frame(page_frame_t *pf)
 
 static inline void pin_page_frame(page_frame_t *pf)
 {
-  atomic_inc(&pf->refcount);
+  if (!(pf->flags & PF_RESERVED))
+    atomic_inc(&pf->refcount);
 }
 
 #define mmap_kern(va, first_page, npages, flags)    \
