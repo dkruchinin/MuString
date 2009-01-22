@@ -37,7 +37,7 @@
 #include <ipc/port.h>
 
 /****************************************************************************/
-#define IPC_PRIORITIZED_PORT_QUEUE   0x20000
+#define IPC_PRIORITIZED_ACCESS   0x2
 
 #define MAX_PORT_MSG_LENGTH  MB(2)
 

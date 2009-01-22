@@ -133,6 +133,7 @@ static status_t prio_insert_message(struct __ipc_gen_port *port,
 
     /* Now insert message according to its priority. */
     __add_one_message(&ds->prio_head,msg);
+    return 0;
    }
   return -ENOMEM;
 }

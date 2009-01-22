@@ -171,7 +171,7 @@ static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
 
   memset(p,0,sizeof(*p));
 
-  if( flags & IPC_PRIORITIZED_PORT_QUEUE ) {
+  if( flags & IPC_PRIORITIZED_ACCESS ) {
     p->msg_ops=&prio_port_msg_ops;
   } else {
     p->msg_ops=&def_port_msg_ops;
