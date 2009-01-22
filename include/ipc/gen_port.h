@@ -39,7 +39,7 @@
 /****************************************************************************/
 #define IPC_PRIORITIZED_PORT_QUEUE   0x20000
 
-#define MAX_PORT_MSG_LENGTH  MB(2)
+#define MAX_PORT_MSG_LENGTH  _mb2b(2)
 
 #define REF_PORT(p)  atomic_inc(&p->use_count)
 #define UNREF_PORT(p)  atomic_dec(&p->use_count)

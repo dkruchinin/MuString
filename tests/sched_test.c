@@ -30,7 +30,6 @@
 #include <eza/scheduler.h>
 #include <eza/swks.h>
 #include <mlibc/string.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/preempt.h>
 #include <eza/spinlock.h>
 #include <ipc/ipc.h>
@@ -72,7 +71,7 @@ static void __traveller_thread(void *d)
   sched_thread_data_t *td=(sched_thread_data_t*)d;
   test_framework_t *tf=td->tf;
   uint64_t target_tick=swks.system_ticks_64 + TRAVELLER_SLEEP_TICKS;
-  status_t r;
+  int r;
   ulong_t back_cpu=0;
 
   tf->printf(TRAVELLER_ID "PID: %d, Starting on CPU %d, Target CPU: %d\n",

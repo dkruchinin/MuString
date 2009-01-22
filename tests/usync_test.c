@@ -30,7 +30,6 @@
 #include <eza/scheduler.h>
 #include <eza/swks.h>
 #include <mlibc/string.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/preempt.h>
 #include <eza/spinlock.h>
 #include <ipc/ipc.h>
@@ -68,7 +67,7 @@ static void __mutex_client(void *d)
 {
   usync_test_ctx_t *tctx=(usync_test_ctx_t *)d;
   test_framework_t *tf=tctx->tf;
-  status_t r,mutex1;
+  int r,mutex1;
 
   mutex1=tctx->mutex_id;
 
@@ -107,7 +106,7 @@ static void __mutex_client(void *d)
 static void __mutex_test(usync_test_ctx_t *tctx)
 {
   test_framework_t *tf=tctx->tf;
-  status_t mutex1,r;
+  int mutex1,r;
   task_t *task;
   uint64_t target_tick;
   
@@ -189,7 +188,7 @@ static void __uevent_client( void *d)
   usync_test_ctx_t *tctx=(usync_test_ctx_t *)d;
   test_framework_t *tf=tctx->tf;
   ulong_t _ts;
-  status_t r,i;
+  int r,i;
 
   tf->printf( "Event client is starting.\n" );
   if( sched_move_task_to_cpu(current_task(),1) ) {
@@ -217,7 +216,7 @@ static void __uevent_tests(usync_test_ctx_t *tctx)
 {
   test_framework_t *tf=tctx->tf;
   sync_id_t ev_id;
-  status_t i,r;
+  int i,r;
 
   tf->printf( "Trying to create an event.\n" );
   r=sys_sync_create_object(__SO_RAWEVENT,&ev_id,NULL,0);

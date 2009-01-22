@@ -6,10 +6,8 @@
 #include <mm/page.h>
 #include <ds/linked_array.h>
 #include <ipc/ipc.h>
-#include <eza/container.h>
 #include <ipc/buffer.h>
 #include <mlibc/stddef.h>
-#include <kernel/vm.h>
 #include <eza/arch/preempt.h>
 #include <eza/kconsole.h>
 #include <mm/slab.h>
@@ -26,11 +24,11 @@ typedef struct __def_port_data_storage {
   linked_array_t msg_array;
 } def_port_data_storage_t;
 
-static status_t def_init_data_storage(struct __ipc_gen_port *port,
+static int def_init_data_storage(struct __ipc_gen_port *port,
                                       task_t *owner)
 {
   def_port_data_storage_t *ds;
-  status_t r;
+  int r;
 
   if( port->data_storage ) {
     return -EBUSY;
@@ -63,7 +61,7 @@ free_ds:
   return -ENOMEM;
 }
 
-static status_t def_insert_message(struct __ipc_gen_port *port,
+static int def_insert_message(struct __ipc_gen_port *port,
                                    ipc_port_message_t *msg)
 {
   def_port_data_storage_t *ds=(def_port_data_storage_t *)port->data_storage;
@@ -100,10 +98,10 @@ static void def_free_data_storage(struct __ipc_gen_port *port)
 {
 }
 
-static status_t def_remove_message(struct __ipc_gen_port *port,
+static int def_remove_message(struct __ipc_gen_port *port,
                                    ulong_t msg_id,ipc_port_message_t **m)
 {
-  status_t r=-EINVAL;
+  int r=-EINVAL;
   ipc_port_message_t *msg=NULL;
 
   if( msg_id < DEF_PORT_QUEUE_SIZE ) {

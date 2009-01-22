@@ -26,7 +26,7 @@ static struct wqt_maint_struct {
 static void wq_test_thread(void *ctx)
 {
   struct wq_thread_ctx *tctx = ctx;
-  status_t ret;
+  int ret;
   wqueue_task_t wqt;
 
   ret = do_scheduler_control(current_task(), SYS_SCHED_CTL_SET_PRIORITY, tctx->priority);
@@ -50,7 +50,7 @@ static void wq_test_thread(void *ctx)
 static void wq_tests_runner(void *ctx)
 {
   int i, j;
-  status_t ret;
+  int ret;
   test_framework_t *tf = ctx;
   
   for (i = 0; i < WQ_NPRIORS; i++) {

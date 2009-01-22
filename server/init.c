@@ -24,7 +24,7 @@
 #include <eza/arch/types.h>
 #include <eza/scheduler.h>
 #include <eza/process.h>
-#include <mm/mm.h>
+#include <eza/arch/mm.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
 #include <mm/vmm.h>
@@ -38,8 +38,7 @@
 #include <eza/process.h>
 #include <eza/ptd.h>
 
-#if 0
-static status_t __create_task_mm(task_t *task, int num)
+static int __create_task_mm(task_t *task, int num)
 {
   uintptr_t code;
   size_t code_size,data_size,text_size,bss_size;
@@ -53,7 +52,7 @@ static status_t __create_task_mm(task_t *task, int num)
   size_t real_code_size=0,real_data_size=0;
   size_t last_data_size,real_data_offset=0;
   size_t last_offset,last_sect_size,last_data_offset;
-  status_t r;
+  int r;
   int i;
   per_task_data_t *ptd;
 
@@ -154,26 +153,26 @@ static status_t __create_task_mm(task_t *task, int num)
   /*  kprintf("elf entry -> %p\n",ehead.e_entry); */
 
   /*remap pages*/
-  r = mmap(task->page_dir, USER_START_VIRT, code >> PAGE_WIDTH, text_size, MAP_USER | MAP_READ | MAP_EXEC);
+  r = mmap_core(task_get_rpd(task), USPACE_VA_BOTTOM, code >> PAGE_WIDTH, text_size, KMAP_READ | KMAP_EXEC);
   if (r)
     return r;
 
-  r = mmap(task->page_dir, real_data_offset, data_bss >> PAGE_WIDTH, data_size, MAP_USER | MAP_READ | MAP_WRITE);  
+  r = mmap_core(task_get_rpd(task), real_data_offset, data_bss >> PAGE_WIDTH, data_size, KMAP_READ | KMAP_WRITE);
   if (r)
     return r;
 
-  r = mmap(task->page_dir, bss_virt, pframe_number(bss), bss_size, MAP_USER | MAP_READ | MAP_WRITE);
+  r = mmap_core(task_get_rpd(task), bss_virt, pframe_number(bss), bss_size, KMAP_READ | KMAP_WRITE);
   if (r)
     return r;
 
-  r = mmap(task->page_dir, USPACE_END-0x40000, pframe_number(stack), USER_STACK_SIZE, MAP_USER | MAP_READ | MAP_WRITE);
+  r = mmap_core(task_get_rpd(task), USPACE_VA_TOP-0x40000, pframe_number(stack), USER_STACK_SIZE, KMAP_READ | KMAP_WRITE);
   if (r)
     return r;
 
   /* Now allocate stack space for per-task user data. */
-  ustack_top=USPACE_END-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH);
+  ustack_top=USPACE_VA_TOP-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH);
   ustack_top-=PER_TASK_DATA_SIZE;
-  ptd=mm_user_addr_to_kern_addr(task->page_dir,ustack_top);
+  ptd=user_to_kernel_vaddr(task_get_rpd(task),ustack_top);
 
   if( !ptd ) {
     return -1;
@@ -198,15 +197,14 @@ static status_t __create_task_mm(task_t *task, int num)
 
   return 0;
 }
-#endif
+
 #ifndef CONFIG_TEST
 
 void server_run_tasks(void)
 {
-    #if 0
   int i=server_get_num(),a;
   task_t *server;
-  status_t r;
+  int r;
   kconsole_t *kconsole=default_console();
 
   if( i > 0 ) {

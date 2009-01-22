@@ -45,6 +45,7 @@ page_idx_t num_phys_pages = 0;
 uintptr_t __kernel_first_free_addr = __KERNEL_END_PHYS;
 uintptr_t __uspace_top_vaddr = USPACE_VA_TOP;
 uintptr_t __kernel_va_base = KERNEL_BASE;
+uintptr_t __utrampoline_virt = 0;
 
 static vm_mandmap_t ident_mandmap, utramp_mandmap, swks_mandmap;
 
@@ -109,13 +110,14 @@ static void register_mandatory_mappings(void)
   vm_mandmap_register(&ident_mandmap, "Identity mapping");
 
   memset(&utramp_mandmap, 0, sizeof(utramp_mandmap));
-  utramp_mandmap.virt_addr = __reserve_uspace_vregion(1);
+  __utrampoline_virt = __reserve_uspace_vregion(1);
+  utramp_mandmap.virt_addr = __utrampoline_virt;
   utramp_mandmap.phys_addr = k2p((uintptr_t)__userspace_trampoline_codepage);
   utramp_mandmap.num_pages = 1;
   utramp_mandmap.flags = KMAP_READ | KMAP_EXEC;
   vm_mandmap_register(&utramp_mandmap, "Utrampoline mapping");
 
-  memset(&swks_mandmap, 0, sizeof(swks_mandmap));
+  memset(&swks_mandmap, 0, sizeof(swks_mandmap));  
   swks_mandmap.virt_addr = __reserve_uspace_vregion(SWKS_PAGES);
   swks_mandmap.phys_addr = p2k(&swks);
   swks_mandmap.num_pages = SWKS_PAGES;
@@ -128,14 +130,14 @@ static void scan_phys_mem(void)
   int idx;
   bool found;
   char *types[] = { "(unknown)", "(usable)", "(reserved)", "(ACPI reclaimable)",
-                    "(ACPI non-volatile)", "(BAD)" };
-  char *type;
+                    "(ACPI non-volatile)", "(BAD)" };  
 
   kprintf("[MM] Scanning physical memory...\n");  
   kprintf("E820 memory map:\n"); 
   for(idx = 0, found = false; idx < e820count; idx++) {
     e820memmap_t *mmap = &e820table[idx];
     uint64_t length = ((uintptr_t)mmap->length_high << 32) | mmap->length_low;
+    char *type;
 
     if( mmap->type <= 5 )
       type = types[mmap->type];
@@ -152,7 +154,7 @@ static void scan_phys_mem(void)
   
   if(!found)
     panic("No valid E820 memory maps found for main physical memory area!");
-  if(!num_phys_pages || (num_phys_pages < MIN_PAGES_REQUIRED))
+  if(!num_phys_pages || (num_phys_pages < BIOS_END_ADDR))
     panic("Insufficient E820 memory map found for main physical memory area!");
 
 #ifndef CONFIG_IOMMU

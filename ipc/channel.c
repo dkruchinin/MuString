@@ -80,11 +80,11 @@ void ipc_unref_channel(ipc_channel_t *channel,ulong_t c)
   }
 }
 
-status_t ipc_close_channel(task_t *owner,ulong_t ch_id)
+int ipc_close_channel(task_t *owner,ulong_t ch_id)
 {
   task_ipc_t *ipc=get_task_ipc(owner);
   ipc_channel_t *c;
-  status_t r;
+  int r;
 
   if( !ipc ) {
     return -EINVAL;
@@ -106,9 +106,9 @@ status_t ipc_close_channel(task_t *owner,ulong_t ch_id)
   return r;
 }
 
-status_t __check_port_flags( ipc_gen_port_t *port,ulong_t flags)
+int __check_port_flags( ipc_gen_port_t *port,ulong_t flags)
 {
-  status_t i,r=0;
+  int i,r=0;
 
   IPC_LOCK_PORT_W(port);
   /* 1: Check blocking access. */
@@ -122,11 +122,11 @@ status_t __check_port_flags( ipc_gen_port_t *port,ulong_t flags)
   return r;
 }
 
-status_t ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
+int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
                           ulong_t flags)
 {
   task_ipc_t *ipc=get_task_ipc(owner);
-  status_t r;
+  int r;
   ulong_t id;
   ipc_channel_t *channel;
   ipc_gen_port_t *server_port;
@@ -205,9 +205,9 @@ out_unlock:
   return r;
 }
 
-status_t ipc_channel_control(task_t *caller,int channel,ulong_t cmd,ulong_t arg) {
+int ipc_channel_control(task_t *caller,int channel,ulong_t cmd,ulong_t arg) {
   ipc_channel_t *c=ipc_get_channel(caller,channel);
-  status_t r;
+  int r;
 
   if( !c ) {
     return -EINVAL;

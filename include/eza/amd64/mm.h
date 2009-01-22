@@ -40,7 +40,6 @@ extern uintptr_t __kernel_va_base;
 #define MIN_MEM_REQUIRED    _mb2b(32)                        /**< Minimum memory required for system */
 #define MIN_PAGES_REQUIRED  (MIN_MEM_REQUIRED >> PAGE_WIDTH) /**< Minimum number of pages that must be present in a system */
 
-
 #define KERNEL_START_PHYS   ((uintptr_t)&_kernel_start) /**/
 #define __KERNEL_END_PHYS   ((uintptr_t)&_kernel_end)
 #define KERNEL_END_PHYS     (PAGE_ALIGN(__kernel_first_free_addr))
@@ -49,6 +48,8 @@ extern uintptr_t __kernel_va_base;
 #define USPACE_VA_BOTTOM    0x1001000UL
 #define INVALID_ADDRESS           (~0UL)
 #define KERNEL_INVALID_ADDRESS    0x100  /* Address that is never mapped. */
+
+#define USER_STACK_SIZE 4
 
 DEFINE_ITERATOR_CTX(page_frame, PF_ITER_ARCH,
                     e820memmap_t *mmap;
@@ -77,6 +78,8 @@ static inline uintptr_t __reserve_uspace_vregion(page_idx_t npages)
   __uspace_top_vaddr += (npages << PAGE_WIDTH);
   return __uspace_top_vaddr;
 }
+
+extern uintptr_t __utrampoline_virt;
 
 void arch_mm_init(void);
 void arch_mm_remap_pages(void);

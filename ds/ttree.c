@@ -81,7 +81,7 @@ struct tnode_lookup {
 };
 
 static int __balance_factors[] = { -1, 1 };
-static memcache_t *__tnodes_cache = NULL;
+static memcache_t *__tnodes_memcache = NULL;
 
 #ifdef CONFIG_DEBUG_TTREE
 #define TT_ASSERT_DBG(cond) ASSERT(cond)
@@ -119,6 +119,7 @@ static ttree_node_t *allocate_ttree_node(ttree_t *ttree)
     panic("allocate_ttree_node: Can't allocate new T*-tree node. ENOMEM.");
   
   memset(tnode, 0, sizeof(*tnode) - 2 * sizeof(uintptr_t));
+  return tnode;
 }
 
 /*
@@ -508,10 +509,10 @@ void __ttree_init(ttree_t *ttree, ttree_cmp_func_t cmpf, size_t key_offs)
   ttree->keys_per_tnode = TTREE_DEFAULT_NUMKEYS;
   ttree->cmp_func = cmpf;
   ttree->key_offs = key_offs;
-  CT_ASSEERT(tnode_size(ttree) <= SLAB_OBJECT_MAX_SIZE);
-  if (!__tnodes_cache) {
-    __tnodes_cache = create_memcache("T*-tree nodes cache", tnode_size(ttree), 1, 0);
-    if (!__tnodes_cache)
+  CT_ASSERT(tnode_size(ttree) <= SLAB_OBJECT_MAX_SIZE);
+  if (!__tnodes_memcache) {
+    __tnodes_memcache = create_memcache("T*-tree nodes cache", tnode_size(ttree), 1, 0);
+    if (!__tnodes_memcache)
       panic("__ttree_init: Couldn't create memory cache for T*-tree nodes cache. ENOMEM.");
   }
 }
@@ -831,23 +832,23 @@ static void __print_tree(ttree_node_t *tnode, int offs)
   int i;
 
   for (i = 0; i < offs; i++)
-    printf(" ");
+    kprintf(" ");
   if (!tnode) {
-    printf("(nil)\n");
+    kprintf("(nil)\n");
     return;
   }
   if (tnode_get_side(tnode) == TNODE_LEFT)
-    printf("[L] ");
+    kprintf("[L] ");
   else if (tnode_get_side(tnode) == TNODE_RIGHT)
-    printf("[R] ");
+    kprintf("[R] ");
   else
-    printf("[*] ");
+    kprintf("[*] ");
 
-  printf("\n");
+  kprintf("\n");
   for (i = 0; i < offs + 1; i++)
-    printf(" ");
+    kprintf(" ");
 
-  printf("<%d>\n", tnode_num_keys(tnode));
+  kprintf("<%d>\n", tnode_num_keys(tnode));
   __print_tree(tnode->left, offs + 1);
   __print_tree(tnode->right, offs + 1);
 }
@@ -877,16 +878,16 @@ static void __tti_last(ttree_iterator_t *tti)
 static void __tti_next(ttree_iterator_t *tti)
 {
   if (unlikely((tti->meta_cur.tnode == tti->tnode_end) &&
-               (tti->meta_cur.tnode->idx == tti->end_idx))) {
+               (tti->meta_cur.idx == tti->end_idx))) {
     tti->state = ITER_STOP;
     return;
   }
-  if (tti->meta_cur.tnode->idx == tti->meta_cur->tnode->max_idx) {
+  if (tti->meta_cur.idx == tti->meta_cur.tnode->max_idx) {
     tti->meta_cur.tnode = tti->meta_cur.tnode->successor;
     tti->meta_cur.idx = tti->meta_cur.tnode->min_idx;
   }
   else
-    tti->meta_cur.tnode->idx++;
+    tti->meta_cur.idx++;
 }
 
 static void __tti_prev(ttree_iterator_t *tti)
@@ -901,10 +902,9 @@ void ttree_iterator_init(ttree_t *ttree, ttree_iterator_t *tti, tnode_meta_t *st
   tti->last = __tti_last;
   tti->next = __tti_next;
   tti->prev = __tti_prev;
-  tti->state = ITER_LIE;
   iter_init(tti, ITERATOR_TYPE_VOID);
   if (start) {
-    if (start->side = TNODE_BOUND) {
+    if (start->side == TNODE_BOUND) {
       tti->tnode_start = start->tnode;
       tti->start_idx = start->idx;
     }
@@ -915,7 +915,7 @@ void ttree_iterator_init(ttree_t *ttree, ttree_iterator_t *tti, tnode_meta_t *st
     }
   }
   else {
-    tti->tnode_start = ttree_tnode_leftmost(ttree.root);
+    tti->tnode_start = ttree_tnode_leftmost(ttree->root);
     tti->start_idx = tti->tnode_start->min_idx;
   }
   if (end) {
@@ -930,7 +930,7 @@ void ttree_iterator_init(ttree_t *ttree, ttree_iterator_t *tti, tnode_meta_t *st
     }
   }
   else {
-    tti->tnode_end = ttree_tnode_rightmost(ttree.root);
+    tti->tnode_end = ttree_tnode_rightmost(ttree->root);
     tti->end_idx = tti->tnode_end->max_idx;
   }
   

@@ -29,6 +29,7 @@
 #include <mm/pfalloc.h>
 #include <ds/linked_array.h>
 #include <eza/limits.h>
+#include <eza/usercopy.h>
 #include <mlibc/stddef.h>
 #include <ipc/gen_port.h>
 
@@ -40,7 +41,6 @@ int ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
 {
   rpd_t *rpd = task_get_rpd(owner);
   page_idx_t idx;
-  page_idx_t pfn;
   ulong_t chunk_num;
   int r=-EFAULT;
   uintptr_t adr,*pchunk;
@@ -64,29 +64,6 @@ int ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
     first=adr-start_addr;
     if( size <= first ) {
       first = size;
-
-  buf->num_chunks=chunk_num;
-  buf->length=iovecs->iov_len;
-  r = 0;
-out:
-  UNLOCK_TASK_VM(owner);
-  return r;
-}
-
-ipc_user_buffer_t *ipc_get_buffer(task_t *owner,ulong_t buf_id)
-{
-  ipc_user_buffer_t *buf;
-  task_ipc_t *ipc = owner->ipc;
-
-  if( !ipc ) {
-    return NULL;
-  }
-
-  IPC_LOCK_BUFFERS(ipc);
-  if( buf_id < owner->limits->limits[LIMIT_IPC_MAX_USER_BUFFERS] ) {
-    buf = ipc->user_buffers[buf_id];
-    if( buf != NULL ) {
-      REF_BUFFER(buf);
     }
 
     buf->first=first;
@@ -98,7 +75,7 @@ ipc_user_buffer_t *ipc_get_buffer(task_t *owner,ulong_t buf_id)
 
     /* Process the rest of chunks. */
     while( size ) {
-      idx=mm_pin_virt_addr(pd, start_addr);
+      idx=mm_vaddr2page_idx(rpd, start_addr);
       if(idx < 0) {
         goto out;
       }
@@ -125,7 +102,7 @@ out:
   return r;
 }
 
-status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
+int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
                                       struct __iovec *iovecs,ulong_t numvecs,
                                       bool to_buffer)
 {
@@ -134,7 +111,7 @@ status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
   ulong_t to_copy,iov_size,bufsize,data_size;
   char *dest_kaddr;
   char *user_addr;
-  status_t r;
+  int r;
 
   for(bufsize=0,to_copy=0;to_copy<numbufs;to_copy++) {
     bufsize+=bufs[to_copy].length;

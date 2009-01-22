@@ -7,7 +7,6 @@
 #include <eza/scheduler.h>
 #include <eza/swks.h>
 #include <mlibc/string.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/preempt.h>
 #include <eza/spinlock.h>
 #include <ipc/ipc.h>
@@ -23,7 +22,6 @@
 #include <test.h>
 #include <mm/slab.h>
 #include <eza/errno.h>
-#include <eza/tevent.h>
 #include <eza/process.h>
 
 #define TEST_ID  "IPC subsystem test"
@@ -158,7 +156,7 @@ static void __client_thread(void *ctx)
   DECLARE_TEST_CONTEXT;
   int i;
   int channels[SERVER_NUM_PORTS];
-  status_t r;
+  int r;
   iovec_t iovecs[MAX_IOVECS];
   ulong_t numvecs;
   
@@ -184,7 +182,7 @@ static void __client_thread(void *ctx)
     /* Now check if channel's flags macth. */
     r=sys_control_channel(channels[i],IPC_CHANNEL_CTL_GET_SYNC_MODE,0);
     if( r >= 0) {
-      status_t shouldbe=(i != NON_BLOCKED_PORT_ID) ? 1 : 0;
+      int shouldbe=(i != NON_BLOCKED_PORT_ID) ? 1 : 0;
       if( r != shouldbe ) {
         tf->printf(CLIENT_THREAD "Synchronous mode flag mismatch for channel %d ! %d:%d\n",
                    channels[i],r,shouldbe);
@@ -300,7 +298,7 @@ static void __poll_client(void *d)
   ipc_test_ctx_t *tctx=tp->tctx;
   test_framework_t *tf=tctx->tf;
   ulong_t channel,port;
-  status_t i,r;
+  int i,r;
   ulong_t msg_id;
   char client_rcv_buf[MAX_TEST_MESSAGE_SIZE];
   iovec_t iovecs[MAX_IOVECS];
@@ -381,7 +379,7 @@ static void __poll_client(void *d)
 
 static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
 {
-  status_t i,r,j;
+  int i,r,j;
   pollfd_t fds[NUM_POLL_CLIENTS];
   thread_port_t poller_ports[NUM_POLL_CLIENTS];
   test_framework_t *tf=tctx->tf;
@@ -521,7 +519,7 @@ static void __process_events_test(void *ctx)
   DECLARE_TEST_CONTEXT;
   int port=sys_create_port(0,0);
   task_t *task;
-  status_t r;
+  int r;
   task_event_ctl_arg te_ctl;
   task_event_descr_t ev_descr;
   port_msg_info_t msg_info;
@@ -732,7 +730,7 @@ static ulong_t __server_pid,__vectored_port;
 static void __vectored_messages_thread(void *ctx)
 {
   DECLARE_TEST_CONTEXT;
-  status_t r,i;
+  int r,i;
   iovec_t snd_iovecs[MAX_IOVECS],rcv_iovecs[MAX_IOVECS];
   ulong_t channel;
   ulong_t size;
@@ -794,7 +792,7 @@ static void __vectored_messages_thread(void *ctx)
   sys_exit(0);
 }
 
-static void __validate_retval(status_t r,int expected,
+static void __validate_retval(int r,int expected,
                               test_framework_t *tf)
 {
   if( r != expected ) {
@@ -903,7 +901,7 @@ static void __vectored_messages_test(void *ctx)
   DECLARE_TEST_CONTEXT;
   int port=sys_create_port(IPC_BLOCKED_ACCESS,0);
   task_t *task;
-  status_t r,i;
+  int r,i;
   port_msg_info_t msg_info;
   iovec_t snd_iovecs[MAX_IOVECS];
 
@@ -970,7 +968,7 @@ static void __server_thread(void *ctx)
   int ports[SERVER_NUM_PORTS];
   int i;
   ulong_t flags;
-  status_t r;
+  int r;
   port_msg_info_t msg_info;
 
   __server_pid=current_task()->pid;

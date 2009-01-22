@@ -60,22 +60,25 @@ void idx_allocator_init(idx_allocator_t *ida, ulong_t idx_max)
 
   ida->size = bmap_sz / sizeof(ulong_t);
   if (bmap_sz >= PAGE_SIZE) {
-    ida->ids_bmap = alloc_pages(bmap_sz >> PAGE_WIDTH, AF_PGEN | AF_ZERO);
-    if (!ida->ids_bmap)
-      panic("idx_allocator_init: Can not allocate %d pages for bitmap. ENOMEM.", bmap_sz >> PAGE_WIDTH);
+    page_frame_t *pf = alloc_pages(bmap_sz >> PAGE_WIDTH, AF_PGEN | AF_ZERO);
+
+    if (!pf)
+      panic("Can not allocate %d pages for bitmap. ENOMEM.", bmap_sz >> PAGE_WIDTH);
+    
+    ida->ids_bmap = pframe_to_virt(pf);
   }
   else {
     ASSERT(bmap_sz > SLAB_OBJECT_MAX_SIZE);
     ida->ids_bmap = memalloc(bmap_sz);
     if (!ida->ids_bmap)
-      panic("idx_allocator_init: Can not allocate %d bytes for bitmap from slab. ENOMEM.", bmap_sz);
+      panic("Can not allocate %d bytes for bitmap from slab. ENOMEM.", bmap_sz);
 
     memset(ida->ids_bmap, 0, bmap_sz);
   }
 
   ida->main_bmap = memalloc(__get_main_bmap_size(ida));
   if (!ida->main_bmap)
-    panic("idx_allocator_init: Can not allocate %zd bytes from slab.", ida->size / WORDS_PER_ITEM);
+    panic("Can not allocate %zd bytes from slab.", ida->size / WORDS_PER_ITEM);
 
   memset(ida->main_bmap, 0, __get_main_bmap_size(ida));
   ida->max_id = idx_max;
@@ -86,7 +89,7 @@ void idx_allocator_destroy(idx_allocator_t *ida)
   size_t bmap_sz = ida->size * sizeof(ulong_t);
 
   if (bmap_sz >= PAGE_SIZE)
-    free_pages(ida->ids_bmap);
+    free_pages(virt_to_pframe(ida->ids_bmap));
   else
     memfree(ida->ids_bmap);
 

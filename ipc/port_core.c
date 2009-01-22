@@ -21,7 +21,7 @@
  *
  */
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <ipc/port.h>
 #include <eza/task.h>
 #include <eza/errno.h>
@@ -30,16 +30,15 @@
 #include <mm/page.h>
 #include <ds/linked_array.h>
 #include <ipc/ipc.h>
-#include <eza/container.h>
 #include <ipc/buffer.h>
 #include <mlibc/stddef.h>
-#include <kernel/vm.h>
 #include <eza/arch/preempt.h>
 #include <eza/kconsole.h>
 #include <mm/slab.h>
 #include <ipc/gen_port.h>
 #include <eza/event.h>
 #include <eza/signal.h>
+#include <eza/usercopy.h>
 
 static ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf,
                                                  ulong_t snd_size,bool copy_data)
@@ -159,11 +158,11 @@ static void __notify_message_arrived(ipc_gen_port_t *port)
     waitqueue_pop(&port->waitqueue, NULL);
 }
 
-static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
+static int __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
                                 task_t *owner)
 {
   ipc_gen_port_t *p = memalloc(sizeof(*p));
-  status_t r;
+  int r;
 
   if( p == NULL ) {
     return -ENOMEM;
@@ -212,12 +211,12 @@ static void __shutdown_port( ipc_gen_port_t *port )
   port->msg_ops->free_data_storage(port);
 }
 
-status_t ipc_close_port(task_t *owner,ulong_t port)
+int ipc_close_port(task_t *owner,ulong_t port)
 {
   task_ipc_t *ipc = get_task_ipc(owner);
   ipc_gen_port_t *p;
   bool shutdown=false;
-  status_t r;
+  int r;
 
   if( !ipc ) {
     return -EINVAL;
@@ -266,9 +265,9 @@ out_unlock:
   return r;
 }
 
-status_t __ipc_create_port(task_t *owner,ulong_t flags)
+int __ipc_create_port(task_t *owner,ulong_t flags)
 {
-  status_t r;
+  int r;
   task_ipc_t *ipc = get_task_ipc(owner);
   ulong_t id;
   ipc_gen_port_t *port;
@@ -336,10 +335,10 @@ out_unlock:
 }
 
 /* FIXME: [mt] potential deadlock problem ! [R] */
-static status_t __put_receiver_into_sleep(task_t *receiver,ipc_gen_port_t *port)
+static int __put_receiver_into_sleep(task_t *receiver,ipc_gen_port_t *port)
 {
   wqueue_task_t w;
-  status_t r;
+  int r;
 
   IPC_TASK_ACCT_OPERATION(receiver);
   waitqueue_prepare_task(&w,receiver);
@@ -349,11 +348,11 @@ static status_t __put_receiver_into_sleep(task_t *receiver,ipc_gen_port_t *port)
   return r;
 }
 
-static status_t __transfer_message_data_to_receiver(ipc_port_message_t *msg,
+static int __transfer_message_data_to_receiver(ipc_port_message_t *msg,
                                                     iovec_t *iovec, ulong_t numvecs,
                                                     port_msg_info_t *stats)
 {
-  status_t r,recv_len;
+  int r,recv_len;
 
   recv_len=MIN(iovec->iov_len,msg->data_size);
   if( msg->data_size <= IPC_BUFFERED_PORT_LENGTH ) {
@@ -381,11 +380,11 @@ static status_t __transfer_message_data_to_receiver(ipc_port_message_t *msg,
   return r;
 }
 
-status_t ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
+int ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
                           iovec_t *iovec,ulong_t numvec,
                           port_msg_info_t *msg_info)
 {
-  status_t r=-EINVAL;
+  int r=-EINVAL;
   ipc_port_message_t *msg;
   task_t *owner=current_task();
   ipc_port_msg_ops_t *msg_ops=port->msg_ops;
@@ -479,7 +478,7 @@ out:
 ipc_gen_port_t * __ipc_get_port(task_t *task,ulong_t port)
 {
   ipc_gen_port_t *p=NULL;
-  status_t r=-EINVAL;
+  int r=-EINVAL;
   task_ipc_t *ipc;
 
   LOCK_TASK_MEMBERS(task);
@@ -511,11 +510,11 @@ void __ipc_put_port(ipc_gen_port_t *p)
   }
 }
 
-static status_t __transfer_reply_data_iov(ipc_port_message_t *msg,
+static int __transfer_reply_data_iov(ipc_port_message_t *msg,
                                           iovec_t *reply_iov,ulong_t numvecs,
                                           bool from_server,ulong_t reply_len)
 {
-  status_t r=0;
+  int r=0;
   ulong_t i,to_copy,rlen;
   char *rcv_buf;
 
@@ -568,13 +567,13 @@ static status_t __transfer_reply_data_iov(ipc_port_message_t *msg,
   return r;
 }
 
-status_t ipc_port_send_iov(struct __ipc_gen_port *port,
+int ipc_port_send_iov(struct __ipc_gen_port *port,
                            ipc_port_message_t *msg,bool sync_send,
                            iovec_t *iovecs,ulong_t numvecs,
                            ulong_t reply_len)
 {
   ipc_port_msg_ops_t *msg_ops=port->msg_ops;
-  status_t msg_size=0,r=0;
+  int msg_size=0,r=0;
   task_t *sender=current_task();
 
   if( !msg_ops->insert_message ||
@@ -617,7 +616,7 @@ status_t ipc_port_send_iov(struct __ipc_gen_port *port,
   /* Sender should wait for the reply, so put it into sleep here. */
   if( sync_send ) {
     bool b;
-    status_t ir=0;
+    int ir=0;
 
   wait_for_reply:
     IPC_TASK_ACCT_OPERATION(sender);
@@ -680,12 +679,12 @@ status_t ipc_port_send_iov(struct __ipc_gen_port *port,
   return r;
 }
 
-status_t ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
+int ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
                             iovec_t *reply_iov,ulong_t numvecs,
                             ulong_t reply_len)
 {
   ipc_port_message_t *msg;
-  status_t r;
+  int r;
 
   if( !port->msg_ops->remove_message ||
       !(port->flags & IPC_BLOCKED_ACCESS)) {

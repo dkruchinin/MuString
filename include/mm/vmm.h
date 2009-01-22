@@ -114,6 +114,11 @@ static inline bool valid_user_address_range(uintptr_t va_start, uintptr_t length
           ((va_start + length) < USPACE_VA_TOP));
 }
 
+static inline void *user_to_kernel_vaddr(rpd_t *rpd, uintptr_t addr)
+{
+  return pframe_to_virt(pframe_by_number(mm_vaddr2page_idx(rpd, addr)));
+}
+
 static inline void unpin_page_frame(page_frame_t *pf)
 {
   ASSERT(atomic_get(&pf->refcount) > 0);

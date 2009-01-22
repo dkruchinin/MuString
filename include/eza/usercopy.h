@@ -6,7 +6,7 @@
 
 #define __user
 
-#define USPACE_ADDR(ksym,ubase) (((unsigned long)(ksym) & PAGE_OFFSET_MASK) + (ubase))
+#define USPACE_ADDR(ksym,ubase) (((unsigned long)(ksym) & PAGE_MASK) + (ubase))
 
 int copy_to_user(void *dest,void *src,ulong_t size);
 int copy_from_user(void *dest,void *src,ulong_t size);

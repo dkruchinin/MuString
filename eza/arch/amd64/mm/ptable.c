@@ -248,6 +248,29 @@ page_idx_t mm_pin_vaddr(rpd_t *rpd, uintptr_t vaddr)
   return pde_fetch_page_idx(pde);
 }
 
+page_idx_t mm_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr)
+{
+  uintptr_t va = PAGE_ALIGN_DOWN(vaddr);
+  page_frame_t *cur_dir = rpd->pml4;
+  pde_t *pde;
+  int level;
+
+  for (level = PTABLE_LEVEL_LAST; level > PTABLE_LEVEL_FIRST; level--) {
+    pde = pde_fetch(cur_dir, vaddr2pde_idx(va, level));
+    if (!(pde->flags & PDE_PRESENT))
+      return PAGE_IDX_INVAL;
+
+    cur_dir = pde_fetch_subdir(pde);
+  }
+
+  pde = pde_fetch(cur_dir, vaddr2pde_idx(va, PTABLE_LEVEL_FIRST));
+  if (!(pde->flags & PDE_PRESENT))
+    return PAGE_IDX_INVAL;
+
+  return pde_fetch_page_idx(pde);
+}
+
+
 static void __pfi_first(page_frame_iterator_t *pfi);
 static void __pfi_next(page_frame_iterator_t *pfi);
 
