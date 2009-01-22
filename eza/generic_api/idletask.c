@@ -46,7 +46,6 @@ void idle_loop(void)
 #endif
 
   for( ;; ) {
-   
 #ifndef CONFIG_TEST
     if( swks.system_ticks_64 >= target_tick ) {
 //      kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",

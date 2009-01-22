@@ -964,6 +964,77 @@ static void __vectored_messages_test(void *ctx)
   }
 }
 
+#define __NGROUPS 4
+#define __GROUP_TASKS  3
+#define __NTASKS (__NGROUPS*__GROUP_TASKS)
+
+task_t ts[__NTASKS];
+ipc_port_message_t msgs[__NTASKS];
+
+void test_prioritized_port_ops(void)
+{
+  status_t r=__ipc_create_port(current_task(),IPC_PRIORITIZED_PORT_QUEUE);
+  ipc_gen_port_t *port=__ipc_get_port(current_task(),r);
+  int i,j,idx;
+  ipc_port_message_t *msg;
+  bool remove=true;
+  int num;
+  
+  if( port == NULL ) {
+    kprintf("Can't resolve port !\n");
+    for(;;);
+  }
+
+  idx=0;
+  for(i=0;i<__NGROUPS;i++) {
+    int prio=100-7*i;
+    for(j=0;j<__GROUP_TASKS;j++) {
+      ts[idx].static_priority=prio;
+      msgs[idx].sender=&ts[idx];
+      port->msg_ops->insert_message(port,&msgs[idx]);
+      kprintf("%p:%d ",&msgs[idx].l,ts[idx].static_priority);
+      idx++;
+    }
+    kprintf("\n");
+  }
+
+  kprintf("AVAIL MESAGES: %d, TOTAL MESSAGES: %d\n",
+          port->avail_messages,
+          port->total_messages);
+
+  kprintf("Removing message N 3\n");
+  port->msg_ops->remove_message(port,&msgs[3]);
+
+  num=port->total_messages;
+  for(i=0;i<num;i++) {
+    if( !remove ) {
+      msg=port->msg_ops->extract_message(port,0);
+      if( !msg ) {
+        kprintf("* Can't extract a message ! AVAIL MESSAGES: %d, ROUND: %d\n",
+                port->avail_messages,i);
+        for(;;);
+      }
+    } else {
+//      msg=&msgs[i];
+//      status_t r=port->msg_ops->remove_message(port,msg);
+      msg=port->msg_ops->remove_head_message(port);
+
+      if( !msg ) {
+        kprintf("* Can't extract a message ! AVAIL MESSAGES: %d, ROUND: %d\n",
+                port->avail_messages,i);
+        for(;;);
+      }
+    }
+    kprintf("/R=%d/ [%d]: ID=%d %p SENDER PRIO: %d\n",
+            remove,i,msg->id,&msg->l,msg->sender->static_priority);
+  }
+
+  kprintf("AVAIL MESAGES: %d, TOTAL MESSAGES: %d\n",
+          port->avail_messages,
+          port->total_messages);
+  kprintf("All tests done !\n");
+}
+
 static void __server_thread(void *ctx)
 {
   DECLARE_TEST_CONTEXT;
