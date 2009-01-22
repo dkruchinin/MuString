@@ -42,6 +42,9 @@ struct __ipc_port_t;
 
 #define IPC_PORT_SHUTDOWN  0x800
 
+#define INSUFFICIENT_MSG_ID  0x100000
+#define WAITQUEUE_MSG_ID     INSUFFICIENT_MSG_ID 
+
 typedef enum __ipc_msg_state {
   MSG_STATE_NOT_PROCESSED,
   MSG_STATE_RECEIVED,
@@ -50,11 +53,12 @@ typedef enum __ipc_msg_state {
   MSG_STATE_REPLIED,
 } ipc_msg_state_t;
 
-typedef struct __ipc_port_messsage_t {
+typedef struct __ipc_port_message_t {
   ulong_t data_size,reply_size,id;
   long replied_size;
   void *send_buffer,*receive_buffer;
   list_node_t l,messages_list;
+  list_head_t h;  /* For implementing skiplists. */
   event_t event;
   struct __ipc_port_t *port;
   ipc_user_buffer_t *snd_buf, *rcv_buf;
