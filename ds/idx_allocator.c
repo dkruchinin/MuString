@@ -64,7 +64,7 @@ void idx_allocator_init(idx_allocator_t *ida, ulong_t idx_max)
 
     if (!pf)
       panic("Can not allocate %d pages for bitmap. ENOMEM.", bmap_sz >> PAGE_WIDTH);
-    
+
     ida->ids_bmap = pframe_to_virt(pf);
   }
   else {

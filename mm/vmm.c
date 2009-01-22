@@ -20,7 +20,7 @@ static void __init_page(page_frame_t *page)
   page->_private = 0;
 }
 
-void vmm_initialize(void)
+void mm_initialize(void)
 {
   mm_pool_t *pool;
   page_frame_iterator_t pfi;
@@ -71,9 +71,14 @@ void vmm_initialize(void)
     panic("mm_init: Can't initialize kernel root page directory!");
   
   /* Now we can remap available memory */
-  arch_mm_remap_pages();
-  memobj_subsystem_initialize();
+  arch_mm_remap_pages();  
   kprintf("[MM] All pages were successfully remapped.\n");
+}
+
+void vmm_initialize(void)
+{
+  memobj_subsystem_initialize();
+  vmm_subsystem_initialize();
 }
 
 static void __pfiter_idx_first(page_frame_iterator_t *pfi)

@@ -125,8 +125,9 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 
   if( __send_sigsegv_on_faults )
     goto send_sigsegv;
-
-  default_console()->enable();
+  if (!default_console()->is_enabled)
+    default_console()->enable();
+  
   kprintf("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
   goto stop_cpu;
@@ -139,7 +140,9 @@ kernel_fault:
     return;
   }
 
-  default_console()->enable();
+  if (!default_console()->is_enabled)
+    default_console()->enable();
+  
   kprintf("[CPU %d] Unhandled kernel-mode PF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
 stop_cpu:

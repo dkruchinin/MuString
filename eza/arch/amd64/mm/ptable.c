@@ -166,15 +166,19 @@ void ptable_map_entries(pde_t *pde_start, int num_entries,
 
   ASSERT(num_entries > 0);
   while (num_entries--) {
-    iter_next(pfi);
-    ASSERT(!iter_isstopped(pfi));
     if (pfi->pf_idx == PAGE_IDX_INVAL)
-      panic("ptable_map_entries: Unexpected page index. ERR = %d", pfi->error);
+      panic("Unexpected page index. ERR = %d", pfi->error);
     
     pde_set_flags(pde, flags | PDE_PRESENT);
     pde_set_page_idx(pde++, pfi->pf_idx);
-    pin_page_frame(pframe_by_number(pfi->pf_idx));
+    if ((flags & PDE_PCD) && page_idx_is_present(pfi->pf_idx))
+      pin_page_frame(pframe_by_number(pfi->pf_idx));
+    
+    iter_next(pfi);
+    ASSERT(!iter_isstopped(pfi));
   }
+
+  ASSERT(iter_isstopped(pfi));
 }
 
 void ptable_unmap_entries(pde_t *pde_start, int num_entries)
@@ -215,8 +219,9 @@ int ptable_map(rpd_t *rpd, mmap_info_t *minfo)
   if (minfo->va_to < minfo->va_from)
     return -EINVAL;
   if ((minfo->va_from != PAGE_ALIGN(minfo->va_from)) ||
-      (minfo->va_to != PAGE_ALIGN(minfo->va_to)))
+      (minfo->va_to != PAGE_ALIGN(minfo->va_to))) {
     return -EINVAL;
+  }
   
   return do_ptable_map(rpd->pml4, minfo, PTABLE_LEVEL_LAST);
 }
@@ -224,28 +229,6 @@ int ptable_map(rpd_t *rpd, mmap_info_t *minfo)
 void ptable_unmap(rpd_t *rpd, uintptr_t va_from, page_idx_t npages)
 {
   do_ptable_unmap(rpd->pml4, va_from, va_from + (npages << PAGE_WIDTH), PTABLE_LEVEL_LAST);
-}
-
-page_idx_t mm_pin_vaddr(rpd_t *rpd, uintptr_t vaddr)
-{
-  uintptr_t va = PAGE_ALIGN_DOWN(vaddr);
-  page_frame_t *cur_dir = rpd->pml4;
-  pde_t *pde;
-  int level;
-
-  for (level = PTABLE_LEVEL_LAST; level > PTABLE_LEVEL_FIRST; level--) {
-    pde = pde_fetch(cur_dir, vaddr2pde_idx(va, level));
-    if (!(pde->flags & PDE_PRESENT))
-      return PAGE_IDX_INVAL;
-
-    cur_dir = pde_fetch_subdir(pde);
-  }
-
-  pde = pde_fetch(cur_dir, vaddr2pde_idx(va, PTABLE_LEVEL_FIRST));
-  if (!(pde->flags & PDE_PRESENT))
-    return PAGE_IDX_INVAL;
-
-  return pde_fetch_page_idx(pde);
 }
 
 page_idx_t mm_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr)
@@ -276,7 +259,7 @@ static void __pfi_next(page_frame_iterator_t *pfi);
 
 void pfi_ptable_init(page_frame_iterator_t *pfi,
                      ITERATOR_CTX(page_frame, PF_ITER_PTABLE) *ctx,
-                     rpd_t *rpd, uintptr_t va_from, int npages)
+                     rpd_t *rpd, uintptr_t va_from, ulong_t npages)
 {
   pfi->first = __pfi_first;
   pfi->next = __pfi_next;
@@ -298,7 +281,7 @@ static void __pfi_first(page_frame_iterator_t *pfi)
   ITER_DBG_CHECK_TYPE(pfi, PF_ITER_PTABLE);
   ctx = iter_fetch_ctx(pfi);
   ctx->va_cur = ctx->va_from;
-  pfi->pf_idx = mm_pin_vaddr(ctx->rpd, ctx->va_cur);
+  pfi->pf_idx = mm_vaddr2page_idx(ctx->rpd, ctx->va_cur);
   if (pfi->pf_idx == PAGE_IDX_INVAL) {
     pfi->error = -EFAULT;
     pfi->state = ITER_STOP;
@@ -322,7 +305,7 @@ static void __pfi_next(page_frame_iterator_t *pfi)
   }
   else {
     ctx->va_cur += PAGE_SIZE;
-    pfi->pf_idx = mm_pin_vaddr(ctx->rpd, ctx->va_cur);
+    pfi->pf_idx = mm_vaddr2page_idx(ctx->rpd, ctx->va_cur);
     if (pfi->pf_idx == PAGE_IDX_INVAL) {
       pfi->error = -EFAULT;
       pfi->state = ITER_STOP;

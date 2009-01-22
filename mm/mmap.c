@@ -266,7 +266,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
   return err;
 }
 
-int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages, kmap_flags_t flags)
+int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, ulong_t npages, kmap_flags_t flags)
 {
   mmap_info_t minfo;
   page_frame_iterator_t pfi;

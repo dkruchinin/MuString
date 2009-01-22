@@ -45,42 +45,42 @@ extern volatile uint8_t local_apic_ids[CONFIG_NRCPUS];
 void arch_specific_init(void)
 {
   int r, i;
-	uint32_t apic_base = 0;
-	int n;
-	uint8_t id;
+  uint32_t apic_base = 0;
+  int n;
+  uint8_t id;
 	
-	kprintf("[HW] Init arch specific ...\n");
-	
-	r = get_acpi_lapic_info(&apic_base, (uint8_t *)local_apic_ids, CONFIG_NRCPUS, &n);
-	if (apic_base)
-		local_apic_base = apic_base;
-	
-	local_apic_bsp_switch(); 
-	if (local_bsp_apic_init() == -1)
-		panic("Local APIC is not detected!\n");
-
+  kprintf("[HW] Init arch specific ...\n");
+  
+  r = get_acpi_lapic_info(&apic_base, (uint8_t *)local_apic_ids, CONFIG_NRCPUS, &n);
+  if (apic_base)
+      local_apic_base = apic_base;
+  
+  local_apic_bsp_switch();
+  if (local_bsp_apic_init() == -1)
+      panic("Local APIC is not detected!\n");
+  
 #ifdef CONFIG_SMP
-	if (r > 0) {
-		/* ensure that the APIC ID of the bootstrap CPU is the first in the ID array */
-		id = get_local_apic_id();
-		for (i = 0; (i < r) && (local_apic_ids[i] != id); i++);
-		
-		if (i == r) {
-			kprintf("Local apic information is invalid!\n");
-			return;
-		} else if (i) {
-			local_apic_ids[i] = local_apic_ids[0];
-			local_apic_ids[0] = id;
-		}
-		
-		kprintf("[HW] Launch other cpus");
-		if (r < n)
-			kprintf(", found CPUs: %d, being launched CPUs: %d\n", n - 1, r - 1);
-		else
-			kprintf(", total number of CPUs: %d\n", r);
+  if (r > 0) {
+      /* ensure that the APIC ID of the bootstrap CPU is the first in the ID array */
+      id = get_local_apic_id();
+      for (i = 0; (i < r) && (local_apic_ids[i] != id); i++);
 
-		arch_smp_init(r);
-	}
+      if (i == r) {
+          kprintf("Local apic information is invalid!\n");
+          return;
+      } else if (i) {
+          local_apic_ids[i] = local_apic_ids[0];
+          local_apic_ids[0] = id;
+      }
+		
+      kprintf("[HW] Launch other cpus");
+      if (r < n)
+          kprintf(", found CPUs: %d, being launched CPUs: %d\n", n - 1, r - 1);
+      else
+          kprintf(", total number of CPUs: %d\n", r);
+      
+      arch_smp_init(r);
+  }
 #endif
 }
 

@@ -37,7 +37,7 @@ extern uintptr_t __kernel_first_free_addr;
 extern uintptr_t __uspace_top_vaddr;
 extern uintptr_t __kernel_va_base;
 
-#define MIN_MEM_REQUIRED    _mb2b(32)                        /**< Minimum memory required for system */
+#define MIN_MEM_REQUIRED    _mb2b(8)                        /**< Minimum memory required for system */
 #define MIN_PAGES_REQUIRED  (MIN_MEM_REQUIRED >> PAGE_WIDTH) /**< Minimum number of pages that must be present in a system */
 
 #define KERNEL_START_PHYS   ((uintptr_t)&_kernel_start) /**/
@@ -67,13 +67,13 @@ static inline bool is_kernel_addr(void *a)
           (addr < KERNEL_START_PHYS));
 }
 
-static inline uintptr_t __allocate_vregion(page_idx_t npages)
+static inline uintptr_t __allocate_vregion(ulong_t npages)
 {
   __kernel_va_base -= (npages << PAGE_WIDTH);
   return __kernel_va_base;
 }
 
-static inline uintptr_t __reserve_uspace_vregion(page_idx_t npages)
+static inline uintptr_t __reserve_uspace_vregion(ulong_t npages)
 {
   __uspace_top_vaddr += (npages << PAGE_WIDTH);
   return __uspace_top_vaddr;

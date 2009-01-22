@@ -37,7 +37,7 @@
 #include <eza/arch/page.h>
 #include <eza/arch/atomic.h>
 
-#define PAGE_ALIGN(addr) (((addr) + PAGE_SIZE) & ~PAGE_MASK)
+#define PAGE_ALIGN(addr) (((addr) + PAGE_MASK) & ~PAGE_MASK)
 #define PAGE_ALIGN_DOWN(addr) ((addr) & ~PAGE_MASK)
 
 #define NOF_MM_POOLS 2 /**< Number of MM pools in system */
@@ -85,7 +85,8 @@ typedef struct __page_frame {
   uint32_t _private;   /**< Private data that may be used by internal page frame allocator */  
 } page_frame_t;
 
-extern page_frame_t *page_frames_array;
+extern page_frame_t *page_frames_array; /**< An array of all available physical pages */
+extern page_idx_t num_phys_pages;       /**< Number of physical pages in system */
 
 #define pframe_pool_type(page) (__pool_type((page)->flags & PAGE_POOLS_MASK))
 
@@ -110,6 +111,11 @@ DEFINE_ITERATOR_TYPES(page_frame,
                       PF_ITER_PTABLE, /**< Page table iterator */
                       PF_ITER_PBLOCK, /**< Iterate through list of page blocks */
                       );
+
+static inline bool page_idx_is_present(page_idx_t page_idx)
+{
+  return (page_idx < num_phys_pages);
+}
 
 static inline void *pframe_to_virt(page_frame_t *frame)
 {
@@ -160,8 +166,4 @@ static inline void pframe_memnull(page_frame_t *start, int block_size)
 #else
 #define pframe_memnull(start, block_size) arch_page_memnull(start, block_size)
 #endif /* ARCH_PAGE_MEMNULL */
-
-extern page_frame_t *page_frames_array; /**< An array of all available physical pages */
-extern page_idx_t num_phys_pages;       /**< Number of physical pages in system */
-
 #endif /* __PAGE_H__ */

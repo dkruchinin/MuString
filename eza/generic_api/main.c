@@ -111,12 +111,10 @@ void main_routine(void) /* this function called from boostrap assembler code */
   kcons->enable();
   //print_kernel_version_info();
   kprintf("[MB] Modules: %d\n",init.c);
-  kprintf("[LW] Initialized CPU vectors.\n");
 
-  vmm_initialize();
-
+  mm_initialize();
   slab_allocator_init();
-
+  vmm_initialize();
   initialize_scheduler();
 
   initialize_timer();

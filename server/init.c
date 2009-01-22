@@ -38,6 +38,8 @@
 #include <eza/process.h>
 #include <eza/ptd.h>
 
+#ifndef CONFIG_TEST
+
 static int __create_task_mm(task_t *task, int num)
 {
   uintptr_t code;
@@ -198,7 +200,7 @@ static int __create_task_mm(task_t *task, int num)
   return 0;
 }
 
-#ifndef CONFIG_TEST
+
 
 void server_run_tasks(void)
 {

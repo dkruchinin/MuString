@@ -110,8 +110,12 @@ extern rpd_t kernel_rpd;
 
 static inline bool valid_user_address_range(uintptr_t va_start, uintptr_t length)
 {
+#ifndef CONFIG_TEST
   return ((va_start >= USPACE_VA_BOTTOM) &&
           ((va_start + length) < USPACE_VA_TOP));
+#else
+  return true;
+#endif /* CONFIG_TEST */
 }
 
 static inline void *user_to_kernel_vaddr(rpd_t *rpd, uintptr_t addr)
@@ -135,18 +139,25 @@ static inline void pin_page_frame(page_frame_t *pf)
 #define mmap_kern(va, first_page, npages, flags)    \
   mmap_core(&kernel_rpd, va, first_page, npages, flags)
 
+static inline bool mm_vaddr_is_mapped(rpd_t *rpd, uintptr_t va)
+{
+  return (mm_vaddr2page_idx(rpd, va) != PAGE_IDX_INVAL);
+}
+
 /**
  * @brief Initialize mm internals
  * @note It's an initcall, so it should be called only once during system boot stage.
  */
+void mm_initialize(void);
 void vmm_initialize(void);
+void vmm_subsystem_initialize(void);
 void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name);
 int vm_mandmaps_roll(vmm_t *target_mm);
 
 vmm_t *vmm_create(void);
-int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages, kmap_flags_t flags);
+int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, ulong_t npages, kmap_flags_t flags);
 
-static inline void munmap_core(rpd_t *rpd, uintptr_t va, page_idx_t npages)
+static inline void munmap_core(rpd_t *rpd, uintptr_t va, ulong_t npages)
 {
   ptable_unmap(rpd, va, npages);
 }

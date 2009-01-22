@@ -22,13 +22,18 @@ void memobj_subsystem_initialize(void)
 {
   kprintf("[MM] Initializing memory objects subsystem...\n");
   idx_allocator_init(&__memobjs_ida, CONFIG_MEMOBJS_MAX);
+  kprintf("-2\n");
   idx_reserve(&__memobjs_ida, 0);
+  kprintf("-1\n");
   __memobjs_memcache = create_memcache("Mmemory objects cache", sizeof(memobj_t),
                                        DEFAULT_SLAB_PAGES, SMCF_PGEN | SMCF_GENERIC);
+  kprintf("-3\n");
   if (!__memobjs_memcache)
     panic("memobj_subsystem_initialize: Can't create memory cache for memory objects. ENOMEM.");
 
+  kprintf("1\n");
   ttree_init(&__memobjs_tree, __memobjs_cmp_func, memobj_t, id);
+  kprintf("2\n");
 }
 
 memobj_t *memobj_find_by_id(memobj_id_t memobj_id)

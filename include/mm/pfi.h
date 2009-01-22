@@ -127,7 +127,7 @@ struct __rpd;
 
 void pfi_ptable_init(page_frame_iterator_t *pfi,
                      ITERATOR_CTX(page_frame, PF_ITER_PTABLE) *ctx,
-                     struct __rpd *rpd, uintptr_t va_from, int npages);
+                     struct __rpd *rpd, uintptr_t va_from, ulong_t npages);
 
 DEFINE_ITERATOR_CTX(page_frame, PF_ITER_PBLOCK,
                     list_node_t *first_node;

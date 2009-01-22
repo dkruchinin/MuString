@@ -78,15 +78,13 @@ static void verify_mapping(const char *descr, uintptr_t start_addr,
 
     start_idx++;
   }
-  if (pfi.error)
-    goto failed;
   
   kprintf(" %*s\n", strlen(descr) + 14, "[OK]");
   return;
 
   failed:
   kprintf(" %*s\n", 18 - strlen(descr), "[FAILED]");
-  panic("verify_mapping: Range: %p - %p. Got idx %u, but %u was expected. ERROR = %d",
+  panic("Range: %p - %p. Got idx %u, but %u was expected. ERROR = %d",
         start_addr, start_addr + ((num_pages - 1) << PAGE_WIDTH),
         pfi.pf_idx, start_idx, pfi.error);
 }
@@ -106,7 +104,7 @@ static void register_mandatory_mappings(void)
   ident_mandmap.virt_addr = 0x1000;
   ident_mandmap.phys_addr = 0x1000;
   ident_mandmap.num_pages = IDENT_MAP_PAGES - 1;
-  ident_mandmap.flags = KMAP_READ | KMAP_WRITE;
+  ident_mandmap.flags = KMAP_READ | KMAP_WRITE | KMAP_KERN;
   vm_mandmap_register(&ident_mandmap, "Identity mapping");
 
   memset(&utramp_mandmap, 0, sizeof(utramp_mandmap));
@@ -146,7 +144,7 @@ static void scan_phys_mem(void)
 
     kprintf(" BIOS-e820: %#.8x - %#.8x %s\n",
             mmap->base_address, mmap->base_address + length, type);
-    if(!found && mmap->base_address == KERNEL_START_PHYS && mmap->type == 1) {      
+    if(!found && mmap->base_address == BIOS_END_ADDR && mmap->type == 1) {      
       num_phys_pages = (mmap->base_address + length) >> PAGE_WIDTH;
       found = true;
     }
@@ -154,7 +152,7 @@ static void scan_phys_mem(void)
   
   if(!found)
     panic("No valid E820 memory maps found for main physical memory area!");
-  if(!num_phys_pages || (num_phys_pages < BIOS_END_ADDR))
+  if(!num_phys_pages || (num_phys_pages < MIN_PAGES_REQUIRED))
     panic("Insufficient E820 memory map found for main physical memory area!");
 
 #ifndef CONFIG_IOMMU
@@ -219,7 +217,7 @@ void arch_mm_remap_pages(void)
   int ret;
 
   /* Create identity mapping */
-  ret = mmap_kern(0x1000, 1, (IDENT_MAP_PAGES - 1) << PAGE_WIDTH,
+  ret = mmap_kern(0x1000, 1, IDENT_MAP_PAGES - 1,
                   KMAP_READ | KMAP_WRITE | KMAP_KERN);
   if (ret) {
     panic("Can't create identity mapping (%p -> %p)! [errcode=%d]",
@@ -227,7 +225,7 @@ void arch_mm_remap_pages(void)
   }
 
   verify_mapping("identity mapping", 0x1000, IDENT_MAP_PAGES - 1, 1);  
-  ret = mmap_kern(KERNEL_BASE, 0, num_phys_pages << PAGE_WIDTH,
+  ret = mmap_kern(KERNEL_BASE, 0, num_phys_pages,
                   KMAP_READ | KMAP_WRITE | KMAP_EXEC | KMAP_KERN);
   if (ret) {
     panic("Can't create kernel mapping (%p -> %p)! [errcode=%d]",
@@ -235,7 +233,7 @@ void arch_mm_remap_pages(void)
   }
 
   /* Verify that mappings are valid. */  
-  verify_mapping("general mapping", KERNEL_BASE, total_pages, 0);
+  verify_mapping("general mapping", KERNEL_BASE, num_phys_pages, 0);
 
   /* Now we should register our direct mapping area and kernel area
    * to allow them be mapped as mandatory areas in user memory space.
