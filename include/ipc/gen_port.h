@@ -37,7 +37,7 @@
 #include <ipc/port.h>
 
 /****************************************************************************/
-#define IPC_PRIORITIZED_PORT_QUEUE   0x20000
+#define IPC_PRIORITIZED_ACCESS   0x2
 
 #define MAX_PORT_MSG_LENGTH  _mb2b(2)
 
@@ -46,9 +46,13 @@
 
 #define IPC_PORT_DIRECT_FLAGS  (IPC_BLOCKED_ACCESS)
 
+#define __MSG_WAS_DEQUEUED  (ipc_port_message_t *)0x007
+
 struct __ipc_gen_port;
 
 typedef struct __ipc_port_msg_ops {
+  ipc_port_message_t *(*lookup_message)(struct __ipc_gen_port *port,
+                                        ulong_t msg_id);
   int (*init_data_storage)(struct __ipc_gen_port *port,task_t *owner);
   int (*insert_message)(struct __ipc_gen_port *port,
                              ipc_port_message_t *msg);
@@ -57,7 +61,7 @@ typedef struct __ipc_port_msg_ops {
   void (*free_data_storage)(struct __ipc_gen_port *port);
   void (*dequeue_message)(struct __ipc_gen_port *port,ipc_port_message_t *msg);
   int (*remove_message)(struct __ipc_gen_port *port,
-                             ulong_t msg_id,ipc_port_message_t **m);
+                                    ipc_port_message_t *msg);
   ipc_port_message_t *(*remove_head_message)(struct __ipc_gen_port *port);
 } ipc_port_msg_ops_t;
 
@@ -65,9 +69,8 @@ typedef struct __ipc_gen_port {
   ulong_t flags;
   spinlock_t lock;
   atomic_t use_count,own_count;
-  ulong_t avail_messages,total_messages;
+  ulong_t avail_messages,total_messages,capacity;
   wqueue_t waitqueue;
-
   ipc_port_msg_ops_t *msg_ops;
   void *data_storage;
   list_head_t channels;  
@@ -88,7 +91,9 @@ void __ipc_put_port(ipc_gen_port_t *p);
 int __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
                           ulong_t reply_buf,ulong_t reply_len);
 int ipc_close_port(task_t *owner,ulong_t port);
+
 extern ipc_port_msg_ops_t def_port_msg_ops;
+extern ipc_port_msg_ops_t prio_port_msg_ops;
 /****************************************************************************/
 
 poll_event_t ipc_port_get_pending_events(ipc_gen_port_t *port);

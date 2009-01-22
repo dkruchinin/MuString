@@ -170,9 +170,8 @@ static int __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
 
   memset(p,0,sizeof(*p));
 
-  /* TODO: [mt] Support flags during IPC port creation. */
-  if( flags & IPC_PRIORITIZED_PORT_QUEUE ) {
-    return -EINVAL;
+  if( flags & IPC_PRIORITIZED_ACCESS ) {
+    p->msg_ops=&prio_port_msg_ops;
   } else {
     p->msg_ops=&def_port_msg_ops;
   }
@@ -441,7 +440,7 @@ out:
     IPC_LOCK_PORT_W(port);
     if( !(port->flags & IPC_PORT_SHUTDOWN) &&
         !(port->flags & IPC_BLOCKED_ACCESS) ) {
-      msg_ops->remove_message(port,msg->id,NULL);
+      msg_ops->remove_message(port,msg);
       free=true;
     } else {
       free=false;
@@ -464,7 +463,7 @@ out:
       /* In case of errors remove message and wakeup client. */
       if( r ) {
         IPC_LOCK_PORT_W(port);
-        msg_ops->remove_message(port,msg->id,NULL);
+        msg_ops->remove_message(port,msg);
         IPC_UNLOCK_PORT_W(port);
 
         msg->replied_size=r;
@@ -636,7 +635,7 @@ int ipc_port_send_iov(struct __ipc_gen_port *port,
           /* If server neither received nor replied to our message, we can
            * remove it from the queue without any problems.
            */
-          msg_ops->remove_message(port,msg->id,NULL);
+          msg_ops->remove_message(port,msg);
           break;
         case MSG_STATE_DATA_TRANSFERRED:
           /* Server successfully received data from our message but not replied yet,
@@ -652,6 +651,12 @@ int ipc_port_send_iov(struct __ipc_gen_port *port,
           b=r;
           break;
         case MSG_STATE_REPLIED:
+          /* If server finished 'REPLY' phase while we have pending signals,
+           * we assume that we weren't actually interrupted by signals.
+           * Because server got no errors after performing reply while we have
+           * pending signals, reporting error to the client may cause confuses.
+           */
+          ir=0;
           break; /* Message was replied - do nothing. */
       }
       IPC_UNLOCK_PORT_W(port);
@@ -691,19 +696,25 @@ int ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
     return -EINVAL;
   }
 
-  msg=NULL;
   IPC_LOCK_PORT_W(port);
   if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
-    r=port->msg_ops->remove_message(port,msg_id,&msg);
-    if( msg ) {
-      msg->state=MSG_STATE_REPLY_BEGIN;
+    msg=port->msg_ops->lookup_message(port,msg_id);
+    if( msg == __MSG_WAS_DEQUEUED ) { /* Client got lost. */
+      r=-ENXIO;
+    } else if( msg ) {
+      r=port->msg_ops->remove_message(port,msg);
+      if( !r ) {
+        msg->state=MSG_STATE_REPLY_BEGIN;
+      }
+    } else {
+      r=-EINVAL;
     }
   } else {
     r=-EPIPE;
   }
   IPC_UNLOCK_PORT_W(port);
 
-  if( msg ) {
+  if( !r ) {
     r=__transfer_reply_data_iov(msg,reply_iov,numvecs,true,reply_len);
 
     /* Update message state and wakeup client. */

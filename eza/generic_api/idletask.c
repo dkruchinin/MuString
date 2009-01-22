@@ -44,7 +44,6 @@ void idle_loop(void)
 #endif
 
   for( ;; ) {
-   
 #ifndef CONFIG_TEST
     {
       uint64_t target_tick = swks.system_ticks_64 + 100;

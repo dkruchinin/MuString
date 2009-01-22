@@ -536,7 +536,7 @@ static void __process_events_test(void *ctx)
   te_ctl.ev_mask=TASK_EVENT_TERMINATION;
   te_ctl.port=port;
   r=sys_task_control(task->pid,SYS_PR_CTL_ADD_EVENT_LISTENER,
-                     &te_ctl);
+                     (ulong_t)&te_ctl);
   if( r ) {
     tf->printf("Can't set event listener: %d\n",r);
     tf->failed();
@@ -546,7 +546,7 @@ static void __process_events_test(void *ctx)
   te_ctl.ev_mask=TASK_EVENT_TERMINATION;
   te_ctl.port=port;
   r=sys_task_control(task->pid,SYS_PR_CTL_ADD_EVENT_LISTENER,
-                     &te_ctl);
+                     (ulong_t)&te_ctl);
   if( r != -EBUSY ) {
     tf->printf("How did I manage to set the second listener ? %d\n",r);
     tf->failed();
@@ -555,7 +555,7 @@ static void __process_events_test(void *ctx)
   }
 
   memset(&ev_descr,0,sizeof(ev_descr));
-  r=sys_port_receive(port,IPC_BLOCKED_ACCESS,&ev_descr,
+  r=sys_port_receive(port,IPC_BLOCKED_ACCESS,(ulong_t)&ev_descr,
                      sizeof(ev_descr),&msg_info);
   if( r ) {
     tf->printf("Error occured while waiting for task's events: %d !\n",
@@ -962,6 +962,210 @@ static void __vectored_messages_test(void *ctx)
   }
 }
 
+#define __NGROUPS 2
+#define __NGROUP_TASKS  3
+#define __NUM_PRIO_THREADS (__NGROUPS*__NGROUP_TASKS)
+
+int __prio_port;
+
+typedef struct __prio_data {
+  test_framework_t *tf;
+  ulong_t priority,runs;
+} prio_data_t;
+
+#define PRIORER_ID "[PRIO CLIENT]"
+
+static void __prio_thread(void *data)
+{
+  prio_data_t *pd=(prio_data_t *)data;
+  test_framework_t *tf=pd->tf;
+  int r,i;
+  iovec_t snd_iovecs[MAX_IOVECS],rcv_iovecs[MAX_IOVECS];
+  ulong_t channel;
+  ulong_t size,prio,parts;
+
+  channel=sys_open_channel(__server_pid,__prio_port,IPC_BLOCKED_ACCESS);
+  if( channel < 0 ) {
+    tf->printf(PRIORER_ID"Can't open a channel !\n" );
+    tf->abort();
+  }
+
+  prio=pd->priority;
+  r=do_scheduler_control(current_task(),SYS_SCHED_CTL_SET_PRIORITY,prio);
+  if( r ) {
+    tf->printf(PRIORER_ID"Can't change my priority to %d ! r=%d\n",
+               prio,r);
+    tf->abort();
+  }
+
+  parts=3;
+  for(i=0;i<TEST_ROUNDS;i++) {
+    ulong_t *watchline;
+
+    CLEAR_CLIENT_BUFFERS;
+    __prepare_vectored_message(__vectored_msg_client_snd_buf,parts);
+    __setup_message_iovecs(__vectored_msg_client_snd_buf,parts,snd_iovecs);
+
+    /* Setup memory watchline. */
+    size=MESSAGE_SIZE(parts);
+    watchline=(ulong_t*)(__vectored_msg_client_rcv_buf+size);
+    *watchline=WL_PATTERN;
+
+    tf->printf(PRIORER_ID "Sending a message consisting of %d parts via %s. SIZE=%d\n",
+               parts, (i & 0x1) ? "'sys_port_send_iov()'" : "'sys_port_send_iov_v()'",
+               MESSAGE_SIZE(parts));
+    if( i & 0x1 ) {
+      r=sys_port_send_iov(channel,snd_iovecs,parts+2,
+                          (uintptr_t)__vectored_msg_client_rcv_buf,
+                          sizeof(__vectored_msg_client_rcv_buf) );
+      tf->printf(PRIORER_ID"Message was sent: r=%d. RCV BUFSIZE=%d\n",r,
+                 sizeof(__vectored_msg_client_rcv_buf));
+      if( r < 0 ) {
+        tf->failed();
+      }
+    } else {
+      __setup_message_iovecs(__vectored_msg_client_rcv_buf,parts,rcv_iovecs);
+      r=sys_port_send_iov_v(channel,snd_iovecs,parts+2,
+                            rcv_iovecs,parts+2);
+      tf->printf(PRIORER_ID"Message was sent: r=%d. RCV BUFSIZE=%d\n",r,
+                 sizeof(__vectored_msg_client_rcv_buf));
+      if( r < 0 ) {
+        tf->failed();
+      }
+    }
+    tf->printf(PRIORER_ID"Verifying server's reply (%d-parts message).\n",
+               parts);
+    FAIL_ON(!__validate_vectored_message(__vectored_msg_client_rcv_buf,parts,tf),tf);
+    if( *watchline != WL_PATTERN ) {
+      tf->printf(VECTORER_ID"Watchline pattern mismatch ! 0x%X instead of 0x%X\n",
+                 *watchline,WL_PATTERN);
+      tf->failed();
+    }
+  }
+
+  sys_exit(0);
+}
+
+static prio_data_t pdata[__NUM_PRIO_THREADS];
+static task_t *ptasks[__NUM_PRIO_THREADS];
+
+static void __prioritized_port_test(void *ctx)
+{
+  DECLARE_TEST_CONTEXT;
+  int r;
+  int i,j,k;
+  port_msg_info_t msg_info;
+  iovec_t snd_iovecs[MAX_IOVECS];
+  const int __PRIO_STEP=4;
+  int prio,parts;
+
+  __prio_port=sys_create_port(IPC_PRIORITIZED_ACCESS | IPC_BLOCKED_ACCESS,
+                              0);
+  if( __prio_port < 0 ) {
+    tf->printf("Can't create prioritized port !");
+    tf->abort();
+  }
+
+  for(i=0;i<__NUM_PRIO_THREADS;i++) {
+    prio=64-__PRIO_STEP*(i/__NGROUP_TASKS);
+    pdata[i].tf=tf;
+    pdata[i].priority=prio;
+    pdata[i].runs=0;
+
+    if( kernel_thread(__prio_thread,&pdata[i],&ptasks[i]) ) {
+      tf->printf("Can't create a prio tester !");
+      tf->abort();
+    }
+  }
+
+  tf->printf(SERVER_THREAD"[PRIO PORT] Sleeping for a while ...\n");
+  sleep(1);
+  tf->printf(SERVER_THREAD"[PRIO PORT] Got woken up ! Testing ! (start priority=%d)\n",
+             prio);
+
+  /* OK, ready for tests. */
+  parts=3;
+  for(k=0;k<__NGROUPS;k++,prio+=__PRIO_STEP) {
+    for(j=0;j<__NGROUP_TASKS;j++) {
+      for(i=0;i<TEST_ROUNDS;i++) {
+        ulong_t *watchline;
+        ulong_t size;
+        task_t *t;
+        int idx;
+        prio_data_t *_pd;
+
+        CLEAR_SERVER_BUFFERS;
+
+        /* Setup memory watchline. */
+        size=MESSAGE_SIZE(parts);
+        watchline=(ulong_t*)(__vectored_msg_server_rcv_buf+size);
+        *watchline=WL_PATTERN;
+
+        tf->printf(SERVER_THREAD"[PRIO PORT] Receiving a message that has %d middle parts. SIZE=%d\n",
+                   parts,MESSAGE_SIZE(parts));
+        r=sys_port_receive(__prio_port,IPC_BLOCKED_ACCESS,(ulong_t)__vectored_msg_server_rcv_buf,
+                           sizeof(__vectored_msg_server_rcv_buf),&msg_info);
+        tf->printf(SERVER_THREAD"[PRIO PORT]Vectored message received. MESSAGE SIZE=%d\n",
+                   msg_info.msg_len);
+        __validate_retval(r,0,tf);
+        FAIL_ON(!__validate_vectored_message(__vectored_msg_server_rcv_buf,parts,tf),tf);
+
+        if( *watchline != WL_PATTERN ) {
+          tf->printf(SERVER_THREAD"[PRIO PORT] Watchline pattern mismatch ! 0x%X instead of 0x%X\n",
+                     *watchline,WL_PATTERN);
+          tf->failed();
+        }
+
+        /* Make sure client has a proper priority. */
+        for(t=NULL,idx=0;idx<__NUM_PRIO_THREADS;idx++) {
+          if(ptasks[idx]->pid == msg_info.sender_pid) {
+            t=ptasks[idx];
+            _pd=&pdata[idx];
+            break;
+          }
+        }
+
+        if( !t ) {
+          tf->printf(SERVER_THREAD"[PRIO PORT] Can't locate a client with PID=%d\n",
+                     msg_info.sender_pid);
+          tf->abort();
+        }
+
+        /* OK, now compare priority */
+        if( t->static_priority != _pd->priority ) {
+          tf->printf(SERVER_THREAD"[PRIO PORT]: Priority mismatch ! %d instead of %d\n",
+                     t->static_priority,_pd->priority);
+          tf->printf("             CURRENT ITERATION: round=%d,task=%d,group=%d\n",
+                     i,j,k);
+          tf->abort();
+        }
+
+        tf->printf(SERVER_THREAD"[PRIO PORT] Good client: MSG ID=%d, PRIO=%d\n",
+                   msg_info.msg_id,t->static_priority);
+
+        /* Reply to the client using a vectored message. */
+        CLEAR_SERVER_BUFFERS;
+        __prepare_vectored_message(__vectored_msg_server_snd_buf,parts);
+        __setup_message_iovecs(__vectored_msg_server_snd_buf,parts,snd_iovecs);
+
+        tf->printf(SERVER_THREAD"[PRIO PORT]Replying by a message that consists of %d parts.\n",
+                   parts);
+        r=sys_port_reply_iov(__prio_port,msg_info.msg_id,snd_iovecs,parts+2);
+        tf->printf(SERVER_THREAD"[PRIO PORT]Message %d was replied (%d)\n",
+                   msg_info.msg_id,r);
+        if( r ) {
+          tf->printf(SERVER_THREAD"[PRIO PORT] Error during reply to message %d ! r=%d\n",
+                     msg_info.msg_id,r);
+          tf->abort();
+        }
+      }
+    }
+  }
+
+  tf->printf(SERVER_THREAD"All priority-related tests finished.\n");
+  sys_close_port(__prio_port);
+}
+
 static void __server_thread(void *ctx)
 {
   DECLARE_TEST_CONTEXT;
@@ -974,6 +1178,7 @@ static void __server_thread(void *ctx)
   __server_pid=current_task()->pid;
 
   __process_events_test(ctx);
+  __prioritized_port_test(ctx);
   __ipc_buffer_test(ctx);
   __vectored_messages_test(ctx);
 

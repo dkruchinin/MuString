@@ -776,8 +776,9 @@ memcache_t *create_memcache(const char *name, size_t size,
   if (was_const)
     cache->flags |= SMCF_CONST;
 
-  kprintf(" Created memory cache \"%s\" [pages per slab:%d, slabs:%d, objsize=%d]\n",
-          name, cache->pages_per_slab, atomic_get(&cache->nslabs), cache->object_size);
+  kprintf("[SLAB] Memory cache \"%s\" was created\n", name);
+  SLAB_VERBOSE(" [pages per slab:%d, slabs:%d, objsize=%d]\n",
+               cache->pages_per_slab, atomic_get(&cache->nslabs), cache->object_size);
   return cache;
   
   err:

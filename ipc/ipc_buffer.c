@@ -25,13 +25,15 @@
 #include <eza/task.h>
 #include <eza/errno.h>
 #include <ipc/ipc.h>
-#include <mm/page.h>
 #include <mm/pfalloc.h>
+#include <mm/vmm.h>
 #include <ds/linked_array.h>
 #include <eza/limits.h>
-#include <eza/usercopy.h>
+#include <eza/arch/page.h>
+#include <mm/page.h>
 #include <mlibc/stddef.h>
 #include <ipc/gen_port.h>
+#include <eza/usercopy.h>
 
 #define LOCK_TASK_VM(x)
 #define UNLOCK_TASK_VM(x)
@@ -51,23 +53,25 @@ int ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
     ipc_user_buffer_t *buf=bufs;
     uintptr_t start_addr=(uintptr_t)iovecs->iov_base;
     ulong_t first,size=iovecs->iov_len;
+
     buf->chunks=addr_array;
 
     /* Process the first chunk. */
-    idx=mm_vaddr2page_idx(rpd, start_addr);
-    if( idx == PAGE_IDX_INVAL ) {
+    idx=mm_vaddr2page_idx(rpd,start_addr);
+    if( idx < 0 ) {
       goto out;
     }
 
     pchunk=buf->chunks;
-    adr=PAGE_ALIGN(start_addr);
+
+    adr=(start_addr+PAGE_SIZE) & ~PAGE_MASK;
     first=adr-start_addr;
     if( size <= first ) {
       first = size;
     }
 
     buf->first=first;
-    *pchunk=(uintptr_t)pframe_id_to_virt(idx)+(start_addr & ~PAGE_MASK);
+    *pchunk=(uintptr_t)pframe_id_to_virt(idx)+(start_addr & PAGE_MASK);
 
     size-=first;
     start_addr+=first;
