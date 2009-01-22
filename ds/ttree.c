@@ -861,10 +861,7 @@ static void __tti_first(ttree_iterator_t *tti)
 {
   tti->meta_cur.tnode = tti->tnode_start;
   tti->meta_cur.idx = tti->start_idx;
-  if (unlikely((tti->tnode_start == tti->tnode_end) && (tnode_num_keys(tti->tnode_start) == 1)))
-    tti->state = ITER_STOP;
-  else
-    tti->state = ITER_RUN;
+  tti->state = ITER_RUN;
 }
 
 static void __tti_last(ttree_iterator_t *tti)
@@ -879,19 +876,17 @@ static void __tti_last(ttree_iterator_t *tti)
 
 static void __tti_next(ttree_iterator_t *tti)
 {
-  if (!iter_isrunning(tti))
-    iter_first(tti);
-
-  tti->meta_cur.tnode->idx++;
   if (unlikely((tti->meta_cur.tnode == tti->tnode_end) &&
                (tti->meta_cur.tnode->idx == tti->end_idx))) {
     tti->state = ITER_STOP;
     return;
   }
-  if (unlikely(tti->meta_cur.tnode->idx == tti->meta_cur->tnode->max_idx)) {
+  if (tti->meta_cur.tnode->idx == tti->meta_cur->tnode->max_idx) {
     tti->meta_cur.tnode = tti->meta_cur.tnode->successor;
     tti->meta_cur.idx = tti->meta_cur.tnode->min_idx;
   }
+  else
+    tti->meta_cur.tnode->idx++;
 }
 
 static void __tti_prev(ttree_iterator_t *tti)

@@ -22,9 +22,10 @@
  */
 
 #include <mm/page.h>
-#include <mm/page.h>
 #include <mm/mmpool.h>
 #include <mm/pfalloc.h>
+#include <mm/vmm.h>
+#include <eza/errno.h>
 #include <eza/arch/types.h>
 
 page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
@@ -74,7 +75,7 @@ status_t pages_block_size(page_frame_t *first_page)
 {
   mm_pool_t *pool = mmpools_get_pool(pframe_pool_type(first_page));
 
-  if (!pool->is_avtive) {
+  if (!pool->is_active) {
     kprintf(KO_ERROR "pages_block_get_size: Trying to get size of pages "
             "block owned by inactive memory pool %s\n", mmpools_get_pool_name(pool->type));
     return -EINVAL;
@@ -92,7 +93,7 @@ status_t pages_block_size(page_frame_t *first_page)
 /* FIXME DK: allocate pages regarding to memory limits of a particular task
  * There is also a good issue when each process mm may have an opportunity to
  * allocate pages from a different pools. For example from general, dma and/or cram
- * pools. Each such pool should be able to restricted by the root user.
+ * pools. Each such pool should be able to be restricted by the root user.
  */
 page_frame_t *alloc_pages4uspace(vmm_t *vmm, page_idx_t npages)
 {

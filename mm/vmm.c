@@ -3,12 +3,22 @@
 #include <mm/page.h>
 #include <mm/mmpool.h>
 #include <mm/pfalloc.h>
+#include <mm/idalloc.h>
 #include <mm/pfi.h>
 #include <mm/vmm.h>
 #include <mm/memobj.h>
 #include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
 #include <mlibc/types.h>
+
+/* initialize opne page */
+static void __init_page(page_frame_t *page)
+{
+  list_init_head(&page->head);
+  list_init_node(&page->node);
+  atomic_set(&page->refcount, 0);
+  page->_private = 0;
+}
 
 void vmm_initialize(void)
 {
@@ -62,29 +72,8 @@ void vmm_initialize(void)
   
   /* Now we can remap available memory */
   arch_mm_remap_pages();
-
-  /* After all memory has been remapped, we can reserve some space
-   * for initial virtual memory range allocation.
-   */
-  idalloc_meminfo.num_vpages=IDALLOC_VPAGES;
-  idalloc_meminfo.avail_vpages=IDALLOC_VPAGES;
-  idalloc_meminfo.virt_top=kernel_min_vaddr;
-  kernel_min_vaddr-=IDALLOC_VPAGES*PAGE_SIZE;
-
   memobj_subsystem_initialize();
-  vmm_subsystem_initialize();
   kprintf("[MM] All pages were successfully remapped.\n");
-  __initialize_mandatory_areas();
-  kprintf("[MM] All mandatory user areas were successfully created.\n");
-}
-
-/* initialize opne page */
-static void __init_page(page_frame_t *page)
-{
-  list_init_head(&page->head);
-  list_init_node(&page->node);
-  atomic_set(&page->refcount, 0);
-  page->_private = 0;
 }
 
 static void __pfiter_idx_first(page_frame_iterator_t *pfi)
@@ -199,7 +188,7 @@ static void __pfiter_list_prev(page_frame_iterator_t *pfi)
   ITERATOR_CTX(page_frame, PF_ITER_LIST) *ctx;
 
   ITER_DBG_CHECK_TYPE(pfi, PF_ITER_LIST);
-  ctx = iter_tetch_ctx(pfi);
+  ctx = iter_fetch_ctx(pfi);
   if (likely(ctx->cur != ctx->first_node)) {
     ctx->cur = ctx->cur->prev;
     pfi->pf_idx =
@@ -238,10 +227,10 @@ static void __pfiter_pblock_first(page_frame_iterator_t *pfi)
   ctx->cur_idx = ctx->first_idx;
   pfi->pf_idx =
     pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->cur_idx);
-  pfi->stet = ITER_RUN;
+  pfi->state = ITER_RUN;
 }
 
-static void __pfiter_pblock_last(page_frame_t *pfi)
+static void __pfiter_pblock_last(page_frame_iterator_t *pfi)
 {
   ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx;
 
@@ -253,7 +242,7 @@ static void __pfiter_pblock_last(page_frame_t *pfi)
   pfi->state = ITER_RUN;
 }
 
-static void __pfiter_pblock_next(page_frame_t *pfi)
+static void __pfiter_pblock_next(page_frame_iterator_t *pfi)
 {
   ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx;
 

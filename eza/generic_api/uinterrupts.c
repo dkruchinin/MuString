@@ -174,7 +174,7 @@ status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   caller=current_task();
 
   LOCK_TASK_VM(caller);
-  pfn = mm_pin_vaddr(task_get_rpd(caller), addr);
+  pfn = mm_vaddr2page_idx(task_get_rpd(caller), addr);
   if(pfn != PAGE_IDX_INVAL) {
     pframe = pframe_by_number(pfn);
     pin_page_frame(pframe);

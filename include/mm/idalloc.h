@@ -59,16 +59,7 @@ typedef struct __idalloc_meminfo {
   bool is_enabled;          /**< True if idalloc is enabled and false otherwise */
 } idalloc_meminfo_t;
 
-typedef __idalloc_vspaceinfo {
-  ulong_t num_vpages;       /**< Size of virtual area pool in pages */
-  ulong_t avail_vpages;     /**< Amount of available pages in virtual area pool */
-  uintptr_t virt_top;       /**< First available address of virtual area pool */
-  spinlock_t lock;
-  bool is_enabled;          /**< Indicates if virtual space allocator is enabled */  
-} idalloc_vspaceinfo_t;
-
 extern idalloc_meminfo_t idalloc_meminfo;      /**< Global structure containing all idalloc informaion */
-extern idalloc_vspaceinfo_t idalloc_vspaceinfo /**< Global structure containing all information about available virtual space */
 
 /**
  * @brief Enable init-data allocator
@@ -78,7 +69,6 @@ extern idalloc_vspaceinfo_t idalloc_vspaceinfo /**< Global structure containing 
  * @see mm_pool_t
  */
 void idalloc_enable(mm_pool_t *pool);
-void idalloc_vspace_enable(uintptr_t start_addr, ulong_t nvpages);
 void idalloc_disable(void); /* TODO DK: redisign */
 
 /**
@@ -88,7 +78,6 @@ void idalloc_disable(void); /* TODO DK: redisign */
  * @return A pointer to memory chunk of size @a size on success or NULL on failure.
  */
 void *idalloc(size_t size);
-void *idalloc_vregion(page_idx_t pages);
 
 /**
  * @brief Check if idalloc is enabled

@@ -38,6 +38,7 @@
 #include <mm/idalloc.h>
 #include <mm/tlsf.h>
 #include <eza/spinlock.h>
+#include <eza/errno.h>
 #include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 
@@ -512,9 +513,10 @@ static void __free_pages(page_frame_t *pages, void *data)
   spinlock_unlock(&tlsf->lock);
 }
 
-static status_t __get_pblock_size(page_frame_t *pages_block_start)
+static status_t __get_pblock_size(page_frame_t *pages_block_start, void *data)
 {
   status_t ret = 0;
+  tlsf_t *tlsf = data;
   
   spinlock_lock(&tlsf->lock);
   if (bit_test(&pages_block_start->_private, bitnumber(TLSF_PB_MARK))) {
@@ -686,4 +688,5 @@ void tlsf_memdump(void *_tlsf)
     }
   }
 }
+
 #endif /* TLSF_DEBUG */

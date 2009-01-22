@@ -33,13 +33,20 @@
 #include <mm/page.h>
 #include <mm/vmm.h>
 #include <mm/pfi.h>
+#include <eza/swks.h>
 #include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
 #include <eza/arch/bios.h>
+#include <eza/arch/asm.h>
 
 uint8_t e820count;
 page_frame_t *page_frames_array = NULL;
 page_idx_t num_phys_pages = 0;
+uintptr_t __kernel_first_free_addr = __KERNEL_END_PHYS;
+uintptr_t __uspace_top_vaddr = USPACE_VA_TOP;
+uintptr_t __kernel_va_base = KERNEL_BASE;
+
+static vm_mandmap_t ident_mandmap, utramp_mandmap, swks_mandmap;
 
 #ifndef CONFIG_IOMMU
 static page_idx_t dma_pages = 0;
@@ -86,76 +93,72 @@ static void verify_mapping(const char *descr, uintptr_t start_addr,
 #define verify_mapping(descr, start_addr, num_pages, start_idx)
 #endif /* CONFIG_DEBUG_MM */
 
-static int __map_kernel_area(vm_mandmap_t *mandmap, vmm_t *vmm)
+
+static void register_mandatory_mappings(void)
 {
-  pde_t *src_pml4, *dst_pml4;
-  page_idx_t eidx = vaddr2pde_idx(KERNEL_BASE, PTABLE_LEVEL_LAST);
+  /* FIXME DK:
+   * Also it's not very clear why *each* task needs in identity mapping.
+   * Only because of VGA? But why doesn't the task map VGA page explicitely in
+   * a place it wants? And why does identity mapping have RW rights? WTF???
+   */
+  memset(&ident_mandmap, 0, sizeof(ident_mandmap));
+  ident_mandmap.virt_addr = 0x1000;
+  ident_mandmap.phys_addr = 0x1000;
+  ident_mandmap.num_pages = IDENT_MAP_PAGES - 1;
+  ident_mandmap.flags = KMAP_READ | KMAP_WRITE;
+  vm_mandmap_register(&ident_mandmap, "Identity mapping");
 
-  src_pml4 = pde_fetch(kernel_rpd.pml4, eidx);
-  dst_pml4 = pde_fetch(vmm->rpd.pml4, eidx);
-  *dst_pml4 = *src_pml4;
+  memset(&utramp_mandmap, 0, sizeof(utramp_mandmap));
+  utramp_mandmap.virt_addr = __reserve_uspace_vregion(1);
+  utramp_mandmap.phys_addr = k2p((uintptr_t)__userspace_trampoline_codepage);
+  utramp_mandmap.num_pages = 1;
+  utramp_mandmap.flags = KMAP_READ | KMAP_EXEC;
+  vm_mandmap_register(&utramp_mandmap, "Utrampoline mapping");
 
-  return 0;
+  memset(&swks_mandmap, 0, sizeof(swks_mandmap));
+  swks_mandmap.virt_addr = __reserve_uspace_vregion(SWKS_PAGES);
+  swks_mandmap.phys_addr = p2k(&swks);
+  swks_mandmap.num_pages = SWKS_PAGES;
+  swks_mandmap.flags = KMAP_READ;
+  vm_mandmap_register(&swks_mandmap, "SWKS mapping");
 }
 
 static void scan_phys_mem(void)
 {
-  int idx, found;  
+  int idx;
+  bool found;
   char *types[] = { "(unknown)", "(usable)", "(reserved)", "(ACPI reclaimable)",
                     "(ACPI non-volatile)", "(BAD)" };
+  char *type;
 
   kprintf("[MM] Scanning physical memory...\n");  
   kprintf("E820 memory map:\n"); 
-  for( idx = 0, found = 0; idx < e820count; idx++ ) {
+  for(idx = 0, found = false; idx < e820count; idx++) {
     e820memmap_t *mmap = &e820table[idx];
     uint64_t length = ((uintptr_t)mmap->length_high << 32) | mmap->length_low;
-    char *type;
 
-    if( mmap->type <= 5 ) {
+    if( mmap->type <= 5 )
       type = types[mmap->type];
-    } else {
+    else
       type = types[0];
-    }
 
     kprintf(" BIOS-e820: %#.8x - %#.8x %s\n",
             mmap->base_address, mmap->base_address + length, type);
-
-    if( !found && mmap->base_address == KERNEL_PHYS_START && mmap->type == 1 ) {
-      min_phys_addr = 0;
-      max_phys_addr = mmap->base_address + length;
-      found = 1;
+    if(!found && mmap->base_address == KERNEL_START_PHYS && mmap->type == 1) {      
+      num_phys_pages = (mmap->base_address + length) >> PAGE_WIDTH;
+      found = true;
     }
   }
-
-  if( !found ) {
-    panic( "detect_physical_memory(): No valid E820 memory maps found for main physical memory area !\n" );
-  }
-
-  if( max_phys_addr <= min_phys_addr ||
-      ((min_phys_addr - max_phys_addr) <= MIN_PHYS_MEMORY_REQUIRED )) {
-    panic( "detect_physical_memory(): Insufficient E820 memory map found for main physical memory area !\n" );
-  }
+  
+  if(!found)
+    panic("No valid E820 memory maps found for main physical memory area!");
+  if(!num_phys_pages || (num_phys_pages < MIN_PAGES_REQUIRED))
+    panic("Insufficient E820 memory map found for main physical memory area!");
 
 #ifndef CONFIG_IOMMU
   /* Setup DMA zone. */
   dma_pages = _mb2b(16) >> PAGE_WIDTH;
 #endif /* CONFIG_IOMMU */
-}
-
-void arch_mm_init(void)
-{
-  uintptr_t addr;
-  
-  scan_phys_mem();
-  total_pages = max_phys_addr >> PAGE_WIDTH;
-  addr = server_get_end_phy_addr();
-  page_frames_array = addr ?
-    (page_frame_t *)PAGE_ALIGN(p2k_code(addr)) : (page_frame_t *)KERNEL_END_ADDRESS;
-  _kernel_first_free_addr = (uintptr_t)page_frames_array + sizeof(page_frame_t) * total_pages;
-  kprintf(" Scanned: %ldM, %ld pages\n", (long)_b2mb(max_phys_addr - min_phys_addr),
-          (long)total_pages);
-  _user_va_start = USPACE_VA_BOTTOM;
-  _user_va_end = USPACE_VA_TOP;
 }
 
 static int prepare_page(page_idx_t idx, ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx)
@@ -186,6 +189,70 @@ static int prepare_page(page_idx_t idx, ITERATOR_CTX(page_frame, PF_ITER_ARCH) *
   return 0;
 }
 
+/* FIXME DK: remove after debugging */
+void map_kernel_area(vmm_t *vmm)
+{
+  pde_t *src_pml4, *dst_pml4;
+  page_idx_t eidx = vaddr2pde_idx(KERNEL_BASE, PTABLE_LEVEL_LAST);
+
+  src_pml4 = pde_fetch(kernel_rpd.pml4, eidx);
+  dst_pml4 = pde_fetch(vmm->rpd.pml4, eidx);
+  *dst_pml4 = *src_pml4;
+}
+
+void arch_mm_init(void)
+{
+  uintptr_t addr;
+  
+  scan_phys_mem();
+  addr = server_get_end_phy_addr();
+  page_frames_array = addr ?
+    (page_frame_t *)PAGE_ALIGN(p2k_code(addr)) : (page_frame_t *)KERNEL_END_PHYS;
+  __kernel_first_free_addr = (uintptr_t)page_frames_array + sizeof(page_frame_t) * num_phys_pages;
+  kprintf(" Scanned: %ldM, %ld pages\n", (long)_b2mb(num_phys_pages << PAGE_WIDTH), num_phys_pages);
+}
+
+void arch_mm_remap_pages(void)
+{
+  int ret;
+
+  /* Create identity mapping */
+  ret = mmap_kern(0x1000, 1, (IDENT_MAP_PAGES - 1) << PAGE_WIDTH,
+                  KMAP_READ | KMAP_WRITE | KMAP_KERN);
+  if (ret) {
+    panic("Can't create identity mapping (%p -> %p)! [errcode=%d]",
+          0x1000, IDENT_MAP_PAGES << PAGE_WIDTH, ret);
+  }
+
+  verify_mapping("identity mapping", 0x1000, IDENT_MAP_PAGES - 1, 1);  
+  ret = mmap_kern(KERNEL_BASE, 0, num_phys_pages << PAGE_WIDTH,
+                  KMAP_READ | KMAP_WRITE | KMAP_EXEC | KMAP_KERN);
+  if (ret) {
+    panic("Can't create kernel mapping (%p -> %p)! [errcode=%d]",
+          KERNEL_BASE, num_phys_pages << PAGE_WIDTH, ret);
+  }
+
+  /* Verify that mappings are valid. */  
+  verify_mapping("general mapping", KERNEL_BASE, total_pages, 0);
+
+  /* Now we should register our direct mapping area and kernel area
+   * to allow them be mapped as mandatory areas in user memory space.
+   */
+  register_mandatory_mappings();
+
+  /* FIXME DK:
+   * actually this is a buggy way of mapping kernel area.
+   * Kernel area mapping *must* be done *explicitely* in order to increment
+   * refcouns of all kernel pages.
+   */
+  arch_smp_mm_init(0);
+}
+
+void arch_smp_mm_init(cpu_id_t cpu)
+{  
+  load_cr3(_k2p((uintptr_t)pframe_to_virt(kernel_rpd.pml4)), 1, 1);
+}
+
 static void __pfiter_first(page_frame_iterator_t *pfi)
 {
   ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx;
@@ -207,7 +274,7 @@ static void __pfiter_next(page_frame_iterator_t *pfi)
   ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx;
 
   ITER_DBG_CHECK_TYPE(pfi, PF_ITER_ARCH);
-  if (pfi->pf_idx >= total_pages) {
+  if (pfi->pf_idx >= num_phys_pages) {
     pfi->state = ITER_STOP;
     pfi->pf_idx = PAGE_IDX_INVAL;
   }
@@ -238,47 +305,4 @@ void pfi_arch_init(page_frame_iterator_t *pfi,
   memset(ctx, 0, sizeof(*ctx));
   iter_set_ctx(pfi, ctx);
   __arch_iterator_init = true;
-}
-
-void arch_mm_remap_pages(void)
-{
-  int ret;
-
-  /* Create identity mapping */
-  ret = mmap_kern(0x1000, 1, (IDENT_MAP_PAGES - 1) << PAGE_WIDTH, KMAP_READ | KMAP_WRITE);
-  if (ret) {
-    panic("arch_mm_remap_pages: Can't create identity mapping (%p -> %p)! [errcode=%d]",
-          0x1000, IDENT_MAP_PAGES << PAGE_WIDTH, ret);
-  }
-
-  verify_mapping("identity mapping", 0x1000, IDENT_MAP_PAGES - 1, 1);  
-  ret = mmap_kern(KERNEL_BASE, 0, total_pages << PAGE_WIDTH, KMAP_READ | KMAP_WRITE | KMAP_EXEC);
-  if (ret) {
-    panic("arch_mm_remap_pages: Can't create kernel mapping (%p -> %p)! [errcode=%d]",
-          KERNEL_BASE, total_pages << PAGE_WIDTH, ret);
-  }
-
-  /* Verify that mappings are valid. */  
-  verify_mapping("general mapping", KERNEL_BASE, total_pages, 0);
-
-  /* Now we should register our direct mapping area and kernel area
-   * to allow them be mapped as mandatory areas in user memory space.
-   */
-  register_mandmap(&kernel_area_mandmap, 0, 0, 0, 0);
-  kernel_area_mandmap.map = __map_kernel_area;
-  register_mandmap(&identity_mandmap, 0x1000, IDENT_MAP_PAGES - 1, 0x1000,
-                   KMAP_READ | KMAP_WRITE | KMAP_EXEC);
-
-  /* TODO: [mt] redesign 'kernel_min_vaddr'. */
-  kernel_min_vaddr=KERNEL_BASE;
-
-  /* All CPUs must initially reload their CR3 registers with already
-   * initialized Level-4 page directory.
-   */
-  arch_smp_mm_init(0);
-}
-
-void arch_smp_mm_init(cpu_id_t cpu)
-{  
-  load_cr3(_k2p((uintptr_t)pframe_to_virt(kernel_rpd.pml4)), 1, 1);
 }

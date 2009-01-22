@@ -61,7 +61,7 @@ typedef enum __pfalloc_type {
 typedef struct __pf_allocator {
   page_frame_t *(*alloc_pages)(int n, void *data);                 /**< A pointer to function that can alloc n pages */
   void (*free_pages)(page_frame_t *pframe, void *data);            /**< A pointer to function that can free pages */
-  status_t (*pages_block_size)(page_frame_t *pages_block_start);   /**< Get size of pages block starting from pages_block_start */ 
+  status_t (*pages_block_size)(page_frame_t *pages_block_start, void *data);   /**< Get size of pages block starting from pages_block_start */ 
   void *alloc_ctx;                                                 /**< Internal allocator private data */
   page_idx_t block_sz_min;
   page_idx_t block_sz_max;

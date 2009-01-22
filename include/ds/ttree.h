@@ -391,7 +391,7 @@ int ttree_replace(ttree_t *ttree, void *key, void *new_item);
  */
 void ttree_print(ttree_t *ttree);
 
-void ttree_iterator_init(ttree_t *ttree, tnode_meta_t *start, tnode_meta_t *end);
+void ttree_iterator_init(ttree_t *ttree, ttree_iterator_t *tti, tnode_meta_t *start, tnode_meta_t *end);
 
 #ifdef CONFIG_DEBUG_TTREE
 /**

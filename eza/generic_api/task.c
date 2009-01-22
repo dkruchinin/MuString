@@ -321,8 +321,10 @@ static status_t initialize_task_mm(task_t *orig, task_t *target,
     target->task_mm = vmm_create();
     if (!target->task_mm)
       ret = -ENOMEM;
-    else
-      ret = mandmaps_roll_forward(target->task_mm);
+    else {
+      map_kernel_area(target->task_mm); /* FIXME DK: remove after debugging */
+      ret = vm_mandmaps_roll(target->task_mm);
+    }
   }
 
   return ret;

@@ -23,6 +23,8 @@
  */
 
 #include <config.h>
+#include <mm/page.h>
+#include <mm/vmm.h>
 #include <eza/interrupt.h>
 #include <eza/arch/8259.h>
 #include <eza/arch/i8254.h>
@@ -31,13 +33,13 @@
 #include <eza/arch/apic.h>
 #include <eza/arch/interrupt.h>
 #include <eza/arch/gdt.h>
-#include <mm/idalloc.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 #include <mlibc/string.h>
 #include <mlibc/bitwise.h>
 #include <eza/arch/interrupt.h>
 #include <eza/arch/smp.h>
+#include <eza/arch/mm.h>
 
 /*
  * Black mages from intel and amd wrote that
@@ -57,13 +59,13 @@ static int __map_apic_page(void)
   int32_t res;
   uintptr_t apic_vaddr;
 
-  apic_vaddr=(uintptr_t)idalloc_allocate_vregion(1);
+  apic_vaddr=__allocate_vregion(1);
   if( !apic_vaddr ) {
     panic( "[MM] Can't allocate memory range for mapping APIC !\n" );
   }
 
   res = mmap_kern(apic_vaddr, local_apic_base >> PAGE_WIDTH, 1,
-                  PROT_READ | PROT_WRITE | PROT_NOCACHE | PROT_EXEC, MAP_PHYS);
+                  KMAP_READ | KMAP_WRITE | KMAP_NOCACHE | KMAP_EXEC | KMAP_KERN);
   if(res<0) {
     panic("[MM] Cannot map IO page for APIC.\n");
   }

@@ -29,14 +29,15 @@
 #include <mm/slab.h>
 #include <mm/memobj.h>
 #include <mm/vmm.h>
+#include <mm/pfi.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/types.h>
 
 rpd_t kernel_rpd;
-static LIST_DEFINE(mandmaps_lst);
-static int __mandpas_total = 0;
-static memcache_t __vmms_cache = NULL;
-static memcache_t __vmrs_cache = NULL;
+static memcache_t *__vmms_cache = NULL;
+static memcache_t *__vmrs_cache = NULL;
+static LIST_DEFINE(__mandmaps_lst);
+static int __num_mandmaps = 0;
 
 static int __vmranges_cmp(void *r1, void *r2)
 {
@@ -45,8 +46,8 @@ static int __vmranges_cmp(void *r1, void *r2)
 
   range1 = (struct range_bounds *)r1;
   range2 = (struct range_bounds *)r2;
-  if ((diff = range1.space_start - range2.space_end) < 0) {
-    if ((diff = range2.space_start - range1.space_end) > 0)
+  if ((diff = range1->space_start - range2->space_end) < 0) {
+    if ((diff = range2->space_start - range1->space_end) > 0)
       return -1;
 
     return 0;
@@ -79,96 +80,60 @@ static void destroy_vmrange(vmrange_t *vmr)
   memfree(vmr);
 }
 
-static int __mandmap_map_default(vm_mandmap_t *mandmap, vmm_t *vmm)
+void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name)
 {
-  int rc;
-  vmrange_t *vmr;
-  ttree_iterator_t tti;
+  ASSERT(!valid_user_address_range(mandmap->virt_addr, mandmap->num_pages << PAGE_WIDTH));
+  mandmap->name = (char *)mandmap_name;
+  mandmap->flags &= KMAP_FLAGS_MASK;
+  list_add2tail(&__mandmaps_lst, &mandmap->node);
+  __num_mandmaps++;
+}
 
-  vmr = vmrange_find(vmm, mandmap->va_start, mandmap->num_pages << PAGE_WIDTH, &tti);
-  if (vmr)
-    return -EBUSY;
+int vm_mandmaps_roll(vmm_t *target_mm)
+{
+  int status = 0;
+  vm_mandmap_t *mandmap;
 
-  vmr = create_vmrange(vmm, mandmap->va_start, mandmap->num_pages, mandmap->flags);
-  if (!vmr)
-    return -ENOMEM;
-
-  ttree_insert_placeful(&vmm->ttree, &tti->meta_cur, &vmr);
-  rc = mmap_core(&vmm->rpd, mandmap->va_start, mandmap->phys_addr >> PAGE_WIDTH,
-                 mandmap->num_pages, mandmap->flags & KMAP_FLAGS_MASK);
-  if (rc) {
-    destroy_vmrange(vmr);
-    munmap_core(&vmm->rpd, mandmap->va_start, mandmap->num_pages);
+  list_for_each_entry(&__mandmaps_lst, mandmap, node) {
+    status = mmap_core(&target_mm->rpd, mandmap->virt_addr, mandmap->phys_addr << PAGE_WIDTH,
+                       mandmap->num_pages, mandmap->flags);
+    if (status) {
+      kprintf(KO_ERROR "Mandatory mapping \"%s\" failed [err=%d]: Can't mmap region %p -> %p starting"
+              " from page with index #%x!\n",
+              mandmap->name, status, mandmap->virt_addr, mandmap->virt_addr + (mandmap->num_pages << PAGE_WIDTH),
+              mandmap->phys_addr << PAGE_WIDTH);
+      goto out;
+    }
   }
 
-  return rc;
+  out:
+  return status;
 }
 
 void vmm_subsystem_initialize(void)
 {
   kprintf("[MM] Initializing VMM subsystem...");
-  __vmms_cache = memcache_create("VMM objects cache", sizeof(vmm_t),
+  __vmms_cache = create_memcache("VMM objects cache", sizeof(vmm_t),
                                  DEFAULT_SLAB_PAGES, SMCF_PGEN | SMCF_GENERIC);
   if (!__vmms_cache)
     panic("vmm_subsystem_initialize: Can not create memory cache for VMM objects. ENOMEM");
 
-  __vmrs_cache = memcache_create("Vmrange objects cache", sizeof(vmrange_t),
+  __vmrs_cache = create_memcache("Vmrange objects cache", sizeof(vmrange_t),
                                  DEFAULT_SLAB_PAGES, SMCF_PGEN | SMCF_GENERIC);
   if (!__vmrs_cache)
     panic("vmm_subsystem_initialize: Can not create memory cache for vmrange objects. ENOMEM.");
-}
-
-void register_mandmap(vm_mandmap_t *mandmap, uintptr_t va_from, uintptr_t va_to, vmrange_flags_t vm_flags)
-{
-  memset(mandmap, 0, sizeof(mandmap));
-  mandmap->bounds.space_start = PAGE_ALIGN_DOWN(va_from);
-  mandmap->bounds.space_end = PAGE_ALIGN(va_to);
-  mandmap->vmr_flags = flags | VMR_FIXED;
-  list_add2tail(&mandmaps_lst, &mandmap->node);
-  __mandmaps_total++;
-  mandmap->map = __mandmap_map_default;
-  mandmap->unmap = NULL;
-}
-
-void unregister_manmap(vm_mandmap_t *mandmap)
-{
-  list_del(&mandmap->node);
-  __mandmaps_total--;
-}
-
-int mandmaps_roll_forward(vmm_t *target_mm)
-{
-  if (!__mandmaps_total)
-    return 0;
-  else {
-    vm_mandmap_t *mandmap;
-    status_t ret;
-
-    list_for_each_entry(&mandmaps_lst, mandmap, node) {
-      ret = mandmap->map(target_mm, mandmap);
-      if (ret) {
-        kprintf(KO_WARNING "mandmaps_roll_forward: Failed to create mandatory mapping from "
-                "%p to %p for VMM %p. ERR = %d",
-                mandmap->bounds.space_start, mandmap->bounds.space_end, target_mm, ret);
-
-        return ret;
-      }
-    }
-  }
-
-  return 0;
 }
 
 vmm_t *vmm_create(void)
 {
   vmm_t *vmm;
 
-  vmm = alloc_from_memcache(&__vmms_cache);
+  vmm = alloc_from_memcache(__vmms_cache);
   if (!vmm)
     return NULL;
 
   memset(vmm, 0, sizeof(*vmm));
-  ttree_init(&vmm->vmranges, __vmranges_cmpf, vmrange_t, bounds);
+  ttree_init(&vmm->vmranges_tree, __vmranges_cmp, vmrange_t, bounds);
   atomic_set(&vmm->vmm_users, 1);
   if (ptable_rpd_initialize(&vmm->rpd) < 0) {
     memfree(vmm);
@@ -179,49 +144,39 @@ vmm_t *vmm_create(void)
 }
 
 
-uintptr_t find_suitable_vmrange(vmm_t *vmm, uintptr_t length, ttree_iterator_t *ttree_iter)
+uintptr_t find_suitable_vmrange(vmm_t *vmm, uintptr_t length, tnode_meta_t *meta)
 {
   ttree_iterator_t tti;
-  uintptr_t start = USER_START_VIRT;
+  uintptr_t start = USPACE_VA_BOTTOM;
   struct range_bounds *bounds;
 
-  ttree_iterator_init(vmm->ttree, &tti, NULL, NULL);
+  ttree_iterator_init(&vmm->vmranges_tree, &tti, NULL, NULL);
   iterate_forward(&tti) {
     bounds = tnode_key(tti.meta_cur.tnode, tti.meta_cur.idx);
-    if ((bounds.space_start - start) >= length) {
-      if (ttree_iter)
-        ttree_iterator_init(&vmm->ttree, ttree_iter, &tti.meta_cur, NULL);
+    if ((bounds->space_start - start) >= length) {
+      if (meta)
+        memcpy(meta, &tti.meta_cur, sizeof(*meta));
 
-      return bounds.space_start;
+      return bounds->space_start;
     }
 
-    start = bounds.space_end;
+    start = bounds->space_end;
   }
 
   return 0;
 }
 
-vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, ttree_iterator_t *tti)
+vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, tnode_meta_t *meta)
 {
-  if (unlikely(!vmm->num_vmrs)) {    
-    if (tti) {
-      memset(tti, 0, sizeof(*tti));
-      tti->state = ITER_LIE;
-    }
-
+  if (unlikely(!vmm->num_vmrs))
     return NULL;
-  }
   else {
     struct range_bounds bounds;
-    tnode_meta_t meta;
     vmrange_t *vmr;
 
     bounds.space_start = va_start;
     bounds.space_end = va_end;
-    vmr = ttree_lookup(&vmm->vmranges_tree, &bounds, &meta);
-    if (tti)
-      ttree_iterator_init(&vmm->ttree, tti, meta->tnode, NULL);
-
+    vmr = ttree_lookup(&vmm->vmranges_tree, &bounds, meta);
     return vmr;
   }
 }
@@ -230,8 +185,8 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
                  vmrange_flags_t flags, int offs_pages)
 {
   vmrange_t *vmr, *vmr_prev;
-  ttree_iterator_t tti;
-  status_t err = 0;
+  tnode_meta_t tmeta;
+  int err = 0;
 
   if (!(flags & VMR_PROTO_MASK)
       || !(flags & (VMR_PRIVATE | VMR_SHARED))
@@ -242,14 +197,14 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
     goto err;
   }
   if (addr) {
-    if (!uspace_varange_is_valid(addr, (1 << npages))) {
+    if (!valid_user_address_range(addr, (1 << npages))) {
       if (flags & VMR_FIXED) {
         err = -ENOMEM;
         goto err;
       }
     }
     else {
-      vmr_prev = vmrange_find(vmm, addr, addr + (1 << npages), &tti);
+      vmr_prev = vmrange_find(vmm, addr, addr + (1 << npages), &tmeta);
       if (vmr_prev) {
         if (flags & VMR_FIXED) {
           err = -EINVAL;
@@ -261,7 +216,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
     }
   }
 
-  addr = find_suitable_vmrange(vmm, (1 << npages), &tti);
+  addr = find_suitable_vmrange(vmm, (1 << npages), &tmeta);
   create_vmrange:
   vmr = create_vmrange(vmm, addr, npages, flags);
   if (!vmr) {
@@ -269,7 +224,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
     goto err;
   }
   
-  ttree_insert_placeful(&vmm->ttree, &tti->meta_cur, &vmr);
+  ttree_insert_placeful(&vmm->vmranges_tree, &tmeta, &vmr);
   if (flags & VMR_POPULATE) {
     page_frame_t *pages;
     
@@ -289,11 +244,11 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
       iter_first(&pfi);
       minfo.va_from = addr;
       minfo.va_to = addr + (1 << npages);
-      minfo.ptable_flags = mpf2ptf(flags);
+      minfo.ptable_flags = kmap_to_ptable_flags(flags);
       minfo.pfi = &pfi;
-      err = ptable_map(vmm->rpd, &minfo);
+      err = ptable_map(&vmm->rpd, &minfo);
       if (err) {
-        ptable_unmap(vmm->rpd, addr, npages);
+        munmap_core(&vmm->rpd, addr, npages);
         goto err;
       }
     }
@@ -303,9 +258,8 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
   
   err:
   if (vmr) {
-    vmr->parent_vmm->num_vmrs--;
-    ttree_delete_placeful(&vmm->ttree, &tti->meta_cur);
-    memfree(vmr);
+    ttree_delete_placeful(&vmm->vmranges_tree, &tmeta);
+    destroy_vmrange(vmr);
   }
   
   return err;
@@ -319,7 +273,7 @@ int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages
 
   minfo.va_from = PAGE_ALIGN_DOWN(va);
   minfo.va_to = minfo.va_from + ((npages - 1) << PAGE_WIDTH);
-  minfo.ptable_flags = mpf2ptf(flags & KMAP_FLAGS_MASK);
+  minfo.ptable_flags = kmap_to_ptable_flags(flags & KMAP_FLAGS_MASK);
   pfi_index_init(&pfi, &pf_idx_ctx, first_page, first_page + npages - 1);
   iter_first(&pfi);
   minfo.pfi = &pfi;

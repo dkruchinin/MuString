@@ -28,10 +28,10 @@ void memobj_subsystem_initialize(void)
   if (!__memobjs_memcache)
     panic("memobj_subsystem_initialize: Can't create memory cache for memory objects. ENOMEM.");
 
-  ttree_init(&__memobjs_ttree, __memobjs_cmp_func, memobj_t, id);
+  ttree_init(&__memobjs_tree, __memobjs_cmp_func, memobj_t, id);
 }
 
 memobj_t *memobj_find_by_id(memobj_id_t memobj_id)
 {
-  return ttree_lookup(&memobj_id, NULL);
+  return ttree_lookup(&__memobjs_tree, &memobj_id, NULL);
 }

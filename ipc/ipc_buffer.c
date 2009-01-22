@@ -23,24 +23,23 @@
 
 #include <ipc/buffer.h>
 #include <eza/task.h>
-#include <kernel/vm.h>
 #include <eza/errno.h>
 #include <ipc/ipc.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
-#include <mm/mmap.h>
 #include <ds/linked_array.h>
 #include <eza/limits.h>
-#include <eza/vm.h>
-#include <kernel/vm.h>
 #include <mlibc/stddef.h>
 #include <ipc/gen_port.h>
-#include <eza/arch/mm.h>
+
+#define LOCK_TASK_VM(x)
+#define UNLOCK_TASK_VM(x)
 
 status_t ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
                                 uintptr_t *addr_array,ipc_user_buffer_t *bufs)
 {
-  rpd_t *rpd = &owner->rpd;
+  rpd_t *rpd = task_get_rpd(owner);
+  page_idx_t idx;
   page_idx_t pfn;
   ulong_t chunk_num;
   status_t r=-EFAULT;
@@ -55,7 +54,7 @@ status_t ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
     buf->chunks=addr_array;
 
     /* Process the first chunk. */
-    idx=mm_vaddr2page_idx(pd, start_addr);mm_pin_virt_addr(pd,start_addr);
+    idx=mm_vaddr2page_idx(rpd, start_addr);
     if( idx == PAGE_IDX_INVAL ) {
       goto out;
     }
@@ -67,7 +66,7 @@ status_t ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
       first = size;
 
   buf->num_chunks=chunk_num;
-  buf->length=ssize;
+  buf->length=iovecs->iov_len;
   r = 0;
 out:
   UNLOCK_TASK_VM(owner);

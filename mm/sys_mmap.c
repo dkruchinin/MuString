@@ -27,16 +27,13 @@
 #include <eza/arch/page.h>
 #include <eza/scheduler.h>
 #include <eza/process.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/mm.h>
 #include <eza/errno.h>
-#include <mm/mm.h>
+#include <mm/vmm.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
-#include <mm/mmap.h>
 #include <mlibc/kprintf.h>
 #include <server.h>
-#include <kernel/vm.h> 
 #include <kernel/mman.h> 
 
 #include <mm/mmpool.h>

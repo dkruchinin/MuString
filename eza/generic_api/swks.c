@@ -27,18 +27,17 @@
 #include <mlibc/types.h>
 #include <eza/arch/timer.h>
 #include <eza/swks.h>
+#include <mm/page.h>
+#include <mm/vmm.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/string.h>
 #include <eza/arch/mm.h>
 
 /* Here it is ! */
-swks_t swks __attribute__((__aligned__(PAGE_SIZE)));
-static vm_mandmap_t swks_mandmap;
+swks_t __page_aligned__ swks;
 
 void initialize_swks(void)
 {
-  uintptr_t swks_va;
-  
   memset(&swks, 0, sizeof(swks));
   swks.system_ticks_64 = INITIAL_TICKS_VALUE;
   swks.nr_cpus = CONFIG_NRCPUS;
@@ -46,9 +45,4 @@ void initialize_swks(void)
   /*kprintf("[LW] Calibrating delay loop ...");
   swks.delay_loop=arch_calibrate_delay_loop();
   kprintf("%ld.\n",swks.delay_loop);*/
-
-  arch_initialize_swks();
-  swks_va = cut_from_usr_top_va(SWKS_PAGES);
-  register_mandmap(&swks_mandmap, swks_va, SWKS_PAGES, p2k(&swks),
-                   VMR_READ | VMR_GENERIC | VMR_FIXED);
 }

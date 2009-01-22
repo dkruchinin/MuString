@@ -65,6 +65,8 @@ typedef uint16_t page_flags_t;
 #define PAGE_POOLS_MASK (PF_PGEN | PF_PDMA)
 #define PAGE_PRESENT_MASK (PAGE_POOL_MASK | PF_RESERVED)
 
+#define __page_aligned__ __attribute__((__aligned__(PAGE_SIZE)))
+
 /**
  * @struct page_frame_t
  * @brief Describes one physical page.

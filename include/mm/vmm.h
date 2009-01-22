@@ -41,16 +41,6 @@ typedef struct __mmap_info {
   uint32_t ptable_flags;
 } mmap_info_t;
 
-typedef struct __mm_info {  
-  uintptr_t kernel_start_phys;
-  uintptr_t kernel_end_phys;
-  uintptr_t kernel_start_virt;
-  uintptr_t kernel_end_virt;
-  uintptr_t user_start_virt;
-  uintptr_t user_end_virt;
-  page_idx_t num_phys_pages;
-} mm_info_t;
-
 #define VMR_PROTO_MASK (VMR_NONE | VMR_READ | VMR_WRITE | VMR_EXEC)
 
 typedef enum __vmrange_flags {
@@ -85,12 +75,12 @@ struct range_bounds {
 };
 
 typedef struct __vm_mandmap {
-  uintptr_t phys_addr;
-  uintptr_t va_start;  
-  page_idx_t num_pages;
+  char *name;
   list_node_t node;
-  int (*map)(struct __vm_mandmap *mandmap, struct __vmm *vmm);
-  kmap_flags_t flags;
+  uintptr_t virt_addr;
+  uintptr_t phys_addr;
+  ulong_t num_pages;
+  kmap_flags_t flags;  
 } vm_mandmap_t;
 
 typedef struct __vmragnge {
@@ -114,15 +104,14 @@ typedef struct __vmm {
 } vmm_t;
 
 extern rpd_t kernel_rpd;
-extern mm_info_t mminfo;
 
 #define valid_user_address(va)                  \
   valid_user_address_range(va, 0)
 
 static inline bool valid_user_address_range(uintptr_t va_start, uintptr_t length)
 {
-  return ((va_start >= USPACE_VA_START) &&
-          ((va_start + length) < USPACE_VA_END));
+  return ((va_start >= USPACE_VA_BOTTOM) &&
+          ((va_start + length) < USPACE_VA_TOP));
 }
 
 static inline void unpin_page_frame(page_frame_t *pf)
@@ -146,10 +135,9 @@ static inline void pin_page_frame(page_frame_t *pf)
  * @note It's an initcall, so it should be called only once during system boot stage.
  */
 void vmm_initialize(void);
-void register_mandmap(vm_mandmap_t *mandmap, uintptr_t va_from, uintptr_t va_to,
-                      uintptr_t phys_addr, vmrange_flags_t vm_flags);
-void unregister_mandmap(vm_mandmap_t *mandmap);
-int mandmaps_roll_forward(vmm_t *target_mm);
+void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name);
+int vm_mandmaps_roll(vmm_t *target_mm);
+
 vmm_t *vmm_create(void);
 int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages, kmap_flags_t flags);
 

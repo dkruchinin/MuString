@@ -26,7 +26,6 @@
 #include <mm/vmm.h>
 #include <mm/slab.h>
 #include <eza/kconsole.h>
-#include <eza/context.h>
 #include <mlibc/kprintf.h>
 #include <server.h>
 #include <align.h>

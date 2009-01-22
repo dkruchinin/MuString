@@ -278,6 +278,6 @@ int ptable_map(rpd_t *prd, struct __mmap_info *minfo);
  */
 void ptable_unmap(rpd_t *rpd, uintptr_t va_from, int npages);
 
-page_idx_t mm_pin_vaddr(rpd_t *rpd, uintptr_t vaddr);
+page_idx_t mm_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr);
 
 #endif /* __ARCH_PTABLE_H__ */

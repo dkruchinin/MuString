@@ -25,7 +25,6 @@
 #include <eza/arch/types.h>
 #include <eza/arch/page.h>
 #include <eza/arch/fault.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/interrupt.h>
 #include <eza/kernel.h>
 #include <mlibc/kprintf.h>
@@ -33,7 +32,6 @@
 #include <eza/smp.h>
 #include <eza/kconsole.h>
 #include <eza/arch/context.h>
-#include <mm/mmap.h>
 #include <eza/signal.h>
 
 #define get_fault_address(x) \
