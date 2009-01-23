@@ -25,7 +25,7 @@ typedef struct __def_port_data_storage {
 } def_port_data_storage_t;
 
 static status_t def_init_data_storage(struct __ipc_gen_port *port,
-                                      task_t *owner)
+                                      task_t *owner,ulong_t queue_size)
 {
   def_port_data_storage_t *ds;
   status_t r;
@@ -44,8 +44,8 @@ static status_t def_init_data_storage(struct __ipc_gen_port *port,
     goto free_ds;
   }
 
-  r=linked_array_initialize(&ds->msg_array,
-                            owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES]);
+  kprintf("QUEUE SIZE=%d\n",queue_size);
+  r=linked_array_initialize(&ds->msg_array,queue_size);
   if( r ) {
     goto free_messages;
   }
@@ -53,7 +53,7 @@ static status_t def_init_data_storage(struct __ipc_gen_port *port,
   list_init_head(&ds->new_messages);
   list_init_head(&ds->all_messages);
   port->data_storage=ds;
-  port->capacity=owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES];
+  port->capacity=queue_size;
   return 0;
 free_messages:
   free_pages_addr(ds->message_ptrs);

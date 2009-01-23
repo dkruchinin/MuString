@@ -53,7 +53,8 @@ struct __ipc_gen_port;
 typedef struct __ipc_port_msg_ops {
   ipc_port_message_t *(*lookup_message)(struct __ipc_gen_port *port,
                                         ulong_t msg_id);
-  status_t (*init_data_storage)(struct __ipc_gen_port *port,task_t *owner);
+  status_t (*init_data_storage)(struct __ipc_gen_port *port,task_t *owner,
+                                ulong_t queue_size);
   status_t (*insert_message)(struct __ipc_gen_port *port,
                              ipc_port_message_t *msg);
   ipc_port_message_t *(*extract_message)(struct __ipc_gen_port *port,
@@ -81,7 +82,7 @@ typedef struct __iovec {
   size_t iov_len;
 } iovec_t;
 
-status_t __ipc_create_port(task_t *owner,ulong_t flags);
+status_t __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size);
 status_t ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
                           iovec_t *iovec,ulong_t numvec,
                           port_msg_info_t *msg_info);

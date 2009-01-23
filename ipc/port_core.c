@@ -160,7 +160,7 @@ static void __notify_message_arrived(ipc_gen_port_t *port)
 }
 
 static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
-                                task_t *owner)
+                                ulong_t queue_size,task_t *owner)
 {
   ipc_gen_port_t *p = memalloc(sizeof(*p));
   status_t r;
@@ -179,7 +179,7 @@ static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
 
   p->flags=(flags & IPC_PORT_DIRECT_FLAGS);
 
-  r=p->msg_ops->init_data_storage(p,owner);
+  r=p->msg_ops->init_data_storage(p,owner,queue_size);
   if( r ) {
     goto out_free_port;
   }
@@ -265,7 +265,7 @@ out_unlock:
   return r;
 }
 
-status_t __ipc_create_port(task_t *owner,ulong_t flags)
+status_t __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
 {
   status_t r;
   task_ipc_t *ipc = get_task_ipc(owner);
@@ -279,7 +279,16 @@ status_t __ipc_create_port(task_t *owner,ulong_t flags)
   LOCK_IPC(ipc);
 
   if(ipc->num_ports >= owner->limits->limits[LIMIT_IPC_MAX_PORTS]) {
-    r = -EMFILE;
+    r=-EMFILE;
+    goto out_unlock;
+  }
+
+  if( !queue_size ) {  /* Default queue size. */
+    queue_size=owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES];
+  }
+
+  if( queue_size > owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES] ) {
+    r=-EINVAL;
     goto out_unlock;
   }
 
@@ -307,7 +316,7 @@ status_t __ipc_create_port(task_t *owner,ulong_t flags)
   }
 
   /* Ok, it seems that we can create a new port. */
-  r = __allocate_port(&port,flags,owner);
+  r = __allocate_port(&port,flags,queue_size,owner);
   if( r != 0 ) {
     goto free_id;
   }

@@ -20,7 +20,7 @@ typedef struct __prio_port_data_storage {
 } prio_port_data_storage_t;
 
 static status_t prio_init_data_storage(struct __ipc_gen_port *port,
-                                      task_t *owner)
+                                       task_t *owner,ulong_t queue_size)
 {
   prio_port_data_storage_t *ds;
   status_t r;
@@ -39,8 +39,7 @@ static status_t prio_init_data_storage(struct __ipc_gen_port *port,
     goto free_ds;
   }
 
-  r=linked_array_initialize(&ds->msg_array,
-                            owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES]);
+  r=linked_array_initialize(&ds->msg_array,queue_size);
   if( r ) {
     goto free_messages;
   }
@@ -50,7 +49,7 @@ static status_t prio_init_data_storage(struct __ipc_gen_port *port,
   list_init_head(&ds->id_waiters);
   ds->num_waiters=0;
   port->data_storage=ds;
-  port->capacity=owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES];
+  port->capacity=queue_size;
   return 0;
 free_messages:
   free_pages_addr(ds->message_ptrs);
@@ -121,21 +120,23 @@ static status_t prio_insert_message(struct __ipc_gen_port *port,
   prio_port_data_storage_t *ds=(prio_port_data_storage_t *)port->data_storage;
   ulong_t id=linked_array_alloc_item(&ds->msg_array);
 
-  if( id != INVALID_ITEM_IDX ) {
-    msg->id=id;
+  port->avail_messages++;
+  port->total_messages++;
+  list_init_head(&msg->h);
+  list_init_node(&msg->l);
+  list_add2tail(&ds->all_messages,&msg->messages_list);
+
+  if( id != INVALID_ITEM_IDX ) { /* Insert this message in the array directly. */
     ds->message_ptrs[id]=msg;
-    port->avail_messages++;
-    port->total_messages++;
-
-    list_init_head(&msg->h);
-    list_init_node(&msg->l);
-    list_add2tail(&ds->all_messages,&msg->messages_list);
-
-    /* Now insert message according to its priority. */
     __add_one_message(&ds->prio_head,msg);
-    return 0;
-   }
-  return -ENOMEM;
+  } else { /* No free slots - put this message to the waitlist. */
+    id=WAITQUEUE_MSG_ID;
+    ds->num_waiters++;
+    __add_one_message(&ds->id_waiters,msg);
+  }
+  msg->id=id;
+
+  return 0;
 }
 
 static ipc_port_message_t *prio_extract_message(ipc_gen_port_t *p,ulong_t flags)
@@ -162,12 +163,26 @@ static status_t prio_remove_message(struct __ipc_gen_port *port,
   prio_port_data_storage_t *ds=(prio_port_data_storage_t*)port->data_storage;
 
   if( msg->id < port->capacity ) {
-    linked_array_free_item(&ds->msg_array,msg->id);
     if( list_node_is_bound(&msg->l) ) {
       port->avail_messages--;
     }
+
+    /* Check if there are tasks waiting for a free message slot. */
+    if( ds->num_waiters ) {
+      ipc_port_message_t *m=container_of(list_node_first(&ds->id_waiters),
+                                         ipc_port_message_t,l);
+      m->id=msg->id;
+      ds->message_ptrs[m->id]=m;
+      __remove_message(m);
+      __add_one_message(&ds->prio_head,m);
+      ds->num_waiters--;
+    } else {
+      linked_array_free_item(&ds->msg_array,msg->id);
+      ds->message_ptrs[msg->id]=NULL;
+    }
   } else if( msg->id == WAITQUEUE_MSG_ID ) {
     ds->num_waiters--;
+    port->avail_messages--;
   } else {
     return -EINVAL;
   }
@@ -198,6 +213,12 @@ static ipc_port_message_t *prio_remove_head_message(struct __ipc_gen_port *port)
 static void prio_dequeue_message(struct __ipc_gen_port *port,
                                  ipc_port_message_t *msg)
 {
+  prio_port_data_storage_t *ds=(prio_port_data_storage_t*)port->data_storage;
+
+  ASSERT(list_node_is_bound(&msg->messages_list));
+
+  if( list_node_is_bound(&msg->l) ) {
+  }
 }
 
 static ipc_port_message_t *prio_lookup_message(struct __ipc_gen_port *port,
