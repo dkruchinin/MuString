@@ -31,5 +31,8 @@ config TEST_SIGNALS
        bool "Signal subsystem test"
        default n
 
-
+config TEST_TLSF
+       bool "TLSF memory allocator test"
+       default n
+       select DEBUG_MM
 endif

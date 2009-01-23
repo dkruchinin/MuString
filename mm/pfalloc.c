@@ -32,7 +32,6 @@ page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
 {
   page_frame_t *pages = NULL;
   mm_pool_t *pool;
-  page_idx_t i;
 
   if (!(flags & PAGE_POOLS_MASK))
     flags |= AF_PGEN;
@@ -50,15 +49,13 @@ page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
     goto out;
   if (flags & AF_ZERO) /* fill page block with zeros */
     pframe_memnull(pages, n);
-  for (i = 0; i < n; i++)
-    atomic_set(&pages[i].refcount, 1);
 
   /* done */
   out:
   return pages;
 }
 
-void free_pages(page_frame_t *pages)
+void free_pages(page_frame_t *pages, page_idx_t num_pages)
 {
   mm_pool_t *pool = mmpools_get_pool(pframe_pool_type(pages));
 
@@ -68,7 +65,7 @@ void free_pages(page_frame_t *pages)
     return;
   }
   
-  __pool_free_pages(pool, pages);
+  __pool_free_pages(pool, pages, num_pages);
 }
 
 page_idx_t pages_block_size(page_frame_t *first_page)
@@ -128,9 +125,12 @@ page_frame_t *alloc_pages4uspace(vmm_t *vmm, page_idx_t npages)
   free_pages:
   if (pages) {
     list_node_t *iter, *safe;
+    page_frame_t *pf;  
 
-    list_for_each_safe(&pages->head, iter, safe)
-      free_pages(list_entry(iter, page_frame_t, node));
+    list_for_each_safe(&pages->head, iter, safe) {
+      pf = list_entry(iter, page_frame_t, node);
+      free_pages(pf, pages_block_size(pf));
+    }
   }
   
   out:

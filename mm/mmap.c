@@ -113,7 +113,7 @@ int vm_mandmaps_roll(vmm_t *target_mm)
 
 void vmm_subsystem_initialize(void)
 {
-  kprintf("[MM] Initializing VMM subsystem...");
+  kprintf("[MM] Initializing VMM subsystem...\n");
   __vmms_cache = create_memcache("VMM objects cache", sizeof(vmm_t),
                                  DEFAULT_SLAB_PAGES, SMCF_PGEN | SMCF_GENERIC);
   if (!__vmms_cache)

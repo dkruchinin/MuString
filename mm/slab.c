@@ -406,7 +406,7 @@ static page_frame_t *alloc_slab_pages(memcache_t *cache)
 
 static inline void free_slab_pages(page_frame_t *pages)
 {
-  free_pages(pages);
+  free_pages(pages, pages_block_size(pages));
 }
 
 static void prepare_slab_pages(slab_t *slab)

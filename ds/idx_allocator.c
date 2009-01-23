@@ -88,8 +88,10 @@ void idx_allocator_destroy(idx_allocator_t *ida)
 {
   size_t bmap_sz = ida->size * sizeof(ulong_t);
 
-  if (bmap_sz >= PAGE_SIZE)
-    free_pages(virt_to_pframe(ida->ids_bmap));
+  if (bmap_sz >= PAGE_SIZE) {
+    page_frame_t *pf = virt_to_pframe(ida->ids_bmap);    
+    free_pages(pf, pages_block_size(pf));
+  }
   else
     memfree(ida->ids_bmap);
 

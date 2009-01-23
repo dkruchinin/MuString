@@ -20,7 +20,6 @@ choice
           
 config PFA_TLSF
        bool "TLSF"
-
 endchoice
 
 config PFA_MAX_PAGES

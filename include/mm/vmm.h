@@ -124,7 +124,7 @@ static inline void unpin_page_frame(page_frame_t *pf)
   ASSERT(atomic_get(&pf->refcount) > 0);
   atomic_dec(&pf->refcount);
   if (!atomic_get(&pf->refcount))
-    free_pages(pf);
+    free_page(pf);
 }
 
 static inline void pin_page_frame(page_frame_t *pf)
