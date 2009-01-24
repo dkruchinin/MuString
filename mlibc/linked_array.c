@@ -119,7 +119,12 @@ ulong_t linked_array_alloc_item(linked_array_t *arr)
       item = INVALID_ITEM_IDX;
       break;
   }
-  arr->head = h;
+
+  if(arr->head == arr->items-1) {
+    arr->head=arr->items;
+  } else {
+    arr->head = h;
+  }
   return item;
 }
 

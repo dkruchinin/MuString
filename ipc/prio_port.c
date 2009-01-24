@@ -1,3 +1,27 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ *
+ * ipc/prio_port.c: Implementation of IPC ports that provide prioritized message
+ *                  queues (based on static priorities of clients).
+ *
+ */
+
 #include <eza/arch/types.h>
 #include <ipc/port.h>
 #include <eza/task.h>
@@ -162,6 +186,8 @@ static status_t prio_remove_message(struct __ipc_gen_port *port,
 {
   prio_port_data_storage_t *ds=(prio_port_data_storage_t*)port->data_storage;
 
+  ASSERT(list_node_is_bound(&msg->messages_list));
+
   if( msg->id < port->capacity ) {
     if( list_node_is_bound(&msg->l) ) {
       port->avail_messages--;
@@ -217,15 +243,37 @@ static void prio_dequeue_message(struct __ipc_gen_port *port,
 
   ASSERT(list_node_is_bound(&msg->messages_list));
 
-  if( list_node_is_bound(&msg->l) ) {
+  if( msg->id < port->capacity ) {
+    if( list_node_is_bound(&msg->l) ) {
+      list_del(&msg->l);
+      port->avail_messages--;
+    }
+    ds->message_ptrs[msg->id]=__MSG_WAS_DEQUEUED;
+  } else if( msg->id == WAITQUEUE_MSG_ID ) { /* This message belongs to the waitlist. */
+    ASSERT(list_node_is_bound(&msg->l));
+    list_del(&msg->l);
+
+    ds->num_waiters--;
+    port->total_messages--;
+    port->avail_messages--;
   }
+
+  list_del(&msg->messages_list);
 }
 
 static ipc_port_message_t *prio_lookup_message(struct __ipc_gen_port *port,
                                                ulong_t msg_id)
 {
   if( msg_id < port->capacity ) {
-    return ((prio_port_data_storage_t*)port->data_storage)->message_ptrs[msg_id];
+    prio_port_data_storage_t *ds=(prio_port_data_storage_t*)port->data_storage;
+    ipc_port_message_t *msg=ds->message_ptrs[msg_id];
+
+    if( msg == __MSG_WAS_DEQUEUED ) { /* Deferred cleanup. */
+      ds->message_ptrs[msg_id]=NULL;
+      port->total_messages--;
+      linked_array_free_item(&ds->msg_array,msg_id);
+    }
+    return msg;
   }
   return NULL;
 }

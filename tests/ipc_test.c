@@ -25,6 +25,7 @@
 #include <eza/errno.h>
 #include <eza/tevent.h>
 #include <eza/process.h>
+#include <ds/linked_array.h>
 
 #define TEST_ID  "IPC subsystem test"
 #define SERVER_THREAD  "[SERVER THREAD] "
@@ -964,7 +965,7 @@ static void __vectored_messages_test(void *ctx)
   }
 }
 
-#define __NGROUPS 2
+#define __NGROUPS 3
 #define __NGROUP_TASKS  3
 #define __NUM_PRIO_THREADS (__NGROUPS*__NGROUP_TASKS)
 
@@ -1060,16 +1061,21 @@ static void __prioritized_port_test(void *ctx)
   iovec_t snd_iovecs[MAX_IOVECS];
   const int __PRIO_STEP=4;
   int prio,parts;
+  static int PRIO_BASE=64;
+  struct __ipc_gen_port *genport;
 
+  /* Only one task from the most prioritized group can initially be
+   * in the port's message queue. This will give us a better test conditions.
+   */
   __prio_port=sys_create_port(IPC_PRIORITIZED_ACCESS | IPC_BLOCKED_ACCESS,
-                              0);
+                              __NUM_PRIO_THREADS-(__NGROUP_TASKS-1));
   if( __prio_port < 0 ) {
     tf->printf("Can't create prioritized port !");
     tf->abort();
   }
 
   for(i=0;i<__NUM_PRIO_THREADS;i++) {
-    prio=64-__PRIO_STEP*(i/__NGROUP_TASKS);
+    prio=PRIO_BASE-__PRIO_STEP*(i/__NGROUP_TASKS);
     pdata[i].tf=tf;
     pdata[i].priority=prio;
     pdata[i].runs=0;
@@ -1134,9 +1140,9 @@ static void __prioritized_port_test(void *ctx)
         }
 
         /* OK, now compare priority */
-        if( t->static_priority != _pd->priority ) {
+        if( t->static_priority != prio ) {
           tf->printf(SERVER_THREAD"[PRIO PORT]: Priority mismatch ! %d instead of %d\n",
-                     t->static_priority,_pd->priority);
+                     t->static_priority,prio);
           tf->printf("             CURRENT ITERATION: round=%d,task=%d,group=%d\n",
                      i,j,k);
           tf->abort();
@@ -1162,6 +1168,18 @@ static void __prioritized_port_test(void *ctx)
         }
       }
     }
+  }
+
+  genport=__ipc_get_port(current_task(),__prio_port);
+  if( !genport ) {
+    tf->printf(SERVER_THREAD"Can't resolve port !");
+    tf->abort();
+  }
+
+  if( genport->avail_messages || genport->total_messages ) {
+    tf->printf(SERVER_THREAD"Error ! Port state is insufficient! Avail: %d, Total: %d\n",
+               genport->avail_messages,genport->total_messages);
+    tf->abort();
   }
 
   tf->printf(SERVER_THREAD"All priority-related tests finished.\n");

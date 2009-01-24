@@ -44,7 +44,6 @@ static status_t def_init_data_storage(struct __ipc_gen_port *port,
     goto free_ds;
   }
 
-  kprintf("QUEUE SIZE=%d\n",queue_size);
   r=linked_array_initialize(&ds->msg_array,queue_size);
   if( r ) {
     goto free_messages;

@@ -17,7 +17,8 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *
- * eza/generic_api/def_actions.c: implementation of IRQ deferred actions.
+ * eza/generic_api/def_actions.c: implementation of prioritized, preemptible IRQ
+ *                                deferred skiplist-based actions.
  */
 
 #include <eza/arch/types.h>
@@ -138,16 +139,25 @@ void fire_deffered_actions(void)
                           deffered_irq_action_t,node);
 
       if( current_task()->priority >= action->target->static_priority ) {
-        if( !list_is_empty(&action->head) ) {
-          list_node_t *next=action->head.head.next;
+        list_node_t *prev=action->node.prev;
 
-          action->head.head.prev->next=next;
-          next->prev=action->head.head.prev;
-          list_add2head(&acts->pending_actions,next);
+        list_del(&action->node);
+        if( !list_is_empty(&action->head) ) {
+          deffered_irq_action_t *a=container_of(list_node_first(&action->head),
+                                                deffered_irq_action_t,node);
+          list_del(&a->node);
+
+          if( !list_is_empty(&action->head) ) {
+            list_move2head(&a->head,&action->head);
+          }
+
+          a->node.prev=prev;
+          a->node.next=prev->next;
+          prev->next->prev=&a->node;
+          prev->next=&a->node;
         }
 
         acts->num_actions--;
-        list_del(&action->node);
         action->host=NULL;
         arch_sched_set_def_works_pending();
       } else {
@@ -158,8 +168,7 @@ void fire_deffered_actions(void)
       }
     }
 
-    if( !action ) {
-      /* No valid actions found. */
+    if( !action ) { /* No valid actions found. */
       arch_sched_reset_def_works_pending();
     }
     spinlock_unlock_irqrestore(&acts->lock,is);
