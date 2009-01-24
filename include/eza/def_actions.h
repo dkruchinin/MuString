@@ -29,11 +29,19 @@
 #include <eza/event.h>
 #include <eza/siginfo.h>
 #include <eza/task.h>
+#include <eza/scheduler.h>
+
+#define __DA_BITMASK_SIZE  (SCHED_PRIO_MAX/sizeof(long)*8)
+
+typedef uint16_t da_counter_t;
 
 typedef struct __percpu_def_actions {
   list_head_t pending_actions;
   ulong_t num_actions,executers;
   spinlock_t lock;
+  long fired_actions_bitmap[__DA_BITMASK_SIZE];
+  long pending_actions_bitmap[__DA_BITMASK_SIZE];
+  da_counter_t fired_actions_counters[SCHED_PRIO_MAX];
 } percpu_def_actions_t;
 
 typedef enum __def_action_type {

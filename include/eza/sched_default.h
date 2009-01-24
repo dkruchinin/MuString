@@ -64,13 +64,13 @@
 
 /* 64-bit bits-related stuff. */
 #define SET_BITMAP_BIT(array,bit) \
-  set_and_test_bit_mem_64(&array->bitmap[0],bit)
+  set_and_test_bit_mem(&array->bitmap[0],bit)
 
 #define RESET_BITMAP_BIT(array,bit) \
-  reset_and_test_bit_mem_64(&array->bitmap[0],bit)
+  reset_and_test_bit_mem(&array->bitmap[0],bit)
 
 #define FIND_FIRST_BITMAP_BIT(array) \
-  find_first_bit_mem_64(&array->bitmap[0],EZA_SCHED_TOTAL_WIDTH)
+  find_first_bit_mem(&array->bitmap[0],EZA_SCHED_TOTAL_WIDTH)
 
 typedef struct __eza_sched_prio_array {
   eza_sched_type_t bitmap[EZA_SCHED_TOTAL_WIDTH];

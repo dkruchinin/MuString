@@ -91,11 +91,11 @@ int allocate_kernel_stack(kernel_stack_t *stack)
   if(main_stack_ctx.free_items > 0) {
     chunk = container_of( list_node_first(&main_stack_ctx.chunks),
                                                 kernel_stack_chunk_t, l );
-    idx = find_first_bit_mem_64( chunk->bitmap, BITMAP_ENTRIES_COUNT );
+    idx = find_first_bit_mem( chunk->bitmap, BITMAP_ENTRIES_COUNT );
 
     if( idx != INVALID_BIT_INDEX ) {
       main_stack_ctx.free_items--;
-      reset_and_test_bit_mem_64( chunk->bitmap, idx );
+      reset_and_test_bit_mem( chunk->bitmap, idx );
       r = 0;
     }
   }
