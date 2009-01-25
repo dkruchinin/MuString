@@ -224,8 +224,8 @@ void ptable_rpd_clone(rpd_t *clone, rpd_t *src);
  * @see page_frame_iterator_t
  * @see pde_t
  */
-void ptable_map_entries(pde_t *pde_start, int num_entries,
-                        page_frame_iterator_t *pfi, uint_t flags);
+uintptr_t ptable_map_entries(page_frame_t *parent_dir, uintptr_t va, int num_entries,
+                             page_frame_iterator_t *pfi, uint_t flags);
 
 /**
  * @brief Unmap pages from the lowest level page directory(PT)
@@ -242,11 +242,12 @@ void ptable_unmap_entries(pde_t *pde_start, int num_entries);
  * PDE_GLOBAL, PDE_PAT and PDE_PHYS
  *
  * @param parent_pde - A pointer to parent pde
+ * @param pde_level  - Actual page directory level.
  * @param flags      - Page direcotory flags
  * @return 0 on success, -ENOMEM if page allocation failed.
  * @see pde_t
  */
-int ptable_populate_pagedir(pde_t *parent_pde, uint_t flags);
+int ptable_populate_pagedir(pde_t *parent_pde, int pde_level, ptable_flags_t flags);
 
 /**
  * @brief Depopulate page direcotry
@@ -278,7 +279,7 @@ int ptable_map(rpd_t *prd, uintptr_t va_from, ulong_t npages,
  * @return 0 on success, -EINVAL on error.
  * @see rpd_t
  */
-void ptable_unmap(rpd_t *rpd, uintptr_t va_from, int npages);
+void ptable_unmap(rpd_t *rpd, uintptr_t va_from, page_idx_t npages);
 
 page_idx_t mm_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr);
 

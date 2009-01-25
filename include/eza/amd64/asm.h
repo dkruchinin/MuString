@@ -18,6 +18,7 @@
  * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *                (added CR3-related functions)
+ * (c) Copyright 2009 Dan Kruchinin
  *
  * include/eza/amd64/asm.h: generic assembler functions
  *
@@ -29,6 +30,7 @@
 #include <config.h>
 #include <eza/arch/page.h>
 #include <eza/arch/cpu.h>
+#include <eza/arch/ptable.h>
 #include <mlibc/types.h>
 
 extern void set_efer_flag(int flag);
@@ -117,6 +119,7 @@ static inline uint64_t read_msr(uint32_t msr)
      :: "a" (sp) )
 
 /* CR3 management. See manual for details about 'PCD' and 'PWT' fields. */
+#if 0
 static inline void load_cr3(uintptr_t phys_addr, uint8_t pcd, uint8_t pwt)
 {
   uintptr_t cr3_val = (((pwt & 1) << 3) | ((pcd & 1) << 4));
@@ -131,6 +134,27 @@ static inline void load_cr3(uintptr_t phys_addr, uint8_t pcd, uint8_t pwt)
   cr3_val |= ((phys_addr & (uintptr_t)0xfffff00000) << PAGE_WIDTH);
   
   __asm__ volatile("movq %0, %%cr3" :: "r" (cr3_val));
+}
+#endif
+
+static inline long read_cr3(void)
+{
+  long ret;
+  __asm__ volatile("movq %%cr3, %0\n\t"
+                   : "=r" (ret));
+
+  return ret;
+}
+
+static inline void write_cr3(long val)
+{
+  __asm__ volatile("movq %0, %%cr3\n\t"
+                   :: "r" (val));
+}
+
+static inline void load_cr3(pde_t *pde)
+{
+  write_cr3(k2p(pde));
 }
 
 #endif /* __ASM_H__ */

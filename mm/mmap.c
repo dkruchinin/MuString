@@ -265,7 +265,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
   return err;
 }
 
-int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, ulong_t npages, kmap_flags_t flags)
+int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages, kmap_flags_t flags)
 {
   page_frame_iterator_t pfi;
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) pf_idx_ctx;
@@ -275,5 +275,6 @@ int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, ulong_t npages, k
 
   pfi_index_init(&pfi, &pf_idx_ctx, first_page, first_page + npages - 1);
   iter_first(&pfi);
-  return ptable_map(rpd, va, npages, &pfi, kmap_to_ptable_flags(flags & KMAP_FLAGS_MASK));
+  return __mmap_core(rpd, va, npages, &pfi, flags);
 }
+

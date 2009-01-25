@@ -68,16 +68,19 @@ static void verify_mapping(const char *descr, uintptr_t start_addr,
                           page_idx_t num_pages, page_idx_t start_idx)
 {
   page_frame_iterator_t pfi;
+  page_idx_t idx = start_idx;  
   ITERATOR_CTX(page_frame, PF_ITER_PTABLE) pfi_ptable_ctx;
 
   pfi_ptable_init(&pfi, &pfi_ptable_ctx, &kernel_rpd, start_addr, num_pages);
   kprintf(" Verifying %s...", descr);
   iterate_forward(&pfi) {
-    if (pfi.pf_idx != start_idx)
+    if (pfi.pf_idx != idx)
       goto failed;
 
-    start_idx++;
+    idx++;
   }
+  if ((idx - start_idx) != num_pages)
+    goto failed;
   
   kprintf(" %*s\n", strlen(descr) + 14, "[OK]");
   return;
@@ -250,7 +253,7 @@ void arch_mm_remap_pages(void)
 
 void arch_smp_mm_init(cpu_id_t cpu)
 {  
-  load_cr3(_k2p((uintptr_t)pframe_to_virt(kernel_rpd.pml4)), 1, 1);
+  load_cr3(pde_fetch(kernel_rpd.pml4, 0));
 }
 
 static void __pfiter_first(page_frame_iterator_t *pfi)

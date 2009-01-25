@@ -11,6 +11,7 @@ extern testcase_t wq_testcase;
 extern testcase_t usync_testcase;
 extern testcase_t signals_testcase;
 extern testcase_t tlsf_testcase;
+extern testcase_t mapunmap_tc;
 
 static testcase_t *known_testcases[] = {
 #ifdef CONFIG_TEST_IPC
@@ -30,6 +31,9 @@ static testcase_t *known_testcases[] = {
 #endif
 #ifdef CONFIG_TEST_TLSF
   &tlsf_testcase,
+#endif
+#ifdef CONFIG_TEST_MAPUNMAP
+  &mapunmap_tc,
 #endif
   NULL,
 };

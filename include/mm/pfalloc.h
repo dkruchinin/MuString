@@ -60,7 +60,7 @@ typedef enum __pfalloc_type {
  */
 typedef struct __pf_allocator {
   /**< A pointer to function that can alloc n pages */
-  page_frame_t *(*alloc_pages)(int n, void *data);
+  page_frame_t *(*alloc_pages)(page_idx_t n, void *data);
   /**< A pointer to function that can free pages */
   void (*free_pages)(page_frame_t *pframe, page_idx_t num_pages, void *data);
   /**< Get size of pages block starting from pages_block_start */ 
@@ -93,7 +93,7 @@ typedef struct __pf_allocator {
  *
  * @see alloc_page
  */
-page_frame_t *alloc_pages(int n, pfalloc_flags_t flags);
+page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags);
 
 /**
  * @brief free continous block of pages starting from @a pages

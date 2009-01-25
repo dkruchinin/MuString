@@ -46,7 +46,7 @@
  * @typedef int page_idx_t
  * Page index.
  */
-typedef int page_idx_t;
+typedef ulong_t page_idx_t;
 
 #define PAGE_IDX_INVAL (~0U)
 

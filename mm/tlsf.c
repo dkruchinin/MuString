@@ -560,7 +560,7 @@ static page_idx_t __get_pblock_size(page_frame_t *pages_block_start, void *data)
   return ret;
 }
 
-static page_frame_t *__alloc_pages(int n, void *data)
+static page_frame_t *__alloc_pages(page_idx_t n, void *data)
 {
   tlsf_t *tlsf = data;
   page_frame_t *block_root = NULL;

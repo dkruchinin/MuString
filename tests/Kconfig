@@ -35,4 +35,9 @@ config TEST_TLSF
        bool "TLSF memory allocator test"
        default n
        select DEBUG_MM
+
+config TEST_MAPUNMAP
+       bool "Map/Unmap general test"
+       default n
+
 endif
