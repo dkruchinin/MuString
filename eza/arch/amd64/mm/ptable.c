@@ -83,36 +83,37 @@ static inline void __destroy_pagedir(page_frame_t *dir)
 static int do_ptable_map(page_frame_t *dir, struct pt_mmap_info *minfo, int pde_level)
 {
   int pde_idx, num_entries;
-  uintptr_t addrs_range = pde_get_va_range(pde_level);
   int ret = 0;
   pde_t *pde;
 
   pde_idx = vaddr2pde_idx(minfo->va_from, pde_level);
 
   /* At this point we can clearly determine number of entries we have to map at level "pde_level" */
-  if ((minfo->va_to - minfo->va_from) >= addrs_range)
+  if ((minfo->va_to - (minfo->va_from - pde_idx2vaddr(pde_idx, pde_level))) > pde_get_va_range(pde_level)) {
     num_entries = PTABLE_DIR_ENTRIES - pde_idx;
-  else
-    num_entries = vaddr2pde_idx(minfo->va_to - minfo->va_from, pde_level) + 1;
+    kprintf("RES0: %d, %d\n", pde_idx, num_entries);
+  }
+  else {
+    num_entries = vaddr2pde_idx(minfo->va_to, pde_level) - pde_idx + 1;
+    kprintf("RES: %d, %d\n", vaddr2pde_idx(minfo->va_to, pde_level),
+            num_entries);
+  }
 
   if (pde_level == PTABLE_LEVEL_FIRST) {
-    pde = pframe_to_virt(dir);
-    if (!(pde->flags & PDE_PRESENT)) {
-      kprintf("MAKING PRESENT %p\n", pde_idx2vaddr(vaddr2pde_idx(minfo->va_from, pde_level), pde_level));
-      pde->flags |= PDE_PRESENT;
-    }
-    
+    kprintf("==> %p - %p = %p\n", minfo->va_to, minfo->va_from, minfo->va_to - minfo->va_from);
     /* we are standing at the lowest level page directory, so we can map given pages to page table from here. */
-    kprintf("!!> %p (%d)\n", minfo->va_from, num_entries);
+    kprintf("was: %p\n", minfo->va_from);
     minfo->va_from = ptable_map_entries(dir, minfo->va_from, num_entries, minfo->pfi, minfo->flags);
-    kprintf("=> %p\n", minfo->va_from);
+    kprintf("become: %p\n", minfo->va_from);
     //minfo->va_from += num_entries << PAGE_WIDTH;
     return 0;
   }
-  do { /* browse through by all pdes at a given level... */
-    pde = pde_fetch(dir, pde_idx++);
 
-    kprintf("LEVEL %d: %p\n", pde_level, pde_idx2vaddr(vaddr2pde_idx(minfo->va_from, pde_level), pde_level));
+  pde = pde_fetch(dir, pde_idx);
+  while (num_entries--) {
+    kprintf("L: %d, NE: %d\n", pde_level, num_entries);
+  //do { /* browse through by all pdes at a given level... */    
+
     if (!(pde->flags & PDE_PRESENT)) {
       ret = ptable_populate_pagedir(pde, pde_level, DEFAULT_PDIR_FLAGS);
       if (ret)
@@ -125,7 +126,10 @@ static int do_ptable_map(page_frame_t *dir, struct pt_mmap_info *minfo, int pde_
       ptable_depopulate_pagedir(pde);      
       return ret;
     }
-  } while (--num_entries > 0);
+
+    pde++;
+  }
+    //} while (--num_entries > 0);
 
   return 0;
 }
@@ -202,21 +206,21 @@ uintptr_t ptable_map_entries(page_frame_t *parent_dir, uintptr_t va,
 {
   pde_t *pde = pde_fetch(parent_dir, vaddr2pde_idx(va, PTABLE_LEVEL_FIRST));
 
+  kprintf("IDX = %d, NE=%d\n", vaddr2pde_idx(va, PTABLE_LEVEL_FIRST), num_entries);
   ASSERT((num_entries > 0) && (num_entries <= PTABLE_DIR_ENTRIES));
   while (num_entries--) {
     bool pde_was_present;
     
     if (pfi->pf_idx == PAGE_IDX_INVAL)
-      panic("Unexpected page index. ERR = %d", pfi->error);
+      panic("Unexpected page index. ERR = %d %d", pfi->error, num_entries);
 
     pde_was_present = !!(pde->flags & PDE_PRESENT);
     pde_set_page_idx(pde, pfi->pf_idx);
     pde_set_flags(pde, flags | PDE_PRESENT);
-    //tlb_flush_entry(task_get_rpd(current_task()), va);
     if (pde_was_present) {
       pin_page_frame(parent_dir);
-      kprintf("Flushing address %p\n", va);
-      //tlb_flush_entry(task_get_rpd(current_task()), va);
+      kprintf("flushing va: %p\n", va);
+      tlb_flush_entry(task_get_rpd(current_task()), va);
     }
     /*
      * Increment page refcount *only* if we're not mapping some kernel area
@@ -227,8 +231,8 @@ uintptr_t ptable_map_entries(page_frame_t *parent_dir, uintptr_t va,
 
     pde++;
     va += PAGE_SIZE;
-    iter_next(pfi);
     ASSERT(!iter_isstopped(pfi));
+    iter_next(pfi);    
   }
 
   return va;
@@ -249,7 +253,7 @@ void ptable_unmap_entries(pde_t *pde_start, int num_entries)
   }
 }
 
-int ptable_populate_pagedir(pde_t *parent_pde, int pde_level, uint_t flags)
+int ptable_populate_pagedir(pde_t *parent_pde, int pde_level, ptable_flags_t flags)
 {
   page_frame_t *subdir, *parent_dir;
 
@@ -285,18 +289,15 @@ int ptable_map(rpd_t *rpd, uintptr_t va_from, ulong_t npages,
   ptminfo.flags = flags;
 
   ctx = iter_fetch_ctx(pfi);
-  kprintf("Iter from %d to %d, cur=%d\n", ctx->first, ctx->last, pfi->pf_idx);
   ret = do_ptable_map(rpd->pml4, &ptminfo, PTABLE_LEVEL_LAST);
-  kprintf("Iter from %d to %d, cur=%d (%p, %p)\n", ctx->first, ctx->last, pfi->pf_idx,
-          ptminfo.va_from, ptminfo.va_to);
+  iter_next(pfi);
   if (ret)
-    ptable_unmap(rpd, va_from, ptminfo.va_from << PAGE_WIDTH);
+    ptable_unmap(rpd, va_from, ptminfo.va_from << PAGE_WIDTH);  
   else if (!iter_isstopped(pfi)) {
     kprintf(KO_WARNING "ptable_map: Got more pages than need for mapping of an area "
             "from %p to %p. (%d pages is enough)\n", va_from, ptminfo.va_to, npages);
   }
 
-  __tlb_flush();
   return ret;
 }
 
@@ -315,7 +316,7 @@ page_idx_t mm_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr)
   for (level = PTABLE_LEVEL_LAST; level > PTABLE_LEVEL_FIRST; level--) {
     pde = pde_fetch(cur_dir, vaddr2pde_idx(va, level));
     if (!(pde->flags & PDE_PRESENT)) {
-      kprintf("Invalid va: %p on level %d, act %p\n", va, level, pde_idx2vaddr(vaddr2pde_idx(va, level), level));
+      kprintf("ival level %d: %p, PDE=%p\n", level, va, pde);
       return PAGE_IDX_INVAL;
     }
 
@@ -323,10 +324,8 @@ page_idx_t mm_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr)
   }
 
   pde = pde_fetch(cur_dir, vaddr2pde_idx(va, PTABLE_LEVEL_FIRST));
-  if (!(pde->flags & PDE_PRESENT)) {
-    kprintf("Invalid va: %p\n", va);
+  if (!(pde->flags & PDE_PRESENT))
     return PAGE_IDX_INVAL;
-  }
 
   return pde_fetch_page_idx(pde);
 }
@@ -385,7 +384,6 @@ static void __pfi_next(page_frame_iterator_t *pfi)
     ctx->va_cur += PAGE_SIZE;
     pfi->pf_idx = mm_vaddr2page_idx(ctx->rpd, ctx->va_cur);
     if (pfi->pf_idx == PAGE_IDX_INVAL) {
-      kprintf("WTF: %p, %d\n", ctx->va_cur, mm_vaddr2page_idx(ctx->rpd, ctx->va_cur));
       pfi->error = -EFAULT;
       pfi->state = ITER_STOP;
     }

@@ -79,8 +79,10 @@ static void verify_mapping(const char *descr, uintptr_t start_addr,
 
     idx++;
   }
-  if ((idx - start_idx) != num_pages)
+  if ((idx - start_idx) != num_pages) {
+    kprintf("%d - %d != %d\n", idx, start_idx, num_pages);
     goto failed;
+  }
   
   kprintf(" %*s\n", strlen(descr) + 14, "[OK]");
   return;
@@ -89,7 +91,7 @@ static void verify_mapping(const char *descr, uintptr_t start_addr,
   kprintf(" %*s\n", 18 - strlen(descr), "[FAILED]");
   panic("Range: %p - %p. Got idx %u, but %u was expected. ERROR = %d",
         start_addr, start_addr + ((num_pages - 1) << PAGE_WIDTH),
-        pfi.pf_idx, start_idx, pfi.error);
+        pfi.pf_idx, idx, pfi.error);
 }
 #else
 #define verify_mapping(descr, start_addr, num_pages, start_idx)

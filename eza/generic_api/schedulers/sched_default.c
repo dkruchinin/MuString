@@ -608,7 +608,7 @@ static long def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
           if( trusted ) {
             interrupts_disable();
             LOCK_TASK_STRUCT(target);
-            ASSERT(!(task->flags & TF_USPC_BLOCKED));
+            ASSERT(!(target->flags & TF_USPC_BLOCKED));
             __shuffle_task(target,sdata, arg);
             
             UNLOCK_TASK_STRUCT(target);

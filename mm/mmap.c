@@ -83,7 +83,10 @@ static void destroy_vmrange(vmrange_t *vmr)
 
 void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name)
 {
+#ifndef CONFIG_TEST
   ASSERT(!valid_user_address_range(mandmap->virt_addr, mandmap->num_pages << PAGE_WIDTH));
+#endif /* CONFIG_TEST */
+  
   mandmap->name = (char *)mandmap_name;
   mandmap->flags &= KMAP_FLAGS_MASK;
   list_add2tail(&__mandmaps_lst, &mandmap->node);

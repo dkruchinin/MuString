@@ -107,7 +107,7 @@ static void __pfiter_idx_next(page_frame_iterator_t *pfi)
 
   ITER_DBG_CHECK_TYPE(pfi, PF_ITER_INDEX);
   ctx = iter_fetch_ctx(pfi);
-  if (unlikely(pfi->pf_idx >= ctx->last)) {
+  if (unlikely(pfi->pf_idx > ctx->last)) {
     pfi->pf_idx = PAGE_IDX_INVAL;
     pfi->state = ITER_STOP;
     return;

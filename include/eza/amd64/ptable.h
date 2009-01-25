@@ -124,7 +124,7 @@ static inline void pde_set_page_idx(pde_t *pde, page_idx_t idx)
  */
 static inline page_idx_t pde_fetch_page_idx(pde_t *pde)
 {
-  return (pde->base_0_19 | (pde->base_20_39 << 20));
+  return ((pde_idx_t)pde->base_0_19 | ((pde_idx_t)pde->base_20_39 << 20));
 }
 
 /**
@@ -179,7 +179,7 @@ static inline uintptr_t pde_idx2vaddr(int pde_idx, int pde_level)
  */
 static inline uintptr_t pde_get_va_range(int pde_level)
 {
-  return ((uintptr_t)PTABLE_DIR_ENTRIES << PAGE_WIDTH) << (9 * pde_level);
+  return (((uintptr_t)PTABLE_DIR_ENTRIES << PAGE_WIDTH) << (9 * pde_level));
 }
 
 /**
