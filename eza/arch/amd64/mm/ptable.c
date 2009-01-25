@@ -48,28 +48,13 @@ static inline page_frame_t *__create_pagedir(page_frame_t *parent_dir, int pde_l
   if (!pf)
     return NULL;
 
-  list_init_head(&pf->head);
-  atomic_set(&pf->refcount, pde_level);
-  if (parent_dir)
-    list_add2tail(&parent_dir->head, &pf->node);
-  
+  atomic_set(&pf->refcount, 0);
   return pf;
 }
 
 static inline void __destroy_pagedir(page_frame_t *dir)
 {
-  page_frame_t *parent;
-  
-  while (atomic_get(&dir->refcount) != PTABLE_LEVEL_LAST) {
-    if (dir->node.next->next != &dir->node)
-      return;
-
-    parent = list_entry(dir->node.next, page_frame_t, head);
-    list_del(&dir->node);
-    atomic_set(&dir->refcount, 0);
-    free_page(dir);
-    dir = parent;
-  }
+  unpin_page_frame(dir);
 }
 
 #define DEFAULT_PDIR_FLAGS (PDE_RW | PDE_US)
@@ -82,54 +67,42 @@ static inline void __destroy_pagedir(page_frame_t *dir)
  */
 static int do_ptable_map(page_frame_t *dir, struct pt_mmap_info *minfo, int pde_level)
 {
-  int pde_idx, num_entries;
-  int ret = 0;
-  pde_t *pde;
+  int pde_idx, num_entries;  
 
   pde_idx = vaddr2pde_idx(minfo->va_from, pde_level);
-
-  /* At this point we can clearly determine number of entries we have to map at level "pde_level" */
-  if ((minfo->va_to - (minfo->va_from - pde_idx2vaddr(pde_idx, pde_level))) > pde_get_va_range(pde_level)) {
+  if ((minfo->va_to -(minfo->va_from - pde_idx2vaddr(pde_idx, pde_level))) > pde_get_va_range(pde_level)) {
     num_entries = PTABLE_DIR_ENTRIES - pde_idx;
-    kprintf("RES0: %d, %d\n", pde_idx, num_entries);
   }
-  else {
+  else
     num_entries = vaddr2pde_idx(minfo->va_to, pde_level) - pde_idx + 1;
-    kprintf("RES: %d, %d\n", vaddr2pde_idx(minfo->va_to, pde_level),
-            num_entries);
-  }
-
   if (pde_level == PTABLE_LEVEL_FIRST) {
-    kprintf("==> %p - %p = %p\n", minfo->va_to, minfo->va_from, minfo->va_to - minfo->va_from);
     /* we are standing at the lowest level page directory, so we can map given pages to page table from here. */
-    kprintf("was: %p\n", minfo->va_from);
     minfo->va_from = ptable_map_entries(dir, minfo->va_from, num_entries, minfo->pfi, minfo->flags);
-    kprintf("become: %p\n", minfo->va_from);
-    //minfo->va_from += num_entries << PAGE_WIDTH;
     return 0;
   }
+  else {
+    pde_t *pde = pde_fetch(dir, pde_idx);
+    int ret = 0;
+    
+    while (num_entries--) { /* browse through by all pdes at a given level... */    
+      if (!(pde->flags & PDE_PRESENT)) {
+        ret = ptable_populate_pagedir(pde, pde_level, DEFAULT_PDIR_FLAGS);
+        if (ret)
+          return ret;
 
-  pde = pde_fetch(dir, pde_idx);
-  while (num_entries--) {
-    kprintf("L: %d, NE: %d\n", pde_level, num_entries);
-  //do { /* browse through by all pdes at a given level... */    
-
-    if (!(pde->flags & PDE_PRESENT)) {
-      ret = ptable_populate_pagedir(pde, pde_level, DEFAULT_PDIR_FLAGS);
-      if (ret)
+        pin_page_frame(dir);
+      }
+      
+      /* and go at 1 level down */
+      ret = do_ptable_map(pde_fetch_subdir(pde), minfo, pde_level - 1);
+      if (ret) {
+        ptable_depopulate_pagedir(pde);      
         return ret;
+      }
+      
+      pde++;
     }
-
-    /* and go at 1 level down */
-    ret = do_ptable_map(pde_fetch_subdir(pde), minfo, pde_level - 1);
-    if (ret) {
-      ptable_depopulate_pagedir(pde);      
-      return ret;
-    }
-
-    pde++;
   }
-    //} while (--num_entries > 0);
 
   return 0;
 }
@@ -145,24 +118,30 @@ static void do_ptable_unmap(page_frame_t *dir, uintptr_t va_from, uintptr_t va_t
   uintptr_t addrs_range = pde_get_va_range(pde_level);
 
   pde_idx = vaddr2pde_idx(va_from, pde_level);
-  if ((va_to - va_from) >= addrs_range)
+  kprintf("==> %p - %p\n", va_from, va_to);
+  if ((va_to - (va_from - pde_idx2vaddr(va_from, pde_level))) > addrs_range)
     num_entries = PTABLE_DIR_ENTRIES - pde_idx;
   else
-    num_entries = vaddr2pde_idx(va_to - va_from, pde_level) + 1;
-  if (pde_level == PTABLE_LEVEL_FIRST) /* unmap pages in PT */
-    ptable_unmap_entries(pde_fetch(dir, pde_idx), num_entries);
+    num_entries = vaddr2pde_idx(va_to, pde_level) - pde_idx + 1;
+  if (pde_level == PTABLE_LEVEL_FIRST) /* unmap pages in PT */ {
+    kprintf("Unmap from %d %d entries\n", pde_idx, num_entries);
+    ptable_unmap_entries(dir, va_from, num_entries);
+  }
   else {
+    pde_t *pde = pde_fetch(dir, pde_idx);
+    
     while (num_entries--) {
-      pde_t *pde = pde_fetch(dir, pde_idx);
-
-      if (!(pde->flags & PDE_PRESENT))
+      if (!(pde->flags & PDE_PRESENT)) {
+        pde++;
         continue;
+      }
 
       /* At first go down in a given PDE, then try to depopulate page directory. */
-      do_ptable_unmap(pde_fetch_subdir(pde), va_from + addrs_range - pde_idx2vaddr(pde_idx, pde_level),
-                      va_to, pde_level - 1);      
+      do_ptable_unmap(pde_fetch_subdir(pde), (va_from - pde_idx2vaddr(va_from, pde_level)) + addrs_range,
+                      va_to, pde_level - 1);
+      kprintf("destroy: %p\n", va_from - pde_idx2vaddr(va_from, pde_level));
       ptable_depopulate_pagedir(pde);
-      pde_idx++;
+      pde++;
     }
   }
 }
@@ -202,11 +181,10 @@ void ptable_rpd_clone(rpd_t *clone, rpd_t *src)
 }
 
 uintptr_t ptable_map_entries(page_frame_t *parent_dir, uintptr_t va,
-                        int num_entries, page_frame_iterator_t *pfi, uint_t flags)
+                        int num_entries, page_frame_iterator_t *pfi, ptable_flags_t flags)
 {
   pde_t *pde = pde_fetch(parent_dir, vaddr2pde_idx(va, PTABLE_LEVEL_FIRST));
 
-  kprintf("IDX = %d, NE=%d\n", vaddr2pde_idx(va, PTABLE_LEVEL_FIRST), num_entries);
   ASSERT((num_entries > 0) && (num_entries <= PTABLE_DIR_ENTRIES));
   while (num_entries--) {
     bool pde_was_present;
@@ -217,11 +195,18 @@ uintptr_t ptable_map_entries(page_frame_t *parent_dir, uintptr_t va,
     pde_was_present = !!(pde->flags & PDE_PRESENT);
     pde_set_page_idx(pde, pfi->pf_idx);
     pde_set_flags(pde, flags | PDE_PRESENT);
-    if (pde_was_present) {
-      pin_page_frame(parent_dir);
-      kprintf("flushing va: %p\n", va);
+
+    /*
+     * If an entry already has been present in a given PDE it's very likely
+     * it has been cached in the TLB. Thus we shuld explicitly flush it. 
+     */
+    if (pde_was_present)
       tlb_flush_entry(task_get_rpd(current_task()), va);
+    else {
+      /* Increment number of entries in the first-level directory */
+      pin_page_frame(parent_dir);
     }
+    
     /*
      * Increment page refcount *only* if we're not mapping some kernel area
      * or if mapped page is a valid visible from kernel physical frame.
@@ -238,18 +223,21 @@ uintptr_t ptable_map_entries(page_frame_t *parent_dir, uintptr_t va,
   return va;
 }
 
-void ptable_unmap_entries(pde_t *pde_start, int num_entries)
-{
-  pde_t *pde;
+void ptable_unmap_entries(page_frame_t *parent_dir, uintptr_t va, int num_entries)
+{  
+  pde_t *pde = pde_fetch(parent_dir, vaddr2pde_idx(va, PTABLE_LEVEL_FIRST));
 
-  ASSERT(num_entries > 0);
-  for (pde = pde_start; num_entries--; pde++) {
+  ASSERT((num_entries > 0) && (num_entries <= PTABLE_DIR_ENTRIES));
+  for (; num_entries--; pde++, va += PAGE_SIZE) {
     if (!(pde->flags & PDE_PRESENT))
       continue;
     
-    pde->flags &= ~PDE_PRESENT;
+    pde->flags &= ~PDE_PRESENT;    
     if ((pde->flags & PDE_PCD) && page_idx_is_present(pde_fetch_page_idx(pde)))
       unpin_page_frame(pframe_by_number(pde_fetch_page_idx(pde)));
+
+    tlb_flush_entry(task_get_rpd(current_task()), va);
+    unpin_page_frame(parent_dir);
   }
 }
 
@@ -315,10 +303,8 @@ page_idx_t mm_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr)
 
   for (level = PTABLE_LEVEL_LAST; level > PTABLE_LEVEL_FIRST; level--) {
     pde = pde_fetch(cur_dir, vaddr2pde_idx(va, level));
-    if (!(pde->flags & PDE_PRESENT)) {
-      kprintf("ival level %d: %p, PDE=%p\n", level, va, pde);
+    if (!(pde->flags & PDE_PRESENT))
       return PAGE_IDX_INVAL;
-    }
 
     cur_dir = pde_fetch_subdir(pde);
   }

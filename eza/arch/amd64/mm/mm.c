@@ -79,10 +79,8 @@ static void verify_mapping(const char *descr, uintptr_t start_addr,
 
     idx++;
   }
-  if ((idx - start_idx) != num_pages) {
-    kprintf("%d - %d != %d\n", idx, start_idx, num_pages);
+  if ((idx - start_idx) != num_pages)
     goto failed;
-  }
   
   kprintf(" %*s\n", strlen(descr) + 14, "[OK]");
   return;

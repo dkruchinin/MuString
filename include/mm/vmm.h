@@ -135,6 +135,8 @@ static inline void pin_page_frame(page_frame_t *pf)
 
 #define mmap_kern(va, first_page, npages, flags)    \
   mmap_core(&kernel_rpd, va, first_page, npages, flags)
+#define munmap_kern(va, npages)                 \
+  munmap_core(&kernel_rpd, va, npages)
 #define __mmap_core(rpd, va, npages, pfi, __flags)    \
   ptable_map(rpd, va, npages, pfi, kmap_to_ptable_flags((__flags) & KMAP_FLAGS_MASK))
 

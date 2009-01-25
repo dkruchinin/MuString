@@ -233,7 +233,7 @@ uintptr_t ptable_map_entries(page_frame_t *parent_dir, uintptr_t va, int num_ent
  * @param num_entries - A number of entries to unmap
  * @see pde_t
  */
-void ptable_unmap_entries(pde_t *pde_start, int num_entries);
+void ptable_unmap_entries(page_frame_t *parent_dir, uintptr_t va, int num_entries);
 
 /**
  * @brief Populate page directory
