@@ -64,6 +64,7 @@
 #define KO_WARNING "[WARNING] "
 #define KO_ERROR   "[ERROR] "
 #define KO_PANIC   "[PANIC] "
+#define KO_DEBUG   "[DEBUG] "
 
 #define KBUF_SIZE 4096
 

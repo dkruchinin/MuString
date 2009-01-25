@@ -224,8 +224,7 @@ void ptable_rpd_clone(rpd_t *clone, rpd_t *src);
  * @see page_frame_iterator_t
  * @see pde_t
  */
-uintptr_t ptable_map_entries(page_frame_t *parent_dir, uintptr_t va, int num_entries,
-                             page_frame_iterator_t *pfi, uint_t flags);
+void ptable_map_entries(pde_t *start_pde, int num_entries, page_frame_iterator_t *pfi, uint_t flags);
 
 /**
  * @brief Unmap pages from the lowest level page directory(PT)
@@ -233,7 +232,7 @@ uintptr_t ptable_map_entries(page_frame_t *parent_dir, uintptr_t va, int num_ent
  * @param num_entries - A number of entries to unmap
  * @see pde_t
  */
-void ptable_unmap_entries(page_frame_t *parent_dir, uintptr_t va, int num_entries);
+void ptable_unmap_entries(pde_t *start_pde, int num_entries);
 
 /**
  * @brief Populate page directory
@@ -247,14 +246,14 @@ void ptable_unmap_entries(page_frame_t *parent_dir, uintptr_t va, int num_entrie
  * @return 0 on success, -ENOMEM if page allocation failed.
  * @see pde_t
  */
-int ptable_populate_pagedir(pde_t *parent_pde, int pde_level, ptable_flags_t flags);
+int ptable_populate_pagedir(pde_t *pde, ptable_flags_t flags);
 
 /**
  * @brief Depopulate page direcotry
  * @param dir - A pointer to pde_t of directory to depopulate
  * @see pde_t
  */
-void ptable_depopulate_pagedir(pde_t *dir);
+void ptable_depopulate_pagedir(pde_t *pde);
 
 /**
  * @brief Map pages into the given root page directory.
@@ -268,7 +267,7 @@ void ptable_depopulate_pagedir(pde_t *dir);
  * @see rpd_t
  * @see page_table_flags
  */
-int ptable_map(rpd_t *prd, uintptr_t va_from, ulong_t npages,
+int ptable_map(rpd_t *prd, uintptr_t va_from, page_idx_t npages,
                page_frame_iterator_t *pfi, ptable_flags_t flags);
 
 /**

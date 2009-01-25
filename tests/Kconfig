@@ -39,5 +39,6 @@ config TEST_TLSF
 config TEST_MAPUNMAP
        bool "Map/Unmap general test"
        default n
+       select DEBUG_MM
 
 endif
