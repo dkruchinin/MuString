@@ -84,7 +84,7 @@ static void tc_alloc_dealloc(void *ctx)
 {
   test_framework_t *tf = ctx;  
   list_node_t *iter, *safe;
-  page_idx_t allocated;
+  page_idx_t allocated, num, i;
   page_frame_t *pages, *pages_start = NULL;
   
   tf->printf("Target MM pool: %s\n", mmpools_get_pool_name(tlsf_ctx.pool->type));
@@ -124,6 +124,29 @@ static void tc_alloc_dealloc(void *ctx)
 
   tlsf_memdump(tlsf_ctx.tlsf);
   tf->printf("Allocated: %d, Free: %d\n", allocated, tlsf_ctx.pool->free_pages);
+  num = tlsf_ctx.pool->free_pages / 2 + 1;
+  tf->printf("Allocate %d non-continous pages...\n", num);
+  pages_start = alloc_pages_ncont(num, AF_CLEAR_RC);
+  if (!pages_start) {
+    tf->printf("Can not allocate %d non-continous pages!\n", num);
+    tf->failed();
+  }
+
+  tf->printf("Validating allocated non-continous pages...\n");
+  allocated = 0;
+  list_for_each_entry(&pages_start->head, pages, node) {
+    int sz = pages_block_size(pages);
+    for (i = 0; i < sz; i++);
+    allocated += i;
+  }
+  if (allocated != num) {
+    tf->printf("FAILED! Requested(%d) != allocated(%d)\n", num, allocated);
+    tf->failed();
+  }
+
+  tf->printf("Ok, now free allocated earlier non-continous pages block.\n");
+  free_pages_ncont(pages_start);
+  tlsf_memdump(tlsf_ctx.tlsf);
   tlsf_ctx.completed = true;
   sys_exit(0);
 }

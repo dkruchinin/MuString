@@ -26,7 +26,7 @@
 #include <mm/pfalloc.h>
 #include <mm/vmm.h>
 #include <eza/errno.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 
 page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
 {
@@ -49,6 +49,12 @@ page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
     goto out;
   if (flags & AF_ZERO) /* fill page block with zeros */
     pframe_memnull(pages, n);
+  if (flags & AF_CLEAR_RC) { /* zero all refcounts of pages in a block */
+    register page_idx_t i;
+
+    for (i = 0; i < n; i++)
+      atomic_set(&pages[i].refcount, 0);
+  }
 
   /* done */
   out:
@@ -81,47 +87,38 @@ page_idx_t pages_block_size(page_frame_t *first_page)
   return __pool_pblock_size(pool, first_page);
 }
 
-#ifdef CONFIG_ZERO_USER_PAGES
-#define UPAGES_DEFAULT_FLAGS (AF_PGEN)
-#else
-#define UPAGES_DEFAULT_FLAGS (AF_PGEN | AF_ZERO)
-#endif /* CONFIG_ZERO_USER_PAGES */
-
 /* FIXME DK: allocate pages regarding to memory limits of a particular task
  * There is also a good issue when each process mm may have an opportunity to
  * allocate pages from a different pools. For example from general, dma and/or cram
  * pools. Each such pool should be able to be restricted by the root user.
  */
-page_frame_t *alloc_pages4uspace(vmm_t *vmm, page_idx_t npages)
+page_frame_t *alloc_pages_ncont(page_idx_t npages, pfalloc_flags_t flags)
 {
-  page_frame_t *pages = NULL;
-  
-  if ((vmm->num_pages + npages) >= vmm->max_pages)
-    goto out;
-  else {
-    page_idx_t block_sz, max_sz;
-    page_frame_t *ap;
+  page_frame_t *pages = NULL;  
+  page_idx_t block_sz, max_sz;
+  page_frame_t *ap;
 
-    max_sz = __pool_block_size_max(mmpools_get_pool(POOL_GENERAL)) - 1;
-    while (npages) {
-      block_sz = (npages > max_sz) ? max_sz : npages;
-      ap = alloc_pages(block_sz, UPAGES_DEFAULT_FLAGS);
-      if (!ap)
-        goto free_pages;
-      if (unlikely(!pages)) {
-        pages = ap;
-        list_init_head(&pages->head);
-        list_add2tail(&pages->head, &pages->node);
-      }
-      else
-        list_add2tail(&pages->head, &ap->node);
+  if (!(flags & PAGE_POOLS_MASK))
+    flags |= AF_PGEN;
 
-      npages -= block_sz;
+  max_sz = __pool_block_size_max(mmpools_get_pool(POOL_GENERAL)) - 1;
+  while (npages) {
+    block_sz = (npages > max_sz) ? max_sz : npages;
+    ap = alloc_pages(block_sz, flags);
+    if (!ap)
+      goto free_pages;
+    if (unlikely(!pages)) {
+      pages = ap;
+      list_init_head(&pages->head);
+      list_add2tail(&pages->head, &pages->node);
     }
-
-    goto out;
+    else
+      list_add2tail(&pages->head, &ap->node);
+    
+    npages -= block_sz;
   }
 
+  goto out;
   free_pages:
   if (pages) {
     list_node_t *iter, *safe;
@@ -135,4 +132,15 @@ page_frame_t *alloc_pages4uspace(vmm_t *vmm, page_idx_t npages)
   
   out:
   return pages;
+}
+
+void free_pages_ncont(page_frame_t *pages)
+{
+  list_node_t *n, *safe;
+  page_frame_t *pf;
+
+  list_for_each_safe(&pages->head, n, safe) {
+    pf = list_entry(n, page_frame_t, node);
+    free_pages(pf, pages_block_size(pf));
+  }
 }

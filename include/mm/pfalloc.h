@@ -34,10 +34,11 @@
 #include <mlibc/types.h>
 
 /* Allocation flags */
-#define __AF_PLAST PF_PGEN
-#define AF_PDMA PF_PDMA           /**< Allocate page from DMA pool */
-#define AF_PGEN PF_PGEN           /**< Allocate page from GENERAL pool */
-#define AF_ZERO (__AF_PLAST << 1) /**< Allocate clean page block(fill block with zeros) */
+#define __AF_PLAST  PF_PGEN
+#define AF_PDMA     PF_PDMA           /**< Allocate page from DMA pool */
+#define AF_PGEN     PF_PGEN           /**< Allocate page from GENERAL pool */
+#define AF_ZERO     (__AF_PLAST << 1) /**< Allocate clean page block(fill block with zeros) */
+#define AF_CLEAR_RC (__AF_PLAST << 2) /**< Allocate pages with refcounts set to 0 */
 
 /**
  * @typedef uint8_t pfalloc_flags_t
@@ -106,7 +107,8 @@ page_idx_t pages_block_size(page_frame_t *first_page);
 
 struct __vmm;
 
-page_frame_t *alloc_pages4uspace(struct __vmm *vmm, page_idx_t npages);
+page_frame_t *alloc_pages_ncont(page_idx_t npages, pfalloc_flags_t flags);
+void free_pages_ncont(page_frame_t *pages);
 
 static inline void *alloc_pages_addr(int n, pfalloc_flags_t flags)
 {

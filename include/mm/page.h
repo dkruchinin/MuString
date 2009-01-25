@@ -30,6 +30,7 @@
 #ifndef __PAGE_H__
 #define __PAGE_H__
 
+#include <config.h>
 #include <ds/iterator.h>
 #include <ds/list.h>
 #include <mlibc/stddef.h>

@@ -232,7 +232,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
   if (flags & VMR_POPULATE) {
     page_frame_t *pages;
     
-    pages = alloc_pages4uspace(vmm, npages);
+    pages = alloc_pages_ncont(npages, AF_CLEAR_RC | AF_ZERO | AF_PGEN);
     if (!pages) {
       err = -ENOMEM;
       goto err;
