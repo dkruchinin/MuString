@@ -1052,27 +1052,129 @@ static void __prio_thread(void *data)
 static prio_data_t pdata[__NUM_PRIO_THREADS];
 static task_t *ptasks[__NUM_PRIO_THREADS];
 
+#define __OVF_DATA_SIZE 137
 typedef struct __ovf_data {
-  ulong_t f1,f2,f3,f4;
+  unsigned char data[__OVF_DATA_SIZE];
 } ovf_data_t;
 
-static ovf_data_t __master_ovf={0x1111111122222222,
-                                0x3333333344444444,
-                                0x5555555566666666,
-                                0x7777777788888888};
+typedef struct __ovf_header {
+  ulong_t f1,f2;
+} ovf_header_t;
+
+static ovf_data_t __master_ovf;
+static ovf_header_t __header_ovf={0x99999999AAAAAAAA,
+                                  0xBBBBBBBBCCCCCCCC};
 
 #define __CP 0xFE
 #define __CP_BUFSIZE  31
 
-static void __stack_overflow_test(void *ctx)
+static long __ovf_port;
+
+static void __stack_overflow_client(void *ctx)
 {
   DECLARE_TEST_CONTEXT;
   status_t r;
+  unsigned char d[sizeof(ovf_header_t)+2];
+  unsigned char *p1=&d[0];
+  ovf_header_t *ovf_header=(ovf_header_t*)&d[1];
+  unsigned char *p2=&d[sizeof(d)-1];
+
+  unsigned char e[sizeof(ovf_data_t)+2];
+  unsigned char *p3=&e[0];
+  ovf_data_t *ovf_data=(ovf_data_t *)&e[1];
+  unsigned char *p4=&e[sizeof(e)-1];
+
+  iovec_t s_vec,r_vec[2];
+  long channel;
+  int i;
+
+  channel=sys_open_channel(__server_pid,__vectored_port,IPC_BLOCKED_ACCESS);
+  if( channel < 0 ) {
+    tf->printf("[OVF TESTER]: Can't open a channel !\n" );
+    tf->abort();
+  }
+
+  tf->printf("[OVF TESTER]: Sending message ...\n" );
+
+  *p1=__CP;
+  *p2=__CP;
+  *p3=__CP;
+  *p4=__CP;
+
+  *ovf_header=__header_ovf;
+
+  s_vec.iov_base=ovf_header;
+  s_vec.iov_len=sizeof(*ovf_header);
+
+  r_vec[0]=s_vec;
+  r_vec[1].iov_base=ovf_data;
+  r_vec[1].iov_len=sizeof(*ovf_data);
+
+  r=sys_port_send_iov_v(channel,&s_vec,1,r_vec,2);
+  tf->printf("[OVF TESTER]: Got a response: %d bytes\n",
+             r);
+  if( r < 0 || r != (r_vec[0].iov_len + r_vec[1].iov_len ) ) {
+    tf->printf("[OVF TESTER]: Message had to be %d bytes length.\n",
+               r_vec[0].iov_len + r_vec[1].iov_len);
+    tf->failed();
+  }
+
+  if( *p1 != __CP ) {
+    kprintf("[!!] P1 mismatch ! %p instead of %p\n",
+            *p1,__CP);
+    tf->abort();
+  }
+
+  if( *p2 != __CP ) {
+    kprintf("[!!] P2 mismatch ! %p instead of %p\n",
+            *p2,__CP);
+    tf->abort();
+  }
+
+  if( *p3 != __CP ) {
+    kprintf("[!!] P3 mismatch ! %p instead of %p\n",
+            *p3,__CP);
+    tf->abort();
+  }
+
+  if( *p4 != __CP ) {
+    kprintf("[!!] P4 mismatch ! %p instead of %p\n",
+            *p4,__CP);
+    tf->abort();
+  }
+
+  tf->printf("[OVF TESTER]: Verifying header ...\n");
+  if( ovf_header->f1 != WL_PATTERN ||
+      ovf_header->f2 != WL_PATTERN*2 ) {
+    tf->printf("[OVF TESTER]: Insufficient header !\n");
+  }
+  tf->printf("OK\n");
+  
+  tf->printf("[OVF TESTER]: Verifying the message ...\n");
+  for(i=0;i<__OVF_DATA_SIZE;i++) {
+    if( ovf_data->data[i] != 0x15 ) {
+      tf->printf("[OVF TESTER]: Bad data at %d position: 0x%X\n",
+                 i,ovf_data->data[i]);
+      tf->failed();
+    }
+  }
+  tf->printf("[OVF TESTER]: Test passed\n");
+  sys_exit(0);
+}
+
+static void __stack_overflow_test(void *ctx)
+{
+  DECLARE_TEST_CONTEXT;
+  status_t r,i;
   unsigned char d[__CP_BUFSIZE+2];
   unsigned char *p1=&d[0];
   unsigned char *dst=&d[1];
   unsigned char *p2=&d[sizeof(d)-1];
-  int to_copy=p2-p1-1;
+  int to_copy=p2-p1-1;  
+  port_msg_info_t msg_info;
+  iovec_t iov[2];
+  ovf_header_t header=__header_ovf,i_header;
+  ovf_data_t o_data;
 
   *p1=__CP;
   *p2=__CP;
@@ -1085,13 +1187,72 @@ static void __stack_overflow_test(void *ctx)
   if( *p1 != __CP ) {
     kprintf("[!!] P1 mismatch ! %p instead of %p\n",
             *p1,__CP);
+    tf->abort();
   }
   if( *p2 != __CP ) {
     kprintf("[!!] P2 mismatch ! %p instead of %p\n",
             *p2,__CP);
+    tf->abort();
   }
-  kprintf( "** Usercopy tests finished !\n" );
-  for(;;);
+
+  kprintf( "** Raw usercopy tests finished !\n" );
+  __ovf_port=sys_create_port(IPC_BLOCKED_ACCESS,0);
+  if( __ovf_port < 0 ) {
+    tf->printf(SERVER_THREAD"Can't create a port for stack overflow tests !\n");
+    tf->abort();
+  }
+
+  if( kernel_thread(__stack_overflow_client,ctx,NULL) ) {
+    tf->printf(SERVER_THREAD"Can't create the overflow client !\n");
+    tf->abort();
+  }
+
+  tf->printf("[OVF TEST]: Waiting for incoming messages ...\n");
+  r=sys_port_receive(__ovf_port,IPC_BLOCKED_ACCESS,(ulong_t)&i_header,
+                     sizeof(i_header),&msg_info);
+  if( r < 0 ) {
+    tf->printf("[OVF TEST]: Error wuring receiving a message ! %d\n",
+               r);
+    tf->abort();
+  }
+  tf->printf("[OVF TEST]: Got a message %d from %d of %d bytes length!\n",
+             msg_info.msg_id,msg_info.sender_pid,
+             msg_info.msg_len);
+  if( msg_info.msg_len != sizeof(i_header) ) {
+    tf->printf("[OVF TEST]: Insufficient message size: %d instead of %d\n",
+               msg_info.msg_len,sizeof(i_header));
+    tf->failed();
+  }
+
+  if( memcmp(&i_header,&__header_ovf,sizeof(i_header)) ) {
+    tf->printf("[OVF TEST]: Insufficient message data !\n");
+    tf->failed();
+  }
+
+  tf->printf("[OVF TEST]: Replying by a 2-part message.\n");
+  for(i=0;i<__OVF_DATA_SIZE;i++) {
+    o_data.data[i]=0x15;
+  }
+
+  header.f1=WL_PATTERN;
+  header.f2=WL_PATTERN*2;
+  
+  iov[0].iov_base=&header;
+  iov[0].iov_len=sizeof(header);
+
+  iov[1].iov_base=&o_data;
+  iov[1].iov_len=sizeof(o_data)+10;
+
+  r=sys_port_reply_iov(__ovf_port,msg_info.msg_id,
+                       iov,2);
+  if( r ) {
+    tf->printf(SERVER_THREAD"[PRIO PORT] Error during reply to message %d ! r=%d\n",
+               msg_info.msg_id,r);
+    tf->abort();
+  }
+
+  tf->printf("[OVF TEST]: All tests finished.\n");
+  sys_close_port(__ovf_port);
 }
 
 static void __prioritized_port_test(void *ctx)
@@ -1226,6 +1387,7 @@ static void __prioritized_port_test(void *ctx)
 
   tf->printf(SERVER_THREAD"All priority-related tests finished.\n");
   sys_close_port(__prio_port);
+  sleep(1);
 }
 
 static void __server_thread(void *ctx)
@@ -1238,9 +1400,7 @@ static void __server_thread(void *ctx)
   port_msg_info_t msg_info;
 
   __server_pid=current_task()->pid;
-
-//  __stack_overflow_test(ctx);
-
+  __stack_overflow_test(ctx);
   __process_events_test(ctx);
   __prioritized_port_test(ctx);
   __ipc_buffer_test(ctx);
