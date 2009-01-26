@@ -728,7 +728,7 @@ static void __setup_message_iovecs(uint8_t *msg,int parts,iovec_t *iovecs)
 static ulong_t __server_pid,__vectored_port;
 
 #define MESSAGE_SIZE(n) (sizeof(message_header_t)+((n)*sizeof(message_part_t))+sizeof(message_tail_t))
-#define WL_PATTERN  0xAABBCCDD
+#define WL_PATTERN  0x00AA11BB22CC33DD
 
 static void __vectored_messages_thread(void *ctx)
 {
@@ -1052,6 +1052,48 @@ static void __prio_thread(void *data)
 static prio_data_t pdata[__NUM_PRIO_THREADS];
 static task_t *ptasks[__NUM_PRIO_THREADS];
 
+typedef struct __ovf_data {
+  ulong_t f1,f2,f3,f4;
+} ovf_data_t;
+
+static ovf_data_t __master_ovf={0x1111111122222222,
+                                0x3333333344444444,
+                                0x5555555566666666,
+                                0x7777777788888888};
+
+#define __CP 0xFE
+#define __CP_BUFSIZE  31
+
+static void __stack_overflow_test(void *ctx)
+{
+  DECLARE_TEST_CONTEXT;
+  status_t r;
+  unsigned char d[__CP_BUFSIZE+2];
+  unsigned char *p1=&d[0];
+  unsigned char *dst=&d[1];
+  unsigned char *p2=&d[sizeof(d)-1];
+  int to_copy=p2-p1-1;
+
+  *p1=__CP;
+  *p2=__CP;
+  kprintf("p1=%p\n",p1);
+  kprintf("d=[%p,size=%d], last address=%p\n",
+          &d[1],to_copy,(ulong_t)&d[1]+to_copy-1);
+  kprintf("p2=%p\n",p2);
+  copy_to_user(dst,&__master_ovf,to_copy);
+
+  if( *p1 != __CP ) {
+    kprintf("[!!] P1 mismatch ! %p instead of %p\n",
+            *p1,__CP);
+  }
+  if( *p2 != __CP ) {
+    kprintf("[!!] P2 mismatch ! %p instead of %p\n",
+            *p2,__CP);
+  }
+  kprintf( "** Usercopy tests finished !\n" );
+  for(;;);
+}
+
 static void __prioritized_port_test(void *ctx)
 {
   DECLARE_TEST_CONTEXT;
@@ -1196,6 +1238,8 @@ static void __server_thread(void *ctx)
   port_msg_info_t msg_info;
 
   __server_pid=current_task()->pid;
+
+//  __stack_overflow_test(ctx);
 
   __process_events_test(ctx);
   __prioritized_port_test(ctx);
