@@ -86,11 +86,10 @@ static int do_ptable_map(page_frame_t *dir, struct pt_mmap_info *minfo, int pde_
         ret = ptable_populate_pagedir(pde, DEFAULT_PDIR_FLAGS);
         if (ret)
           return ret;
-
-        pin_page_frame(dir);
+        
 #ifdef CONFIG_DEBUG_MM
-        kprintf(KO_DEBUG "Allocate page directory for level %d: [frame_idx = %d]\n",
-                pde_level - 1, pde_fetch_page_idx(pde));
+        kprintf(KO_DEBUG "Allocate page directory for level %d: [frame_idx = %d] (%d)\n",
+                pde_level - 1, pde_fetch_page_idx(pde), pframe_number(dir));
 #endif /* CONFIG_DEBUG_MM */
       }
 
@@ -220,7 +219,7 @@ void ptable_map_entries(pde_t *start_pde, int num_entries, page_frame_iterator_t
      * Increment page refcount *only* if we're not mapping some kernel area
      * or if mapped page is a valid visible from kernel physical frame.
      */
-    if ((flags & PDE_PCD) && page_idx_is_present(pfi->pf_idx))
+    if ((flags & PDE_US) && page_idx_is_present(pfi->pf_idx))
       pin_page_frame(pframe_by_number(pfi->pf_idx));
 
     pde++;
@@ -240,7 +239,7 @@ void ptable_unmap_entries(pde_t *start_pde, int num_entries)
       continue;
 
     pde->flags &= ~PDE_PRESENT;
-    if ((pde->flags & PDE_PCD) && page_idx_is_present(pde_fetch_page_idx(pde)))
+    if ((pde->flags & PDE_US) && page_idx_is_present(pde_fetch_page_idx(pde)))
       unpin_page_frame(pframe_by_number(pde_fetch_page_idx(pde)));
 
     tlb_flush_entry(task_get_rpd(current_task()), (uintptr_t)pde);
@@ -251,16 +250,17 @@ void ptable_unmap_entries(pde_t *start_pde, int num_entries)
 
 int ptable_populate_pagedir(pde_t *pde, ptable_flags_t flags)
 {
-  page_frame_t *subdir, *parent_dir;
+  page_frame_t *subdir, *current_dir;
 
   ASSERT(!(pde->flags & PDE_PRESENT));
-  parent_dir = virt_to_pframe(pde);
+  current_dir = virt_to_pframe(pde);
   subdir = __create_pagedir();
   if (!subdir)
     return -ENOMEM;
 
   pde_set_page_idx(pde, pframe_number(subdir));
   pde_set_flags(pde, flags | PDE_PRESENT);
+  pin_page_frame(current_dir);
   return 0;
 }
 
@@ -268,13 +268,13 @@ void ptable_depopulate_pagedir(pde_t *pde)
 {
   if (pde->flags & PDE_PRESENT) {
     page_frame_t *current_dir = virt_to_pframe(pde);
+    page_frame_t *child = pframe_by_number(pde_fetch_page_idx(pde));
 
-    ASSERT(atomic_get(&current_dir->refcount) > 0);
-    atomic_dec(&current_dir->refcount);
-    if (!atomic_get(&current_dir->refcount)) {
+    if (!atomic_get(&child->refcount)) {
       pde->flags &= ~PDE_PRESENT;
-      free_page(current_dir);
-    }
+      tlb_flush_entry(task_get_rpd(current_task()), (uintptr_t)pde);
+      unpin_page_frame(current_dir);
+    }    
   }
 }
 

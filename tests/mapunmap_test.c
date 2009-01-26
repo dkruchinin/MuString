@@ -34,6 +34,7 @@
 
 #define MAPUNMAP_TEST_ID "Map/Unmap test"
 #define TC_MAP_ADDR PAGE_ALIGN((KERNEL_BASE + ((ulong_t)num_phys_pages << PAGE_WIDTH) * 2))
+#define TC_MAP_ADDR_FAR (KERNEL_BASE + KERNEL_BASE / 2)
 
 static bool is_completed = false;
 
@@ -60,6 +61,22 @@ static void __check_mapped(test_framework_t *tf, uintptr_t start_addr,
   }
 }
 
+static void __check_refcounts(test_framework_t *tf, page_frame_t *pages, int refc, bool is_cont)
+{
+  if (!is_cont) {
+    int i, sz;
+
+    sz = pages_block_size(pages);
+    for (i = 0; i < sz; i++) {
+      if (atomic_get(&pages[i].refcount) != refc) {
+        tf->printf("Page idx %d: refcount != %d(%d)\n", pframe_number(pages + i), refc,
+                   atomic_get(&pages[i].refcount));
+        tf->failed();
+      }
+    }
+  }
+}
+
 static void tc_map_unmap_core(void *ctx)
 {
   test_framework_t *tf = ctx;
@@ -75,17 +92,34 @@ static void tc_map_unmap_core(void *ctx)
   }
   
   tf->printf("Creating mapping: %p -> %p\n", TC_MAP_ADDR, TC_MAP_ADDR + (num_pages << PAGE_WIDTH));
-  ret = mmap_kern(TC_MAP_ADDR, pframe_number(pages), num_pages, KMAP_KERN | KMAP_READ | KMAP_WRITE);
+  ret = mmap_kern(TC_MAP_ADDR, pframe_number(pages), num_pages, KMAP_KERN | KMAP_READ | KMAP_WRITE);  
   if (ret) {
     tf->printf("Failed to map %d pages from %p to %p\n",
                atomic_get(&pool->free_pages), TC_MAP_ADDR, TC_MAP_ADDR + (num_pages << PAGE_WIDTH));
     tf->abort();
 
   }
-
+  
   __check_mapped(tf, TC_MAP_ADDR, num_pages, pframe_number(pages));
+  __check_refcounts(tf, pages, 0, false);
   tf->printf("Unmap mapped pages range [%p -> %p]\n", TC_MAP_ADDR, TC_MAP_ADDR + (num_pages << PAGE_WIDTH));
   munmap_kern(TC_MAP_ADDR, num_pages);
+  __check_refcounts(tf, pages, 0, false);
+
+  tf->printf("Remmaping mapping: %p -> %p\n", TC_MAP_ADDR, TC_MAP_ADDR + (num_pages << PAGE_WIDTH));
+  ret = mmap_kern(TC_MAP_ADDR, pframe_number(pages), num_pages, KMAP_READ | KMAP_WRITE);  
+  if (ret) {
+    tf->printf("Failed to map %d pages from %p to %p\n",
+               atomic_get(&pool->free_pages), TC_MAP_ADDR, TC_MAP_ADDR + (num_pages << PAGE_WIDTH));
+    tf->abort();
+  }
+
+  kprintf("=> %d, %d\n", pframe_number(pages), num_phys_pages);
+  *(int *)(TC_MAP_ADDR + ((num_pages - 1) << PAGE_WIDTH)) = 666;
+  __check_refcounts(tf, pages, 1, false);
+  tf->printf("Unmap mapped pages range [%p -> %p]\n", TC_MAP_ADDR, TC_MAP_ADDR + (num_pages << PAGE_WIDTH));
+  munmap_kern(TC_MAP_ADDR, num_pages);
+  __check_refcounts(tf, pages, 0, false);
   tf->printf("Done\n");
   is_completed = true;
   sys_exit(0);

@@ -114,7 +114,7 @@ DEFINE_ITERATOR_TYPES(page_frame,
 
 static inline bool page_idx_is_present(page_idx_t page_idx)
 {
-  return (page_idx < num_phys_pages);
+  return (page_idx <= num_phys_pages);
 }
 
 static inline void *pframe_to_virt(page_frame_t *frame)
