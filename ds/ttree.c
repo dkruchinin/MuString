@@ -43,10 +43,6 @@
 #define min_tnode_entries(ttree)                \
   ((ttree)->keys_per_tnode - ((ttree)->keys_per_tnode >> 2))
 
-/* Index number of first key in a T*-tree node when a node has only one key. */
-#define first_tnode_idx(ttree)                  \
-  (((ttree)->keys_per_tnode >> 1) - 1)
-
 /*
  * T*-tree has three types of node:
  * 1. Node that hasn't left and right child is called "leaf node".
@@ -633,13 +629,15 @@ void ttree_insert_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta, void *item)
   void *key = ttree_item2key(ttree, item);
   
   n = at_node = tnode_meta->tnode;
-  if (!at_node) { /* The root node has to be created. */
+  if (!ttree->root) { /* The root node has to be created. */
     at_node = allocate_ttree_node(ttree);
-    at_node->keys[tnode_meta->idx] = key;
-    at_node->min_idx = at_node->max_idx = tnode_meta->idx;
+    at_node->keys[first_tnode_idx(ttree)] = key;
+    at_node->min_idx = at_node->max_idx = first_tnode_idx(ttree);
     ttree->root = at_node;
     tnode_set_side(at_node, TNODE_ROOT);
     tnode_meta->tnode = at_node;
+    tnode_meta->idx = at_node->min_idx;
+    tnode_meta->side = TNODE_BOUND;
     return;
   }
   if (tnode_meta->side == TNODE_BOUND) {

@@ -87,17 +87,17 @@ static int do_ptable_map(page_frame_t *dir, struct pt_mmap_info *minfo, int pde_
         if (ret)
           return ret;
         
-#ifdef CONFIG_DEBUG_MM
+#ifdef CONFIG_DEBUG_PTABLE
         kprintf(KO_DEBUG "Allocate page directory for level %d: [frame_idx = %d] (%d)\n",
                 pde_level - 1, pde_fetch_page_idx(pde), pframe_number(dir));
-#endif /* CONFIG_DEBUG_MM */
+#endif /* CONFIG_DEBUG_PTABLE */
       }
 
       /* and go at 1 level down */
       ret = do_ptable_map(pde_fetch_subdir(pde), minfo, pde_level - 1);
       if (ret) {
         ptable_depopulate_pagedir(pde);
-#ifdef CONFIG_DEBUG_MM
+#ifdef CONFIG_DEBUG_PTABLE
         {
           page_frame_t *pf = pframe_by_number(pde_fetch_page_idx(pde));
           
@@ -106,7 +106,7 @@ static int do_ptable_map(page_frame_t *dir, struct pt_mmap_info *minfo, int pde_
                     pde_level - 1, pframe_number(pf));
           }
         }
-#endif /* CONFIG_DEBUG_MM */
+#endif /* CONFIG_DEBUG_PTABLE */
         return ret;
       }
 
@@ -147,7 +147,7 @@ static void do_ptable_unmap(page_frame_t *dir, uintptr_t *va_from, uintptr_t va_
 
       /* At first go down in a given PDE, then try to depopulate page directory. */
       do_ptable_unmap(pde_fetch_subdir(pde), va_from, va_to, pde_level - 1);
-#ifdef CONFIG_DEBUG_MM
+#ifdef CONFIG_DEBUG_PTABLE
       {
         page_frame_t *fpf = pde_fetch_subdir(pde);
 
@@ -156,7 +156,7 @@ static void do_ptable_unmap(page_frame_t *dir, uintptr_t *va_from, uintptr_t va_
                   pde_level - 1, pframe_number(fpf));
         }
       }
-#endif /* CONFIG_DEBUG_MM */
+#endif /* CONFIG_DEBUG_PTABLE */
 
       ptable_depopulate_pagedir(pde);
       pde++;
@@ -304,7 +304,11 @@ int ptable_map(rpd_t *rpd, uintptr_t va_from, page_idx_t npages,
   ret = do_ptable_map(rpd->pml4, &ptminfo, PTABLE_LEVEL_LAST);
   iter_next(pfi);
   if (ret) {
-    kprintf("Unmapping: %p -> %p\n", va_from, ptminfo.va_from);
+#ifdef CONFIG_DEBUG_PTABLE
+    kprintf(KO_DEBUG "Failed to create mapping %p -> %p. Cleaning modified by the mapping entries:\n"
+            "  [dirty entries]: %p -> %p\n", va_from, va_from + ((npages - 1) << PAGE_WIDTH),
+            va_from, ptminfo.va_from);
+#endif /* CONFIG_DEBUG_PTABLE */
     ptable_unmap(rpd, va_from, (ptminfo.va_from - va_from + PAGE_SIZE) >> PAGE_WIDTH);
   }
   else if (!iter_isstopped(pfi)) {

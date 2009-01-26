@@ -39,6 +39,10 @@ config TEST_TLSF
 config TEST_MAPUNMAP
        bool "Map/Unmap general test"
        default n
-       select DEBUG_MM
+       select DEBUG_PTABLE
+
+config TEST_VMA
+       bool "Test general VMA functinality"
+       default n
 
 endif

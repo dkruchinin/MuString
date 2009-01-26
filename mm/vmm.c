@@ -253,6 +253,7 @@ static void __pfiter_pblock_first(page_frame_iterator_t *pfi)
   ctx = iter_fetch_ctx(pfi);
   ctx->cur_node = ctx->first_node;
   ctx->cur_idx = ctx->first_idx;
+  kprintf("==> %p to %p\n", ctx->cur_node, ctx->last_node);
   pfi->pf_idx =
     pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->cur_idx);
   pfi->state = ITER_RUN;
@@ -276,14 +277,15 @@ static void __pfiter_pblock_next(page_frame_iterator_t *pfi)
 
   ITER_DBG_CHECK_TYPE(pfi, PF_ITER_PBLOCK);
   ctx = iter_fetch_ctx(pfi);
+  ctx->cur_idx++;
   if (unlikely((ctx->cur_node == ctx->last_node) &&
                (ctx->cur_idx >= ctx->last_idx))) {
     pfi->pf_idx = PAGE_IDX_INVAL;
     pfi->state = ITER_STOP;
   }
-  else {
-    ctx->cur_idx++;
+  else {    
     if (ctx->cur_idx >= pages_block_size(list_entry(ctx->cur_node, page_frame_t, node))) {
+      kprintf("next => %p\n", ctx->cur_node->next);
       ctx->cur_node = ctx->cur_node->next;
       ctx->cur_idx = 0;
     }

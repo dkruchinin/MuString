@@ -208,6 +208,7 @@ void arch_mm_init(void)
   uintptr_t addr;
   
   scan_phys_mem();
+  num_phys_pages++;
   addr = server_get_end_phy_addr();
   page_frames_array = addr ?
     (page_frame_t *)PAGE_ALIGN(p2k_code(addr)) : (page_frame_t *)KERNEL_END_PHYS;

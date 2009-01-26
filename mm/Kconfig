@@ -32,5 +32,8 @@ config PFA_MAX_PAGES
 config DEBUG_MM
        bool "Enable memory manager main debugging"
 
+config DEBUG_PTABLE
+       bool "Debug low-level page table interface"
+
 config DEBUG_SLAB
        bool "Enable slab allocator debugging"

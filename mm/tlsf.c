@@ -542,7 +542,7 @@ static page_idx_t __get_pblock_size(page_frame_t *pages_block_start, void *data)
   
   spinlock_lock(&tlsf->lock);
   if (!bit_test(&pages_block_start->_private, bitnumber(TLSF_PB_MARK))) {
-    kprintf(KO_WARNING "TLSF: Attemption to get size of non-tlsf block, frame #%d\n",
+    kprintf(KO_WARNING "TLSF: Attemption to get size of non TLSF block, frame #%d\n",
             pframe_number(pages_block_start));
     ret = -EINVAL;
   }

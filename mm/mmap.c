@@ -30,6 +30,7 @@
 #include <mm/memobj.h>
 #include <mm/vmm.h>
 #include <mm/pfi.h>
+#include <eza/spinlock.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/types.h>
 
@@ -38,6 +39,20 @@ static memcache_t *__vmms_cache = NULL;
 static memcache_t *__vmrs_cache = NULL;
 static LIST_DEFINE(__mandmaps_lst);
 static int __num_mandmaps = 0;
+
+#ifdef CONFIG_DEBUG_MM
+static bool __vmm_verbose = false;
+static SPINLOCK_DEFINE(__vmm_verb_lock);
+
+#define VMM_VERBOSE(fmt, args...)               \
+  do {                                          \
+    if (__vmm_verbose) {                        \
+      kprintf("[VMM VERBOSE]: ");               \
+      kprintf(fmt, ##args);                     \
+    }                                           \
+  } while (0)
+
+#endif /* CONFING_DEBUG_MM */
 
 static int __vmranges_cmp(void *r1, void *r2)
 {
@@ -56,6 +71,69 @@ static int __vmranges_cmp(void *r1, void *r2)
     return !!diff;
 }
 
+static inline bool __vmranges_can_be_merged(const vmrange_t *vmr1, const vmrange_t *vmr2)
+{
+  return ((vmr1->flags == vmr2->flags) && (vmr1->memobj == vmr2->memobj));
+}
+
+static vmrange_t *previous_vmrange(ttree_t *ttree, tnode_meta_t *tnode_meta, tnode_meta_t *prev_meta)
+{
+  vmrange_t *vmr = NULL;
+
+  if (tnode_meta->idx > tnode_meta->tnode->min_idx) {
+    kprintf("YEAH!\n");
+    vmr = ttree_key2item(ttree, tnode_key(tnode_meta->tnode, tnode_meta->idx - 1));
+    if (prev_meta) {
+      prev_meta->idx = tnode_meta->idx - 1;
+      prev_meta->tnode = tnode_meta->tnode;
+      prev_meta->side = TNODE_BOUND;
+    }
+  }
+  else {
+    ttree_node_t *n = ttree_tnode_glb(tnode_meta->tnode);
+
+    kprintf("YEAH?? %p\n", n);
+    if (n) {
+      vmr = ttree_key2item(ttree, tnode_key(n, n->max_idx));
+      if (prev_meta) {
+        prev_meta->idx = n->max_idx;
+        prev_meta->tnode = n;
+        prev_meta->side = TNODE_BOUND;
+      }
+    }
+  }
+
+  return vmr;
+}
+
+static vmrange_t *next_vmrange(ttree_t *ttree, tnode_meta_t *meta, tnode_meta_t *next_meta)
+{
+  vmrange_t *vmr = NULL;
+
+  if (meta->idx < meta->tnode->max_idx) {
+    vmr = ttree_key2item(ttree, tnode_key(meta->tnode, meta->idx + 1));
+    if (next_meta) {
+      next_meta->idx = meta->idx + 1;
+      next_meta->tnode = meta->tnode;
+      next_meta->side = TNODE_BOUND;
+    }
+  }
+  else {
+    ttree_node_t *n = meta->tnode->successor;
+
+    if (n) {
+      vmr = ttree_key2item(ttree, tnode_key(n, n->min_idx));
+      if (next_meta) {
+        next_meta->idx = n->min_idx;
+        next_meta->tnode = n;
+        next_meta->side = TNODE_BOUND;
+      }
+    }
+  }
+
+  return vmr;
+}
+
 static vmrange_t *create_vmrange(vmm_t *parent_vmm, uintptr_t va_start, int npages, vmrange_flags_t flags)
 {
   vmrange_t *vmr;
@@ -67,18 +145,55 @@ static vmrange_t *create_vmrange(vmm_t *parent_vmm, uintptr_t va_start, int npag
   vmr->parent_vmm = parent_vmm;
   vmr->flags = flags;
   vmr->bounds.space_start = va_start;
-  vmr->bounds.space_end = va_start + (1 << npages);
+  vmr->bounds.space_end = va_start + (npages << PAGE_WIDTH);
   vmr->memobj = vmr->private = NULL;
   parent_vmm->num_vmrs++;
 
   return vmr;
 }
 
-
 static void destroy_vmrange(vmrange_t *vmr)
 {
   vmr->parent_vmm->num_vmrs--;
   memfree(vmr);
+}
+
+static void try_merge_vmranges(vmm_t *vmm, vmrange_t *vmrange, tnode_meta_t *meta)
+{
+  vmrange_t *mergeable_vmr = NULL;
+  tnode_meta_t mergeable_meta;
+  int i;
+
+  /* FIXME DK: among flags and memory object check if two backends are equal(BTW: are backends and memobjs the same?) */
+  for (i = 0; i < 2; i++) {
+    if (!i)
+      mergeable_vmr = previous_vmrange(&vmm->vmranges_tree, meta, &mergeable_meta);
+    else
+      mergeable_vmr = next_vmrange(&vmm->vmranges_tree, meta, &mergeable_meta);
+    if (!mergeable_vmr) {
+      kprintf("%d: here\n", i);
+      continue;
+    }
+    if (!__vmranges_can_be_merged(vmrange, mergeable_vmr))
+      continue;
+
+    ttree_delete_placeful(&vmm->vmranges_tree, &mergeable_meta);
+    if (!i) {
+      vmrange->bounds.space_start = mergeable_vmr->bounds.space_start;
+      VMM_VERBOSE("Merge ranges [%p, %p) => [%p %p)\n",
+                  mergeable_vmr->bounds.space_start, mergeable_vmr->bounds.space_end,
+                  vmrange->bounds.space_start, vmrange->bounds.space_start);
+    }
+    else {
+      VMM_VERBOSE("Merge ranges [%p, %p) => [%p %p)\n",        
+                  vmrange->bounds.space_start, vmrange->bounds.space_start,
+                  mergeable_vmr->bounds.space_start, mergeable_vmr->bounds.space_end);
+      vmrange->bounds.space_end = mergeable_vmr->bounds.space_end;
+    }
+    
+    ASSERT(!ttree_replace(&vmm->vmranges_tree, &vmrange->bounds, vmrange));
+    vmm->num_vmrs--;
+  }
 }
 
 void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name)
@@ -147,27 +262,58 @@ vmm_t *vmm_create(void)
   return vmm;
 }
 
-
+/*
+ * TODO DK: optimize
+ * Actually the algorithm is quite stupid. It iterates through T*-tree nodes: from
+ * the lefmost one and up to the node's successor. So strictly speaking it's just an
+ * iteration through a *linked list* which takes O(N). I think it's quite unefficient
+ * way to find needful amount of address space. The algorithm may be optimized by
+ * using some data structure - parallel with T*-tree - that will store address-space
+ * holes sorted by their size in memory-efficient way. May be some t*-tree hooks will
+ * be introduced for this purpose. Time'll show (:
+ */
 uintptr_t find_suitable_vmrange(vmm_t *vmm, uintptr_t length, tnode_meta_t *meta)
-{
-  ttree_iterator_t tti;
+{  
+  ttree_node_t *tnode, *p;
   uintptr_t start = USPACE_VA_BOTTOM;
   struct range_bounds *bounds;
+  int i = 0;
+  
+  p = tnode = ttree_tnode_leftmost(vmm->vmranges_tree.root);
+  while (tnode) {
+    p = tnode;
+    tnode_for_each_key(tnode, i) {
+      bounds = ttree_key2item(&vmm->vmranges_tree, tnode_key(tnode, i));
+      kprintf("%p <-> %p\n", bounds->space_start, bounds->space_end);
+      if ((bounds->space_start - start) >= length) {
+        kprintf("found: %p\n", bounds->space_start);
+        start = bounds->space_start;
+        goto out;
+      }
 
-  ttree_iterator_init(&vmm->vmranges_tree, &tti, NULL, NULL);
-  iterate_forward(&tti) {
-    bounds = tnode_key(tti.meta_cur.tnode, tti.meta_cur.idx);
-    if ((bounds->space_start - start) >= length) {
-      if (meta)
-        memcpy(meta, &tti.meta_cur, sizeof(*meta));
-
-      return bounds->space_start;
+      start = bounds->space_end;
     }
 
-    start = bounds->space_end;
+    tnode = tnode->successor;
   }
+  if (unlikely((start + length) >= USPACE_VA_TOP))
+    return INVALID_ADDRESS;
 
-  return 0;
+  out:
+  if (meta && p) {
+    meta->tnode = p;
+    if (unlikely(tnode_is_full(&vmm->vmranges_tree, p)
+                 && ((i + 1) > p->max_idx))) {      
+      meta->side = TNODE_RIGHT;
+      meta->idx = first_tnode_idx(&vmm->vmranges_tree);
+    }
+    else {
+      meta->side = TNODE_BOUND;
+      meta->idx = i + 1;
+    }
+  }
+  
+  return start;
 }
 
 vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, tnode_meta_t *meta)
@@ -192,6 +338,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
   tnode_meta_t tmeta;
   int err = 0;
 
+  vmr = NULL;
   if (!(flags & VMR_PROTO_MASK)
       || !(flags & (VMR_PRIVATE | VMR_SHARED))
       || ((flags & (VMR_PRIVATE | VMR_SHARED)) == (VMR_PRIVATE | VMR_SHARED))
@@ -201,26 +348,31 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
     goto err;
   }
   if (addr) {
-    if (!valid_user_address_range(addr, (1 << npages))) {
+    if (!valid_user_address_range(addr, (npages << PAGE_WIDTH))) {
       if (flags & VMR_FIXED) {
         err = -ENOMEM;
         goto err;
       }
     }
     else {
-      vmr_prev = vmrange_find(vmm, addr, addr + (1 << npages), &tmeta);
+      vmr_prev = vmrange_find(vmm, addr, addr + (npages << PAGE_WIDTH), &tmeta);
       if (vmr_prev) {
         if (flags & VMR_FIXED) {
           err = -EINVAL;
           goto err;
         }
       }
-
+      
       goto create_vmrange;
     }
   }
 
-  addr = find_suitable_vmrange(vmm, (1 << npages), &tmeta);
+  addr = find_suitable_vmrange(vmm, (npages << PAGE_WIDTH), &tmeta);
+  if (addr == INVALID_ADDRESS) {
+    err = -ENOMEM;
+    goto err;
+  }
+  
   create_vmrange:
   vmr = create_vmrange(vmm, addr, npages, flags);
   if (!vmr) {
@@ -228,35 +380,31 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
     goto err;
   }
   
-  ttree_insert_placeful(&vmm->vmranges_tree, &tmeta, &vmr);
+  ttree_insert_placeful(&vmm->vmranges_tree, &tmeta, vmr);
+  kprintf("inserted\n");
   if (flags & VMR_POPULATE) {
     page_frame_t *pages;
-    
+
     pages = alloc_pages_ncont(npages, AF_CLEAR_RC | AF_ZERO | AF_PGEN);
     if (!pages) {
       err = -ENOMEM;
       goto err;
     }
     else {
-      /*page_frame_iterator_t pfi;      
+      page_frame_iterator_t pfi;
       ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) pblock_ctx;
 
       pfi_pblock_init(&pfi, &pblock_ctx, list_node_first(&pages->head), 0,
                       list_node_last(&pages->head),
                       pages_block_size(list_entry(list_node_last(&pages->head), page_frame_t, node)));
       iter_first(&pfi);
-      minfo.va_from = addr;
-      minfo.va_to = addr + (1 << npages);
-      minfo.ptable_flags = kmap_to_ptable_flags(flags);
-      minfo.pfi = &pfi;
-      err = ptable_map(&vmm->rpd, &minfo);
-      if (err) {
-        munmap_core(&vmm->rpd, addr, npages);
+      err = __mmap_core(&vmm->rpd, addr, npages, &pfi, flags);
+      if (err)
         goto err;
-        }*/
     }
   }
 
+  try_merge_vmranges(vmm, vmr, &tmeta);
   return addr;
   
   err:
@@ -281,3 +429,18 @@ int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages
   return __mmap_core(rpd, va, npages, &pfi, flags);
 }
 
+#ifdef CONFIG_DEBUG_MM
+void vmm_enable_verbose_dbg(void)
+{
+  spinlock_lock(&__vmm_verb_lock);
+  __vmm_verbose = true;
+  spinlock_unlock(&__vmm_verb_lock);
+}
+
+void vmm_disable_verbose_dbg(void)
+{
+  spinlock_lock(&__vmm_verb_lock);
+  __vmm_verbose = false;
+  spinlock_unlock(&__vmm_verb_lock);
+}
+#endif /* CONFIG_DEBUG_MM */

@@ -156,11 +156,18 @@ void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name);
 int vm_mandmaps_roll(vmm_t *target_mm);
 
 vmm_t *vmm_create(void);
+long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
+                 vmrange_flags_t flags, int offs_pages);
 int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages, kmap_flags_t flags);
 
 static inline void munmap_core(rpd_t *rpd, uintptr_t va, ulong_t npages)
 {
   ptable_unmap(rpd, va, npages);
 }
+
+#ifdef CONFIG_DEBUG_MM
+void vmm_enable_verbose_dbg(void);
+void vmm_disable_verbose_dbg(void);
+#endif /* CONFIG_DEBUG_MM */
 
 #endif /* __VMM_H__ */

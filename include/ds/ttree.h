@@ -239,6 +239,10 @@ DEFINE_ITERATOR(ttree,
 #define tnode_for_each_key(tnode, iter)                     \
   for ((iter) = (tnode)->min_idx; (iter) <= (tnode)->max_idx; (iter)++)
 
+/* Index number of first key in a T*-tree node when a node has only one key. */
+#define first_tnode_idx(ttree)                  \
+  (((ttree)->keys_per_tnode >> 1) - 1)
+
 /**
  * @brief Set T*-tree node side to @a side
  * @param tnode - A pointer to target node
@@ -260,6 +264,13 @@ static inline void tnode_set_side(ttree_node_t *tnode, int side)
 static inline int tnode_get_side(ttree_node_t *tnode)
 {
   return ((tnode->node_side & 0x03) - 1);
+}
+
+static inline void tnode_meta_fill(tnode_meta_t *meta, ttree_node_t *tnode, int idx, int side)
+{
+  meta->tnode = tnode;
+  meta->idx = idx;
+  meta->side = side;
 }
 
 /**

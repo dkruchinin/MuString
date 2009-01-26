@@ -6,3 +6,4 @@ obj-$(CONFIG_TEST_USYNC) += usync_test.o
 obj-$(CONFIG_TEST_SIGNALS) += signal_test.o
 obj-$(CONFIG_TEST_TLSF) += tlsf_test.o
 obj-$(CONFIG_TEST_MAPUNMAP) += mapunmap_test.o
+obj-$(CONFIG_TEST_VMA) += vmatest.o

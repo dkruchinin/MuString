@@ -161,7 +161,7 @@ static void tc_map_unmap_core(void *ctx)
     tf->failed();
   }
 
-  //__check_refcounts(tf, pages, 0, true);
+  free_pages_ncont(pages);
   tf->printf("Done\n");
   is_completed = true;
   sys_exit(0);

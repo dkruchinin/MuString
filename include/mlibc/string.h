@@ -32,24 +32,24 @@
 #ifndef ARCH_MEMSET
 static inline void *memset(void *s, int c, size_t n)
 {
-    if ((uintptr_t)s & 0x1) {
-        register char *to = (char *)s;
+  if (1/*(uintptr_t)s & 0x1*/) {
+    register char *to = (char *)s;
         
-        while (n-- > 0)
-            *to++ = c;
-    }
-    else { /* address is aligned by 2 */
-        register uint16_t *to = (uint16_t *)s;
-        register uint16_t tmp = ((c & 0xff) | ((c & 0xff) << 8));
-        size_t len = n >> 1;
+    while (n-- > 0)
+      *to++ = c;
+  }
+  else { 
+    register uint16_t *to = (uint16_t *)s;
+    register uint16_t tmp = ((c & 0xff) | ((c & 0xff) << 8));
+    size_t len = n >> 1;
+      
+    while (len-- > 0)
+      *to++ = tmp;
+    if (n & 0x1)            
+      *(char *)to = c;
+  }
 
-        while (len-- > 0)
-            *to++ = tmp;
-        if (n & 0x1)
-            *(char *)to = c;
-    }
-
-    return s;
+  return s;
 }
 #else
 #define memset(s, c, n) arch_memset(s, c, n)
