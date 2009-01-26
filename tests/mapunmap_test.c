@@ -34,7 +34,7 @@
 
 #define MAPUNMAP_TEST_ID "Map/Unmap test"
 #define TC_MAP_ADDR PAGE_ALIGN((KERNEL_BASE + ((ulong_t)num_phys_pages << PAGE_WIDTH) * 2))
-#define TC_MAP_ADDR_FAR (KERNEL_BASE + KERNEL_BASE / 2)
+#define TC_MAP_ADDR_FAR (TC_MAP_ADDR + ((ulong_t)num_phys_pages << PAGE_WIDTH) * 4)
 
 static bool is_completed = false;
 
@@ -63,15 +63,29 @@ static void __check_mapped(test_framework_t *tf, uintptr_t start_addr,
 
 static void __check_refcounts(test_framework_t *tf, page_frame_t *pages, int refc, bool is_cont)
 {
-  if (!is_cont) {
-    int i, sz;
+  int i, sz;
 
+  if (!is_cont) {
     sz = pages_block_size(pages);
     for (i = 0; i < sz; i++) {
       if (atomic_get(&pages[i].refcount) != refc) {
         tf->printf("Page idx %d: refcount != %d(%d)\n", pframe_number(pages + i), refc,
                    atomic_get(&pages[i].refcount));
         tf->failed();
+      }
+    }
+  }
+  else {
+    page_frame_t *pf;
+
+    list_for_each_entry(&pages->head, pf, node) {
+      sz = pages_block_size(pf);
+      for (i = 0; i < sz; i++) {
+        if (atomic_get(&pf[i].refcount) != refc) {
+          tf->printf("Page idx %d: refcount != %d(%d)\n", pframe_number(pages + i), refc,
+                     atomic_get(&pages[i].refcount));
+          tf->failed();
+        }
       }
     }
   }
@@ -82,8 +96,10 @@ static void tc_map_unmap_core(void *ctx)
   test_framework_t *tf = ctx;
   mm_pool_t *pool = mmpools_get_pool(POOL_GENERAL);
   ulong_t num_pages = pool->allocator.block_sz_max - 1;
-  int ret;
+  int ret, i;
   page_frame_t *pages;
+  page_frame_iterator_t pfi;
+  ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) pfi_pblock_ctx;
   
   pages = alloc_pages(num_pages, AF_PGEN);  
   if (!pages) {
@@ -114,12 +130,38 @@ static void tc_map_unmap_core(void *ctx)
     tf->abort();
   }
 
-  kprintf("=> %d, %d\n", pframe_number(pages), num_phys_pages);
   *(int *)(TC_MAP_ADDR + ((num_pages - 1) << PAGE_WIDTH)) = 666;
   __check_refcounts(tf, pages, 1, false);
   tf->printf("Unmap mapped pages range [%p -> %p]\n", TC_MAP_ADDR, TC_MAP_ADDR + (num_pages << PAGE_WIDTH));
   munmap_kern(TC_MAP_ADDR, num_pages);
-  __check_refcounts(tf, pages, 0, false);
+
+  tf->printf("Checking page-table recovery due mmap fail.\n");
+  num_pages = pool->free_pages - 5;
+  tf->printf("Allocating non-continous block of %d pages.\n", num_pages);
+  pages = alloc_pages_ncont(num_pages, AF_PGEN | AF_CLEAR_RC);
+  if (!pages) {
+    tf->printf("Failed to allocate %d non-continous pages.\n", num_pages);
+    tf->failed();
+  }
+
+  tf->printf("Creating mapping: %p - %p\n", TC_MAP_ADDR_FAR, TC_MAP_ADDR_FAR + (num_pages << PAGE_WIDTH));
+  pfi_pblock_init(&pfi, &pfi_pblock_ctx, &pages->node, 0, list_node_last(&pages->head),
+                  pages_block_size(list_entry(list_node_last(&pages->head), page_frame_t, node)) - 1);
+  iterate_forward(&pfi)
+    i++;
+  if (i != num_pages) {
+    tf->printf("Page block iterator failed: %d != %d\n", i, num_pages);
+    tf->abort();
+  }
+
+  iter_first(&pfi);
+  ret = __mmap_core(&kernel_rpd, TC_MAP_ADDR_FAR, num_pages, &pfi, KMAP_READ | KMAP_WRITE | KMAP_EXEC);
+  if (ret != -ENOMEM) {
+    tf->printf("__mmap_core returned %d, but -ENOMEM(%d) was expected.\n", ret, -ENOMEM);
+    tf->failed();
+  }
+
+  //__check_refcounts(tf, pages, 0, true);
   tf->printf("Done\n");
   is_completed = true;
   sys_exit(0);

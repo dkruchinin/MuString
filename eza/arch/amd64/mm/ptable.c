@@ -97,6 +97,16 @@ static int do_ptable_map(page_frame_t *dir, struct pt_mmap_info *minfo, int pde_
       ret = do_ptable_map(pde_fetch_subdir(pde), minfo, pde_level - 1);
       if (ret) {
         ptable_depopulate_pagedir(pde);
+#ifdef CONFIG_DEBUG_MM
+        {
+          page_frame_t *pf = pframe_by_number(pde_fetch_page_idx(pde));
+          
+          if (!atomic_get(&pf->refcount)) {
+            kprintf(KO_DEBUG "Freed page directory of level %d: [frame_idx = %d]\n",
+                    pde_level - 1, pframe_number(pf));
+          }
+        }
+#endif /* CONFIG_DEBUG_MM */
         return ret;
       }
 
@@ -274,7 +284,7 @@ void ptable_depopulate_pagedir(pde_t *pde)
       pde->flags &= ~PDE_PRESENT;
       tlb_flush_entry(task_get_rpd(current_task()), (uintptr_t)pde);
       unpin_page_frame(current_dir);
-    }    
+    }
   }
 }
 
@@ -293,8 +303,10 @@ int ptable_map(rpd_t *rpd, uintptr_t va_from, page_idx_t npages,
   ctx = iter_fetch_ctx(pfi);
   ret = do_ptable_map(rpd->pml4, &ptminfo, PTABLE_LEVEL_LAST);
   iter_next(pfi);
-  if (ret)
-    ptable_unmap(rpd, va_from, ptminfo.va_from << PAGE_WIDTH);
+  if (ret) {
+    kprintf("Unmapping: %p -> %p\n", va_from, ptminfo.va_from);
+    ptable_unmap(rpd, va_from, (ptminfo.va_from - va_from + PAGE_SIZE) >> PAGE_WIDTH);
+  }
   else if (!iter_isstopped(pfi)) {
     kprintf(KO_WARNING "ptable_map: Got more pages than need for mapping of an area "
             "from %p to %p. (%d pages is enough)\n", va_from, ptminfo.va_to, npages);
