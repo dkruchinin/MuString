@@ -46,7 +46,7 @@ int idx_allocator_get_entry(idx_allocator_t *ia)
 
   if( ia->values_left ) {
     if( ia->single_entry ) {
-      idx=find_first_bit_mem_64(ia->entries.bitmap,__LONGS_PER_BITMAP);
+      idx=find_first_bit_mem(ia->entries.bitmap,__LONGS_PER_BITMAP);
       if( idx == INVALID_BIT_INDEX ) {
         idx=-1;
       } else {
@@ -61,7 +61,7 @@ int idx_allocator_put_entry(idx_allocator_t *ia,int entry)
 {
   if( entry >=0 && entry < ia->size ) {
     if( ia->single_entry ) {
-      if( set_and_test_bit_mem_64(ia->entries.bitmap,entry) ) {
+      if( set_and_test_bit_mem(ia->entries.bitmap,entry) ) {
         kprintf(KO_WARNING "idx_allocator_put_entry(): Freeing insufficient entry %d\n",
                 entry);
       } else {

@@ -50,7 +50,7 @@ static inline bit_idx_t find_first_bit64( uint64_t v )
   return idx;
 }
 
-static inline bit_idx_t find_first_bit_mem_64( uint64_t *ptr, uint64_t count )
+static inline bit_idx_t find_first_bit_mem(long *ptr, long count)
 {
   bit_idx_t idx;
 
@@ -70,7 +70,7 @@ static inline bit_idx_t find_first_bit_mem_64( uint64_t *ptr, uint64_t count )
   return idx;
 }
 
-static inline bit_idx_t reset_and_test_bit_mem_64( uint64_t *ptr, bit_idx_t bit )
+static inline bit_idx_t reset_and_test_bit_mem(uint64_t *ptr, bit_idx_t bit )
 {
   bit_idx_t prev_state;
 
@@ -88,7 +88,7 @@ static inline bit_idx_t reset_and_test_bit_mem_64( uint64_t *ptr, bit_idx_t bit 
   return prev_state;
 }
 
-static inline bit_idx_t set_and_test_bit_mem_64( uint64_t *ptr, bit_idx_t bit )
+static inline bit_idx_t set_and_test_bit_mem(long *ptr, bit_idx_t bit)
 {
   bit_idx_t prev_state;
 

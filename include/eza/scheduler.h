@@ -35,6 +35,8 @@
 
 struct __task_struct;
 
+#define SCHED_PRIO_MAX 128
+
 /* Handler for extra check during the scheduling step.
  * If it returns true, target task will be rescheduled,
  * otherwise - it won't.
