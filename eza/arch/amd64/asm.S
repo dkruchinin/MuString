@@ -151,11 +151,11 @@ process_irq_deffered_actions:
   jnc no_irq_deffered_works
 
   /* Avoid recursive processing of deffered works. */
-  bt $CPU_SCHED_DEF_WORKS_PROCESSING_F_IDX,%gs:CPU_SCHED_STAT_FLAGS_OFFT
-  jc no_irq_deffered_works
+//  bt $CPU_SCHED_DEF_WORKS_PROCESSING_F_IDX,%gs:CPU_SCHED_STAT_FLAGS_OFFT
+//  jc no_irq_deffered_works
 
   /* We're the only one processing deffered works during this IRQ processing. */
-  bts $CPU_SCHED_DEF_WORKS_PROCESSING_F_IDX,%gs:CPU_SCHED_STAT_FLAGS_OFFT
+//  bts $CPU_SCHED_DEF_WORKS_PROCESSING_F_IDX,%gs:CPU_SCHED_STAT_FLAGS_OFFT
   btr $CPU_SCHED_DEF_WORKS_F_IDX, %gs:CPU_SCHED_STAT_FLAGS_OFFT
 
   /* We shouldn't be preempted while processing deffered actions. */
@@ -166,10 +166,10 @@ process_irq_deffered_actions:
   cli
 
   /* Now we can be preempted. */
-  subq $1, %gs:CPU_SCHED_STAT_PREEMPT_OFFT
+//  subq $1, %gs:CPU_SCHED_STAT_PREEMPT_OFFT
 
   /* Report that we have finished processing deffered IRQ events. */
-  btr $CPU_SCHED_DEF_WORKS_PROCESSING_F_IDX, %gs:CPU_SCHED_STAT_FLAGS_OFFT
+//  btr $CPU_SCHED_DEF_WORKS_PROCESSING_F_IDX, %gs:CPU_SCHED_STAT_FLAGS_OFFT
 
   /* More prioritized deffered actions occured ? */
   bt $CPU_SCHED_DEF_WORKS_F_IDX, %gs:CPU_SCHED_STAT_FLAGS_OFFT

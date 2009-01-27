@@ -108,7 +108,7 @@ range_type_t index_array_alloc_value(index_array_t *array)
   if(array->values_left > 0) {
     register index_array_entry_t *entry = list_entry(list_node_first(&array->free_entries),index_array_entry_t,l);
 
-    bit_idx_t idx = find_first_bit_mem_64(entry->bitmap,IA_ENTRY_RANGE / 64);
+    bit_idx_t idx = find_first_bit_mem(entry->bitmap,IA_ENTRY_RANGE / 64);
 
     array->values_left--;
     entry->values_left--;
@@ -120,7 +120,7 @@ range_type_t index_array_alloc_value(index_array_t *array)
     }
 
     if(idx != INVALID_BIT_INDEX) {
-      reset_and_test_bit_mem_64(entry->bitmap,idx);
+      reset_and_test_bit_mem(entry->bitmap,idx);
       return entry->range_start + idx;
     }
   }
@@ -134,7 +134,7 @@ bool index_array_free_value(index_array_t *array,range_type_t value)
     register range_type_t off = value & (IA_ENTRY_RANGE-1);
 
     index_array_entry_t *entry = &array->entries[idx];
-    if( set_and_test_bit_mem_64(entry->bitmap,off) != 0 ) {
+    if( set_and_test_bit_mem(entry->bitmap,off) != 0 ) {
       kprintf( KO_WARNING "index_array_free_value(): Freeing insufficient index: %d\n", value );
     } else {
       entry->values_left++;

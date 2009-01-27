@@ -62,7 +62,7 @@ status_t sys_create_port( ulong_t flags, ulong_t queue_size )
     flags |= IPC_BLOCKED_ACCESS;
   }
 
-  return __ipc_create_port(caller,flags);
+  return __ipc_create_port(caller,flags,queue_size);
 }
 
 status_t sys_close_port(ulong_t port)

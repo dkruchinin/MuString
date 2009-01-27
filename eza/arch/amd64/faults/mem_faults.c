@@ -39,36 +39,6 @@
 #define get_fault_address(x) \
     __asm__ __volatile__( "movq %%cr2, %0" : "=r"(x) )
 
-void invalid_tss_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
-{
-    kprintf( "  [!!] #Invalid TSS exception raised !\n" );
-}
-
-void stack_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
-{
-    kprintf( "  [!!] #Stack exception raised !\n" );
-}
-
-void segment_not_present_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
-{
-    kprintf( "  [!!] #Segment not present exception raised !\n" );
-}
-
-static int __send_sigsegv_on_faults=0;
-
-void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
-{
-  default_console()->enable();
-  if( kernel_fault(stack_frame) ) {
-    kprintf( "#GPF in kernel mode: RIP = 0x%X\n", stack_frame->rip );    
-  }
-
-  kprintf( "[!!!] Unhandled GPF exception ! RIP: %p (CODE: %d) ...\n",
-           stack_frame->rip, stack_frame->error_code );
-  interrupts_disable();
-  l1: goto l1;
-}
-
 static void __dump_regs(regs_t *r,ulong_t rip)
 {
   kprintf(" Current task: PID=%d, TID=0x%X\n",
@@ -111,6 +81,51 @@ void __dump_stack(uintptr_t ustack)
     }
     ustack += sizeof(uintptr_t);
   }
+}
+
+void invalid_tss_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
+{
+    kprintf( "  [!!] #Invalid TSS exception raised !\n" );
+}
+
+void stack_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
+{
+    kprintf( "  [!!] #Stack exception raised !\n" );
+}
+
+void segment_not_present_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
+{
+    kprintf( "  [!!] #Segment not present exception raised !\n" );
+}
+
+static int __send_sigsegv_on_faults=0;
+
+void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
+{
+  regs_t *regs=(regs_t *)(((uintptr_t)stack_frame)-sizeof(struct __gpr_regs)-8);
+
+  default_console()->enable();
+
+  if( kernel_fault(stack_frame) ) {
+    goto kernel_fault;
+  }
+
+  kprintf("[CPU %d] Unhandled user-mode GPF exception! Stopping CPU with error code=%d.\n\n",
+          cpu_id(), stack_frame->error_code);
+  goto stop_cpu;
+
+kernel_fault:
+  kprintf("[CPU %d] Unhandled kernel-mode GPF exception! Stopping CPU with error code=%d.\n\n",
+          cpu_id(), stack_frame->error_code);
+stop_cpu:
+  __dump_regs(regs,stack_frame->rip);
+
+  if( !kernel_fault(stack_frame) ) {
+    __dump_stack(stack_frame->old_rsp);
+  }
+
+  interrupts_disable();
+  for(;;);
 }
 
 void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)

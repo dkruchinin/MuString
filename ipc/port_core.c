@@ -120,6 +120,7 @@ ipc_port_message_t *ipc_create_port_message_iov_v(iovec_t *snd_kiovecs,ulong_t s
     if( rcv_size ) {
       if( rcv_size <= IPC_BUFFERED_PORT_LENGTH ) {
         msg->receive_buffer=ipc_priv->cached_data.cached_page2;
+        msg->rcv_buf=NULL;
         msg->num_recv_buffers=0;
       } else {
         r=ipc_setup_buffer_pages(owner,rcv_kiovecs,rcv_numvecs,
@@ -128,8 +129,8 @@ ipc_port_message_t *ipc_create_port_message_iov_v(iovec_t *snd_kiovecs,ulong_t s
         if( r ) {
 	  goto free_message;
 	}
-        msg->num_recv_buffers=rcv_numvecs;
         msg->rcv_buf=rcv_bufs;
+        msg->num_recv_buffers=rcv_numvecs;
 	/* Fallthrough. */
       }
     }
@@ -160,7 +161,7 @@ static void __notify_message_arrived(ipc_gen_port_t *port)
 }
 
 static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
-                                task_t *owner)
+                                ulong_t queue_size,task_t *owner)
 {
   ipc_gen_port_t *p = memalloc(sizeof(*p));
   status_t r;
@@ -171,16 +172,15 @@ static status_t __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
 
   memset(p,0,sizeof(*p));
 
-  /* TODO: [mt] Support flags during IPC port creation. */
-  if( flags & IPC_PRIORITIZED_PORT_QUEUE ) {
-    return -EINVAL;
+  if( flags & IPC_PRIORITIZED_ACCESS ) {
+    p->msg_ops=&prio_port_msg_ops;
   } else {
     p->msg_ops=&def_port_msg_ops;
   }
 
   p->flags=(flags & IPC_PORT_DIRECT_FLAGS);
 
-  r=p->msg_ops->init_data_storage(p,owner);
+  r=p->msg_ops->init_data_storage(p,owner,queue_size);
   if( r ) {
     goto out_free_port;
   }
@@ -266,7 +266,7 @@ out_unlock:
   return r;
 }
 
-status_t __ipc_create_port(task_t *owner,ulong_t flags)
+status_t __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
 {
   status_t r;
   task_ipc_t *ipc = get_task_ipc(owner);
@@ -280,7 +280,16 @@ status_t __ipc_create_port(task_t *owner,ulong_t flags)
   LOCK_IPC(ipc);
 
   if(ipc->num_ports >= owner->limits->limits[LIMIT_IPC_MAX_PORTS]) {
-    r = -EMFILE;
+    r=-EMFILE;
+    goto out_unlock;
+  }
+
+  if( !queue_size ) {  /* Default queue size. */
+    queue_size=owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES];
+  }
+
+  if( queue_size > owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES] ) {
+    r=-EINVAL;
     goto out_unlock;
   }
 
@@ -308,7 +317,7 @@ status_t __ipc_create_port(task_t *owner,ulong_t flags)
   }
 
   /* Ok, it seems that we can create a new port. */
-  r = __allocate_port(&port,flags,owner);
+  r = __allocate_port(&port,flags,queue_size,owner);
   if( r != 0 ) {
     goto free_id;
   }
@@ -442,7 +451,7 @@ out:
     IPC_LOCK_PORT_W(port);
     if( !(port->flags & IPC_PORT_SHUTDOWN) &&
         !(port->flags & IPC_BLOCKED_ACCESS) ) {
-      msg_ops->remove_message(port,msg->id,NULL);
+      msg_ops->remove_message(port,msg);
       free=true;
     } else {
       free=false;
@@ -465,7 +474,7 @@ out:
       /* In case of errors remove message and wakeup client. */
       if( r ) {
         IPC_LOCK_PORT_W(port);
-        msg_ops->remove_message(port,msg->id,NULL);
+        msg_ops->remove_message(port,msg);
         IPC_UNLOCK_PORT_W(port);
 
         msg->replied_size=r;
@@ -526,7 +535,7 @@ static status_t __transfer_reply_data_iov(ipc_port_message_t *msg,
   }
 
   if( reply_len > 0 ) {
-    if( !msg->num_send_bufs && msg->reply_size <= IPC_BUFFERED_PORT_LENGTH ) {
+    if( msg->reply_size <= IPC_BUFFERED_PORT_LENGTH ) {
       /* Short message - copy it from the buffer. */
       rcv_buf=msg->receive_buffer;
 
@@ -557,8 +566,7 @@ static status_t __transfer_reply_data_iov(ipc_port_message_t *msg,
   }
 
   if( r ) {
-    r=-EFAULT;
-    reply_len=0;
+    r=reply_len=-EFAULT;
   }
 
   /* If we're replying to the message, setup size properly. */
@@ -637,7 +645,7 @@ status_t ipc_port_send_iov(struct __ipc_gen_port *port,
           /* If server neither received nor replied to our message, we can
            * remove it from the queue without any problems.
            */
-          msg_ops->remove_message(port,msg->id,NULL);
+          msg_ops->remove_message(port,msg);
           break;
         case MSG_STATE_DATA_TRANSFERRED:
           /* Server successfully received data from our message but not replied yet,
@@ -653,6 +661,12 @@ status_t ipc_port_send_iov(struct __ipc_gen_port *port,
           b=r;
           break;
         case MSG_STATE_REPLIED:
+          /* If server finished 'REPLY' phase while we have pending signals,
+           * we assume that we weren't actually interrupted by signals.
+           * Because server got no errors after performing reply while we have
+           * pending signals, reporting error to the client may cause confuses.
+           */
+          ir=0;
           break; /* Message was replied - do nothing. */
       }
       IPC_UNLOCK_PORT_W(port);
@@ -692,19 +706,25 @@ status_t ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
     return -EINVAL;
   }
 
-  msg=NULL;
   IPC_LOCK_PORT_W(port);
   if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
-    r=port->msg_ops->remove_message(port,msg_id,&msg);
-    if( msg ) {
-      msg->state=MSG_STATE_REPLY_BEGIN;
+    msg=port->msg_ops->lookup_message(port,msg_id);
+    if( msg == __MSG_WAS_DEQUEUED ) { /* Client got lost. */
+      r=-ENXIO;
+    } else if( msg ) {
+      r=port->msg_ops->remove_message(port,msg);
+      if( !r ) {
+        msg->state=MSG_STATE_REPLY_BEGIN;
+      }
+    } else {
+      r=-EINVAL;
     }
   } else {
     r=-EPIPE;
   }
   IPC_UNLOCK_PORT_W(port);
 
-  if( msg ) {
+  if( !r ) {
     r=__transfer_reply_data_iov(msg,reply_iov,numvecs,true,reply_len);
 
     /* Update message state and wakeup client. */
