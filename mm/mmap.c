@@ -65,10 +65,13 @@ static int __vmranges_cmp(void *r1, void *r2)
     if ((diff = range2->space_start - range1->space_end) > 0)
       return -1;
 
+    kprintf("0?\n");
     return 0;
   }
-  else
-    return !!diff;
+  else {
+    kprintf("%p -> %p\n", range1->space_start, range1->space_end);
+    return !diff;
+  }
 }
 
 static inline bool __vmranges_can_be_merged(const vmrange_t *vmr1, const vmrange_t *vmr2)
@@ -178,6 +181,9 @@ static void try_merge_vmranges(vmm_t *vmm, vmrange_t *vmrange, tnode_meta_t *met
       continue;
 
     ttree_delete_placeful(&vmm->vmranges_tree, &mergeable_meta);
+    kprintf("search: %p, %p\n", vmrange->bounds.space_start, vmrange->bounds.space_end);
+    ASSERT(!ttree_replace(&vmm->vmranges_tree, &vmrange->bounds, vmrange));
+    ttree_print(&vmm->vmranges_tree);
     if (!i) {
       vmrange->bounds.space_start = mergeable_vmr->bounds.space_start;
       VMM_VERBOSE("Merge ranges [%p, %p) => [%p %p)\n",
@@ -190,8 +196,7 @@ static void try_merge_vmranges(vmm_t *vmm, vmrange_t *vmrange, tnode_meta_t *met
                   mergeable_vmr->bounds.space_start, mergeable_vmr->bounds.space_end);
       vmrange->bounds.space_end = mergeable_vmr->bounds.space_end;
     }
-    
-    ASSERT(!ttree_replace(&vmm->vmranges_tree, &vmrange->bounds, vmrange));
+        
     vmm->num_vmrs--;
   }
 }
@@ -284,7 +289,7 @@ uintptr_t find_suitable_vmrange(vmm_t *vmm, uintptr_t length, tnode_meta_t *meta
     p = tnode;
     tnode_for_each_key(tnode, i) {
       bounds = ttree_key2item(&vmm->vmranges_tree, tnode_key(tnode, i));
-      kprintf("%p <-> %p\n", bounds->space_start, bounds->space_end);
+      kprintf("[%d] %p <-> %p\n", i, bounds->space_start, bounds->space_end);
       if ((bounds->space_start - start) >= length) {
         kprintf("found: %p\n", bounds->space_start);
         start = bounds->space_start;
@@ -303,13 +308,13 @@ uintptr_t find_suitable_vmrange(vmm_t *vmm, uintptr_t length, tnode_meta_t *meta
   if (meta && p) {
     meta->tnode = p;
     if (unlikely(tnode_is_full(&vmm->vmranges_tree, p)
-                 && ((i + 1) > p->max_idx))) {      
+                 && (i > p->max_idx))) {
       meta->side = TNODE_RIGHT;
       meta->idx = first_tnode_idx(&vmm->vmranges_tree);
     }
     else {
       meta->side = TNODE_BOUND;
-      meta->idx = i + 1;
+      meta->idx = i;
     }
   }
   
@@ -381,6 +386,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
   }
   
   ttree_insert_placeful(&vmm->vmranges_tree, &tmeta, vmr);
+  ttree_print(&vmm->vmranges_tree);
   kprintf("inserted\n");
   if (flags & VMR_POPULATE) {
     page_frame_t *pages;
@@ -405,6 +411,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
   }
 
   try_merge_vmranges(vmm, vmr, &tmeta);
+  kprintf("-> %p\n", addr);
   return addr;
   
   err:

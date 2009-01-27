@@ -36,6 +36,10 @@
 #include <mlibc/stddef.h>
 #include <mlibc/types.h>
 
+/* Index number of first key in a T*-tree node when a node has only one key. */
+#define first_tnode_idx(ttree)                  \
+  (((ttree)->keys_per_tnode >> 1) - 1)
+
 /*
  * Minimum allowed number of used rooms in a T*-tree node.
  * By default it's a quoter of total number of key rooms in a node.
@@ -384,7 +388,7 @@ static inline void __add_successor(ttree_node_t *n)
    * 1) If new node is added as a right child, it inherites
    *    successor of its parent. And it itself becomes a new parent's
    *    successor.
-   * 2) If it is left child its parent becomes child's successor.
+   * 2) If it is a left child its parent becomes child's successor.
    * 2.1) If parent itself is right child, then newly added node becomes
    *      the successor of parent's parent.
    * 2.2) Otherwise it becomes a successor of one of nodes higher.
@@ -394,19 +398,26 @@ static inline void __add_successor(ttree_node_t *n)
    *      newly added node.
    */
   if (tnode_get_side(n) == TNODE_RIGHT) {
-    n->successor = n->parent->successor;      
+    n->successor = n->parent->successor;
+    if (n->parent->successor)
+      n->parent->successor->predessor = n;
+    
     n->parent->successor = n;
+    n->predessor = n->parent;
   }
   else {
     n->successor = n->parent;
-    if (tnode_get_side(n->parent) == TNODE_RIGHT)
+    if (tnode_get_side(n->parent) == TNODE_RIGHT) {
       n->parent->parent->successor = n;
+      n->predessor = n->parent->parent;
+    }
     else if (tnode_get_side(n->parent) == TNODE_LEFT) {
       register ttree_node_t *node;
 
       for (node = n->parent->parent; node; node = node->parent) {
         if (node->successor == n->parent) {
           node->successor = n;
+          n->predessor = node;
           break;
         }
       }
@@ -422,16 +433,22 @@ static inline void __remove_successor(ttree_node_t *n)
    * assumes that ony leafs are removed, successor fixing
    * is opposite to successor adding algorithm.
    */
-  if (tnode_get_side(n) == TNODE_RIGHT)
+  if (tnode_get_side(n) == TNODE_RIGHT) {
     n->parent->successor = n->successor;
-  else if (tnode_get_side(n->parent) == TNODE_RIGHT)
+    if (n->successor)
+      n->successor->predessor = n->parent;
+  }
+  else if (tnode_get_side(n->parent) == TNODE_RIGHT) {
     n->parent->parent->successor = n->parent;
+    n->parent->predessor = n->parent->parent;
+  }
   else {
     register ttree_node_t *node = n;
       
     while ((node = node->parent)) {
       if (node->successor == n) {
         node->successor = n->parent;
+        n->parent->predessor = node;
         break;
       }
     }
@@ -823,6 +840,42 @@ int ttree_replace(ttree_t *ttree, void *key, void *new_item)
 
   tnode_meta.tnode->keys[tnode_meta.idx] = ttree_item2key(ttree, new_item);
   return 0;
+}
+
+void tnode_meta_next(ttree_t *ttree, tnode_meta_t *tmeta)
+{
+  if (unlikely((tnode_is_full(ttree, tmeta->tnode)) &&
+               (tmeta->idx >= tmeta->tnode->max_idx))) {
+    if (tmeta->tnode->successor) {
+      tmeta->tnode = tmeta->tnode->successor;
+      tmeta->idx = tmeta->tnode->min_idx;
+      tmeta->side = TNODE_BOUND;
+    }
+    else {
+      tmeta->side = TNODE_RIGHT;
+      tnode->idx = first_tnode_idx(ttree);
+    }
+  }
+  else
+    tmeta->idx++;
+}
+
+void tnode_meta_prev(ttree_t *ttree, tnode_meta_t *tmeta)
+{
+  if (unlikely((tnode_is_full(ttree, tmeta->tnode)) &&
+               (tmeta->idx <= tmeta->tnode->min_idx))) {
+    if (tmeta->tnode->predessor) {
+      tmeta->tnode = tmeta->tnode->predessor;
+      tmeta->idx = tmeta->tnode->max_idx;
+      tmeta->side = TNODE_BOUND;
+    }
+    else {
+      tmeta->side = TNODE_LEFT;
+      tnode->idx = first_tnode_idx(ttree);
+    }
+  }
+  else
+    tmeta->idx--;
 }
 
 static void __print_tree(ttree_node_t *tnode, int offs)

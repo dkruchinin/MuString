@@ -62,6 +62,7 @@ enum {
 typedef struct __ttree_node {
   struct __ttree_node *parent;     /**< Pointer to node's parent */
   struct __ttree_node *successor;  /**< Pointer to node's soccussor */
+  struct __ttree_node *predessor;
   union {
     struct __ttree_node *sides[2];
     struct  {
@@ -239,10 +240,6 @@ DEFINE_ITERATOR(ttree,
 #define tnode_for_each_key(tnode, iter)                     \
   for ((iter) = (tnode)->min_idx; (iter) <= (tnode)->max_idx; (iter)++)
 
-/* Index number of first key in a T*-tree node when a node has only one key. */
-#define first_tnode_idx(ttree)                  \
-  (((ttree)->keys_per_tnode >> 1) - 1)
-
 /**
  * @brief Set T*-tree node side to @a side
  * @param tnode - A pointer to target node
@@ -264,13 +261,6 @@ static inline void tnode_set_side(ttree_node_t *tnode, int side)
 static inline int tnode_get_side(ttree_node_t *tnode)
 {
   return ((tnode->node_side & 0x03) - 1);
-}
-
-static inline void tnode_meta_fill(tnode_meta_t *meta, ttree_node_t *tnode, int idx, int side)
-{
-  meta->tnode = tnode;
-  meta->idx = idx;
-  meta->side = side;
 }
 
 /**
@@ -394,6 +384,16 @@ void *ttree_delete_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta);
  * @return 0 if all is ok or negative value if @a key wasn't found.
  */
 int ttree_replace(ttree_t *ttree, void *key, void *new_item);
+
+static inline void tnode_meta_fill(tnode_meta_t *tmeta, ttree_node_t *tnode, int idx, int side)
+{
+  tmeta->tnode = tnode;
+  tmeta->idx = idx;
+  tmeta->side = side;
+}
+
+void tnode_meta_next(tnode_meta_t *tmeta);
+void tnode_meta_prev(tnode_meta_t *tmeta);
 
 /**
  * @brief Display T*-tree structure on a screen.

@@ -93,6 +93,9 @@ typedef struct __skiplist {
     .node = { MLST_LIST_NEXT, MLST_LIST_PREV }  \
   }
 
+#define list_node2head(node)                    \
+    ((list_head_t *)(node))
+
 /**
  * @fn static inline void list_init_head(list_head_t *lst)
  * @brief Initialize list head
@@ -208,11 +211,14 @@ static inline bool list_node_prev_isbound(list_node_t *node)
 
 /**
  * @def list_add(before, new, after)
- * @param next  - will be the next node after @a new
+ * @param next   - will be the next node after @a new
  * @param new    - node to insert
  */
-#define list_add(next, new)                        \
-  (list_add_range(new, new, (next)->prev, next))
+#define list_add_brfore(before, new)                  \
+  (list_add_range(new, new, (before)->prev, before))
+
+#define list_add_after(after, new)              \
+  (list_add_range(new, new, (after), (after)->next))
 
 /**
  * @def list_move2head(to, from)
