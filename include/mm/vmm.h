@@ -80,7 +80,7 @@ typedef struct __vmragnge {
   struct range_bounds bounds;
   struct __vmm *parent_vmm;
   memobj_t *memobj;
-  void *private;
+  uintptr_t hole_size;
   vmrange_flags_t flags;
 } vmrange_t;
 
@@ -168,6 +168,7 @@ static inline void munmap_core(rpd_t *rpd, uintptr_t va, ulong_t npages)
 #ifdef CONFIG_DEBUG_MM
 void vmm_enable_verbose_dbg(void);
 void vmm_disable_verbose_dbg(void);
+void vmranges_print_tree_dbg(vmm_t *vmm);
 #endif /* CONFIG_DEBUG_MM */
 
 #endif /* __VMM_H__ */

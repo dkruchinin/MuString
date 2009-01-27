@@ -94,7 +94,7 @@ static void init_sw_timers(void)
 void hw_timer_register (hw_timer_t *ctrl)
 {
   GRAB_HW_TIMER_LOCK();
-  list_add(list_node_first(&known_hw_timers), &ctrl->l);
+  list_add_before(list_node_first(&known_hw_timers), &ctrl->l);
   RELEASE_HW_TIMER_LOCK();
 }
 
@@ -117,7 +117,7 @@ static void __insert_timer(timer_t *timer)
   list_for_each(&active_sw_timers,n) {
     timer_t *t=container_of(n,timer_t,l);
     if(timer->time_x <= t->time_x) {
-      list_add(n,&timer->l);
+      list_add_before(n,&timer->l);
       return;
     }
   }

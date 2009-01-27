@@ -62,7 +62,6 @@ enum {
 typedef struct __ttree_node {
   struct __ttree_node *parent;     /**< Pointer to node's parent */
   struct __ttree_node *successor;  /**< Pointer to node's soccussor */
-  struct __ttree_node *predessor;
   union {
     struct __ttree_node *sides[2];
     struct  {
@@ -232,12 +231,12 @@ DEFINE_ITERATOR(ttree,
   __tnode_sidemost(tnode, TNODE_RIGHT)
 
 /**
- * @brief Iterate through each key in a T*-tree node
+ * @brief Iterate through each non-empty index in a T*-tree node
  * @param tnode - A pointer to target node
  * @param iter  - An integer using for iteration.
  * @see tnode_key
  */
-#define tnode_for_each_key(tnode, iter)                     \
+#define tnode_for_each_index(tnode, iter)                               \
   for ((iter) = (tnode)->min_idx; (iter) <= (tnode)->max_idx; (iter)++)
 
 /**
@@ -392,15 +391,16 @@ static inline void tnode_meta_fill(tnode_meta_t *tmeta, ttree_node_t *tnode, int
   tmeta->side = side;
 }
 
-void tnode_meta_next(tnode_meta_t *tmeta);
-void tnode_meta_prev(tnode_meta_t *tmeta);
+int tnode_meta_next(ttree_t *ttree, tnode_meta_t *tmeta);
+int tnode_meta_prev(ttree_t *ttree, tnode_meta_t *tmeta);
 
 /**
  * @brief Display T*-tree structure on a screen.
  * @param ttree - A pointer to a T*-tree.
+ * @paran fn    - A pointer to function used for displaing T-tree node items
  * @warning Recursive function.
  */
-void ttree_print(ttree_t *ttree);
+void ttree_print(ttree_t *ttree, void (*fn)(ttree_node_t *tnode));
 
 void ttree_iterator_init(ttree_t *ttree, ttree_iterator_t *tti, tnode_meta_t *start, tnode_meta_t *end);
 

@@ -174,7 +174,7 @@ static inline bool list_node_prev_isbound(list_node_t *node)
  * @param new - A pointer to the list node
  */
 #define list_add2head(lst, new)                 \
-  list_add(list_node_first(lst), new)
+  list_add_before(list_node_first(lst), new)
 
 /**
  * @def list_add2tail(lst, new)
@@ -183,7 +183,7 @@ static inline bool list_node_prev_isbound(list_node_t *node)
  * @param new - A pointer to node to add
  */
 #define list_add2tail(lst, new)                         \
-  list_add(list_head(lst), new)
+  list_add_before(list_head(lst), new)
 
 /**
  * @def list_delfromhead(lst)
@@ -210,13 +210,18 @@ static inline bool list_node_prev_isbound(list_node_t *node)
   (list_del_range(del, del))
 
 /**
- * @def list_add(before, new, after)
- * @param next   - will be the next node after @a new
- * @param new    - node to insert
+ * @def list_add_before(before, new)
+ * @param brefore - The node before which @a new will be inserted
+ * @param new     - A node to insert
  */
-#define list_add_brfore(before, new)                  \
+#define list_add_before(before, new)                  \
   (list_add_range(new, new, (before)->prev, before))
 
+/**
+ * @def list_add_after(after, new)
+ * @param after - The node after which a new one will be inserted
+ * @param new   - A node to insert
+ */
 #define list_add_after(after, new)              \
   (list_add_range(new, new, (after), (after)->next))
 

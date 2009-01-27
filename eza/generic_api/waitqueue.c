@@ -65,7 +65,7 @@ static void __insert_task(wqueue_t *wq, wqueue_task_t *wq_task)
     }
   }
 
-  list_add(next, &wq_task->node);
+  list_add_before(next, &wq_task->node);
   wq_task->q = wq;
   wq->num_waiters++;
 }
@@ -76,7 +76,7 @@ static void __delete_task(wqueue_task_t *wq_task)
     wqueue_task_t *t = list_entry(list_node_first(&wq_task->head),
                                       wqueue_task_t, node);
     list_del(&t->node);
-    list_add(&wq_task->node, &t->node);
+    list_add_before(&wq_task->node, &t->node);
     if (!list_is_empty(&wq_task->head))
       list_move(list_head(&t->head), list_head(&t->head), &wq_task->head);
   }

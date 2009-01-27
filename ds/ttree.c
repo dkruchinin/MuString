@@ -313,7 +313,7 @@ static void rotate_double(ttree_node_t **target, int side)
   (*target)->bfc = 0;
 }
 
-static void rebalance(ttree_t *ttree, ttree_node_t **node)
+static void rebalance(ttree_t *ttree, ttree_node_t **node, tnode_meta_t *tmeta)
 {
   int lh = left_heavy(*node);
   int sum = ABS((*node)->bfc + (*node)->sides[opposite_side(lh)]->bfc);
@@ -353,6 +353,14 @@ static void rebalance(ttree_t *ttree, ttree_node_t **node)
       offs = 1;
       (*node)->min_idx = 0;
       (*node)->max_idx = nkeys - 1;
+      if (tmeta && (tmeta->tnode == n)) {
+        if (tmeta->idx < n->max_idx) {
+          tmeta->tnode = *node;
+          tmeta->idx = (*node)->min_idx + (tmeta->idx - n->min_idx + 1);
+        }
+        else
+          tmeta->idx = first_tnode_idx(ttree);
+      }
     }
     else {
       /*
@@ -364,6 +372,15 @@ static void rebalance(ttree_t *ttree, ttree_node_t **node)
       (*node)->keys[ttree->keys_per_tnode - 1] = (*node)->keys[(*node)->min_idx];
       (*node)->min_idx = offs = ttree->keys_per_tnode - nkeys;
       (*node)->max_idx = ttree->keys_per_tnode - 1;
+      if (tmeta && (tmeta->tnode == n)) {
+        if (tmeta->idx > n->min_idx) {
+          tmeta->tnode = *node;
+          tmeta->idx = (*node)->min_idx + (tmeta->idx - n->min_idx);
+        }
+        else
+          tmeta->idx = first_tnode_idx(ttree);
+      }
+      
       n->max_idx = n->min_idx++;
     }
 
@@ -399,25 +416,18 @@ static inline void __add_successor(ttree_node_t *n)
    */
   if (tnode_get_side(n) == TNODE_RIGHT) {
     n->successor = n->parent->successor;
-    if (n->parent->successor)
-      n->parent->successor->predessor = n;
-    
     n->parent->successor = n;
-    n->predessor = n->parent;
   }
   else {
     n->successor = n->parent;
-    if (tnode_get_side(n->parent) == TNODE_RIGHT) {
+    if (tnode_get_side(n->parent) == TNODE_RIGHT)
       n->parent->parent->successor = n;
-      n->predessor = n->parent->parent;
-    }
     else if (tnode_get_side(n->parent) == TNODE_LEFT) {
       register ttree_node_t *node;
 
       for (node = n->parent->parent; node; node = node->parent) {
         if (node->successor == n->parent) {
           node->successor = n;
-          n->predessor = node;
           break;
         }
       }
@@ -433,29 +443,23 @@ static inline void __remove_successor(ttree_node_t *n)
    * assumes that ony leafs are removed, successor fixing
    * is opposite to successor adding algorithm.
    */
-  if (tnode_get_side(n) == TNODE_RIGHT) {
+  if (tnode_get_side(n) == TNODE_RIGHT)
     n->parent->successor = n->successor;
-    if (n->successor)
-      n->successor->predessor = n->parent;
-  }
-  else if (tnode_get_side(n->parent) == TNODE_RIGHT) {
+  else if (tnode_get_side(n->parent) == TNODE_RIGHT)
     n->parent->parent->successor = n->parent;
-    n->parent->predessor = n->parent->parent;
-  }
   else {
     register ttree_node_t *node = n;
       
     while ((node = node->parent)) {
       if (node->successor == n) {
         node->successor = n->parent;
-        n->parent->predessor = node;
         break;
       }
     }
   }
 }
 
-static void fixup_after_insertion(ttree_t *ttree, ttree_node_t *n)
+static void fixup_after_insertion(ttree_t *ttree, ttree_node_t *n, tnode_meta_t *tmeta)
 {
   int bfc_delta = get_bfc_delta(n);
   ttree_node_t *node = n;
@@ -470,8 +474,13 @@ static void fixup_after_insertion(ttree_t *ttree, ttree_node_t *n)
      */
     if (!node->bfc)
       return;
-    if (subtree_is_unbalanced(node)) {      
-      rebalance(ttree, &node);
+    if (subtree_is_unbalanced(node)) {
+      /*
+       * Because of nature of T-tree rebalancing, just inserted item
+       * may change its position in its node and even its node itself.
+       * Thus if tnode meta was specified we have to take care of it.
+       */
+      rebalance(ttree, &node, tmeta);
       /* single or double rotation tree becomes balanced and we can stop here. */
       return;
     }
@@ -499,7 +508,7 @@ static void fixup_after_deletion(ttree_t *ttree, ttree_node_t *n)
     if (subtree_is_unbalanced(node)) {
       ttree_node_t *tmp = node;
       
-      rebalance(ttree, &tmp);
+      rebalance(ttree, &tmp, NULL);
       /*
        * If after rotation subtree heigh is not changed,
        * proccess should be continued.
@@ -710,10 +719,10 @@ void ttree_insert_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta, void *item)
   n->keys[tnode_meta->idx] = key;
   n->min_idx = n->max_idx = tnode_meta->idx;
   n->parent = at_node;
-  at_node->sides[tnode_meta->side] = n;
+  at_node->sides[tnode_meta->side] = n;  
   tnode_set_side(n, tnode_meta->side);
-  fixup_after_insertion(ttree, n);
   tnode_meta->tnode = n;
+  fixup_after_insertion(ttree, n, tnode_meta);  
 }
 
 void *ttree_delete(ttree_t *ttree, void *key)
@@ -842,43 +851,54 @@ int ttree_replace(ttree_t *ttree, void *key, void *new_item)
   return 0;
 }
 
-void tnode_meta_next(ttree_t *ttree, tnode_meta_t *tmeta)
-{
+int tnode_meta_next(ttree_t *ttree, tnode_meta_t *tmeta)
+{  
   if (unlikely((tnode_is_full(ttree, tmeta->tnode)) &&
-               (tmeta->idx >= tmeta->tnode->max_idx))) {
+               (tmeta->idx == tmeta->tnode->max_idx))) {
     if (tmeta->tnode->successor) {
       tmeta->tnode = tmeta->tnode->successor;
       tmeta->idx = tmeta->tnode->min_idx;
       tmeta->side = TNODE_BOUND;
+      return 0;
     }
-    else {
-      tmeta->side = TNODE_RIGHT;
-      tnode->idx = first_tnode_idx(ttree);
-    }
+
+    tmeta->side = TNODE_RIGHT;
+    tmeta->idx = first_tnode_idx(ttree);
+    tmeta->tnode = NULL;
+    return -1;
   }
-  else
-    tmeta->idx++;
+
+  return ((++tmeta->idx <= tmeta->tnode->max_idx) ? 0 : -1);
 }
 
-void tnode_meta_prev(ttree_t *ttree, tnode_meta_t *tmeta)
+int tnode_meta_prev(ttree_t *ttree, tnode_meta_t *tmeta)
 {
   if (unlikely((tnode_is_full(ttree, tmeta->tnode)) &&
-               (tmeta->idx <= tmeta->tnode->min_idx))) {
-    if (tmeta->tnode->predessor) {
-      tmeta->tnode = tmeta->tnode->predessor;
+               (tmeta->idx == tmeta->tnode->min_idx))) {
+    ttree_node_t *n = ttree_tnode_glb(tmeta->tnode);
+
+    if (!n && tmeta->tnode->parent) {
+      int s = tnode_get_side(tmeta->tnode);      
+      for (n = tmeta->tnode->parent; n->parent &&
+             (tnode_get_side(n->parent) != s); n = n->parent);
+    }
+    if (n) {
+      tmeta->tnode = n;
       tmeta->idx = tmeta->tnode->max_idx;
       tmeta->side = TNODE_BOUND;
+      return 0;
     }
-    else {
-      tmeta->side = TNODE_LEFT;
-      tnode->idx = first_tnode_idx(ttree);
-    }
+
+    tmeta->side = TNODE_LEFT;
+    tmeta->idx = first_tnode_idx(ttree);
+    tmeta->tnode = NULL;
+    return -1;
   }
-  else
-    tmeta->idx--;
+
+  return ((--tmeta->idx >= tmeta->tnode->min_idx) ? 0 : -1);
 }
 
-static void __print_tree(ttree_node_t *tnode, int offs)
+static void __print_tree(ttree_node_t *tnode, int offs, void (*fn)(ttree_node_t *tnode))
 {
   int i;
 
@@ -899,14 +919,15 @@ static void __print_tree(ttree_node_t *tnode, int offs)
   for (i = 0; i < offs + 1; i++)
     kprintf(" ");
 
-  kprintf("<%d>\n", tnode_num_keys(tnode));
-  __print_tree(tnode->left, offs + 1);
-  __print_tree(tnode->right, offs + 1);
+  kprintf("<%d> ", tnode_num_keys(tnode));
+  fn(tnode);
+  __print_tree(tnode->left, offs + 1, fn);
+  __print_tree(tnode->right, offs + 1, fn);
 }
 
-void ttree_print(ttree_t *ttree)
+void ttree_print(ttree_t *ttree, void (*fn)(ttree_node_t *tnode))
 {
-  __print_tree(ttree->root, 0);
+  __print_tree(ttree->root, 0, fn);
 }
 
 static void __tti_first(ttree_iterator_t *tti)
