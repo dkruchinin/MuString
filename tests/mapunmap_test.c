@@ -98,6 +98,7 @@ static void tc_map_unmap_core(void *ctx)
   ulong_t num_pages = pool->allocator.block_sz_max - 1;
   int ret, i;
   page_frame_t *pages;
+  page_idx_t sz;
   page_frame_iterator_t pfi;
   ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) pfi_pblock_ctx;
   
@@ -113,7 +114,6 @@ static void tc_map_unmap_core(void *ctx)
     tf->printf("Failed to map %d pages from %p to %p\n",
                atomic_get(&pool->free_pages), TC_MAP_ADDR, TC_MAP_ADDR + (num_pages << PAGE_WIDTH));
     tf->abort();
-
   }
   
   __check_mapped(tf, TC_MAP_ADDR, num_pages, pframe_number(pages));
@@ -136,32 +136,53 @@ static void tc_map_unmap_core(void *ctx)
   munmap_kern(TC_MAP_ADDR, num_pages);
 
   tf->printf("Checking page-table recovery due mmap fail.\n");
-  num_pages = pool->free_pages - 5;
-  tf->printf("Allocating non-continous block of %d pages.\n", num_pages);
+  num_pages = atomic_get(&pool->free_pages) - 5;
+  sz = atomic_get(&pool->free_pages);
+  tf->printf("Allocating non-continous block of %d pages. (%d avail)\n",
+             num_pages, atomic_get(&pool->free_pages));
   pages = alloc_pages_ncont(num_pages, AF_PGEN | AF_CLEAR_RC);
   if (!pages) {
     tf->printf("Failed to allocate %d non-continous pages.\n", num_pages);
     tf->failed();
   }
 
+  i = 0;
+  list_node_t *iter;
+  list_for_each(&pages->head, iter) {
+    i += pages_block_size(list_entry(iter, page_frame_t, node));
+  }
+
+  tf->printf("i=%d, sz=%d\n", i, sz);
+  ASSERT((atomic_get(&pool->free_pages) + i) == sz);
   tf->printf("Creating mapping: %p - %p\n", TC_MAP_ADDR_FAR, TC_MAP_ADDR_FAR + (num_pages << PAGE_WIDTH));
-  pfi_pblock_init(&pfi, &pfi_pblock_ctx, &pages->node, 0, list_node_last(&pages->head),
-                  pages_block_size(list_entry(list_node_last(&pages->head), page_frame_t, node)) - 1);
-  iterate_forward(&pfi)
+  pfi_pblock_init(&pfi, &pfi_pblock_ctx, list_node_first(&pages->head), 0, list_node_last(&pages->head),
+                  pages_block_size(list_entry(list_node_last(&pages->head), page_frame_t, node)));
+  i = 0;
+  iterate_forward(&pfi) {
     i++;
+  }
   if (i != num_pages) {
     tf->printf("Page block iterator failed: %d != %d\n", i, num_pages);
     tf->abort();
   }
 
   iter_first(&pfi);
+  tf->printf("before mmap => %d\n", atomic_get(&pool->free_pages));
   ret = __mmap_core(&kernel_rpd, TC_MAP_ADDR_FAR, num_pages, &pfi, KMAP_READ | KMAP_WRITE | KMAP_EXEC);
   if (ret != -ENOMEM) {
     tf->printf("__mmap_core returned %d, but -ENOMEM(%d) was expected.\n", ret, -ENOMEM);
     tf->failed();
   }
 
+  tf->printf("after mmap => %d\n", atomic_get(&pool->free_pages));
   free_pages_ncont(pages);
+  if (atomic_get(&pool->free_pages) != sz) {
+    tf->printf("It seems that mapping recovery wasn't fully completed.\n");
+    tf->printf("Expected %d pages to be free, but %d free indeed.\n",
+               sz, atomic_get(&pool->free_pages));
+    tf->failed();
+  }
+  
   tf->printf("Done\n");
   is_completed = true;
   sys_exit(0);

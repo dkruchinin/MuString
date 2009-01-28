@@ -230,9 +230,10 @@ void ptable_map_entries(pde_t *start_pde, int num_entries, page_frame_iterator_t
  * @brief Unmap pages from the lowest level page directory(PT)
  * @param pde_start   - A pointer to pde unmapping starts from
  * @param num_entries - A number of entries to unmap
+ * @param do_recovery - If true, doesn't free pages if their refcount(after decrement) equals to 0
  * @see pde_t
  */
-void ptable_unmap_entries(pde_t *start_pde, int num_entries);
+void ptable_unmap_entries(pde_t *start_pde, int num_entries, bool do_recovery);
 
 /**
  * @brief Populate page directory

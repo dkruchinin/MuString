@@ -88,10 +88,13 @@ page_idx_t pages_block_size(page_frame_t *first_page)
   return __pool_pblock_size(pool, first_page);
 }
 
-/* FIXME DK: allocate pages regarding to memory limits of a particular task
- * There is also a good issue when each process mm may have an opportunity to
- * allocate pages from a different pools. For example from general, dma and/or cram
- * pools. Each such pool should be able to be restricted by the root user.
+/*
+ * FIXME DK: for now alloc_pages_ncont can allocate more pages than
+ * target allocator's max pages limit, but it assumes that there are
+ * enough free blocks of max size. This is not good behaviour, because
+ * actually allocator may not have any free blocks of max size, but
+ * its memory may be highly fragmented, so there may be enough pages
+ * in blocks less than max ones. That *must* be attended.
  */
 page_frame_t *alloc_pages_ncont(page_idx_t npages, pfalloc_flags_t flags)
 {
@@ -106,13 +109,8 @@ page_frame_t *alloc_pages_ncont(page_idx_t npages, pfalloc_flags_t flags)
   while (npages) {
     block_sz = (npages > max_sz) ? max_sz : npages;
     ap = alloc_pages(block_sz, flags);
-    if (npages == 843)
-      tlsf_memdump(mmpools_get_pool(POOL_GENERAL)->allocator.alloc_ctx);
-    if (!ap) {
-      kprintf("WEEEEEE:: %d (%d) [%d]\n", pages_block_size(ap), block_sz, npages);
+    if (!ap)
       goto free_pages;
-    }
-    kprintf(":: %d (%d) [%d]\n", pages_block_size(ap), block_sz, npages);
     if (unlikely(!pages)) {
       pages = ap;
       list_init_head(&pages->head);
@@ -134,6 +132,8 @@ page_frame_t *alloc_pages_ncont(page_idx_t npages, pfalloc_flags_t flags)
       pf = list_entry(iter, page_frame_t, node);
       free_pages(pf, pages_block_size(pf));
     }
+
+    pages = NULL;
   }
   
   out:

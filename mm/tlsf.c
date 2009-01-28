@@ -585,7 +585,7 @@ static page_frame_t *__alloc_pages(page_idx_t n, void *data)
   atomic_sub(&pool->free_pages, n);
   spinlock_unlock(&tlsf->lock);
   
-  out:  
+  out:
   return block_root;
 }
 
@@ -675,7 +675,86 @@ void tlsf_alloc_init(mm_pool_t *pool)
 }
 
 #ifdef CONFIG_DEBUG_MM
-void tlsf_memdump(void *_tlsf)
+static void __validate_empty_sldi_dbg(tlsf_t *tlsf, int fldi, int sldi)
+{
+  /* Check if given SLD *really* hasn't any pages */
+  tlsf_node_t *node = tlsf->map[fldi].nodes + sldi;
+  list_node_t *n;
+
+  list_for_each(&node->blocks, n) {
+    panic("TLSF: (FLDi: %d, SLDi: %d) is marked as free, but it has at least "
+          "one page frame[idx = %d] available!", fldi, sldi,
+          pframe_number(list_entry(n, page_frame_t, head)));
+  }
+  if (node->blocks_no) {
+    panic("TLSF: (FLDi: %d, SLDi: %d) is marked as free, but block_no field of "
+          "corresponding TLSF node is not 0! (block_no = %d)", fldi, sldi, node->blocks_no);
+  }
+  if (node->max_avail_size) {
+    panic("TLSF: (FLDi: %d, SLDi: %d) is marked as free, but max_avail_size field "
+          "of corresponding TLSF node is %d instead of 0!", fldi, sldi, node->max_avail_size);
+  }
+}
+
+void tlsf_validate_dbg(void *_tlsf)
+{
+  tlsf_t *tlsf = _tlsf;
+  int fldi, sldi;
+  page_idx_t total_pgs = 0;
+  mm_pool_t *parent_pool = mmpools_get_pool(tlsf->owner);
+
+  for (fldi = 0; fldi < TLSF_FLD_SIZE; fldi++) {
+    if (!__fld_is_avail(tlsf, fldi)) {
+      /* Ok, given FLD is marked as free. Check if it's true */
+      for (sldi = 0; sldi < TLSF_SLD_SIZE; sldi++) {
+        if (!__sld_is_avail(tlsf, fldi, sldi))
+          __validate_empty_sldi_dbg(tlsf, fldi, sldi);
+      }
+
+      /* It seems TLSF is not a lier (: */
+    }
+    for (sldi = 0; sldi < TLSF_SLD_SIZE; sldi++) {
+      page_frame_t *pf;
+      tlsf_node_t *node;
+      list_node_t *n;
+      int blocks = 0;
+      
+      if (!__sld_is_avail(tlsf, fldi, sldi)) {
+        __validate_empty_sldi_dbg(tlsf, fldi, sldi);
+        continue;
+      }
+
+      /*
+       * Check if max_avail_size field and actual size of max block
+       * in a directory are relevant.
+       */
+      node = tlsf->map[fldi].nodes + sldi;
+      pf = list_entry(list_node_last(&node->blocks), page_frame_t, head);
+      if (__block_size(pf) != node->max_avail_size) {
+        panic("TLSF (FLDi: %d, SLDi: %d) TLSF node has invalid value in a max_avail_size field. "
+              "max_avail_size = %d, actual block size = %d", fldi, sldi,
+              node->max_avail_size, __block_size(pf));
+      }
+
+      /* Then check if actual number of blocks corresponds to blocks_no field */
+      list_for_each(&node->blocks, n) {
+        total_pgs += __block_size(list_entry(n, page_frame_t, head));
+        blocks++;
+      }
+      if (blocks != node->blocks_no) {
+        panic("TLSF (FLDi: %d, SLDi: %d) blocks_no field of TLSF node contains invalid value: %d "
+              "but %d is expected!", fldi, sldi, node->blocks_no, blocks);
+      }
+    }
+  }
+  if (total_pgs != atomic_get(&parent_pool->free_pages)) {
+    panic("TLSF belonging to pool %s has inadequate number of free pages: "
+          "%d, but pool itself tells us that there are %d pages available!",
+          mmpools_get_pool_name(tlsf->owner), total_pgs, atomic_get(&parent_pool->free_pages));
+  }
+}
+
+void tlsf_memdump_dbg(void *_tlsf)
 {
   int i;
   tlsf_t *tlsf = _tlsf;
