@@ -285,7 +285,6 @@ static void __pfiter_pblock_next(page_frame_iterator_t *pfi)
   }
   else {    
     if (ctx->cur_idx >= pages_block_size(list_entry(ctx->cur_node, page_frame_t, node))) {
-      kprintf("next => %p\n", ctx->cur_node->next);
       ctx->cur_node = ctx->cur_node->next;
       ctx->cur_idx = 0;
     }

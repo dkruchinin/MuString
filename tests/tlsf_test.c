@@ -34,11 +34,19 @@
 
 #define TLSF_TEST_ID "TLSF test"
 
+static int __pr = 0;
+
 static struct tlsf_test_ctx {
   mm_pool_t *pool;
   tlsf_t *tlsf;
   bool completed;
 } tlsf_ctx;
+
+static inline int __simple_random(void)
+{
+  __pr =  (11 * __pr + 0xbeaf) % 333;
+  return __pr;
+}
 
 static page_idx_t __allocate_all(test_framework_t *tf, page_frame_t **plst)
 {
@@ -124,7 +132,7 @@ static void tc_alloc_dealloc(void *ctx)
 
   tlsf_memdump(tlsf_ctx.tlsf);
   tf->printf("Allocated: %d, Free: %d\n", allocated, tlsf_ctx.pool->free_pages);
-  num = tlsf_ctx.pool->free_pages / 2 + 1;
+  num = tlsf_ctx.pool->free_pages;
   tf->printf("Allocate %d non-continous pages...\n", num);
   pages_start = alloc_pages_ncont(num, AF_CLEAR_RC);
   if (!pages_start) {

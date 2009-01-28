@@ -24,6 +24,7 @@
 #ifndef __VMM_H__
 #define __VMM_H__
 
+#include <config.h>
 #include <ds/iterator.h>
 #include <ds/list.h>
 #include <ds/ttree.h>
@@ -33,6 +34,10 @@
 #include <mlibc/types.h>
 #include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
+
+#ifdef CONFIG_DEBUG_MM
+#define VMM_DBG_NAME_LEN 128
+#endif /* CONFIG_DEBUG_MM */
 
 #define VMR_PROTO_MASK (VMR_NONE | VMR_READ | VMR_WRITE | VMR_EXEC)
 
@@ -94,6 +99,9 @@ typedef struct __vmm {
   ulong_t num_vmrs;
   page_idx_t num_pages;
   page_idx_t max_pages;
+#ifdef CONFIG_DEBUG_MM
+  char name_dbg[VMM_DBG_NAME_LEN];
+#endif /* CONFIG_DEBUG_MM */
 } vmm_t;
 
 extern rpd_t kernel_rpd;
@@ -166,6 +174,17 @@ static inline void munmap_core(rpd_t *rpd, uintptr_t va, ulong_t npages)
 }
 
 #ifdef CONFIG_DEBUG_MM
+static inline char *vmm_get_name_dbg(vmm_t *vmm)
+{
+  return ((vmm->name_dbg) ? vmm->name_dbg : "VMM [noname]");
+}
+
+static inline void vmm_set_name_dbg(vmm_t *vmm, const char *name)
+{
+  strncpy(vmm->name_dbg, name, VMM_DBG_NAME_LEN);
+}
+
+void vmm_set_name_from_pid_dbg(vmm_t *vmm, unsigned long pid);
 void vmm_enable_verbose_dbg(void);
 void vmm_disable_verbose_dbg(void);
 void vmranges_print_tree_dbg(vmm_t *vmm);

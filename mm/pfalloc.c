@@ -27,6 +27,7 @@
 #include <mm/vmm.h>
 #include <eza/errno.h>
 #include <mlibc/types.h>
+#include <mm/tlsf.h>
 
 page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
 {
@@ -105,8 +106,13 @@ page_frame_t *alloc_pages_ncont(page_idx_t npages, pfalloc_flags_t flags)
   while (npages) {
     block_sz = (npages > max_sz) ? max_sz : npages;
     ap = alloc_pages(block_sz, flags);
-    if (!ap)
+    if (npages == 843)
+      tlsf_memdump(mmpools_get_pool(POOL_GENERAL)->allocator.alloc_ctx);
+    if (!ap) {
+      kprintf("WEEEEEE:: %d (%d) [%d]\n", pages_block_size(ap), block_sz, npages);
       goto free_pages;
+    }
+    kprintf(":: %d (%d) [%d]\n", pages_block_size(ap), block_sz, npages);
     if (unlikely(!pages)) {
       pages = ap;
       list_init_head(&pages->head);

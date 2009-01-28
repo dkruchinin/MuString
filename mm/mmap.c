@@ -113,6 +113,9 @@ static void try_merge_vmranges(vmm_t *vmm, vmrange_t *vmrange, tnode_meta_t *met
     prev_vmr =
       ttree_key2item(&vmm->vmranges_tree, tnode_key(merg_meta.tnode, merg_meta.idx));
     if (!prev_vmr->hole_size && __vmranges_can_be_merged(vmrange, prev_vmr)) {
+      VMM_VERBOSE("%s: Merge intervals [%p,%p) with [%p,%p)\n", vmm_get_name_dbg(vmm),
+                  prev_vmr->bounds.space_start, prev_vmr->bounds.space_end,
+                  vmrange->bounds.space_start, vmrange->bounds.space_end);
       vmrange->bounds.space_start = prev_vmr->bounds.space_start;
       ttree_delete_placeful(&vmm->vmranges_tree, &merg_meta);
       vmm->num_vmrs--;
@@ -128,6 +131,9 @@ static void try_merge_vmranges(vmm_t *vmm, vmrange_t *vmrange, tnode_meta_t *met
       next_vmr =
         ttree_key2item(&vmm->vmranges_tree, tnode_key(merg_meta.tnode, merg_meta.idx));
       if (__vmranges_can_be_merged(vmrange, next_vmr)) {
+        VMM_VERBOSE("%s: Merge intervals [%p,%p) with [%p,%p)\n", vmm_get_name_dbg(vmm),
+                    vmrange->bounds.space_start, vmrange->bounds.space_end,
+                    next_vmr->bounds.space_start, next_vmr->bounds.space_end);
         vmrange->bounds.space_end = next_vmr->bounds.space_start;
         vmrange->hole_size = 0;
         if (!prev_vmr)
@@ -225,7 +231,7 @@ vmm_t *vmm_create(void)
     memfree(vmm);
     vmm = NULL;
   }
-  
+
   return vmm;
 }
 
@@ -264,7 +270,10 @@ uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, tnode_meta_t *meta)
     tnode = tnode->successor;
   }
 
+  VMM_VERBOSE("%s: Failed to find free VM range with size = %d pages\n",
+              vmm_get_name_dbg(vmm), length << PAGE_WIDTH);
   return INVALID_ADDRESS;
+  
   found:
   if (meta) {
     tnode_meta_fill(meta, tnode, i, TNODE_BOUND);
@@ -357,6 +366,16 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
       pfi_pblock_init(&pfi, &pblock_ctx, list_node_first(&pages->head), 0,
                       list_node_last(&pages->head),
                       pages_block_size(list_entry(list_node_last(&pages->head), page_frame_t, node)));
+      {
+        int i = 0;
+        page_frame_t *pf;
+
+        kprintf("DBG: start\n");
+        list_for_each_entry(&pages->head, pf, node)
+          i += pages_block_size(pf);
+        kprintf("DBG:: end [%d, %d]\n", npages, i);
+        ASSERT(i == npages);
+      }
       iter_first(&pfi);
       err = __mmap_core(&vmm->rpd, addr, npages, &pfi, flags);
       if (err)
@@ -390,6 +409,17 @@ int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages
 }
 
 #ifdef CONFIG_DEBUG_MM
+#include <eza/task.h>
+
+void vmm_set_name_from_pid_dbg(vmm_t *vmm, unsigned long pid)
+{
+  if (is_tid(pid))
+    pid = TID_TO_PIDBASE(pid);
+  
+  memset(vmm->name_dbg, 0, VMM_DBG_NAME_LEN);  
+  snprintf(vmm->name_dbg, VMM_DBG_NAME_LEN, "VMM [PID: %ld]", pid);
+}
+
 void vmm_enable_verbose_dbg(void)
 {
   spinlock_lock(&__vmm_verb_lock);
