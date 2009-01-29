@@ -378,7 +378,7 @@ static page_frame_t *try_merge(tlsf_t *tlsf, page_frame_t *block_root, int side)
     neighbour = __left_neighbour(block_root);
   }
   else { /* get block's right neighbour */
-    if ((pframe_number(block_root) + size) > tlsf->last_page_idx)
+    if ((pframe_number(block_root) + size) >= tlsf->last_page_idx)
       goto out;
 
     neighbour = __right_neighbour(block_root);
