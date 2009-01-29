@@ -77,10 +77,17 @@ static int __count_num_entries(int pde_idx, uintptr_t va_from, uintptr_t va_to, 
 #define DEFAULT_PDIR_FLAGS (PDE_RW | PDE_US)
 
 /*
- * Recursive function for mapping some address range.
+ * Recursive function for mapping given address range.
  * Here we invent a term "pde_level". Pde level is a level of directory(PML4E, PDPE or PDE).
  * We go down and populate page directories until pde_level becomes equal to the level of
  * the lowest directory(PT) and after that we map the lowest level page table entries.
+ *
+ * Another thing that should be kept in mind is so-called "page-table recovery".
+ * There may be a crappy situation when mapping is partially completed(I mean one or more
+ * pages were mapped in low level directories) and attemption to allocate new page directory
+ * yields -ENOMEM. In this case all previousely mapped pages must be:
+ *  1) unmapped
+ *  2) there refcounts must be decremented
  */
 static int do_ptable_map(page_frame_t *dir, struct pt_mmap_info *minfo, int pde_level)
 {
@@ -113,6 +120,14 @@ static int do_ptable_map(page_frame_t *dir, struct pt_mmap_info *minfo, int pde_
 
       /* and go at 1 level down */
       ret = do_ptable_map(pde_fetch_subdir(pde), minfo, pde_level - 1);
+
+      /*
+       * If an attemption to populate page directory yielded -ENOMEM,
+       * we can guaranty that no pages were mapped in low level directory on
+       * "error-path". Thus allocated earlier page directories may be cleaned-up
+       * (if necessary) due going back the "error-path". (other part of mapping
+       * would be cleaned-up in parent function using do_ptable_unmap)
+       */
       if (ret) {
         page_frame_t *chld = pde_fetch_subdir(pde);
 
@@ -249,6 +264,10 @@ void ptable_map_entries(pde_t *start_pde, int num_entries, page_frame_iterator_t
   }
 }
 
+/*
+ * FIXME DK: I really don't like a "do_recovery" param and conditions it
+ * invents. I'm sure that more clear way may be invented in near future.
+ */
 void ptable_unmap_entries(pde_t *start_pde, int num_entries, bool do_recovery)
 {
   pde_t *pde = start_pde;
