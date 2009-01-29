@@ -136,38 +136,50 @@ int mmap(page_frame_t *root_dir, uintptr_t va, page_idx_t first_page, int npages
   return ret;
 }
 
-int __mmap_pages(page_frame_t *dir, mmap_info_t *minfo, pdir_level_t level)
+static int __count_num_entries(int pde_idx, uintptr_t va_from, uintptr_t va_to, int pde_level)
 {
-  pde_idx_t idx, entries;
-  uintptr_t range = pgt_get_range(level);
-  int ret = 0;  
-  
-  idx = pgt_vaddr2idx(minfo->va_from, level);
-  if (likely((minfo->va_to - minfo->va_from) >= range))
-    entries = PTABLE_DIR_ENTRIES - idx;
-  else
-    entries = pgt_vaddr2idx(minfo->va_to - minfo->va_from, level) + 1;
+  int num_entries;
 
-  if (level == PTABLE_LEVEL_FIRST) {
-    ret = mm_map_entries(pgt_fetch_entry(dir, idx), entries, &minfo->pfi, pgt_translate_flags(minfo->flags));
-    minfo->va_from += (range - pgt_idx2vaddr(idx, level));
+  if ((va_to - (va_from - pgt_idx2vaddr(pde_idx, pde_level)))
+      > pgt_get_range(pde_level)) {
+    num_entries = PTABLE_DIR_ENTRIES - pde_idx;
+  }
+  else
+    num_entries = pgt_vaddr2idx(va_to, pde_level) - pde_idx + 1;
+
+  return num_entries;
+}
+
+int __mmap_pages(page_frame_t *dir, mmap_info_t *minfo, pdir_level_t pde_level)
+{
+  pde_idx_t pde_idx, num_entries;
+  int ret = 0;  
+
+  pde_idx = pgt_vaddr2idx(minfo->va_from, pde_level);
+  num_entries = __count_num_entries(pde_idx, minfo->va_from, minfo->va_to, pde_level);
+  
+  if (pde_level == PTABLE_LEVEL_FIRST) {
+    ret = mm_map_entries(pgt_fetch_entry(dir, pde_idx), num_entries, &minfo->pfi, pgt_translate_flags(minfo->flags));
+    minfo->va_from += num_entries << PAGE_WIDTH;
   }
   else {
     pde_flags_t _flags = pgt_translate_flags(DEFAULT_MAPDIR_FLAGS);
+    pde_t *pde = pgt_fetch_entry(dir, pde_idx);
     
-    do {
-      pde_t *pde = pgt_fetch_entry(dir, idx++);
-      
+    while (num_entries--) {
       if (!pgt_pde_is_mapped(pde)) {
         ret = mm_populate_pagedir(pde, _flags);
         if (ret < 0)
           return ret;
       }
       
-      ret = __mmap_pages(pgt_get_pde_subdir(pde), minfo, level - 1);
-      if (ret < 0)
-        return ret;            
-    } while (--entries > 0);
+      ret = __mmap_pages(pgt_get_pde_subdir(pde), minfo, pde_level - 1);
+      if (ret < 0) {
+        return ret;
+      }
+
+      pde++;
+    }
   }
 
   return ret;
