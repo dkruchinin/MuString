@@ -124,25 +124,15 @@ static inline void *user_to_kernel_vaddr(rpd_t *rpd, uintptr_t addr)
   return pframe_to_virt(pframe_by_number(mm_vaddr2page_idx(rpd, addr)));
 }
 
-static inline int unpin_page_frame(page_frame_t *pf)
+static inline void unpin_page_frame(page_frame_t *pf)
 {
-  if (pf->flags & PF_RESERVED)
-    return 0;
-  
   ASSERT(atomic_get(&pf->refcount) > 0);
   atomic_dec(&pf->refcount);
-  if (!atomic_get(&pf->refcount)) {
-    free_page(pf);
-    return 1;
-  }
-
-  return 0;
 }
 
 static inline void pin_page_frame(page_frame_t *pf)
 {
-  if (!(pf->flags & PF_RESERVED))
-    atomic_inc(&pf->refcount);
+  atomic_inc(&pf->refcount);
 }
 
 #define mmap_kern(va, first_page, npages, flags)    \
