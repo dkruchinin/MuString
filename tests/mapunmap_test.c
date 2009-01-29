@@ -146,14 +146,6 @@ static void tc_map_unmap_core(void *ctx)
     tf->failed();
   }
 
-  i = 0;
-  list_node_t *iter;
-  list_for_each(&pages->head, iter) {
-    i += pages_block_size(list_entry(iter, page_frame_t, node));
-  }
-
-  tf->printf("i=%d, sz=%d\n", i, sz);
-  ASSERT((atomic_get(&pool->free_pages) + i) == sz);
   tf->printf("Creating mapping: %p - %p\n", TC_MAP_ADDR_FAR, TC_MAP_ADDR_FAR + (num_pages << PAGE_WIDTH));
   pfi_pblock_init(&pfi, &pfi_pblock_ctx, list_node_first(&pages->head), 0, list_node_last(&pages->head),
                   pages_block_size(list_entry(list_node_last(&pages->head), page_frame_t, node)));
@@ -173,7 +165,14 @@ static void tc_map_unmap_core(void *ctx)
     tf->printf("__mmap_core returned %d, but -ENOMEM(%d) was expected.\n", ret, -ENOMEM);
     tf->failed();
   }
-
+  iterate_forward(&pfi) {
+    if (atomic_get(&pframe_by_number(pfi.pf_idx)->refcount)) {
+      tf->printf("Page frame %d has unexpected refcount %d\n",
+                 pfi.pf_idx, atomic_get(&pframe_by_number(pfi.pf_idx)->refcount));
+      tf->failed();
+    }
+  }
+  
   tf->printf("after mmap => %d\n", atomic_get(&pool->free_pages));
   free_pages_ncont(pages);
   if (atomic_get(&pool->free_pages) != sz) {
