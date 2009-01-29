@@ -113,14 +113,14 @@ static int do_ptable_map(page_frame_t *dir, struct pt_mmap_info *minfo, int pde_
                      pde_level - 1, pframe_number(dir));
           return ret;
         }
-
+        
         PTABLE_DBG("Allocate PD level %d [frame_idx = %d, parent_idx = %d]\n",
                    pde_level - 1, pde_fetch_page_idx(pde), pframe_number(dir));
       }
 
       /* and go at 1 level down */
       ret = do_ptable_map(pde_fetch_subdir(pde), minfo, pde_level - 1);
-
+      
       /*
        * If an attemption to populate page directory yielded -ENOMEM,
        * we can guaranty that no pages were mapped in low level directory on

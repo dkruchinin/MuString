@@ -102,7 +102,7 @@ static void tc_map_unmap_core(void *ctx)
   page_frame_iterator_t pfi;
   ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) pfi_pblock_ctx;
   
-  pages = alloc_pages(num_pages, AF_PGEN);  
+  pages = alloc_pages(num_pages, AF_PGEN | AF_ZERO);
   if (!pages) {
     tf->printf("Failed to allocate %d pages!\n", num_pages);
     tf->abort();
@@ -140,7 +140,7 @@ static void tc_map_unmap_core(void *ctx)
   sz = atomic_get(&pool->free_pages);
   tf->printf("Allocating non-continous block of %d pages. (%d avail)\n",
              num_pages, atomic_get(&pool->free_pages));
-  pages = alloc_pages_ncont(num_pages, AF_PGEN | AF_CLEAR_RC);
+  pages = alloc_pages_ncont(num_pages, AF_PGEN | AF_CLEAR_RC | AF_ZERO);
   if (!pages) {
     tf->printf("Failed to allocate %d non-continous pages.\n", num_pages);
     tf->failed();

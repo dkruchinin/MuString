@@ -277,13 +277,13 @@ static void __pfiter_next(page_frame_iterator_t *pfi)
   ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx;
 
   ITER_DBG_CHECK_TYPE(pfi, PF_ITER_ARCH);
+  ctx = iter_fetch_ctx(pfi);
+  pfi->pf_idx++;
   if (pfi->pf_idx >= num_phys_pages) {
     pfi->state = ITER_STOP;
     pfi->pf_idx = PAGE_IDX_INVAL;
   }
-  else {
-    ctx = iter_fetch_ctx(pfi);
-    pfi->pf_idx++;
+  else {    
     if (prepare_page(pfi->pf_idx, ctx) < 0) {
       panic("e820 error: Can't recognize a page with index %d and physical address %p\n",
           pfi->pf_idx, pframe_phys_addr(page_frames_array + pfi->pf_idx));

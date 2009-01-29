@@ -380,7 +380,7 @@ static page_frame_t *try_merge(tlsf_t *tlsf, page_frame_t *block_root, int side)
     neighbour = __left_neighbour(block_root);
   }
   else { /* get block's right neighbour */
-    if ((pframe_number(block_root) + size) > tlsf->last_page_idx)
+    if ((pframe_number(block_root) + size) >= tlsf->last_page_idx)
       goto out;
 
     neighbour = __right_neighbour(block_root);
@@ -606,7 +606,7 @@ static void build_tlsf_map(tlsf_t *tlsf, page_frame_t *pages, page_idx_t npages)
     }
   }
     
-  tlsf->first_page_idx = tlsf->last_page_idx = - 1;
+  tlsf->first_page_idx = tlsf->last_page_idx = PAGE_IDX_INVAL;
   /* initialize bitmaps */
   memset(&tlsf->fld_bitmap, 0, sizeof(tlsf->fld_bitmap));
   memset(tlsf->slds_bitmap, 0, sizeof(*(tlsf->slds_bitmap)) * TLSF_SLD_BITMAP_SIZE);
@@ -622,7 +622,7 @@ static void build_tlsf_map(tlsf_t *tlsf, page_frame_t *pages, page_idx_t npages)
   for (i = npages - 1; i >= 0; i--) {
     if (pages[i].flags & PF_RESERVED) /*  */
       continue;
-    if (tlsf->last_page_idx < 0)
+    if (tlsf->last_page_idx == PAGE_IDX_INVAL)
       tlsf->last_page_idx = pframe_number(pages + i);
     
     tlsf->first_page_idx = pframe_number(pages + i);
@@ -630,6 +630,9 @@ static void build_tlsf_map(tlsf_t *tlsf, page_frame_t *pages, page_idx_t npages)
     __block_size_set(pages + i, 1);
     __free_pages(pages + i, 1, tlsf);
   }
+
+  ASSERT((tlsf->last_page_idx != PAGE_IDX_INVAL) &&
+         (tlsf->first_page_idx != PAGE_IDX_INVAL));
 }
 
 static void check_tlsf_defs(void)
