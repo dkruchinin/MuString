@@ -210,11 +210,11 @@ static void __pfiter_next(page_frame_iterator_t *pfi)
   ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx;
 
   ASSERT(pfi->type == PF_ITER_ARCH);
+  ctx = iter_fetch_ctx(pfi);
+  pfi->pf_idx++;
   if (pfi->pf_idx >= swks.mem_total_pages)
     pfi->state = ITER_STOP;
-  else {
-    ctx = iter_fetch_ctx(pfi);
-    pfi->pf_idx++;
+  else {        
     if (prepare_page(pfi->pf_idx, ctx) < 0) {
       panic("e820 error: Can't recognize a page with index %d and physical address %p\n",
           pfi->pf_idx, pframe_phys_addr(page_frames_array + pfi->pf_idx));
