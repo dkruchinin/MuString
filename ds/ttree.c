@@ -172,20 +172,22 @@ static inline void increase_tnode_window(ttree_t *ttree, ttree_node_t *tnode, in
   }
 }
 
-static inline void decrease_tnode_window(ttree_t *ttree, ttree_node_t *tnode, int idx)
+static inline void decrease_tnode_window(ttree_t *ttree, ttree_node_t *tnode, int *idx)
 {
   register int i;
 
   /* Shrink the window to the longer side by given index. */
   if ((ttree->keys_per_tnode - 1 - tnode->max_idx) <= tnode->min_idx) {
     tnode->max_idx--;
-    for (i = idx; i <= tnode->max_idx; i++)
+    for (i = *idx; i <= tnode->max_idx; i++)
       tnode->keys[i] = tnode->keys[i + 1];
   }
   else {
     tnode->min_idx++;
-    for (i = idx; i >= tnode->min_idx; i--)
+    for (i = *idx; i >= tnode->min_idx; i--)
       tnode->keys[i] = tnode->keys[i - 1];
+
+    *idx = *idx + 1;
   }
 }
 
@@ -745,7 +747,7 @@ void *ttree_delete_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta)
 
   tnode = tnode_meta->tnode;
   ret = ttree_key2item(ttree, tnode->keys[tnode_meta->idx]);
-  decrease_tnode_window(ttree, tnode, tnode_meta->idx);
+  decrease_tnode_window(ttree, tnode, &tnode_meta->idx);
 
   /*
    * If after a key deletion T*-tree node contains more than
@@ -764,6 +766,8 @@ void *ttree_delete_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta)
     idx = tnode->max_idx + 1;
     increase_tnode_window(ttree, tnode, &idx);
     tnode->keys[idx] = n->keys[n->min_idx++];
+    if (unlikely(tnode_meta->idx > tnode->max_idx))
+      tnode_meta->idx = tnode->max_idx;    
     if (!tnode_is_empty(n) && is_leaf_node(n))
       return ret;
 
@@ -793,9 +797,10 @@ void *ttree_delete_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta)
         memcpy(tnode->keys + tnode->min_idx + diff,
                tnode->keys + tnode->min_idx, sizeof(void *) * tnode_num_keys(tnode));
         tnode->min_idx += diff;
-        tnode->max_idx += diff;      
+        tnode->max_idx += diff;
+        if (tnode_meta->tnode == tnode)
+          tnode_meta->idx += diff;
       }
-
       memcpy(tnode->keys + tnode->max_idx + 1, n->keys + n->min_idx, sizeof(void *) * items);
       tnode->max_idx += items;
     }
@@ -813,6 +818,8 @@ void *ttree_delete_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta)
 
         tnode->min_idx -= diff;
         tnode->max_idx -= diff;
+        if (tnode_meta->tnode == tnode)
+          tnode_meta->idx -= diff;
       }
 
       memcpy(tnode->keys + tnode->min_idx - items, n->keys + n->min_idx, sizeof(void *) * items);
@@ -825,7 +832,9 @@ void *ttree_delete_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta)
   }
   if (!tnode_is_empty(tnode))
     return ret;
-
+  if (tnode_meta->tnode == tnode)
+    tnode_meta->tnode = NULL;
+  
   /* if we're here, then current node will be removed from the tree. */
   n = tnode->parent;
   if (!n) {

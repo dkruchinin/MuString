@@ -104,6 +104,13 @@ typedef struct __vmm {
 #endif /* CONFIG_DEBUG_MM */
 } vmm_t;
 
+DEFINE_ITERATOR(vmrange,                
+                vmrange_t *vmr;
+                vmrange_t *vmr_first;
+                tnode_meta_t meta;
+                uintptr_t va_to;
+                );
+
 extern rpd_t kernel_rpd;
 
 #define valid_user_address(va)                  \
@@ -113,7 +120,7 @@ static inline bool valid_user_address_range(uintptr_t va_start, uintptr_t length
 {
 #ifndef CONFIG_TEST
   return ((va_start >= USPACE_VA_BOTTOM) &&
-          ((va_start + length) < USPACE_VA_TOP));
+          ((va_start + length) <= USPACE_VA_TOP));
 #else
   return true;
 #endif /* CONFIG_TEST */
@@ -160,6 +167,8 @@ int vm_mandmaps_roll(vmm_t *target_mm);
 vmm_t *vmm_create(void);
 long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
                  vmrange_flags_t flags, int offs_pages);
+int vmrange_find_covered(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, vmrange_iterator_t *vmri);
+void vmrange_iterator_init(vmrange_iterator_t *vmri, vmm_t *vmm, uintptr_t va_from, uintptr_t va_to);
 int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages, kmap_flags_t flags);
 
 static inline void munmap_core(rpd_t *rpd, uintptr_t va, ulong_t npages)

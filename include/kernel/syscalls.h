@@ -69,6 +69,7 @@
 #define SC_THREAD_KILL         31
 #define SC_SIGPROCMASK         32
 #define SC_THREAD_EXIT         33
+#define SC_MUNMAP              35
 
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */
@@ -467,6 +468,7 @@ long sys_sigprocmask(int how,const sigset_t *set,sigset_t *oldset);
 
 void sys_thread_exit(int code);
 
+void sys_munmap(void *addr, size_t length);
 #endif
 
 #endif

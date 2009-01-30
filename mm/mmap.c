@@ -24,6 +24,7 @@
 #include <config.h>
 #include <ds/list.h>
 #include <ds/ttree.h>
+#include <ds/iterator.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
 #include <mm/slab.h>
@@ -31,6 +32,7 @@
 #include <mm/vmm.h>
 #include <mm/pfi.h>
 #include <eza/spinlock.h>
+#include <kernel/syscalls.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/types.h>
 
@@ -302,7 +304,7 @@ vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, tnode_
 long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
                  vmrange_flags_t flags, int offs_pages)
 {
-  vmrange_t *vmr, *vmr_prev;
+  vmrange_t *vmr;
   tnode_meta_t tmeta;
   int err = 0;
 
@@ -322,19 +324,22 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
         goto err;
       }
     }
-    else {
-      vmr_prev = vmrange_find(vmm, addr, addr + (npages << PAGE_WIDTH), &tmeta);
-      if (vmr_prev) {
-        if (flags & VMR_FIXED) {
-          err = -EINVAL;
-          goto err;
-        }
+
+    vmr = vmrange_find(vmm, addr, addr + (npages << PAGE_WIDTH), &tmeta);
+    if (vmr) {
+      if (flags & VMR_FIXED) {
+        err = -EINVAL;
+        goto err;
       }
-      else
-        goto create_vmrange;
     }
+
+    goto create_vmrange;
   }
 
+  /*
+   * It has been asked to find suitable portion of address space
+   * satisfying requested length.
+   */
   addr = find_free_vmrange(vmm, (npages << PAGE_WIDTH), &tmeta);
   if (addr == INVALID_ADDRESS) {
     err = -ENOMEM;
@@ -342,15 +347,19 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
   }
 
   create_vmrange:
+  /*
+   * After suitable address is found, check if it can be attached
+   * to previous or next VM range. It can be done only if flags
+   * and memory objects are equal.
+   */
+  
   vmr = create_vmrange(vmm, addr, npages, flags);
   if (!vmr) {
     err = -ENOMEM;
     goto err;
   }
 
-  ttree_insert_placeful(&vmm->vmranges_tree, &tmeta, vmr);
-  fix_vmrange_holes(vmm, vmr, &tmeta);
-  kprintf("inserted\n");
+  ttree_insert_placeful(&vmm->vmranges_tree, &tmeta, vmr);  
   if (flags & VMR_POPULATE) {
     page_frame_t *pages;
 
@@ -366,16 +375,6 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
       pfi_pblock_init(&pfi, &pblock_ctx, list_node_first(&pages->head), 0,
                       list_node_last(&pages->head),
                       pages_block_size(list_entry(list_node_last(&pages->head), page_frame_t, node)));
-      {
-        int i = 0;
-        page_frame_t *pf;
-
-        kprintf("DBG: start\n");
-        list_for_each_entry(&pages->head, pf, node)
-          i += pages_block_size(pf);
-        kprintf("DBG:: end [%d, %d]\n", npages, i);
-        ASSERT(i == npages);
-      }
       iter_first(&pfi);
       err = __mmap_core(&vmm->rpd, addr, npages, &pfi, flags);
       if (err)
@@ -383,6 +382,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
     }
   }
 
+  fix_vmrange_holes(vmm, vmr, &tmeta);
   try_merge_vmranges(vmm, vmr, &tmeta);
   return addr;
   
@@ -395,6 +395,26 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
   return err;
 }
 
+static void __vmri_first(vmrange_iterator_t *vmri);
+static void __vmri_last(vmrange_iterator_t *vmri);
+static void __vmri_next(vmrange_iterator_t *vmri);
+static void __vmri_prev(vmrange_iterator_t *vmri);
+
+void vmranges_find_covered(vmm_t *vmm, uintptr_t va_from, uintptr_t va_to, vmrange_iterator_t *vmri)
+{
+  ASSERT(!(va_from & PAGE_MASK) && (va_to & PAGE_MASK));
+  memset(vmri, 0, sizeof(*vmri));
+  vmri->va_to = va_to;
+  vmri->vmr = vmrange_find(vmm, va_from, va_from + PAGE_SIZE, &vmri->meta);
+  vmri->first = __vmri_first;
+  vmri->last = __vmri_last;
+  vmri->next = __vmri_next;
+  vmri->prev = __vmri_prev;
+  iter_init(vmri, ITERATOR_TYPE_VOID);
+  iter_set_ctx(vmri, ITERATOR_CTX_VOID);
+}
+
+
 int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages, kmap_flags_t flags)
 {
   page_frame_iterator_t pfi;
@@ -406,6 +426,39 @@ int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages
   pfi_index_init(&pfi, &pf_idx_ctx, first_page, first_page + npages - 1);
   iter_first(&pfi);
   return __mmap_core(rpd, va, npages, &pfi, flags);
+}
+
+void sys_munmap(void *addr, size_t length)
+{
+  uintptr_t va_from = PAGE_AL
+}
+
+static void __vmri_first(vmrange_iterator_t *vmri)
+{
+  vmri->state = (!vmri->vmr) ? ITER_STOP : ITER_RUN;
+}
+
+static void __vmri_last(vmrange_iterator_t *vmri)
+{
+  panic("vmrange_iterator_t doesn't support method \"last\"!");
+}
+
+static void __vmri_next(vmrange_iterator_t *vmri)
+{
+  if (unlikely(tnode_meta_next(&vmri->meta) < 0)) {
+    vmri->state = ITER_STOP;
+    return;
+  }
+
+  vmri->vmr = ttree_key2item(&vmri->vmr->parent_vmm->vmranges_tree,
+                             tnode_key(vmri->meta.tnode, vmri->meta.idx));
+  if (vmr->bounds.space_start >= vmri->va_to)
+    vmri->state = ITER_STOP;    
+}
+
+static void __vmri_prev(vmrange_iterator_t *vmri)
+{
+  panic("vmrange_iterator_t doesn't suppert method \"prev\"");
 }
 
 #ifdef CONFIG_DEBUG_MM
