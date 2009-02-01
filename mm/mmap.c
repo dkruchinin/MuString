@@ -315,24 +315,20 @@ uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, tnode_meta_t *meta)
 
 vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, ttree_cursor_t *cursor)
 {
-  if (unlikely(!vmm->num_vmrs))
-    return NULL;
-  else {
-    struct range_bounds bounds;
-    vmrange_t *vmr;
+  struct range_bounds bounds;
+  vmrange_t *vmr;
 
-    bounds.space_start = va_start;
-    bounds.space_end = va_end;
-    vmr = ttree_lookup(&vmm->vmranges_tree, &bounds, cursor);
-    return vmr;
-  }
+  bounds.space_start = va_start;
+  bounds.space_end = va_end;
+  vmr = ttree_lookup(&vmm->vmranges_tree, &bounds, cursor);
+  return vmr;
 }
 
 long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
                  vmrange_flags_t flags, int offs_pages)
 {
   vmrange_t *vmr;
-  ttree_cursor_t cursor;
+  ttree_cursor_t cursor, csr_tmp;
   int err = 0;
 
   vmr = NULL;
@@ -381,6 +377,8 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
    * and memory objects are equal.
    */
 
+
+  ttree_cursor_copy(&csr_tmp, &cursor);
   
   vmr = create_vmrange(vmm, addr, npages, flags);
   if (!vmr) {

@@ -52,6 +52,12 @@ enum {
   TNODE_RIGHT,      /**< Right side */
 };
 
+enum {
+  TT_CSR_UNTIED = 0,
+  TT_CSR_TIED,
+  TT_CSR_PENDING,
+} ttree_cursor_state;
+
 #define TNODE_ROOT  TNODE_UNDEF /**< T*-tree node is root */
 #define TNODE_BOUND TNODE_UNDEF /**< T*-tree node bounds searhing value */
 
@@ -114,6 +120,7 @@ typedef struct __ttree_cursor {
   ttree_node_t *tnode; /**< A pointer to T*-tree node */
   int idx;             /**< Particular index in a T*-tree node array */
   int side;            /**< T*-tree node side. Used when item is inserted. */
+  enum ttree_cursor_state state;
 } ttree_cursor_t;
 
 #ifndef CONFIG_DEBUG_TTREE
@@ -123,9 +130,10 @@ typedef struct __ttree_cursor {
 #define TT_ASSERT_DBG(cond) ASSERT(cond)
 #define __validate_cursor_dbg(cursor)                   \
   do {                                                  \
-    TT_ASSERT_DBG(((cursor)->ttree != NULL) &&          \
-                  ((cursor)->tnode != NULL) &&          \
-                  !tnode_is_empty((cursor)->tnode));    \
+    TT_ASSERT_DBG((cursor)->ttree != NULL);             \
+    TT_ASSERT_DBG((curosr)->tnode != NULL);             \
+    TT_ASSERT_DBG(!tnode_is_empty((cursor)->tnode));    \
+    TT_ASSERT_DBG((cursor)->state != TT_CSR_UNTIED);    \
   } while (0)
 #endif /* CONFIG_DEBUG_TTREE */
 
@@ -393,6 +401,8 @@ int ttree_replace(ttree_t *ttree, void *key, void *new_item);
 void ttree_cursor_init(ttree_t *ttree, ttree_cursor_t *cursor);
 int ttree_cursor_next(ttree_cursor_t *cursor);
 int ttree_cursor_prev(ttree_cursor_t *cursor);
+
+#define ttree_cursor_copy(csr_dst, csr_src) memcpy(csr_dst, csr_src, sizeof(*(csr_src)))
 
 static inline void *ttree_key_from_cursor(ttree_cursor_t *cursor)
 {
