@@ -116,6 +116,20 @@ typedef struct __ttree_cursor {
   int side;            /**< T*-tree node side. Used when item is inserted. */
 } ttree_cursor_t;
 
+#ifndef CONFIG_DEBUG_TTREE
+#define TT_ASSERT_DBG(cond)
+#define __validate_cursor_dbg(cursor)
+#else
+#define TT_ASSERT_DBG(cond) ASSERT(cond)
+#define __validate_cursor_dbg(cursor)                   \
+  do {                                                  \
+    TT_ASSERT_DBG(((cursor)->ttree != NULL) &&          \
+                  ((cursor)->tnode != NULL) &&          \
+                  !tnode_is_empty((cursor)->tnode));    \
+  } while (0)
+#endif /* CONFIG_DEBUG_TTREE */
+
+
 /**
  * @brief Get real size of T*-tree node in bytes
  * @paran ttree - A pointer to T*-tree
@@ -379,6 +393,24 @@ int ttree_replace(ttree_t *ttree, void *key, void *new_item);
 void ttree_cursor_init(ttree_t *ttree, ttree_cursor_t *cursor);
 int ttree_cursor_next(ttree_cursor_t *cursor);
 int ttree_cursor_prev(ttree_cursor_t *cursor);
+
+static inline void *ttree_key_from_cursor(ttree_cursor_t *cursor)
+{
+  __validate_cursor_dbg(cursor);
+  if (likely(cursor->side == TNODE_BOUND))
+    return tnode_key(cursor->tnode, cursor->idx);
+
+  return NULL;
+}
+
+static inline void ttree_item_from_cursor(ttree_cursor_t *cursor)
+{
+  void *key = ttree_key_from_cursor(cursor);
+  if (!key)
+    return NULL;
+
+  return ttree_key2item(cursor->ttree, key);
+}
 
 /**
  * @brief Display T*-tree structure on a screen.

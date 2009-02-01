@@ -313,7 +313,7 @@ uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, tnode_meta_t *meta)
   return start;
 }
 
-vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, tnode_meta_t *meta)
+vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, ttree_cursor_t *cursor)
 {
   if (unlikely(!vmm->num_vmrs))
     return NULL;
@@ -323,7 +323,7 @@ vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, tnode_
 
     bounds.space_start = va_start;
     bounds.space_end = va_end;
-    vmr = ttree_lookup(&vmm->vmranges_tree, &bounds, meta);
+    vmr = ttree_lookup(&vmm->vmranges_tree, &bounds, cursor);
     return vmr;
   }
 }
@@ -332,10 +332,11 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
                  vmrange_flags_t flags, int offs_pages)
 {
   vmrange_t *vmr;
-  tnode_meta_t tmeta;
+  ttree_cursor_t cursor;
   int err = 0;
 
   vmr = NULL;
+  ttree_cursor_init(&vmm->vmranges_tree, &cursor);
   if (!(flags & VMR_PROTO_MASK)
       || !(flags & (VMR_PRIVATE | VMR_SHARED))
       || ((flags & (VMR_PRIVATE | VMR_SHARED)) == (VMR_PRIVATE | VMR_SHARED))
@@ -352,22 +353,22 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
       }
     }
 
-    vmr = vmrange_find(vmm, addr, addr + (npages << PAGE_WIDTH), &tmeta);
+    vmr = vmrange_find(vmm, addr, addr + (npages << PAGE_WIDTH), &cursor);
     if (vmr) {
       if (flags & VMR_FIXED) {
         err = -EINVAL;
         goto err;
       }
     }
-
-    goto create_vmrange;
+    else
+      goto create_vmrange;
   }
 
   /*
    * It has been asked to find suitable portion of address space
    * satisfying requested length.
    */
-  addr = find_free_vmrange(vmm, (npages << PAGE_WIDTH), &tmeta);
+  addr = find_free_vmrange(vmm, (npages << PAGE_WIDTH), &cursor);
   if (addr == INVALID_ADDRESS) {
     err = -ENOMEM;
     goto err;
@@ -379,6 +380,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
    * to previous or next VM range. It can be done only if flags
    * and memory objects are equal.
    */
+
   
   vmr = create_vmrange(vmm, addr, npages, flags);
   if (!vmr) {
@@ -436,9 +438,21 @@ void vmranges_munmap(vmm_t *vmm, uintptr_t addr, page_idx_t npages)
   vmr = vmrange_find(vmm, addr, addr + PAGE_SIZE, &meta);
   if (!vmr)
     return;
+
+  /* VM range have to be splitted if it strictly includes requiested diapason */
   if (unlikely((vmr->bounds.space_start > addr) &&
                (vmr->bounds.space_end < va_to))) {
-    split_vmrange(vmm, vmr, addr, va_to, &meta);
+    if (!split_vmrange(vmm, vmr, addr, va_to, &meta)) {
+      kprintf(KO_ERROR "vmranges_munmap: Failed to split VM range [%p, %p) "
+              "by dispason [%p, %p). -ENOMEM.\n",
+              vmr->bounds.space_start, vmr->bounds.space_end, addr, va_to);
+    }
+
+    munmap_core(&vmm->rpd, addr, npages);
+    return;
+  }
+  else {
+    
   }
 }
 

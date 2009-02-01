@@ -1,0 +1,13 @@
+# data-structures configuration
+
+menu "Data structures settings (advanced)"
+
+config DEBUG_TTREE
+       bool "Enable T*-tree debugging"
+       default n
+       help
+         If enabled various runtime checkings will be applied and
+         some verbose information will print on screen. Actually
+         it won't significantly slow down T*-tree speed.
+
+endmenu
