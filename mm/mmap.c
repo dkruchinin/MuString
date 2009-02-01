@@ -91,6 +91,7 @@ static vmrange_t *create_vmrange(vmm_t *parent_vmm, uintptr_t va_start, int npag
   vmr->bounds.space_start = va_start;
   vmr->bounds.space_end = va_start + (npages << PAGE_WIDTH);
   vmr->memobj = NULL;
+  vmr->hole_size = 0;
   parent_vmm->num_vmrs++;
 
   return vmr;
@@ -147,6 +148,32 @@ static void try_merge_vmranges(vmm_t *vmm, vmrange_t *vmrange, tnode_meta_t *met
       }
     }
   }
+}
+
+static vmrange_t *split_vmrange(vmm_t *vmm, vmrange_t *vmrage, uintptr_t va_from,
+                                uintptr_t va_to, tnode_meta_t *meta)
+{
+  vmrange_t *new_vmr;
+  tnode_meta_t meta_next;
+
+  new_vmr = create_vmrange(vmm, va_from, va_to, vmrange->flags);
+  if (!new_vmr)
+    return NULL;
+
+  vmrange->bounds.space_end = va_from;
+  new_vmr->memobj = vmrange->memobj;
+  vmrange->hole_size = new_vmr->bounds.space_start - vmrange->bounds.space_end;
+  tnode_meta_next(&vmm->vmranges_tree, meta);
+  ttree_insert_placeful(&vmm->vmranges_tree, new_vmr, meta);
+  memcpy(&meta_next, meta, sizeof(meta_next));
+  if (unlikely(tnode_meta_next(&vmm->vmranges_tree, &meta_next) < 0))
+    new_vmr->hole_size = USPACE_VA_TOP - new_vmr->bounds.space_end;
+  else {
+    struct bounds *bnd = tnode_key(meta_next.tnode, meta_next.idx);
+    new_vmr->hole_size = bnd->space_start - new_vmr->bounds.space_end;
+  }
+
+  return new_vmr;
 }
 
 static void fix_vmrange_holes(vmm_t *vmm, vmrange_t *target_vmr, tnode_meta_t *meta)
@@ -395,6 +422,26 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
   return err;
 }
 
+void vmranges_munmap(vmm_t *vmm, uintptr_t addr, page_idx_t npages)
+{
+  vmrange_t *vmr;
+  uintptr_t va_to = addr + (npages << PAGE_WIDTH);
+  tnode_meta_t meta;
+  
+  /*
+   * At first find the very first VM range covered by given
+   * addresses diapason. In case it is *partially* covered,
+   * descrease its start/end bound or split target VM range.
+   */
+  vmr = vmrange_find(vmm, addr, addr + PAGE_SIZE, &meta);
+  if (!vmr)
+    return;
+  if (unlikely((vmr->bounds.space_start > addr) &&
+               (vmr->bounds.space_end < va_to))) {
+    split_vmrange(vmm, vmr, addr, va_to, &meta);
+  }
+}
+
 static void __vmri_first(vmrange_iterator_t *vmri);
 static void __vmri_last(vmrange_iterator_t *vmri);
 static void __vmri_next(vmrange_iterator_t *vmri);
@@ -430,7 +477,21 @@ int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages
 
 void sys_munmap(void *addr, size_t length)
 {
-  uintptr_t va_from = PAGE_AL
+  uintptr_t va_from, va_to;
+  vmrange_t *vmr;
+  vmm_t *vmm = current_task()->vmm;
+
+  va_from = PAGE_ALIGN_DOWN((uintptr_t)addr);
+  va_to = PAGE_ALIGN(va_from + length);
+  /* wow, somebody wants to kill himself... */
+  if (!valid_user_address_range(va_from, length)) {
+    va_from = USPACE_VA_BOTTOM;
+    va_to = USPACE_VA_TOP;
+  }
+
+  if (!vmr) /* nothing was found */
+    return;
+  if ()
 }
 
 static void __vmri_first(vmrange_iterator_t *vmri)

@@ -110,20 +110,12 @@ typedef struct __ttree {
  *
  * @see ttree_node_t
  */
-typedef struct __tnode_meta {
+typedef struct __ttree_cursor {
   ttree_node_t *tnode; /**< A pointer to T*-tree node */
   int idx;             /**< Particular index in a T*-tree node array */
   int side;            /**< T*-tree node side. Used when item is inserted. */
-} tnode_meta_t;
+} ttree_cursor_t;
 
-DEFINE_ITERATOR(ttree,
-                tnode_meta_t meta_cur;
-                ttree_node_t *tnode_start;
-                ttree_node_t *tnode_end;
-                ttree_t *dst_tree;
-                int start_idx;
-                int end_idx;
-                );
 /**
  * @brief Get real size of T*-tree node in bytes
  * @paran ttree - A pointer to T*-tree
@@ -311,7 +303,7 @@ void ttree_destroy(ttree_t *ttree);
  * @return A pointer to found item or NULL if item wasn't found.
  * @see tnode_meta_t
  */
-void *ttree_lookup(ttree_t *ttree, void *key, tnode_meta_t *tnode_meta);
+void *ttree_lookup(ttree_t *ttree, void *key, ttree_cursor_t *cursor);
 
 /**
  * @brief Insert an item @a item in a T*-tree
@@ -353,7 +345,7 @@ void *ttree_delete(ttree_t *ttree, void *key);
  * @see ttree_lookup
  * @see ttree_delete_placeful
  */
-void ttree_insert_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta, void *item);
+void ttree_insert_placeful(ttree_cursor_t *cursor, void *item);
 
 /**
  * @brief "Placeful" item deletion from a T*-tree.
@@ -371,7 +363,7 @@ void ttree_insert_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta, void *item)
  * @see ttree_lookup
  * @see ttree_delete_placeful
  */
-void *ttree_delete_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta);
+void *ttree_delete_placeful(ttree_cursor_t *cursor);
 
 /**
  * @brief Replace an item saved in a T*-tree by a key @a key.
@@ -384,15 +376,9 @@ void *ttree_delete_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta);
  */
 int ttree_replace(ttree_t *ttree, void *key, void *new_item);
 
-static inline void tnode_meta_fill(tnode_meta_t *tmeta, ttree_node_t *tnode, int idx, int side)
-{
-  tmeta->tnode = tnode;
-  tmeta->idx = idx;
-  tmeta->side = side;
-}
-
-int tnode_meta_next(ttree_t *ttree, tnode_meta_t *tmeta);
-int tnode_meta_prev(ttree_t *ttree, tnode_meta_t *tmeta);
+void ttree_cursor_init(ttree_t *ttree, ttree_cursor_t *cursor);
+int ttree_cursor_next(ttree_cursor_t *cursor);
+int ttree_cursor_prev(ttree_cursor_t *cursor);
 
 /**
  * @brief Display T*-tree structure on a screen.
@@ -401,8 +387,6 @@ int tnode_meta_prev(ttree_t *ttree, tnode_meta_t *tmeta);
  * @warning Recursive function.
  */
 void ttree_print(ttree_t *ttree, void (*fn)(ttree_node_t *tnode));
-
-void ttree_iterator_init(ttree_t *ttree, ttree_iterator_t *tti, tnode_meta_t *start, tnode_meta_t *end);
 
 #ifdef CONFIG_DEBUG_TTREE
 /**

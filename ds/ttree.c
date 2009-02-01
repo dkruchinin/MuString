@@ -85,6 +85,11 @@ static memcache_t *__tnodes_memcache = NULL;
 
 #ifdef CONFIG_DEBUG_TTREE
 #define TT_ASSERT_DBG(cond) ASSERT(cond)
+#define TT_VERBOSE(fmt, args..)                 \
+  do {                                          \
+    kprintf(KO_DEBUG "[T*-tree]: ");            \
+    kprintf(fmt, ##args);                       \
+  } while (0)
 
 void ttree_check_depth_dbg(ttree_node_t *tnode)
 {
@@ -109,6 +114,7 @@ void ttree_check_depth_dbg(ttree_node_t *tnode)
 
 #else
 #define TT_ASSERT_DBG(cond)
+#define TT_VERBOSE(fmt, args...)
 #endif /* CONFIG_DEBUG_TTREE */
 
 
@@ -315,7 +321,7 @@ static void rotate_double(ttree_node_t **target, int side)
   (*target)->bfc = 0;
 }
 
-static void rebalance(ttree_t *ttree, ttree_node_t **node, tnode_meta_t *tmeta)
+static void rebalance(ttree_t *ttree, ttree_node_t **node, ttree_cursor_t *cursor)
 {
   int lh = left_heavy(*node);
   int sum = ABS((*node)->bfc + (*node)->sides[opposite_side(lh)]->bfc);
@@ -355,13 +361,19 @@ static void rebalance(ttree_t *ttree, ttree_node_t **node, tnode_meta_t *tmeta)
       offs = 1;
       (*node)->min_idx = 0;
       (*node)->max_idx = nkeys - 1;
-      if (tmeta && (tmeta->tnode == n)) {
-        if (tmeta->idx < n->max_idx) {
-          tmeta->tnode = *node;
-          tmeta->idx = (*node)->min_idx + (tmeta->idx - n->min_idx + 1);
+      if (cursor->tnode == n) {
+        TT_VERBOSE("(R) Tree cursor was affected due rebalancing and values of its members will be changed.\n"
+                   " Current values: { .tnode = %p, .idx = %d, .side = %d }\n",
+                   cursor->tnode, cursor->idx, cursor->side);
+        if (cursor->idx < n->max_idx) {
+          cursor->tnode = *node;
+          cursor->idx = (*node)->min_idx + (cursor->idx - n->min_idx + 1);
         }
         else
-          tmeta->idx = first_tnode_idx(ttree);
+          cursor->idx = first_tnode_idx(ttree);
+
+        TT_VERBOSE("(R) New values of cursor: { .tnode = %p, .idx = %d, .side = %d }\n",
+                   cursor->tnode, cursor->idx, cursor->side);
       }
     }
     else {
@@ -374,13 +386,19 @@ static void rebalance(ttree_t *ttree, ttree_node_t **node, tnode_meta_t *tmeta)
       (*node)->keys[ttree->keys_per_tnode - 1] = (*node)->keys[(*node)->min_idx];
       (*node)->min_idx = offs = ttree->keys_per_tnode - nkeys;
       (*node)->max_idx = ttree->keys_per_tnode - 1;
-      if (tmeta && (tmeta->tnode == n)) {
-        if (tmeta->idx > n->min_idx) {
-          tmeta->tnode = *node;
-          tmeta->idx = (*node)->min_idx + (tmeta->idx - n->min_idx);
+      if (cursor->tnode == n) {
+        TT_VERBOSE("(L) Tree cursor was affected due rebalancing and values of its members will be changed.\n"
+                   " Current values: { .tnode = %p, .idx = %d, .side = %d }\n",
+                   cursor->tnode, cursor->idx, cursor->side);
+        if (cursor->idx > n->min_idx) {
+          cursor->tnode = *node;
+          cursor->idx = (*node)->min_idx + (cursor->idx - n->min_idx);
         }
         else
-          tmeta->idx = first_tnode_idx(ttree);
+          cursor->idx = first_tnode_idx(ttree);
+
+        TT_VERBOSE("(L) New values of cursor: { .tnode = %p, .idx = %d, .side = %d }\n",
+                   cursor->tnode, cursor->idx, cursor->side);
       }
       
       n->max_idx = n->min_idx++;
@@ -461,7 +479,7 @@ static inline void __remove_successor(ttree_node_t *n)
   }
 }
 
-static void fixup_after_insertion(ttree_t *ttree, ttree_node_t *n, tnode_meta_t *tmeta)
+static void fixup_after_insertion(ttree_t *ttree, ttree_node_t *n, ttree_cursor_t *cursor)
 {
   int bfc_delta = get_bfc_delta(n);
   ttree_node_t *node = n;
@@ -480,9 +498,9 @@ static void fixup_after_insertion(ttree_t *ttree, ttree_node_t *n, tnode_meta_t 
       /*
        * Because of nature of T-tree rebalancing, just inserted item
        * may change its position in its node and even its node itself.
-       * Thus if tnode meta was specified we have to take care of it.
+       * Thus if T-tree cursor was specified we have to take care of it.
        */
-      rebalance(ttree, &node, tmeta);
+      rebalance(ttree, &node, cursor);
       /* single or double rotation tree becomes balanced and we can stop here. */
       return;
     }
@@ -491,7 +509,7 @@ static void fixup_after_insertion(ttree_t *ttree, ttree_node_t *n, tnode_meta_t 
   }
 }
 
-static void fixup_after_deletion(ttree_t *ttree, ttree_node_t *n)
+static void fixup_after_deletion(ttree_t *ttree, ttree_node_t *n, ttree_cursor_t *cursor)
 {
   ttree_node_t *node = n->parent;
   int bfc_delta = get_bfc_delta(n);
@@ -510,7 +528,7 @@ static void fixup_after_deletion(ttree_t *ttree, ttree_node_t *n)
     if (subtree_is_unbalanced(node)) {
       ttree_node_t *tmp = node;
       
-      rebalance(ttree, &tmp, NULL);
+      rebalance(ttree, &tmp, cursor);
       /*
        * If after rotation subtree heigh is not changed,
        * proccess should be continued.
@@ -553,7 +571,7 @@ void ttree_destroy(ttree_t *ttree)
   }
 }
 
-void *ttree_lookup(ttree_t *ttree, void *key, tnode_meta_t *tnode_meta)
+void *ttree_lookup(ttree_t *ttree, void *key, ttree_cursor_t *cursor)
 {
   ttree_node_t *n, *marked_tn, *target;
   int side = TNODE_BOUND, cmp_res, idx;
@@ -631,10 +649,11 @@ void *ttree_lookup(ttree_t *ttree, void *key, tnode_meta_t *tnode_meta)
   }
 
   out:
-  if (tnode_meta) {
-    tnode_meta->tnode = target;
-    tnode_meta->side = side;
-    tnode_meta->idx = idx;
+  if (cursor) {
+    ttree_cursor_init(ttree, cursor);
+    cursor->tnode = tnode;
+    cursor->side = side;
+    cursor->idx = idx;
   }
 
   return item;
@@ -642,33 +661,37 @@ void *ttree_lookup(ttree_t *ttree, void *key, tnode_meta_t *tnode_meta)
 
 int ttree_insert(ttree_t *ttree, void *item)
 {
-  tnode_meta_t tnode_meta;
+  ttree_cursor_t cursor;
 
-  if (ttree_lookup(ttree, &tnode_meta, ttree_item2key(ttree, item)))
+  if (ttree_lookup(ttree, ttree_item2key(ttree, item), &cursor))
     return -1;
 
-  ttree_insert_placeful(ttree, &tnode_meta, item);
+  ttree_insert_placeful(&cursor, item);
   return 0;
 }
 
-void ttree_insert_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta, void *item)
+void ttree_insert_placeful(ttree_cursor_t *cursor, void *item)
 {
+  ttree_t *ttree = cursor->ttree;
   ttree_node_t *at_node, *n;
-  void *key = ttree_item2key(ttree, item);
-  
-  n = at_node = tnode_meta->tnode;
+  void *key;
+
+  TT_ASSERT((cursor->ttree != NULL) && (cursor->tnode != NULL) &&
+            !tnode_is_empty(cursor->tnode));
+  key = ttree_item2key(ttree, item);
+  n = at_node = cursor->tnode;
   if (!ttree->root) { /* The root node has to be created. */
     at_node = allocate_ttree_node(ttree);
     at_node->keys[first_tnode_idx(ttree)] = key;
     at_node->min_idx = at_node->max_idx = first_tnode_idx(ttree);
     ttree->root = at_node;
     tnode_set_side(at_node, TNODE_ROOT);
-    tnode_meta->tnode = at_node;
-    tnode_meta->idx = at_node->min_idx;
-    tnode_meta->side = TNODE_BOUND;
+    cursor->tnode = at_node;
+    cursor->idx = at_node->min_idx;
+    cursor->side = TNODE_BOUND;
     return;
   }
-  if (tnode_meta->side == TNODE_BOUND) {
+  if (cursor->side == TNODE_BOUND) {
     if (tnode_is_full(ttree, n)) {
       /*
        * If node is full its max item should be removed and
@@ -677,8 +700,8 @@ void ttree_insert_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta, void *item)
        */
       void *tmp = n->keys[n->max_idx--];
 
-      increase_tnode_window(ttree, n, &tnode_meta->idx);
-      n->keys[tnode_meta->idx] = key;
+      increase_tnode_window(ttree, n, &cursor->idx);
+      n->keys[cursor->idx] = key;
       key = tmp;
       
       /*
@@ -686,8 +709,8 @@ void ttree_insert_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta, void *item)
        * New node is created and becomes the right child of current node.
        */
       if (!n->successor || !n->right) {
-        tnode_meta->side = TNODE_RIGHT;
-        tnode_meta->idx = first_tnode_idx(ttree);
+        cursor->side = TNODE_RIGHT;
+        cursor->idx = first_tnode_idx(ttree);
         goto create_new_node;
       }
 
@@ -698,8 +721,8 @@ void ttree_insert_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta, void *item)
        * node's successor.
        */
       if (tnode_is_full(ttree, at_node)) {
-        tnode_meta->side = TNODE_LEFT;
-        tnode_meta->idx = first_tnode_idx(ttree);
+        cursor->side = TNODE_LEFT;
+        cursor->idx = first_tnode_idx(ttree);
         goto create_new_node;
       }
 
@@ -707,47 +730,50 @@ void ttree_insert_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta, void *item)
        * If we're here, then successor has free rooms and key
        * will be inserted into it.
        */
-      tnode_meta->idx = at_node->min_idx;
-      tnode_meta->tnode = at_node;
+      cursor->idx = at_node->min_idx;
+      cursor->tnode = at_node;
     }
 
-    increase_tnode_window(ttree, at_node, &tnode_meta->idx);
-    at_node->keys[tnode_meta->idx] = key;
+    increase_tnode_window(ttree, at_node, &cursor->idx);
+    at_node->keys[cursor->idx] = key;
     return;
   }
 
   create_new_node:
   n = allocate_ttree_node(ttree);
-  n->keys[tnode_meta->idx] = key;
-  n->min_idx = n->max_idx = tnode_meta->idx;
+  n->keys[cursor->idx] = key;
+  n->min_idx = n->max_idx = cursor->idx;
   n->parent = at_node;
-  at_node->sides[tnode_meta->side] = n;  
-  tnode_set_side(n, tnode_meta->side);
-  tnode_meta->tnode = n;
-  fixup_after_insertion(ttree, n, tnode_meta);  
+  at_node->sides[cursor->side] = n;  
+  tnode_set_side(n, cursor->side);
+  cursor->tnode = n;
+  fixup_after_insertion(ttree, n, cursor);  
 }
 
 void *ttree_delete(ttree_t *ttree, void *key)
 {
-  tnode_meta_t tnode_meta;
+  ttree_cursor_t cursor;
   void *ret;
 
-  ret = ttree_lookup(ttree, &tnode_meta, key);
+  ret = ttree_lookup(ttree, key, &cursor);
   if (!ret)
     return ret;
 
-  ttree_delete_placeful(ttree, &tnode_meta);
+  ttree_delete_placeful(&cursor);
   return ret;
 }
 
-void *ttree_delete_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta)
+void *ttree_delete_placeful(ttree_cursor_t *cursor)
 {
+  ttree_t *ttree = cursor->ttree;
   ttree_node_t *tnode, *n;
   void *ret;
 
-  tnode = tnode_meta->tnode;
-  ret = ttree_key2item(ttree, tnode->keys[tnode_meta->idx]);
-  decrease_tnode_window(ttree, tnode, &tnode_meta->idx);
+  TT_ASSERT((cursor->ttree != NULL) && (cursor->tnode != NULL) &&
+            !tnode_is_empty(cursor->tnode));
+  tnode = cursor->tnode;
+  ret = ttree_key2item(ttree, tnode->keys[cursor->idx]);
+  decrease_tnode_window(ttree, tnode, &cursor->idx);
 
   /*
    * If after a key deletion T*-tree node contains more than
@@ -766,8 +792,8 @@ void *ttree_delete_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta)
     idx = tnode->max_idx + 1;
     increase_tnode_window(ttree, tnode, &idx);
     tnode->keys[idx] = n->keys[n->min_idx++];
-    if (unlikely(tnode_meta->idx > tnode->max_idx))
-      tnode_meta->idx = tnode->max_idx;    
+    if (unlikely(cursor->idx > tnode->max_idx))
+      cursor->idx = tnode->max_idx;    
     if (!tnode_is_empty(n) && is_leaf_node(n))
       return ret;
 
@@ -798,8 +824,8 @@ void *ttree_delete_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta)
                tnode->keys + tnode->min_idx, sizeof(void *) * tnode_num_keys(tnode));
         tnode->min_idx += diff;
         tnode->max_idx += diff;
-        if (tnode_meta->tnode == tnode)
-          tnode_meta->idx += diff;
+        if (cursor->tnode == tnode)
+          cursor->idx += diff;
       }
       memcpy(tnode->keys + tnode->max_idx + 1, n->keys + n->min_idx, sizeof(void *) * items);
       tnode->max_idx += items;
@@ -818,8 +844,8 @@ void *ttree_delete_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta)
 
         tnode->min_idx -= diff;
         tnode->max_idx -= diff;
-        if (tnode_meta->tnode == tnode)
-          tnode_meta->idx -= diff;
+        if (cursor->tnode == tnode)
+          cursor->idx -= diff;
       }
 
       memcpy(tnode->keys + tnode->min_idx - items, n->keys + n->min_idx, sizeof(void *) * items);
@@ -832,8 +858,15 @@ void *ttree_delete_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta)
   }
   if (!tnode_is_empty(tnode))
     return ret;
-  if (tnode_meta->tnode == tnode)
-    tnode_meta->tnode = NULL;
+  if (cursor->tnode == tnode) {
+    if (tnode->successor) {
+      cursor->tnode = tnode->successor;
+      cursor->side = TNODE_BOUND;
+      cursor->idx = cursor->tnode->min_idx;
+    }
+    else
+      cursor->tnode = NULL;
+  }
   
   /* if we're here, then current node will be removed from the tree. */
   n = tnode->parent;
@@ -844,67 +877,102 @@ void *ttree_delete_placeful(ttree_t *ttree, tnode_meta_t *tnode_meta)
   }
 
   n->sides[tnode_get_side(tnode)] = NULL;
-  fixup_after_deletion(ttree, tnode);
+  fixup_after_deletion(ttree, tnode, cursor);
   memfree(tnode);
   return ret;
 }
 
 int ttree_replace(ttree_t *ttree, void *key, void *new_item)
 {
-  tnode_meta_t tnode_meta;
+  ttree_cursor_t cursor;
 
-  if (!ttree_lookup(ttree, &tnode_meta, key))
+  if (!ttree_lookup(ttree, &cursor, key))
     return -1;
 
-  tnode_meta.tnode->keys[tnode_meta.idx] = ttree_item2key(ttree, new_item);
+  cursor.tnode->keys[cursor.idx] = ttree_item2key(ttree, new_item);
   return 0;
 }
 
-int tnode_meta_next(ttree_t *ttree, tnode_meta_t *tmeta)
-{  
-  if (unlikely((tnode_is_full(ttree, tmeta->tnode)) &&
-               (tmeta->idx == tmeta->tnode->max_idx))) {
-    if (tmeta->tnode->successor) {
-      tmeta->tnode = tmeta->tnode->successor;
-      tmeta->idx = tmeta->tnode->min_idx;
-      tmeta->side = TNODE_BOUND;
-      return 0;
-    }
-
-    tmeta->side = TNODE_RIGHT;
-    tmeta->idx = first_tnode_idx(ttree);
-    tmeta->tnode = NULL;
-    return -1;
-  }
-
-  return ((++tmeta->idx <= tmeta->tnode->max_idx) ? 0 : -1);
+void ttree_cursor_init(ttree_t *ttree, ttree_cursor_t *cursor)
+{
+  cursor->ttree = ttree;
+  cursor->tnode = NULL;
+  cursor->side = TNODE_BOUND;
+  cursor->idx = first_tnode_idx(cursor->ttree);
 }
 
-int tnode_meta_prev(ttree_t *ttree, tnode_meta_t *tmeta)
+int ttree_cursor_next(ttree_cursor_t *cursor)
 {
-  if (unlikely((tnode_is_full(ttree, tmeta->tnode)) &&
-               (tmeta->idx == tmeta->tnode->min_idx))) {
-    ttree_node_t *n = ttree_tnode_glb(tmeta->tnode);
+  TT_ASSERT((cursor->ttree != NULL) && (cursor->tnode != NULL) &&
+            !tnode_is_empty(cursor->tnode));
 
-    if (!n && tmeta->tnode->parent) {
-      int s = tnode_get_side(tmeta->tnode);      
-      for (n = tmeta->tnode->parent; n->parent &&
-             (tnode_get_side(n->parent) != s); n = n->parent);
-    }
-    if (n) {
-      tmeta->tnode = n;
-      tmeta->idx = tmeta->tnode->max_idx;
-      tmeta->side = TNODE_BOUND;
+  if ((cursor->side == TNODE_LEFT) || (cursor->idx < tnode->min_idx)) {
+    cursor->side = TNODE_BOUND;
+    cursor->idx = tnode->min_idx;
+    return 0;
+  }
+  if (unlikely((cursor->side == TNODE_RIGHT) || (cursor->idx > tnode->max_idx))) {
+    cursor->side = TNODE_BOUND;
+    cursor->idx = tnode->max_idx;
+  }
+  if (unlikely((tnode_is_full(cursor->ttree, cursor->tnode)) &&
+               (cursor->idx == cursor->tnode->max_idx))) {
+    if (cursor->tnode->successor) {
+      cursor->tnode = cursor->tnode->successr;
+      cursor->idx = cursor->tnode->min_idx;
+      cursor->side = TNODE_BOUND;
       return 0;
     }
 
-    tmeta->side = TNODE_LEFT;
-    tmeta->idx = first_tnode_idx(ttree);
-    tmeta->tnode = NULL;
+    cursor->side = TNODE_RIGHT;
+    cursor->idx = first_tnode_idx(cursor->ttree);
     return -1;
   }
 
-  return ((--tmeta->idx >= tmeta->tnode->min_idx) ? 0 : -1);
+  return ((++cursor->idx <= cursor->tnode->max_idx) ? 0 : -1);
+}
+
+int ttree_cursor_prev(ttree_cursor_t *cursor)
+{
+  TT_ASSERT((cursor->ttree != NULL) && (cursor->tnode != NULL) &&
+            !tnode_is_empty(cursor->tnode));
+
+  if ((cursor->side == TNODE_RIGHT) || (cursor->idx > cursor->tnode->max_idx)) {
+    cursor->side = TNODE_BOUND;
+    cursor->idx = cursor->tnode->max_idx;
+    return 0;
+  }
+  if ((cursor->side == TNODE_LEFT) || (cursor->idx < cursor->tnode->min_idx)) {
+    cursor->side = TNODE_BOUND;
+    cursor->idx = cursor->tnode->min_idx;
+  }
+  if (unlikely((tnode_is_full(cursor->ttree, cursor->tnode)) &&
+               (cursor->idx == cursor->tnode->min_idx))) {
+    ttree_node_t *n = ttree_tnode_glb(cursor->tnode);
+
+    if (unlikely(n == NULL)) {
+      if (likely(cursor->tnode->parent != NULL)) {
+        for (n = cursor->tnode->parent; n->parent &&
+               (tnode_get_side(n) == TNODE_LEFT); n = n->parent);
+        n = n->parent;
+      }
+      else
+        goto no_prev;
+    }
+    if (likely(n != NULL)) {
+      cursor->tnode = n;
+      cursor->idx = cursor->tnode->max_idx;
+      cursor->side = TNODE_BOUND;
+      return 0;
+    }
+
+    no_prev:
+    cursor->side = TNODE_LEFT;
+    cursor->idx = first_tnode_idx(cursor->ttree);
+    return -1;
+  }
+
+  return ((--cursor->idx >= cursor->tnode->min_idx) ? 0 : -1);
 }
 
 static void __print_tree(ttree_node_t *tnode, int offs, void (*fn)(ttree_node_t *tnode))
@@ -939,84 +1007,3 @@ void ttree_print(ttree_t *ttree, void (*fn)(ttree_node_t *tnode))
   __print_tree(ttree->root, 0, fn);
 }
 
-static void __tti_first(ttree_iterator_t *tti)
-{
-  tti->meta_cur.tnode = tti->tnode_start;
-  tti->meta_cur.idx = tti->start_idx;
-  tti->state = ITER_RUN;
-}
-
-static void __tti_last(ttree_iterator_t *tti)
-{
-  tti->meta_cur.tnode = tti->tnode_end;
-  tti->meta_cur.idx = tti->end_idx;
-  if (unlikely(tti->tnode_start == tti->tnode_end) && (tnode_num_keys(tti->tnode_end) == 1))
-    tti->state = ITER_STOP;
-  else
-    tti->state = ITER_RUN;
-}
-
-static void __tti_next(ttree_iterator_t *tti)
-{
-  if (unlikely((tti->meta_cur.tnode == tti->tnode_end) &&
-               (tti->meta_cur.idx == tti->end_idx))) {
-    tti->state = ITER_STOP;
-    return;
-  }
-  if (tti->meta_cur.idx == tti->meta_cur.tnode->max_idx) {
-    tti->meta_cur.tnode = tti->meta_cur.tnode->successor;
-    tti->meta_cur.idx = tti->meta_cur.tnode->min_idx;
-  }
-  else
-    tti->meta_cur.idx++;
-}
-
-static void __tti_prev(ttree_iterator_t *tti)
-{
-  panic("T*-tree iterator doesn't support \"prev\" method!");
-}
-
-void ttree_iterator_init(ttree_t *ttree, ttree_iterator_t *tti, tnode_meta_t *start, tnode_meta_t *end)
-{
-  ASSERT(ttree->root != NULL);
-  tti->first = __tti_first;
-  tti->last = __tti_last;
-  tti->next = __tti_next;
-  tti->prev = __tti_prev;
-  iter_init(tti, ITERATOR_TYPE_VOID);
-  if (start) {
-    if (start->side == TNODE_BOUND) {
-      tti->tnode_start = start->tnode;
-      tti->start_idx = start->idx;
-    }
-    else {
-      tti->tnode_start = start->tnode->parent;
-      tti->start_idx = (start->side == TNODE_LEFT) ?
-        tti->tnode_start->min_idx : tti->tnode_start->max_idx;
-    }
-  }
-  else {
-    tti->tnode_start = ttree_tnode_leftmost(ttree->root);
-    tti->start_idx = tti->tnode_start->min_idx;
-  }
-  if (end) {
-    if (end->side == TNODE_BOUND) {
-      tti->tnode_end = end->tnode;
-      tti->end_idx = end->idx;
-    }
-    else {
-      tti->tnode_end = end->tnode->parent;
-      tti->end_idx = (end->side == TNODE_LEFT) ?
-        tti->tnode_end->min_idx : tti->tnode_end->max_idx;
-    }
-  }
-  else {
-    tti->tnode_end = ttree_tnode_rightmost(ttree->root);
-    tti->end_idx = tti->tnode_end->max_idx;
-  }
-  
-  memset(&tti->meta_cur, 0, sizeof(tti->meta_cur));
-  tti->meta_cur.side = TNODE_BOUND;
-  tti->dst_tree = ttree;
-  iter_set_ctx(tti, ITERATOR_CTX_VOID);  
-}
