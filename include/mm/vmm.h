@@ -104,12 +104,11 @@ typedef struct __vmm {
 #endif /* CONFIG_DEBUG_MM */
 } vmm_t;
 
-DEFINE_ITERATOR(vmrange,                
-                vmrange_t *vmr;
-                vmrange_t *vmr_first;
-                tnode_meta_t meta;
-                uintptr_t va_to;
-                );
+typedef struct __vmrange_set {
+  vmrange_t *vmr;
+  uintptrt_t va_to;
+  ttree_cursor_t cursor;
+} vmrange_set_t;
 
 extern rpd_t kernel_rpd;
 
@@ -170,6 +169,18 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
 int vmrange_find_covered(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, vmrange_iterator_t *vmri);
 void vmrange_iterator_init(vmrange_iterator_t *vmri, vmm_t *vmm, uintptr_t va_from, uintptr_t va_to);
 int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages, kmap_flags_t flags);
+
+static inline void vmrange_set_next(vmrange_set_t *vmrs)
+{
+  if (unlikely(vmrs->va_from <= vmrs->va_to))
+    vmrs->vmr = NULL;
+  else if (!ttree_cursor_next(&vmrs->cursor)) {
+    vmrs->vmr = ttree_item_from_cursor(&vmrs->cursor);
+    vmrs->va_from = vmrs->vmr->bounds.space_end;
+  }
+  else
+    vmrs->vmr = NULL;
+}
 
 static inline void munmap_core(rpd_t *rpd, uintptr_t va, ulong_t npages)
 {

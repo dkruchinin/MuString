@@ -151,51 +151,56 @@ static void try_merge_vmranges(vmm_t *vmm, vmrange_t *vmrange, tnode_meta_t *met
 }
 
 static vmrange_t *split_vmrange(vmm_t *vmm, vmrange_t *vmrage, uintptr_t va_from,
-                                uintptr_t va_to, tnode_meta_t *meta)
+                                uintptr_t va_to, ttree_cursor_t *cursor)
 {
   vmrange_t *new_vmr;
-  tnode_meta_t meta_next;
+  ttree_cursor_t csr_next;
 
-  new_vmr = create_vmrange(vmm, va_from, va_to, vmrange->flags);
+  new_vmr = create_vmrange(vmm, va_to, vmrage->bounds.space_end, vmrange->flags);
   if (!new_vmr)
     return NULL;
 
+  VMM_VERBOSE("%s: Split VM range [%p, %p) to [%p, %p) and [%p, %p)\n",
+              vmm_get_name_dbg(vmm), vmrange->bounds.space_start, vmrange->bounds.space_end,
+              vmrange->bounds.space_start, va_from, va_to, vmrange->bounds.space_end);
   vmrange->bounds.space_end = va_from;
   new_vmr->memobj = vmrange->memobj;
   vmrange->hole_size = new_vmr->bounds.space_start - vmrange->bounds.space_end;
-  tnode_meta_next(&vmm->vmranges_tree, meta);
-  ttree_insert_placeful(&vmm->vmranges_tree, new_vmr, meta);
-  memcpy(&meta_next, meta, sizeof(meta_next));
-  if (unlikely(tnode_meta_next(&vmm->vmranges_tree, &meta_next) < 0))
-    new_vmr->hole_size = USPACE_VA_TOP - new_vmr->bounds.space_end;
-  else {
-    struct bounds *bnd = tnode_key(meta_next.tnode, meta_next.idx);
-    new_vmr->hole_size = bnd->space_start - new_vmr->bounds.space_end;
-  }
+  ttree_cursor_copy(&csr_next, cursor);
+  ttree_cursor_next(&csr_next);
+  ttree_insert_placeful(&csr_next, new_vmr);
 
   return new_vmr;
 }
 
-static void fix_vmrange_holes(vmm_t *vmm, vmrange_t *target_vmr, tnode_meta_t *meta)
+static void fix_vmrange_holes(vmm_t *vmm, vmrange_t *target_vmr, ttree_cursor_t *cursor)
 {
   vmrange_t *vmr;
-  tnode_meta_t m;
+  ttree_cursor_t csr;
 
-  memcpy(&m, meta, sizeof(m));
-  if (!tnode_meta_prev(&vmm->vmranges_tree, &m)) {
-    vmr = ttree_key2item(&vmm->vmranges_tree, tnode_key(m.tnode, m.idx));
-    vmr->hole_size = target_vmr->bounds.space_start -
-      vmr->bounds.space_end;
+  ttree_cursor_copy(&csr, cursor);
+  if (!ttree_cursor_prev(&csr)) {
+    vmr = ttree_item_from_cursor(&csr);
+    VMM_VERBOSE("%s [%p, %p): old hole size: %p, new hole size: %p\n",
+                vmm_get_name_dbg(vmm), vmr->bounds.space_start, vmr->bounds.space_end,
+                vmr->hole_size, vmrange->bounds.space_start - vmr->bounds.space_end);
+    vmr->hole_size = vmrange->bounds.space_start - vmr->bounds.space_end;
   }
 
-  memcpy(&m, meta, sizeof(m));
-  if (!tnode_meta_next(&vmm->vmranges_tree, &m)) {
-    vmr = ttree_key2item(&vmm->vmranges_tree, tnode_key(m.tnode, m.idx));
-    target_vmr->hole_size = vmr->bounds.space_start -
-      target_vmr->bounds.space_end;
+  ttree_cursor_copy(&csr, cursor);
+  if (!ttree_cursor_next(&csr)) {
+    VMM_VERBOSE("%s [%p, %p): old hole size: %p, new hole size: %p\n",
+                vmm_get_name_dbg(vmm), vmrange->bounds.space_start, vmrange->bounds.space_end,
+                vmrange->hole_size, vmr->bounds.space_start - vmrange->bounds.space_end);
+    vmr = ttree_item_from_cursor(&csr);
+    vmrange->hole_size = vmr->bounds.space_start - vmrange->bounds.space_end;
   }
-  else
-    target_vmr->hole_size = USPACE_VA_TOP - target_vmr->bounds.space_end;
+  else {
+    VMM_VERBOSE("%s [%p, %p): old hole size: %p, new hole size: %p\n",
+                vmm_get_name_dbg(vmm), vmrange->bounds.space_start, vmrange->bounds.space_end,
+                vmrange->hole_size, USPACE_VA_TOP - vmrange->bounds.space_end);
+    vmrange->hole_size = USPACE_VA_TOP - vmrange->bounds.space_end;
+  }
 }
 
 void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name)
@@ -264,7 +269,7 @@ vmm_t *vmm_create(void)
   return vmm;
 }
 
-uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, tnode_meta_t *meta)
+uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, ttree_cursor_t *cursor)
 {    
   uintptr_t start = USPACE_VA_BOTTOM;
   vmrange_t *vmr;
@@ -304,10 +309,19 @@ uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, tnode_meta_t *meta)
   return INVALID_ADDRESS;
   
   found:
-  if (meta) {
-    tnode_meta_fill(meta, tnode, i, TNODE_BOUND);
-    if (gonext)
-      tnode_meta_next(&vmm->vmranges_tree, meta);
+  if (cursor) {
+    if (cursor->state == TT_CSR_UNTIED)
+      ttree_cursor_init(&vmm->vmranges_tree, cursor);
+
+    cursor->tnode = tnode;
+    cursor->idx = i;
+    cursor->side = TNODE_BOUND;
+    if (gonext) {
+      cursor->state = TT_CSR_TIED;
+      ttree_cursor_next(cursor);
+    }
+
+    cursor->state = TT_CSR_PENDING;
   }
 
   return start;
@@ -322,6 +336,28 @@ vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, ttree_
   bounds.space_end = va_end;
   vmr = ttree_lookup(&vmm->vmranges_tree, &bounds, cursor);
   return vmr;
+}
+
+static void __vmri_first(vmrange_iterator_t *vmri);
+static void __vmri_last(vmrange_iterator_t *vmri);
+static void __vmri_next(vmrange_iterator_t *vmri);
+static void __vmri_prev(vmrange_iterator_t *vmri);
+
+void vmranges_find_covered(vmm_t *vmm, uintptr_t va_from, uintptr_t va_to, vmrange_set_t *vmrs)
+{
+  ASSERT(!(va_from & PAGE_MASK) && !(va_to & PAGE_MASK));
+  memset(vmrs, 0, sizeof(*vmri));
+  vmrs->va_from = va_from;
+  vmrs->va_to = va_to;
+  ttree_cursor_init(&vmm->vmranges_tree, &vmrs->cursor);
+  vmrs->vmr = vmrange_find(vmm, va_from, va_from + PAGE_SIZE, &vmrs->cursor);
+  if (!vmrs->vmr) {
+    if (!ttree_cursor_next(&vmrs->cursor)) {
+      vmrs->vmr = ttree_item_from_cursor(&vmrs->cursor);
+      if (vmrs->vmr->bounds.space_end > va_to)
+        vmrs->vmr = NULL;
+    }
+  }
 }
 
 long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
@@ -371,15 +407,37 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
   }
 
   create_vmrange:
-  /*
-   * After suitable address is found, check if it can be attached
-   * to previous or next VM range. It can be done only if flags
-   * and memory objects are equal.
-   */
-
+  ttree_cursor_copy(&csr_tmp, &cursor);
+  vmr = NULL;
+  if (!ttree_cursor_prev(&csr_tmp)) {
+    vmr = ttree_item_from_cursor(&csr_tmp);
+    if ((vmr->flags == flags) && (memobj == vmr->memobj) &&
+        vmr->bounds.space_end == addr) {
+      VMM_VERBOSE("%s: Attach [%p, %p) to the top of [%p, %p)\n", vmm_get_name_dbg(vmm),
+                  addr, addr + (npages << PAGE_WIDTH), vmr->bounds.space_start, vmr->bounds.space_end);
+      vmr->bounds->hole_size -= (addr + (npages << PAGE_WIDTH) - vmr->bounds.space_end);
+      vmr->bounds.space_end = addr + (npages << PAGE_WIDTH);
+      goto out;
+    }
+  }
 
   ttree_cursor_copy(&csr_tmp, &cursor);
-  
+  if (!ttree_cursor_next(&csr_tmp)) {
+    vmrange_t *prev = vmr;
+    
+    vmr = ttree_item_from_cursor(&csr_tmp);
+    if ((vmr->flags == flags) && (memobj == vmr->memobj) &&
+        (vmr->bounds.space_start == (addr + (npages << PAGE_WIDTH)))) {
+      VMM_VERBOSE("%s: Attach [%p, %p) to the bottom of [%p, %p)\n", vmm_get_name_dbg(vmm),
+                  addr, addr + (npages << PAGE_WIDTH), vmr->bounds.space_start, vmr->bounds.space_end);
+      vmr->bounds.space_start = addr;
+      if (prev)
+        prev->hole_size = vmr->bounds.space_start - prev->bounds.space_end;
+
+      goto out;
+    }
+  }
+
   vmr = create_vmrange(vmm, addr, npages, flags);
   if (!vmr) {
     err = -ENOMEM;
@@ -387,30 +445,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
   }
 
   ttree_insert_placeful(&vmm->vmranges_tree, &tmeta, vmr);  
-  if (flags & VMR_POPULATE) {
-    page_frame_t *pages;
-
-    pages = alloc_pages_ncont(npages, AF_CLEAR_RC | AF_ZERO | AF_PGEN);
-    if (!pages) {
-      err = -ENOMEM;
-      goto err;
-    }
-    else {
-      page_frame_iterator_t pfi;
-      ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) pblock_ctx;
-
-      pfi_pblock_init(&pfi, &pblock_ctx, list_node_first(&pages->head), 0,
-                      list_node_last(&pages->head),
-                      pages_block_size(list_entry(list_node_last(&pages->head), page_frame_t, node)));
-      iter_first(&pfi);
-      err = __mmap_core(&vmm->rpd, addr, npages, &pfi, flags);
-      if (err)
-        goto err;
-    }
-  }
-
   fix_vmrange_holes(vmm, vmr, &tmeta);
-  try_merge_vmranges(vmm, vmr, &tmeta);
   return addr;
   
   err:
@@ -418,61 +453,53 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
     ttree_delete_placeful(&vmm->vmranges_tree, &tmeta);
     destroy_vmrange(vmr);
   }
-  
+
+  out:
   return err;
 }
 
-void vmranges_munmap(vmm_t *vmm, uintptr_t addr, page_idx_t npages)
+void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
 {
-  vmrange_t *vmr;
-  uintptr_t va_to = addr + (npages << PAGE_WIDTH);
-  tnode_meta_t meta;
-  
-  /*
-   * At first find the very first VM range covered by given
-   * addresses diapason. In case it is *partially* covered,
-   * descrease its start/end bound or split target VM range.
-   */
-  vmr = vmrange_find(vmm, addr, addr + PAGE_SIZE, &meta);
-  if (!vmr)
-    return;
+  vmrange_set_t vmrs;
+  uintptr_t va_to = va_from + (npages << PAGE_WIDTH);
 
-  /* VM range have to be splitted if it strictly includes requiested diapason */
-  if (unlikely((vmr->bounds.space_start > addr) &&
-               (vmr->bounds.space_end < va_to))) {
-    if (!split_vmrange(vmm, vmr, addr, va_to, &meta)) {
-      kprintf(KO_ERROR "vmranges_munmap: Failed to split VM range [%p, %p) "
-              "by dispason [%p, %p). -ENOMEM.\n",
-              vmr->bounds.space_start, vmr->bounds.space_end, addr, va_to);
+  ASSERT(!(va_from & PAGE_MASK));
+  vmranges_find_covered(vmm, va_from, va_from + (npages << PAGE_WIDTH), &vmrs);
+  if (!vmrs.vmr)
+    return;
+  if ((vmrs.vmr->bounds.space_start < va_from) &&
+      (vmrs.vmr->bounds.space_end > va_to)) {
+    if (!split_vmranges(vmm, vmrs.vmr, va_from, va_to, &vmrs.cursor)) {
+      kprintf(KO_ERROR "unmap_vmranges: Failed to split VM range [%p, %p). -ENOMEM\n",
+              vmrs.vmr->bounds.space_start, vmrs.vmr->bounds.space_end);
     }
 
-    munmap_core(&vmm->rpd, addr, npages);
+    munmap_core(&vmm->rpd, va_from, npages);
     return;
   }
-  else {
-    
+  else if (va_from > vmrs.vmr->bounds.space_start) {
+    vmrs.vmr->hole_size += vmrs.vmr->bounds.space_end - va_from;    
+    munmap_core(&vmm->rpd, va_from, vmrs.vmr->bounds.space_end);
+    vmrs.vmr->bounds.space_end = va_from;
+  }
+
+  vmrange_set_next(&vmrs);
+  while (vmrs.vmr) {
+    if (unlikely(vmrs.va_to < vmrs.vmr->bounds.space_end)) {
+      ttree_cursor_t csr_prev;
+
+      ttree_cursor_copy(&csr_prev, &vmrs.cursor);
+      vmrs->vmr->bounds.space_start = vmrs.va_to;
+      if (!ttree_cursor_prev(&csr_prev)) {
+        vmrange_t *vmr = ttree_item_from_cursor(&csr_prev);
+        vmr->hole_size = vmrs.vmr->bounds.space_start - vmr->bounds.space_end;
+      }
+    }
+
+    munmap_core(&vmm->rpd, vmrs.va_from, ((vmrs.va_to - vmrs.va_from) << PAGE_WIDTH));
+    vmrange_set_next(&vmrs);
   }
 }
-
-static void __vmri_first(vmrange_iterator_t *vmri);
-static void __vmri_last(vmrange_iterator_t *vmri);
-static void __vmri_next(vmrange_iterator_t *vmri);
-static void __vmri_prev(vmrange_iterator_t *vmri);
-
-void vmranges_find_covered(vmm_t *vmm, uintptr_t va_from, uintptr_t va_to, vmrange_iterator_t *vmri)
-{
-  ASSERT(!(va_from & PAGE_MASK) && (va_to & PAGE_MASK));
-  memset(vmri, 0, sizeof(*vmri));
-  vmri->va_to = va_to;
-  vmri->vmr = vmrange_find(vmm, va_from, va_from + PAGE_SIZE, &vmri->meta);
-  vmri->first = __vmri_first;
-  vmri->last = __vmri_last;
-  vmri->next = __vmri_next;
-  vmri->prev = __vmri_prev;
-  iter_init(vmri, ITERATOR_TYPE_VOID);
-  iter_set_ctx(vmri, ITERATOR_CTX_VOID);
-}
-
 
 int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages, kmap_flags_t flags)
 {
@@ -487,28 +514,10 @@ int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages
   return __mmap_core(rpd, va, npages, &pfi, flags);
 }
 
-void sys_munmap(void *addr, size_t length)
-{
-  uintptr_t va_from, va_to;
-  vmrange_t *vmr;
-  vmm_t *vmm = current_task()->vmm;
-
-  va_from = PAGE_ALIGN_DOWN((uintptr_t)addr);
-  va_to = PAGE_ALIGN(va_from + length);
-  /* wow, somebody wants to kill himself... */
-  if (!valid_user_address_range(va_from, length)) {
-    va_from = USPACE_VA_BOTTOM;
-    va_to = USPACE_VA_TOP;
-  }
-
-  if (!vmr) /* nothing was found */
-    return;
-  if ()
-}
 
 static void __vmri_first(vmrange_iterator_t *vmri)
 {
-  vmri->state = (!vmri->vmr) ? ITER_STOP : ITER_RUN;
+  if (!vmri->vmr)
 }
 
 static void __vmri_last(vmrange_iterator_t *vmri)
@@ -518,13 +527,12 @@ static void __vmri_last(vmrange_iterator_t *vmri)
 
 static void __vmri_next(vmrange_iterator_t *vmri)
 {
-  if (unlikely(tnode_meta_next(&vmri->meta) < 0)) {
+  if (unlikely(ttree_cursor_next(&vmri->cursor) < 0)) {
     vmri->state = ITER_STOP;
     return;
   }
 
-  vmri->vmr = ttree_key2item(&vmri->vmr->parent_vmm->vmranges_tree,
-                             tnode_key(vmri->meta.tnode, vmri->meta.idx));
+  vmri->vmr = ttree_item_from_cursor(&vmri->cursor);
   if (vmr->bounds.space_start >= vmri->va_to)
     vmri->state = ITER_STOP;    
 }
