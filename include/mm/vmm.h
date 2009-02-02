@@ -106,7 +106,8 @@ typedef struct __vmm {
 
 typedef struct __vmrange_set {
   vmrange_t *vmr;
-  uintptrt_t va_to;
+  uintptr_t va_to;
+  uintptr_t va_from;
   ttree_cursor_t cursor;
 } vmrange_set_t;
 
@@ -164,10 +165,10 @@ void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name);
 int vm_mandmaps_roll(vmm_t *target_mm);
 
 vmm_t *vmm_create(void);
-long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
+long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages,
                  vmrange_flags_t flags, int offs_pages);
-int vmrange_find_covered(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, vmrange_iterator_t *vmri);
-void vmrange_iterator_init(vmrange_iterator_t *vmri, vmm_t *vmm, uintptr_t va_from, uintptr_t va_to);
+vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, ttree_cursor_t *cursor);
+void vmrange_find_covered(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, vmrange_set_t *vmrs);
 int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages, kmap_flags_t flags);
 
 static inline void vmrange_set_next(vmrange_set_t *vmrs)

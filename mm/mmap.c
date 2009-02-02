@@ -103,6 +103,7 @@ static void destroy_vmrange(vmrange_t *vmr)
   memfree(vmr);
 }
 
+#if 0
 static void try_merge_vmranges(vmm_t *vmm, vmrange_t *vmrange, tnode_meta_t *meta)
 {
   vmrange_t *prev_vmr, *next_vmr;
@@ -149,14 +150,15 @@ static void try_merge_vmranges(vmm_t *vmm, vmrange_t *vmrange, tnode_meta_t *met
     }
   }
 }
+#endif 
 
-static vmrange_t *split_vmrange(vmm_t *vmm, vmrange_t *vmrage, uintptr_t va_from,
+static vmrange_t *split_vmrange(vmm_t *vmm, vmrange_t *vmrange, uintptr_t va_from,
                                 uintptr_t va_to, ttree_cursor_t *cursor)
 {
   vmrange_t *new_vmr;
   ttree_cursor_t csr_next;
 
-  new_vmr = create_vmrange(vmm, va_to, vmrage->bounds.space_end, vmrange->flags);
+  new_vmr = create_vmrange(vmm, va_to, vmrange->bounds.space_end, vmrange->flags);
   if (!new_vmr)
     return NULL;
 
@@ -173,7 +175,7 @@ static vmrange_t *split_vmrange(vmm_t *vmm, vmrange_t *vmrage, uintptr_t va_from
   return new_vmr;
 }
 
-static void fix_vmrange_holes(vmm_t *vmm, vmrange_t *target_vmr, ttree_cursor_t *cursor)
+static void fix_vmrange_holes(vmm_t *vmm, vmrange_t *vmrange, ttree_cursor_t *cursor)
 {
   vmrange_t *vmr;
   ttree_cursor_t csr;
@@ -275,7 +277,6 @@ uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, ttree_cursor_t *cursor
   vmrange_t *vmr;
   ttree_node_t *tnode = NULL;
   int i = 0;
-  bool gonext = false;
 
   tnode = ttree_tnode_leftmost(vmm->vmranges_tree.root);
   if (unlikely(tnode == NULL))
@@ -296,7 +297,6 @@ uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, ttree_cursor_t *cursor
       vmr = ttree_key2item(&vmm->vmranges_tree, tnode_key(tnode, i));
       if (vmr->hole_size >= length) {
         start = vmr->bounds.space_end;
-        gonext = true;
         goto found;
       }
     }
@@ -304,24 +304,21 @@ uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, ttree_cursor_t *cursor
     tnode = tnode->successor;
   }
 
-  VMM_VERBOSE("%s: Failed to find free VM range with size = %d pages\n",
-              vmm_get_name_dbg(vmm), length << PAGE_WIDTH);
+  VMM_VERBOSE("%s: Failed to find free VM range with size = %d pages (%d)\n",
+              vmm_get_name_dbg(vmm), length << PAGE_WIDTH, length);
   return INVALID_ADDRESS;
   
   found:
   if (cursor) {
-    if (cursor->state == TT_CSR_UNTIED)
-      ttree_cursor_init(&vmm->vmranges_tree, cursor);
-
-    cursor->tnode = tnode;
-    cursor->idx = i;
-    cursor->side = TNODE_BOUND;
-    if (gonext) {
+    ttree_cursor_init(&vmm->vmranges_tree, cursor);
+    if (tnode) {
+      cursor->tnode = tnode;
+      cursor->idx = i;
+      cursor->side = TNODE_BOUND;
       cursor->state = TT_CSR_TIED;
       ttree_cursor_next(cursor);
+      cursor->state = TT_CSR_PENDING;
     }
-
-    cursor->state = TT_CSR_PENDING;
   }
 
   return start;
@@ -338,15 +335,10 @@ vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, ttree_
   return vmr;
 }
 
-static void __vmri_first(vmrange_iterator_t *vmri);
-static void __vmri_last(vmrange_iterator_t *vmri);
-static void __vmri_next(vmrange_iterator_t *vmri);
-static void __vmri_prev(vmrange_iterator_t *vmri);
-
 void vmranges_find_covered(vmm_t *vmm, uintptr_t va_from, uintptr_t va_to, vmrange_set_t *vmrs)
 {
   ASSERT(!(va_from & PAGE_MASK) && !(va_to & PAGE_MASK));
-  memset(vmrs, 0, sizeof(*vmri));
+  memset(vmrs, 0, sizeof(*vmrs));
   vmrs->va_from = va_from;
   vmrs->va_to = va_to;
   ttree_cursor_init(&vmm->vmranges_tree, &vmrs->cursor);
@@ -360,7 +352,7 @@ void vmranges_find_covered(vmm_t *vmm, uintptr_t va_from, uintptr_t va_to, vmran
   }
 }
 
-long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
+long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages,
                  vmrange_flags_t flags, int offs_pages)
 {
   vmrange_t *vmr;
@@ -415,7 +407,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
         vmr->bounds.space_end == addr) {
       VMM_VERBOSE("%s: Attach [%p, %p) to the top of [%p, %p)\n", vmm_get_name_dbg(vmm),
                   addr, addr + (npages << PAGE_WIDTH), vmr->bounds.space_start, vmr->bounds.space_end);
-      vmr->bounds->hole_size -= (addr + (npages << PAGE_WIDTH) - vmr->bounds.space_end);
+      vmr->hole_size -= (addr + (npages << PAGE_WIDTH) - vmr->bounds.space_end);
       vmr->bounds.space_end = addr + (npages << PAGE_WIDTH);
       goto out;
     }
@@ -444,17 +436,18 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, int npages,
     goto err;
   }
 
-  ttree_insert_placeful(&vmm->vmranges_tree, &tmeta, vmr);  
-  fix_vmrange_holes(vmm, vmr, &tmeta);
+  ttree_insert_placeful(&cursor, vmr);  
+  fix_vmrange_holes(vmm, vmr, &cursor);
+  
+  out:
   return addr;
   
   err:
   if (vmr) {
-    ttree_delete_placeful(&vmm->vmranges_tree, &tmeta);
+    ttree_delete_placeful(&cursor);
     destroy_vmrange(vmr);
   }
 
-  out:
   return err;
 }
 
@@ -469,7 +462,7 @@ void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
     return;
   if ((vmrs.vmr->bounds.space_start < va_from) &&
       (vmrs.vmr->bounds.space_end > va_to)) {
-    if (!split_vmranges(vmm, vmrs.vmr, va_from, va_to, &vmrs.cursor)) {
+    if (!split_vmrange(vmm, vmrs.vmr, va_from, va_to, &vmrs.cursor)) {
       kprintf(KO_ERROR "unmap_vmranges: Failed to split VM range [%p, %p). -ENOMEM\n",
               vmrs.vmr->bounds.space_start, vmrs.vmr->bounds.space_end);
     }
@@ -489,7 +482,7 @@ void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
       ttree_cursor_t csr_prev;
 
       ttree_cursor_copy(&csr_prev, &vmrs.cursor);
-      vmrs->vmr->bounds.space_start = vmrs.va_to;
+      vmrs.vmr->bounds.space_start = vmrs.va_to;
       if (!ttree_cursor_prev(&csr_prev)) {
         vmrange_t *vmr = ttree_item_from_cursor(&csr_prev);
         vmr->hole_size = vmrs.vmr->bounds.space_start - vmr->bounds.space_end;
@@ -514,33 +507,6 @@ int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages
   return __mmap_core(rpd, va, npages, &pfi, flags);
 }
 
-
-static void __vmri_first(vmrange_iterator_t *vmri)
-{
-  if (!vmri->vmr)
-}
-
-static void __vmri_last(vmrange_iterator_t *vmri)
-{
-  panic("vmrange_iterator_t doesn't support method \"last\"!");
-}
-
-static void __vmri_next(vmrange_iterator_t *vmri)
-{
-  if (unlikely(ttree_cursor_next(&vmri->cursor) < 0)) {
-    vmri->state = ITER_STOP;
-    return;
-  }
-
-  vmri->vmr = ttree_item_from_cursor(&vmri->cursor);
-  if (vmr->bounds.space_start >= vmri->va_to)
-    vmri->state = ITER_STOP;    
-}
-
-static void __vmri_prev(vmrange_iterator_t *vmri)
-{
-  panic("vmrange_iterator_t doesn't suppert method \"prev\"");
-}
 
 #ifdef CONFIG_DEBUG_MM
 #include <eza/task.h>
@@ -576,7 +542,7 @@ static void __print_tnode(ttree_node_t *tnode)
   tnode_for_each_index(tnode, i) {
     vmr = container_of(tnode_key(tnode, i), vmrange_t, bounds);
     kprintf("[%p<->%p FP: %zd), ", vmr->bounds.space_start,
-            vmr->bounds.space_end, (vmr->hole_size << PAGE_WIDTH));
+            vmr->bounds.space_end, (vmr->hole_size >> PAGE_WIDTH));
   }
 
   kprintf("\n");

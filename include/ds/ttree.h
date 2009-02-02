@@ -52,11 +52,11 @@ enum {
   TNODE_RIGHT,      /**< Right side */
 };
 
-enum {
+enum ttree_cursor_state {
   TT_CSR_UNTIED = 0,
   TT_CSR_TIED,
   TT_CSR_PENDING,
-} ttree_cursor_state;
+};
 
 #define TNODE_ROOT  TNODE_UNDEF /**< T*-tree node is root */
 #define TNODE_BOUND TNODE_UNDEF /**< T*-tree node bounds searhing value */
@@ -117,6 +117,7 @@ typedef struct __ttree {
  * @see ttree_node_t
  */
 typedef struct __ttree_cursor {
+  ttree_t *ttree;
   ttree_node_t *tnode; /**< A pointer to T*-tree node */
   int idx;             /**< Particular index in a T*-tree node array */
   int side;            /**< T*-tree node side. Used when item is inserted. */
@@ -131,7 +132,7 @@ typedef struct __ttree_cursor {
 #define __validate_cursor_dbg(cursor)                   \
   do {                                                  \
     TT_ASSERT_DBG((cursor)->ttree != NULL);             \
-    TT_ASSERT_DBG((curosr)->tnode != NULL);             \
+    TT_ASSERT_DBG((cursor)->tnode != NULL);             \
     TT_ASSERT_DBG(!tnode_is_empty((cursor)->tnode));    \
     TT_ASSERT_DBG((cursor)->state != TT_CSR_UNTIED);    \
   } while (0)
@@ -413,7 +414,7 @@ static inline void *ttree_key_from_cursor(ttree_cursor_t *cursor)
   return NULL;
 }
 
-static inline void ttree_item_from_cursor(ttree_cursor_t *cursor)
+static inline void *ttree_item_from_cursor(ttree_cursor_t *cursor)
 {
   void *key = ttree_key_from_cursor(cursor);
   if (!key)
@@ -442,7 +443,7 @@ void ttree_print(ttree_t *ttree, void (*fn)(ttree_node_t *tnode));
  * @see ttree_t
  * @see ttree_node_t
  */
-void ttree_check_depth_dbg(ttree_node_t *tnode);
+int ttree_check_depth_dbg(ttree_node_t *tnode);
 #endif /* CONFIG_DEBUG_TTREE */
 
 /*
