@@ -85,15 +85,12 @@ void initialize_scheduler(void)
     panic( "initialize_scheduler(): Can't register default scheduler !" );  
   }
 
-  kprintf("1\n");
   initialize_idle_tasks();
-  kprintf("2\n");
 
   for(i=0;i<CONFIG_NRCPUS;i++) {
     spinlock_initialize(&migration_locks[i]);
     list_init_head(&migration_actions[i]);
   }
-  kprintf("3\n");
 }
 
 scheduler_t *sched_get_scheduler(const char *name)

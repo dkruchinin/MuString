@@ -444,6 +444,7 @@ void ttree_print(ttree_t *ttree, void (*fn)(ttree_node_t *tnode));
  * @see ttree_node_t
  */
 int ttree_check_depth_dbg(ttree_node_t *tnode);
+void ttree_display_cursor_dbg(ttree_cursor_t *cursor);
 #endif /* CONFIG_DEBUG_TTREE */
 
 /*

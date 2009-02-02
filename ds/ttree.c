@@ -111,6 +111,51 @@ int ttree_check_depth_dbg(ttree_node_t *tnode)
   return ((r > l) ? r : l);
 }
 
+void ttree_display_cursor_dbg(ttree_cursor_t *cursor)
+{
+  kprintf("=== Cursor content ===\n");
+  kprintf("\t.ttree = %p\n", cursor->ttree);
+  kprintf("\t.tnode = %p", cursor->tnode);
+  if (cursor->tnode)
+    kprintf(" [%d, %d]", cursor->tnode->min_idx, cursor->tnode->max_idx);
+
+  kprintf("\n");
+  kprintf("\t.idx = %d\n", cursor->idx);
+  kprintf("\t.side = ");
+  switch (cursor->side) {
+      case TNODE_BOUND:
+        kprintf("TNODE_BOUND");
+        break;
+      case TNODE_LEFT:
+        kprintf("TNODE_LEFT");
+        break;
+      case TNODE_RIGHT:
+        kprintf("TNODE_BOUND");
+        break;
+      default:
+        kprintf("Unknown side type");
+        break;
+  }
+
+  kprintf("\n");
+  kprintf("\t.state = ");
+  switch (cursor->state) {
+      case TT_CSR_UNTIED:
+        kprintf("TT_CSR_UNTIED");
+        break;
+      case TT_CSR_TIED:
+        kprintf("TT_CSR_TIED");
+        break;
+      case TT_CSR_PENDING:
+        kprintf("TT_CSR_PENDING");
+        break;
+      default:
+        kprintf("Unknown cursor state");
+        break;
+  }
+
+  kprintf("\n=========\n");
+}
 #else
 #define TT_VERBOSE(fmt, args...)
 #endif /* CONFIG_DEBUG_TTREE */
@@ -683,6 +728,7 @@ void ttree_insert_placeful(ttree_cursor_t *cursor, void *item)
   TT_ASSERT_DBG(cursor->ttree != NULL);
   key = ttree_item2key(ttree, item);
   n = at_node = cursor->tnode;
+  cursor->state = TT_CSR_TIED;
   if (!ttree->root) { /* The root node has to be created. */
     at_node = allocate_ttree_node(ttree);
     at_node->keys[first_tnode_idx(ttree)] = key;
@@ -695,7 +741,7 @@ void ttree_insert_placeful(ttree_cursor_t *cursor, void *item)
     return;
   }
 
-  __validate_cursor_dbg(cursor);
+  __validate_cursor_dbg(cursor);  
   if (cursor->side == TNODE_BOUND) {
     if (tnode_is_full(ttree, n)) {
       /*
@@ -751,7 +797,7 @@ void ttree_insert_placeful(ttree_cursor_t *cursor, void *item)
   n->parent = at_node;
   at_node->sides[cursor->side] = n;  
   tnode_set_side(n, cursor->side);
-  cursor->tnode = n;
+  cursor->tnode = n;  
   fixup_after_insertion(ttree, n, cursor);  
 }
 
@@ -867,9 +913,12 @@ void *ttree_delete_placeful(ttree_cursor_t *cursor)
       cursor->tnode = tnode->successor;
       cursor->side = TNODE_BOUND;
       cursor->idx = cursor->tnode->min_idx;
+      cursor->state = TT_CSR_TIED;
     }
-    else
+    else {
       cursor->tnode = NULL;
+      cursor->state = TT_CSR_UNTIED;
+    }
   }
   
   /* if we're here, then current node will be removed from the tree. */
@@ -912,17 +961,20 @@ int ttree_cursor_next(ttree_cursor_t *cursor)
     return -1;
   
   __validate_cursor_dbg(cursor);
-  if (unlikely(cursor->state == TT_CSR_PENDING)) {    
+  if (unlikely(cursor->state == TT_CSR_PENDING)) {
+    int ret = 0;
+    
     if ((cursor->side == TNODE_LEFT) || (cursor->idx < cursor->tnode->min_idx)) {
       cursor->side = TNODE_BOUND;
       cursor->idx = cursor->tnode->min_idx;
       cursor->state = TT_CSR_TIED;
-      return 0;
-    }    
-    else if ((cursor->side == TNODE_RIGHT) || (cursor->idx > cursor->tnode->max_idx)) {
-      cursor->side = TNODE_BOUND;
-      cursor->idx = cursor->tnode->max_idx;
     }
+    else if (cursor->idx == cursor->tnode->max_idx)
+      cursor->state = TT_CSR_TIED;
+    else
+      ret = -1;
+
+    return ret;
   }
   if (unlikely(cursor->idx == cursor->tnode->max_idx)) {
     if (cursor->tnode->successor) {
@@ -932,23 +984,23 @@ int ttree_cursor_next(ttree_cursor_t *cursor)
       cursor->state = TT_CSR_TIED;
       return 0;
     }
-
-    cursor->state = TT_CSR_PENDING;
+    
     if (likely(tnode_is_full(cursor->ttree, cursor->tnode))) {
       cursor->side = TNODE_RIGHT;
       cursor->idx = first_tnode_idx(cursor->ttree);
     }
-    else {
-      cursor->idx++;
+    else {      
       cursor->side = TNODE_BOUND;
+      cursor->idx++;
     }
 
+    cursor->state = TT_CSR_PENDING;
     return -1;
   }
 
+  cursor->idx++;  
   cursor->side = TNODE_BOUND;
-  cursor->state = TT_CSR_TIED;
-  cursor->idx++;
+  cursor->state = TT_CSR_TIED;  
   return 0;
 }
 

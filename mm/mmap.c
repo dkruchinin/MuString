@@ -59,26 +59,28 @@ static SPINLOCK_DEFINE(__vmm_verb_lock);
 static int __vmranges_cmp(void *r1, void *r2)
 {
   struct range_bounds *range1, *range2;
-  long diff;
 
   range1 = (struct range_bounds *)r1;
   range2 = (struct range_bounds *)r2;
-  if ((diff = range1->space_start - range2->space_end) < 0) {
-    if ((diff = range2->space_start - range1->space_end) > 0)
-      return -1;
-
+  if ((long)(range2->space_start - range1->space_end) < 0) {
+    if ((long)(range1->space_start - range2->space_end) >= 0)
+      return 1;
+     
     return 0;
   }
   else
-    return !diff;
+    return -1;
 }
 
-static inline bool __vmranges_can_be_merged(const vmrange_t *vmr1, const vmrange_t *vmr2)
+#define __VMR_CLEAR_MASK (VMR_FIXED | VMR_POPULATE)
+
+static inline bool can_be_merged(const vmrange_t *vmr, const memobj_t *memobj, vmrange_flags_t flags)
 {
-  return ((vmr1->flags == vmr2->flags) && (vmr1->memobj == vmr2->memobj));
+  return ((vmr->flags & ~__VMR_CLEAR_MASK) == (flags & ~__VMR_CLEAR_MASK)
+          && ((vmr->memobj == memobj)));
 }
 
-static vmrange_t *create_vmrange(vmm_t *parent_vmm, uintptr_t va_start, int npages, vmrange_flags_t flags)
+static vmrange_t *create_vmrange(vmm_t *parent_vmm, uintptr_t va_start, page_idx_t npages, vmrange_flags_t flags)
 {
   vmrange_t *vmr;
 
@@ -103,54 +105,20 @@ static void destroy_vmrange(vmrange_t *vmr)
   memfree(vmr);
 }
 
-#if 0
-static void try_merge_vmranges(vmm_t *vmm, vmrange_t *vmrange, tnode_meta_t *meta)
+static vmrange_t *merge_vmranges(vmrange_t *prev_vmr, vmrange_t *next_vmr)
 {
-  vmrange_t *prev_vmr, *next_vmr;
-  tnode_meta_t merg_meta;
+  ASSERT(prev_vmr->parent_vmm == next_vmr->parent_vmm);
+  ASSERT(can_be_merged(prev_vmr, next_vmr->memobj, next_vmr->flags));
+  ASSERT(prev_vmr->bounds.space_end == next_vmr->bounds.space_start);
 
-  prev_vmr = next_vmr = NULL;
+  ttree_delete(&prev_vmr->parent_vmm->vmranges_tree, &next_vmr->bounds);
+  prev_vmr->bounds.space_end = next_vmr->bounds.space_end;
+  prev_vmr->hole_size = next_vmr->hole_size;
+  prev_vmr->parent_vmm->num_vmrs--;  
+  memfree(next_vmr);
 
-  /* At first try merge with previous VM range */
-  memcpy(&merg_meta, meta, sizeof(merg_meta));
-  if (!tnode_meta_prev(&vmm->vmranges_tree, &merg_meta)) {
-    prev_vmr =
-      ttree_key2item(&vmm->vmranges_tree, tnode_key(merg_meta.tnode, merg_meta.idx));
-    if (!prev_vmr->hole_size && __vmranges_can_be_merged(vmrange, prev_vmr)) {
-      VMM_VERBOSE("%s: Merge intervals [%p,%p) with [%p,%p)\n", vmm_get_name_dbg(vmm),
-                  prev_vmr->bounds.space_start, prev_vmr->bounds.space_end,
-                  vmrange->bounds.space_start, vmrange->bounds.space_end);
-      vmrange->bounds.space_start = prev_vmr->bounds.space_start;
-      ttree_delete_placeful(&vmm->vmranges_tree, &merg_meta);
-      vmm->num_vmrs--;
-    }
-    else
-      prev_vmr = NULL;
-  }
-
-  /* then with right one */
-  if (!vmrange->hole_size) {
-    memcpy(&merg_meta, meta, sizeof(merg_meta));
-    if (!tnode_meta_next(&vmm->vmranges_tree, &merg_meta)) {
-      next_vmr =
-        ttree_key2item(&vmm->vmranges_tree, tnode_key(merg_meta.tnode, merg_meta.idx));
-      if (__vmranges_can_be_merged(vmrange, next_vmr)) {
-        VMM_VERBOSE("%s: Merge intervals [%p,%p) with [%p,%p)\n", vmm_get_name_dbg(vmm),
-                    vmrange->bounds.space_start, vmrange->bounds.space_end,
-                    next_vmr->bounds.space_start, next_vmr->bounds.space_end);
-        vmrange->bounds.space_end = next_vmr->bounds.space_start;
-        vmrange->hole_size = 0;
-        if (!prev_vmr)
-          ttree_delete_placeful(&vmm->vmranges_tree, &merg_meta);
-        else
-          ttree_delete(&vmm->vmranges_tree, &next_vmr->bounds);
-
-        vmm->num_vmrs--;
-      }
-    }
-  }
+  return prev_vmr;
 }
-#endif 
 
 static vmrange_t *split_vmrange(vmm_t *vmm, vmrange_t *vmrange, uintptr_t va_from,
                                 uintptr_t va_to, ttree_cursor_t *cursor)
@@ -183,7 +151,7 @@ static void fix_vmrange_holes(vmm_t *vmm, vmrange_t *vmrange, ttree_cursor_t *cu
   ttree_cursor_copy(&csr, cursor);
   if (!ttree_cursor_prev(&csr)) {
     vmr = ttree_item_from_cursor(&csr);
-    VMM_VERBOSE("%s [%p, %p): old hole size: %p, new hole size: %p\n",
+    VMM_VERBOSE("%s(P) [%p, %p): old hole size: %ld, new hole size: %ld\n",
                 vmm_get_name_dbg(vmm), vmr->bounds.space_start, vmr->bounds.space_end,
                 vmr->hole_size, vmrange->bounds.space_start - vmr->bounds.space_end);
     vmr->hole_size = vmrange->bounds.space_start - vmr->bounds.space_end;
@@ -191,14 +159,14 @@ static void fix_vmrange_holes(vmm_t *vmm, vmrange_t *vmrange, ttree_cursor_t *cu
 
   ttree_cursor_copy(&csr, cursor);
   if (!ttree_cursor_next(&csr)) {
-    VMM_VERBOSE("%s [%p, %p): old hole size: %p, new hole size: %p\n",
+    VMM_VERBOSE("%s(N) [%p, %p): old hole size: %ld, new hole size: %ld\n",
                 vmm_get_name_dbg(vmm), vmrange->bounds.space_start, vmrange->bounds.space_end,
                 vmrange->hole_size, vmr->bounds.space_start - vmrange->bounds.space_end);
     vmr = ttree_item_from_cursor(&csr);
     vmrange->hole_size = vmr->bounds.space_start - vmrange->bounds.space_end;
   }
   else {
-    VMM_VERBOSE("%s [%p, %p): old hole size: %p, new hole size: %p\n",
+    VMM_VERBOSE("%s(L) [%p, %p): old hole size: %ld, new hole size: %ld\n",
                 vmm_get_name_dbg(vmm), vmrange->bounds.space_start, vmrange->bounds.space_end,
                 vmrange->hole_size, USPACE_VA_TOP - vmrange->bounds.space_end);
     vmrange->hole_size = USPACE_VA_TOP - vmrange->bounds.space_end;
@@ -358,6 +326,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   vmrange_t *vmr;
   ttree_cursor_t cursor, csr_tmp;
   int err = 0;
+  bool was_merged = false;
 
   vmr = NULL;
   ttree_cursor_init(&vmm->vmranges_tree, &cursor);
@@ -380,6 +349,9 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
     vmr = vmrange_find(vmm, addr, addr + (npages << PAGE_WIDTH), &cursor);
     if (vmr) {
       if (flags & VMR_FIXED) {
+        VMM_VERBOSE("%s: Failed to allocate fixed VM range [%p, %p) because it is "
+                    "covered by this one: [%p, %p)\n", vmm_get_name_dbg(vmm), addr,
+                    addr + (npages << PAGE_WIDTH), vmr->bounds.space_start, vmr->bounds.space_end);
         err = -EINVAL;
         goto err;
       }
@@ -403,33 +375,42 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   vmr = NULL;
   if (!ttree_cursor_prev(&csr_tmp)) {
     vmr = ttree_item_from_cursor(&csr_tmp);
-    if ((vmr->flags == flags) && (memobj == vmr->memobj) &&
-        vmr->bounds.space_end == addr) {
-      VMM_VERBOSE("%s: Attach [%p, %p) to the top of [%p, %p)\n", vmm_get_name_dbg(vmm),
-                  addr, addr + (npages << PAGE_WIDTH), vmr->bounds.space_start, vmr->bounds.space_end);
+    if (can_be_merged(vmr, memobj, flags) && (vmr->bounds.space_end == addr)) {
+      VMM_VERBOSE("%s: Attach [%p, %p) to the top of [%p, %p)\n",
+                  vmm_get_name_dbg(vmm), addr, addr + (npages << PAGE_WIDTH),
+                  vmr->bounds.space_start, vmr->bounds.space_end);
       vmr->hole_size -= (addr + (npages << PAGE_WIDTH) - vmr->bounds.space_end);
       vmr->bounds.space_end = addr + (npages << PAGE_WIDTH);
-      goto out;
+      was_merged = true;
     }
   }
 
   ttree_cursor_copy(&csr_tmp, &cursor);
   if (!ttree_cursor_next(&csr_tmp)) {
     vmrange_t *prev = vmr;
-    
-    vmr = ttree_item_from_cursor(&csr_tmp);
-    if ((vmr->flags == flags) && (memobj == vmr->memobj) &&
-        (vmr->bounds.space_start == (addr + (npages << PAGE_WIDTH)))) {
-      VMM_VERBOSE("%s: Attach [%p, %p) to the bottom of [%p, %p)\n", vmm_get_name_dbg(vmm),
-                  addr, addr + (npages << PAGE_WIDTH), vmr->bounds.space_start, vmr->bounds.space_end);
-      vmr->bounds.space_start = addr;
-      if (prev)
-        prev->hole_size = vmr->bounds.space_start - prev->bounds.space_end;
 
-      goto out;
+    vmr = ttree_item_from_cursor(&csr_tmp);
+    if (can_be_merged(vmr, memobj, flags)) {
+      if (!was_merged && (vmr->bounds.space_start == (addr + (npages << PAGE_WIDTH)))) {
+        VMM_VERBOSE("%s: Attach [%p, %p) to the bottom of [%p, %p)\n",
+                    vmm_get_name_dbg(vmm), addr, addr + (npages << PAGE_WIDTH),
+                    vmr->bounds.space_start, vmr->bounds.space_end);
+        vmr->bounds.space_start = addr;
+        was_merged = true;
+        if (prev)
+          prev->hole_size = vmr->bounds.space_start - prev->bounds.space_end;
+      }
+      else if (was_merged && (prev->bounds.space_end == vmr->bounds.space_start)) {
+        VMM_VERBOSE("%s: Merge two VM ranges [%p, %p) and [%p, %p).\n",
+                    vmm_get_name_dbg(vmm), prev->bounds.space_start, prev->bounds.space_end,
+                    vmr->bounds.space_start, vmr->bounds.space_end);
+        merge_vmranges(prev, vmr);
+      }
     }
   }
-
+  if (was_merged)
+    goto out;
+  
   vmr = create_vmrange(vmm, addr, npages, flags);
   if (!vmr) {
     err = -ENOMEM;
