@@ -39,14 +39,13 @@ typedef struct __percpu_def_actions {
   list_head_t pending_actions;
   ulong_t num_actions,executers;
   spinlock_t lock;
-  long fired_actions_bitmap[__DA_BITMASK_SIZE];
-  long pending_actions_bitmap[__DA_BITMASK_SIZE];
-  da_counter_t fired_actions_counters[SCHED_PRIO_MAX];
 } percpu_def_actions_t;
 
 typedef enum __def_action_type {
   DEF_ACTION_EVENT,
   DEF_ACTION_SIGACTION,
+  DEF_ACTION_CUSTOM,
+
 } def_action_type_t;
 
 #define __DEF_ACT_PENDING_BIT_IDX     0
@@ -62,7 +61,7 @@ typedef struct __deffered_irq_action {
   def_action_type_t type;
   list_head_t head;
   list_node_t node;
-  task_t *target;
+  ulong_t priority;
 
   union {
     event_t _event;
@@ -72,12 +71,11 @@ typedef struct __deffered_irq_action {
 } deffered_irq_action_t;
 
 #define DEFFERED_ACTION_INIT(da,t,f)    do {    \
-  list_init_head(&(da).head);                   \
-  list_init_node(&(da).node);                   \
-  (da).target=NULL;                             \
-  (da).type=(t);                                \
-  (da).flags=(f);                               \
-  (da).host=NULL;                               \
+  list_init_head(&(da)->head);                   \
+  list_init_node(&(da)->node);                   \
+  (da)->type=(t);                                \
+  (da)->flags=(f);                               \
+  (da)->host=NULL;                               \
   } while(0)
 
 void initialize_deffered_actions(void);

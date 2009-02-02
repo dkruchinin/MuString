@@ -24,6 +24,7 @@
 #include <eza/task.h>
 #include <eza/swks.h>
 #include <eza/smp.h>
+#include <eza/timer.h>
 
 #ifdef CONFIG_TEST
 #include <test.h>
@@ -35,6 +36,42 @@ task_t *idle_tasks[CONFIG_NRCPUS];
 
 ulong_t syscall_counter = 0;
 
+#define NUM_TIMERS 5
+
+ktimer_t timers[NUM_TIMERS];
+
+static void __timer_test(void)
+{
+  int i;
+  ulong_t tx;
+
+  kprintf("Initializing timers ... ");
+  for(i=0;i<NUM_TIMERS;i++) {
+    timers[i].da.priority=i+10;
+
+    if( i == 2 ) {
+      tx=100+90;
+    } else {
+      tx=100+90*i;
+    }
+
+    init_timer(&timers[i],tx);
+  }
+  kprintf("Done.\n");
+
+  for(i=0;i<NUM_TIMERS;i++) {
+    kprintf("Adding timer %d\n",i);
+    add_timer(&timers[i]);
+  }
+}
+
+void timer_thread(void *d)
+{
+  __timer_test();
+  kprintf("TOTAL DONE !!!\n");
+  for(;;);
+}
+
 void idle_loop(void)
 {
   uint64_t target_tick = swks.system_ticks_64 + 100;
@@ -45,11 +82,15 @@ void idle_loop(void)
   }
 #endif
 
+  if( !cpu_id() ) {
+    __timer_test();
+  }
+
   for( ;; ) {
 #ifndef CONFIG_TEST
     if( swks.system_ticks_64 >= target_tick ) {
-//      kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
-//               cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
+      kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
+               cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
       target_tick += STEP;
     }
 #endif

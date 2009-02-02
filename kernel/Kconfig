@@ -9,4 +9,11 @@ config ALWAYS_INLINE
        optimisation. Note: disabling of this option is not a very good idea, but in some
        cases(for example for debugging) it may have a sense.
 
+config TIMER_GRANULARITY
+       int "Granularity of timer major tick"
+       range 32 64 
+       default "32"
+       help
+       Granularity (in timer tick) of major tick.
+
 endmenu

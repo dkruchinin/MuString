@@ -326,6 +326,7 @@ out_release:
 
 extern int sched_verbose1;
 
+/*
 static void __sleep_timer_handler(ulong_t data)
 {
   sched_verbose1=0;
@@ -337,7 +338,8 @@ static bool __sleep_timer_lazy_routine(void *data)
   timer_t *t=(timer_t*)data;
   return t->time_x > system_ticks;
 }
-
+*/
+/*
 status_t sleep(ulong_t ticks)
 {
   if( ticks ) {
@@ -356,6 +358,12 @@ status_t sleep(ulong_t ticks)
 
     delete_timer(&timer);
   }
+  return 0;
+}
+*/
+
+status_t sleep(ulong_t ticks)
+{
   return 0;
 }
 

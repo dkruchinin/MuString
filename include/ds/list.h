@@ -377,5 +377,19 @@ static inline void list_move(list_node_t *prev, list_node_t *next, list_head_t *
   list_init_head(from);
 }
 
+/**
+ * @fn static inline void list_insert_before(list_node_t *t,list_node_t *b)
+ * @brief Insert node @a t before @a b
+ * @param t - a node that will be inserted
+ * @param b - a node before which target now will be inserted
+ */
+static inline void list_insert_before(list_node_t *t,list_node_t *b)
+{
+  t->next=b;
+  t->prev=b->prev;
+  b->prev->next=t;
+  b->prev=t;
+}
+
 #endif /* __LIST_H__ */
 

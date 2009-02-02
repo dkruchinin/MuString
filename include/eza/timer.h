@@ -25,9 +25,13 @@
 #ifndef __EZA_TIMER_H__
 #define __EZA_TIMER_H__
 
+#include <config.h>
 #include <ds/list.h>
 #include <eza/arch/types.h>
-#include <eza/interrupt.h>
+#include <eza/def_actions.h>
+#include <mlibc/rbtree.h>
+#include <eza/arch/atomic.h>
+#include <eza/spinlock.h>
 
 typedef struct __hw_timer_type {
   list_node_t l;
@@ -44,18 +48,58 @@ typedef void (*timer_handler_t)(ulong_t data);
 
 #define TF_TIMER_ACTIVE  0x1        /* Timer is active and ticking. */
 
-typedef struct __timer {
-  list_node_t l;
-  ulong_t time_x,flags,data;
-  timer_handler_t handler;
-} timer_t;
+struct __major_timer_tick;
+
+typedef struct __timer_tick {
+  ulong_t time_x;      /* Trigger time. */
+  list_node_t node;    /* To link us with our major tick. */
+  list_head_t actions; /* Deffered actions for this tick. */
+  ulong_t num_actions; /* Numbers of pending actions in 'actions'. */
+  struct __major_timer_tick *major_tick;
+} timer_tick_t;
+
+#define TIMER_TICK_INIT(tt,tx)                    \
+  (tt)->time_x=(tx);                              \
+  list_init_node(&(tt)->node);                    \
+   list_init_head(&(tt)->actions);                \
+  (tt)->num_actions=0;                            \
+  (tt)->major_tick=NULL
+
+#define LOCK_MAJOR_TIMER_TICK(t,_is)            \
+  spinlock_lock_irqsave(&(t)->lock,(_is));
+
+#define UNLOCK_MAJOR_TIMER_TICK(t,_is)            \
+  spinlock_unlock_irqrestore(&(t)->lock,(_is));
+
+typedef struct __ktimer {
+  timer_tick_t minor_tick;
+  deffered_irq_action_t da;
+  ulong_t time_x;
+} ktimer_t;
+
+#define MINOR_TICK_GROUP_SIZE  16
+#define MINOR_TICK_GROUPS  CONFIG_TIMER_GRANULARITY / MINOR_TICK_GROUP_SIZE
+
+typedef struct __major_timer_tick {
+  spinlock_t lock;
+  atomic_t use_counter;
+  struct rb_node rbnode;
+  ulong_t time_x;
+  list_head_t minor_ticks[MINOR_TICK_GROUPS];
+} major_timer_tick_t;
 
 void init_timers(void);
-void init_timer(timer_t *t);
-bool add_timer(timer_t *t);
-void delete_timer(timer_t *t);
-void adjust_timer(timer_t *t,long_t delta);
+long add_timer(ktimer_t *t);
+void delete_timer(ktimer_t *t);
+void adjust_timer(ktimer_t *t,long_t delta);
 void process_timers(void);
+void timer_cleanup_expired_ticks(void);
+
+#define init_timer(t,tx)                                 \
+  DEFFERED_ACTION_INIT(&(t)->da,DEF_ACTION_CUSTOM,0);    \
+  (t)->time_x=(tx);                                      \
+  TIMER_TICK_INIT(&(t)->minor_tick,(t)->time_x);         \
+  (t)->da.priority=current_task()->priority
 
 #endif /*__EZA_TIMER_H__*/
 

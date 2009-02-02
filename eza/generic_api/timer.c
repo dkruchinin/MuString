@@ -35,6 +35,8 @@
 #include <eza/arch/interrupt.h>
 #include <eza/time.h>
 #include <eza/def_actions.h>
+#include <mlibc/rbtree.h>
+#include <mlibc/skiplist.h>
 
 /*spinlock*/
 static SPINLOCK_DEFINE(timer_lock);
@@ -42,52 +44,24 @@ static SPINLOCK_DEFINE(sw_timers_lock);
 
 /*list of the timers*/
 static LIST_DEFINE(known_hw_timers);
-static LIST_DEFINE(active_sw_timers);
-static LIST_DEFINE(pending_sw_timers);
-static deffered_irq_action_t timer_action;
+
+static struct rb_root timers_rb_root;
 
 #define GRAB_HW_TIMER_LOCK() spinlock_lock(&timer_lock)
 #define RELEASE_HW_TIMER_LOCK() spinlock_unlock(&timer_lock)
 
-#define GRAB_SW_TIMER_LOCK(l)  spinlock_lock_irqsave(&sw_timers_lock,l)
-#define RELEASE_SW_TIMER_LOCK(l) spinlock_unlock_irqrestore(&sw_timers_lock,l)
+#define LOCK_SW_TIMERS(l)  spinlock_lock_irqsave(&sw_timers_lock,l)
+#define UNLOCK_SW_TIMERS(l) spinlock_unlock_irqrestore(&sw_timers_lock,l)
 
-#define MARK_TIMER_DEACTIVATED(t) t->flags &= ~TF_TIMER_ACTIVE
+#define LOCK_SW_TIMERS_R(l)  spinlock_lock_irqsave(&sw_timers_lock,l)
+#define UNLOCK_SW_TIMERS_R(l) spinlock_unlock_irqrestore(&sw_timers_lock,l)
+
+#define get_major_tick(t) atomic_inc(&(t)->use_counter)
+#define put_major_tick(t) if( atomic_dec_and_test(&(t)->use_counter) ) { memfree(t); }
 
 static void init_hw_timers (void)
 {
   list_init_head(&known_hw_timers);
-}
-
-static void __timer_action_handler(ulong_t data)
-{
-  ulong_t l;
-  list_node_t *first,*n;
-
-  GRAB_SW_TIMER_LOCK(l);
-  if( !list_is_empty(&pending_sw_timers) ) {
-    first=list_node_first(&pending_sw_timers);
-    list_cut_head(&pending_sw_timers);
-  } else {
-    first=NULL;
-  }
-  RELEASE_SW_TIMER_LOCK(l);
-
-  if( first!=NULL ) {
-    n=first;
-    do {
-      timer_t *t=container_of(n,timer_t,l);
-      t->handler(t->data);
-      MARK_TIMER_DEACTIVATED(t);
-      n=n->next;
-    } while( n!=first );
-  }
-}
-
-static void init_sw_timers(void)
-{
-  list_init_head(&active_sw_timers);
-  list_init_head(&pending_sw_timers);
 }
 
 void hw_timer_register (hw_timer_t *ctrl)
@@ -104,104 +78,181 @@ void hw_timer_generic_suspend(void)
 void init_timers(void)
 {
   init_hw_timers();
-  init_sw_timers();
   initialize_deffered_actions();
-}
-
-/* NOTE: timer list must be locked prior calling this function. */
-static void __insert_timer(timer_t *timer)
-{
-  list_node_t *n;
-
-  list_for_each(&active_sw_timers,n) {
-    timer_t *t=container_of(n,timer_t,l);
-    if(timer->time_x <= t->time_x) {
-      list_add(n,&timer->l);
-      return;
-    }
-  }
-  /* No luck - put the timer in the end of list. */
-  list_add2tail(&active_sw_timers,&timer->l);
-}
-
-bool add_timer(timer_t *timer)
-{
-  bool added;
-  ulong_t l;
-
-  GRAB_SW_TIMER_LOCK(l);
-  if( !(timer->flags & TF_TIMER_ACTIVE) && timer->time_x>system_ticks
-      && timer->handler ) {
-    list_init_node(&timer->l);
-    timer->flags |= TF_TIMER_ACTIVE;
-    __insert_timer(timer);
-    added=true;
-  } else {
-    added=false;
-  }
-  RELEASE_SW_TIMER_LOCK(l);
-  return added;
-}
-
-void delete_timer(timer_t *timer)
-{
-  ulong_t l;
-
-  GRAB_SW_TIMER_LOCK(l);
-  if( timer->flags & TF_TIMER_ACTIVE ) {
-    list_del(&timer->l);
-    MARK_TIMER_DEACTIVATED(timer);
-  }
-  RELEASE_SW_TIMER_LOCK(l);
-}
-
-void adjust_timer(timer_t *timer,long_t delta)
-{
-}
-
-void init_timer(timer_t *t)
-{
-  t->flags=t->time_x=0;
-  list_init_node(&t->l);
-  t->handler=NULL;
 }
 
 void process_timers(void)
 {
-  ulong_t l;
-  list_node_t *n,*first,*last;
+  major_timer_tick_t *mt,*major_tick=NULL;
+  long is;
+  struct rb_node *n;
+  ulong_t mtickv=system_ticks-(system_ticks % CONFIG_TIMER_GRANULARITY);
 
-  first=last=NULL;
+  LOCK_SW_TIMERS_R(is);
+  n=timers_rb_root.rb_node;
 
-  GRAB_SW_TIMER_LOCK(l);
-  if( !list_is_empty(&active_sw_timers)  ) {
-    list_for_each(&active_sw_timers,n) {
-      timer_t *t=container_of(n,timer_t,l);
+  while( n ) {
+    mt=rb_entry(n,major_timer_tick_t,rbnode);
 
-      if( t->time_x<=system_ticks ) {
-        if( first==NULL ) {
-          first=&t->l;
+    if( mtickv < mt->time_x ) {
+      n=n->rb_left;
+    } else if( mtickv > mt->time_x )  {
+      n=n->rb_right;
+    } else {
+      major_tick=mt;
+      break;
+    }
+  }
+
+  UNLOCK_SW_TIMERS_R(is);
+
+  /* Let's see if we have any timers for this major tick. */
+  if( major_tick ) {
+    list_head_t *lh=&major_tick->minor_ticks[(system_ticks-mtickv)/MINOR_TICK_GROUP_SIZE];
+    list_node_t *ln;
+
+    list_for_each(lh,ln) {
+      timer_tick_t *tt=container_of(ln,timer_tick_t,node);
+
+      if( tt->time_x == system_ticks ) {
+        kprintf("[TT]: Found %d actions for %d. MAJOR: %d\n",
+                tt->num_actions,tt->time_x,major_tick->time_x);
+      }
+    }
+  }
+}
+
+void timer_cleanup_expired_ticks(void)
+{
+}
+
+long add_timer(ktimer_t *t)
+{
+  major_timer_tick_t *major_tick=NULL;
+  long is;
+  struct rb_node *n;
+  ulong_t mtickv;
+  long r=0,i;
+  major_timer_tick_t *mt;
+  struct rb_node ** p;
+  list_head_t *lh;
+  list_node_t *ln;
+
+  if( !t->time_x ) {
+    return -EINVAL;
+  }
+
+  if( t->time_x <= system_ticks  ) {
+    return 0;
+  }
+
+  mtickv=t->time_x-(t->time_x % CONFIG_TIMER_GRANULARITY);
+  kprintf("* Adding timer for %d, major tick is %d, %p\n",
+          t->time_x,mtickv,t);
+
+  /* First try to locate an existing major tick or create a new one.
+   */
+  LOCK_SW_TIMERS_R(is);
+  n=timers_rb_root.rb_node;
+  while( n ) {
+    mt=rb_entry(n,major_timer_tick_t,rbnode);
+
+    if( mtickv < mt->time_x ) {
+      n=n->rb_left;
+    } else if( mtickv > mt->time_x )  {
+      n=n->rb_right;
+    } else {
+      major_tick=mt;
+      get_major_tick(mt);
+      break;
+    }
+  }
+  UNLOCK_SW_TIMERS_R(is);
+
+  /* No major tick for target time point, so we should create a new one.
+   */
+  if( !major_tick ) {
+    major_tick=memalloc(sizeof(*major_tick));
+
+    if( !major_tick ) {
+      r=-ENOMEM;
+      goto out;
+    }
+
+    /* Initialize a new entry. */
+    atomic_set(&major_tick->use_counter,1);
+    major_tick->time_x=mtickv;
+    spinlock_initialize(&major_tick->lock);
+
+    for( i=0;i<MINOR_TICK_GROUPS;i++ ) {
+      list_init_head(&major_tick->minor_ticks[i]);
+    }
+
+    /* Now insert new tick into RB tree. */
+    LOCK_SW_TIMERS(is);
+    if( mtickv > system_ticks ) {
+      p=&timers_rb_root.rb_node;
+      n=NULL;
+
+      while( *p ) {
+        n=*p;
+        mt=rb_entry(n,major_timer_tick_t,rbnode);
+
+        if( mtickv < mt->time_x ) {
+          p=&(*p)->rb_left;
+        } else if( mtickv > mt->time_x ) {
+          p=&(*p)->rb_right;
+        } else {
+          /* Hmmmm. Someone else populated the same major tick concurrently. */
+          get_major_tick(mt);
+          goto major_tick_found;
         }
-        last=&t->l;
       }
+      get_major_tick(major_tick); /* Add one extra reference. */
+      mt=major_tick;
+      rb_link_node(&major_tick->rbnode,n,p);
+      rb_insert_color(&major_tick->rbnode,&timers_rb_root);
+      kprintf("  ++ New node inserted at %d,%p\n",
+              mt->time_x,mt);
+    } else {
+      /* Expired while allocating a new major tick. */
+      UNLOCK_SW_TIMERS(is);
+      goto out;
     }
+  major_tick_found:
+    UNLOCK_SW_TIMERS(is);
+  } else {
+    mt=major_tick;
+  }
 
-    /* Cut all pending timers. */
-    if( first != NULL ) {
-      list_cut_sublist(first,last);
+  /* OK, our major tick was located so we can insert add our timer to it.
+   */
+  t->minor_tick.major_tick=mt;
 
-      /* Let these timers be processed by the timer deferred task. */
-      if( list_is_empty(&pending_sw_timers) ) {
-        list_set_head(&pending_sw_timers,first);
-      } else {
-        list_add_range(first,last,list_node_last(&pending_sw_timers)->prev,
-                       list_node_last(&pending_sw_timers));
-      }
+  LOCK_MAJOR_TIMER_TICK(mt,is);
+  lh=&mt->minor_ticks[(t->time_x-mtickv)/MINOR_TICK_GROUP_SIZE];
+  list_for_each( lh,ln ) {
+    timer_tick_t *tt=container_of(ln,timer_tick_t,node);
+
+    if( tt->time_x == t->time_x ) {
+      tt->num_actions++;
+      skiplist_add(&t->da,&tt->actions,deffered_irq_action_t,node,head,priority);
+      goto dont_insert_tick;
+    }
+    if( tt->time_x > t->time_x ) {
+      break;
     }
   }
-  RELEASE_SW_TIMER_LOCK(l);
 
-  if( !list_is_empty(&pending_sw_timers) ) {
-    __timer_action_handler(0);
+  t->minor_tick.num_actions=1;
+  list_add2tail(&t->minor_tick.actions,&t->da.node);
+  list_insert_before(&t->minor_tick.node,ln);
+dont_insert_tick:
+  UNLOCK_MAJOR_TIMER_TICK(mt,is);
+  r=0;
+out:
+  if( major_tick != NULL ) {
+    put_major_tick(major_tick);
   }
+  return r;
 }
