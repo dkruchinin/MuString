@@ -31,7 +31,7 @@ static inline void __validate_hole_sz(test_framework_t *tf, vmrange_t *vmr, uint
     }
 }
 
-static void __vmr_create_plus_populte(test_framework_t *tf, vmm_t *vmm)
+static void map_merge_test(test_framework_t *tf, vmm_t *vmm)
 {
   long ret = 0, free_space = USPACE_VA_TOP - USPACE_VA_BOTTOM;
   page_idx_t pgs = 128;
@@ -157,6 +157,73 @@ static void __vmr_create_plus_populte(test_framework_t *tf, vmm_t *vmm)
   tf->printf("OK\n");
 }
 
+static void __unmap_chunk(test_framework_t *tf, vmm_t *vmm, uintptr_t va_from,
+                          page_idx_t pages, ttree_cursor_t *csr)
+{
+  tf->printf("Unmap diapason %p, %p...\n", va_from, va_from + (pages << PAGE_WIDTH));
+  unmap_vmranges(vmm, va_from, pages);
+  if (!vmrange_find(vmm, va_from - PAGE_SIZE, va_from + (pages << PAGE_WIDTH), csr)) {
+    tf->printf("Failed to find VM range covered by diapason [%p, %p)\n",
+               va_from - PAGE_SIZE, va_from + (pages << PAGE_WIDTH));
+    tf->failed();
+  }  
+  
+}
+
+static void unmap_split_test(test_framework_t *tf, vmm_t *vmm)
+{
+  vmrange_t *vmr;
+  uintptr_t start = USPACE_VA_BOTTOM + PAGE_SIZE;
+  page_idx_t pgs = 1024;
+  ttree_cursor_t csr;
+
+  ttree_cursor_init(&vmm->vmranges_tree, &csr);
+  __unmap_chunk(tf, vmm, start, pgs, &csr);
+  if (csr.state != TT_CSR_TIED) {
+    tf->printf("Cursor must be in a tied state!\n");
+    ttree_display_cursor_dbg(&csr);
+    tf->failed();
+  }
+  
+  vmranges_print_tree_dbg(vmm);
+  vmr = ttree_item_from_cursor(&csr);
+  __validate_hole_sz(tf, vmr, pgs << PAGE_WIDTH);
+  if (vmr->bounds.space_end != start) {
+    tf->printf("Unexpected top virtual address of range(%p). %p was expected!\n",
+               vmr->bounds.space_end, start);
+    tf->failed();
+  }
+  if (ttree_cursor_next(&csr) < 0) {
+    tf->printf("ttree_cursor_next failed!\n");
+    ttree_display_cursor_dbg(&csr);
+    tf->failed();
+  }
+
+  vmr = ttree_item_from_cursor(&csr);
+  if (vmr->bounds.space_start != (start + (pgs << PAGE_WIDTH))) {
+    tf->printf("Unexpected bottom virtual address of range(%p). %p was expected!\n",
+               vmr->bounds.space_start, start + (pgs << PAGE_WIDTH));
+    tf->failed();
+  }
+
+  __validate_hole_sz(tf, vmr, 0);
+  if (vmm->num_vmrs != 2) {
+    tf->printf("Unexpected number of VM ranges: %d. (2 was expected)!\n", vmm->num_vmrs);
+    tf->failed();
+  }
+
+  start = USPACE_VA_TOP - ((pgs + 1) << PAGE_WIDTH);
+  ttree_cursor_init(&vmm->vmranges_tree, &csr);
+  __unmap_chunk(tf, vmm, start, pgs, &csr);
+  if (csr.state != TT_CSR_TIED) {
+    tf->printf("Cursor must be in a tied state!\n");
+    ttree_display_cursor_dbg(&csr);
+    tf->failed();
+  }
+  
+  for (;;);
+}
+
 static void tc_vma(void *ctx)
 {
   test_framework_t *tf = ctx;
@@ -171,8 +238,10 @@ static void tc_vma(void *ctx)
   }
 
   vmm_set_name_dbg(vmm, "VMM [vmmtest]");
-  tf->printf("1) Trying continousely create VM ranges with VMR_POPULATE flag untill memory is end.\n");
-  __vmr_create_plus_populte(tf, vmm);
+  tf->printf("1) Continousely create VM ranges virtual sapce is end.\n");
+  map_merge_test(tf, vmm);
+  tf->printf("2) Now there is no free virtual space. So try to unmap busy chunks\n");
+  unmap_split_test(tf, vmm);
   is_completed = true;
   sys_exit(0);
 }

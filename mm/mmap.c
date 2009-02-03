@@ -80,7 +80,8 @@ static inline bool can_be_merged(const vmrange_t *vmr, const memobj_t *memobj, v
           && ((vmr->memobj == memobj)));
 }
 
-static vmrange_t *create_vmrange(vmm_t *parent_vmm, uintptr_t va_start, page_idx_t npages, vmrange_flags_t flags)
+static vmrange_t *create_vmrange(vmm_t *parent_vmm, uintptr_t va_start,
+                                 page_idx_t npages, vmrange_flags_t flags)
 {
   vmrange_t *vmr;
 
@@ -111,6 +112,10 @@ static vmrange_t *merge_vmranges(vmrange_t *prev_vmr, vmrange_t *next_vmr)
   ASSERT(can_be_merged(prev_vmr, next_vmr->memobj, next_vmr->flags));
   ASSERT(prev_vmr->bounds.space_end == next_vmr->bounds.space_start);
 
+  VMM_VERBOSE("%s: Merge two VM ranges [%p, %p) and [%p, %p).\n",
+              vmm_get_name_dbg(prev_vmr->parent_vmm),
+              prev_vmr->bounds.space_start, prev_vmr->bounds.space_end,
+              next_vmr->bounds.space_start, next_vmr->bounds.space_end);
   ttree_delete(&prev_vmr->parent_vmm->vmranges_tree, &next_vmr->bounds);
   prev_vmr->bounds.space_end = next_vmr->bounds.space_end;
   prev_vmr->hole_size = next_vmr->hole_size;
@@ -120,25 +125,29 @@ static vmrange_t *merge_vmranges(vmrange_t *prev_vmr, vmrange_t *next_vmr)
   return prev_vmr;
 }
 
-static vmrange_t *split_vmrange(vmm_t *vmm, vmrange_t *vmrange, uintptr_t va_from,
-                                uintptr_t va_to, ttree_cursor_t *cursor)
+static vmrange_t *split_vmrange(vmrange_t *vmrange, uintptr_t va_from, uintptr_t va_to)
 {
   vmrange_t *new_vmr;
-  ttree_cursor_t csr_next;
+  page_idx_t npages;
 
-  new_vmr = create_vmrange(vmm, va_to, vmrange->bounds.space_end, vmrange->flags);
+  ASSERT(vmrange->parent_vmm != NULL);
+  ASSERT(!(va_from & PAGE_MASK));
+  ASSERT(!(va_to & PAGE_MASK));
+  npages = (vmrange->bounds.space_end - va_to) >> PAGE_WIDTH;
+  new_vmr = create_vmrange(vmrange->parent_vmm, va_to, npages, vmrange->flags);
   if (!new_vmr)
     return NULL;
 
+  kprintf("new_vmr: %p, %p\n", new_vmr->bounds.space_start, new_vmr->bounds.space_end);
   VMM_VERBOSE("%s: Split VM range [%p, %p) to [%p, %p) and [%p, %p)\n",
-              vmm_get_name_dbg(vmm), vmrange->bounds.space_start, vmrange->bounds.space_end,
-              vmrange->bounds.space_start, va_from, va_to, vmrange->bounds.space_end);
+              vmm_get_name_dbg(vmrange->parent_vmm), vmrange->bounds.space_start,
+              vmrange->bounds.space_end, vmrange->bounds.space_start,
+              va_from, va_to, vmrange->bounds.space_end);
   vmrange->bounds.space_end = va_from;
   new_vmr->memobj = vmrange->memobj;
+  new_vmr->hole_size = vmrange->hole_size;
   vmrange->hole_size = new_vmr->bounds.space_start - vmrange->bounds.space_end;
-  ttree_cursor_copy(&csr_next, cursor);
-  ttree_cursor_next(&csr_next);
-  ttree_insert_placeful(&csr_next, new_vmr);
+  ttree_insert(&vmrange->parent_vmm->vmranges_tree, new_vmr);
 
   return new_vmr;
 }
@@ -400,12 +409,8 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
         if (prev)
           prev->hole_size = vmr->bounds.space_start - prev->bounds.space_end;
       }
-      else if (was_merged && (prev->bounds.space_end == vmr->bounds.space_start)) {
-        VMM_VERBOSE("%s: Merge two VM ranges [%p, %p) and [%p, %p).\n",
-                    vmm_get_name_dbg(vmm), prev->bounds.space_start, prev->bounds.space_end,
-                    vmr->bounds.space_start, vmr->bounds.space_end);
+      else if (was_merged && (prev->bounds.space_end == vmr->bounds.space_start))
         merge_vmranges(prev, vmr);
-      }
     }
   }
   if (was_merged)
@@ -443,7 +448,8 @@ void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
     return;
   if ((vmrs.vmr->bounds.space_start < va_from) &&
       (vmrs.vmr->bounds.space_end > va_to)) {
-    if (!split_vmrange(vmm, vmrs.vmr, va_from, va_to, &vmrs.cursor)) {
+    kprintf("FOUND: %p %p\n", vmrs.vmr->bounds.space_start, vmrs.vmr->bounds.space_end);
+    if (!split_vmrange(vmrs.vmr, va_from, va_to)) {
       kprintf(KO_ERROR "unmap_vmranges: Failed to split VM range [%p, %p). -ENOMEM\n",
               vmrs.vmr->bounds.space_start, vmrs.vmr->bounds.space_end);
     }

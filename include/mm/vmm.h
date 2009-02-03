@@ -167,6 +167,7 @@ int vm_mandmaps_roll(vmm_t *target_mm);
 vmm_t *vmm_create(void);
 long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages,
                  vmrange_flags_t flags, int offs_pages);
+void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages);
 vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, ttree_cursor_t *cursor);
 void vmrange_find_covered(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, vmrange_set_t *vmrs);
 int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages, kmap_flags_t flags);
