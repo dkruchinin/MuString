@@ -192,7 +192,12 @@ void fire_deffered_actions(void)
       if( current_task()->priority >= action->priority ) {
         list_node_t *prev=action->node.prev;
 
+        /* Remove action under protection of the lock. */
+        if( action->__lock ) {
+          spinlock_lock(action->__lock);
+        }
         list_del(&action->node);
+
         if( !list_is_empty(&action->head) ) {
           deffered_irq_action_t *a=container_of(list_node_first(&action->head),
                                                 deffered_irq_action_t,node);
@@ -206,6 +211,10 @@ void fire_deffered_actions(void)
           a->node.next=prev->next;
           prev->next->prev=&a->node;
           prev->next=&a->node;
+        }
+
+        if( action->__lock ) {
+          spinlock_unlock(action->__lock);
         }
 
         action->host=NULL;

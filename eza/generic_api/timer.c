@@ -193,6 +193,7 @@ long add_timer(ktimer_t *t)
   }
 
   mtickv=t->time_x-(t->time_x % CONFIG_TIMER_GRANULARITY);
+  t->da.__lock=&sw_timers_list_lock;
 
   /* First try to locate an existing major tick or create a new one.
    */
