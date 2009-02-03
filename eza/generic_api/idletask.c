@@ -74,8 +74,11 @@ static void __timer_test(void)
 
 void timer_thread(void *d)
 {
-  __timer_test();
-  kprintf("TOTAL DONE !!!\n");
+  int ticks=27;
+
+  while( 1 ) {
+    sleep(ticks);
+  }
   for(;;);
 }
 
@@ -90,7 +93,10 @@ void idle_loop(void)
 #endif
 
   if( !cpu_id() ) {
-    __timer_test();
+    if( kernel_thread(timer_thread,NULL,NULL) ) {
+      panic("Can't lounch a test thread !\n");
+    }
+    //__timer_test();
   }
 
   for( ;; ) {

@@ -47,11 +47,11 @@ typedef enum __def_action_type {
   DEF_ACTION_UNBLOCK,
 } def_action_type_t;
 
-#define __DEF_ACT_PENDING_BIT_IDX     0
+#define __DEF_ACT_FIRED_BIT_IDX     0
 #define __DEF_ACT_SINGLETON_BIT_IDX   16
 
 typedef enum {
-  __DEF_ACT_PENDING_MASK=(1<<__DEF_ACT_PENDING_BIT_IDX),
+  __DEF_ACT_FIRED_MASK=(1<<__DEF_ACT_FIRED_BIT_IDX),
   __DEF_ACT_SINGLETON_MASK=(1<<__DEF_ACT_SINGLETON_BIT_IDX),
 } def_action_masks_t;
 
@@ -63,8 +63,9 @@ typedef struct __deffered_irq_action {
   ulong_t priority;
 
   union {
-    event_t _event;
-    struct sigevent _sigevent;
+    event_t _event;                /* DEF_ACTION_EVENT */
+    struct sigevent _sigevent;     /* DEF_ACTION_SIGACTION */
+    task_t *target;                /* DEF_ACTION_UNBLOCK */
   } d;
   percpu_def_actions_t *host;
 } deffered_irq_action_t;

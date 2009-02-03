@@ -99,52 +99,48 @@ void schedule_deffered_actions(list_head_t *actions,ulong_t num_actions)
 
 void schedule_deffered_action(deffered_irq_action_t *a) {
   percpu_def_actions_t *acts=&cpu_actions[cpu_id()];
-  long is,old_acts;
+  long is;
 
   spinlock_lock_irqsave(&acts->lock,is);
-  old_acts=acts->num_actions;
 
-  if( !arch_bit_test_and_set(&a->flags,__DEF_ACT_PENDING_BIT_IDX) ) {
-    if( list_is_empty(&acts->pending_actions) ) {
-      list_add2tail(&acts->pending_actions,&a->node);
-    } else {
-      list_node_t *next=acts->pending_actions.head.next,*prev=NULL;
-      deffered_irq_action_t *da;
-      bool inserted=false;
+  if( list_is_empty(&acts->pending_actions) ) {
+    list_add2tail(&acts->pending_actions,&a->node);
+  } else {
+    list_node_t *next=acts->pending_actions.head.next,*prev=NULL;
+    deffered_irq_action_t *da;
+    bool inserted=false;
 
-      do {
-        da=container_of(next,deffered_irq_action_t,node);
-        if( da->priority > a->priority ) {
-          break;
-        } else if( da->priority == a->priority ) {
-          list_add2tail(&da->head,&a->node);
+    do {
+      da=container_of(next,deffered_irq_action_t,node);
+      if( da->priority > a->priority ) {
+        break;
+      } else if( da->priority == a->priority ) {
+        list_add2tail(&da->head,&a->node);
 
-          inserted=true;
-          break;
-        }
-        prev=next;
-        next=next->next;
-      } while( next != list_head(&acts->pending_actions) );
+        inserted=true;
+        break;
+      }
+      prev=next;
+      next=next->next;
+    } while( next != list_head(&acts->pending_actions) );
 
-      a->host=acts;
+    a->host=acts;
 
-      if( !inserted ) {
-        if( prev != NULL ) {
-          a->node.next=prev->next;
-          prev->next->prev=&a->node;
-          prev->next=&a->node;
-          a->node.prev=prev;
-        } else {
-          list_add2head(&acts->pending_actions,&a->node);
-        }
+    if( !inserted ) {
+      if( prev != NULL ) {
+        a->node.next=prev->next;
+        prev->next->prev=&a->node;
+        prev->next=&a->node;
+        a->node.prev=prev;
+      } else {
+        list_add2head(&acts->pending_actions,&a->node);
       }
     }
-    acts->num_actions++;
   }
+  acts->num_actions++;
 
   /* Current task needs to be rescheduled as soon as possible. */
-  if( acts->num_actions != old_acts &&
-      a->priority <= current_task()->priority ) {
+  if( a->priority <= current_task()->priority ) {
     arch_sched_set_def_works_pending();
   }
   spinlock_unlock_irqrestore(&acts->lock,is);
@@ -159,12 +155,11 @@ void execute_deffered_action(deffered_irq_action_t *a)
     case DEF_ACTION_SIGACTION:
       break;
     case  DEF_ACTION_UNBLOCK:
+      sched_change_task_state(a->d.target,TASK_STATE_RUNNABLE);
       break;
   }
 
-  arch_bit_clear(&a->flags,__DEF_ACT_PENDING_BIT_IDX);
-  kprintf("** Executing action: %d, priority=%d\n",a->type,
-          a->priority);
+  arch_bit_set(&a->flags,__DEF_ACT_FIRED_BIT_IDX);
 }
 
 void fire_deffered_actions(void)

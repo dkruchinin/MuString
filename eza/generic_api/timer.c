@@ -194,7 +194,7 @@ long add_timer(ktimer_t *t)
 
     /* Now insert new tick into RB tree. */
     LOCK_SW_TIMERS(is);
-    if( mtickv > system_ticks ) {
+    if( t->time_x > system_ticks ) {
       p=&timers_rb_root.rb_node;
       n=NULL;
 
@@ -219,6 +219,7 @@ long add_timer(ktimer_t *t)
     } else {
       /* Expired while allocating a new major tick. */
       UNLOCK_SW_TIMERS(is);
+      r=1;
       goto out;
     }
   major_tick_found:
@@ -227,7 +228,7 @@ long add_timer(ktimer_t *t)
     mt=major_tick;
   }
 
-  /* OK, our major tick was located so we can insert add our timer to it.
+  /* OK, our major tick was located so we can add our timer to it.
    */
   t->minor_tick.major_tick=mt;
 
@@ -263,5 +264,39 @@ out:
   if( major_tick != NULL ) {
     put_major_tick(major_tick);
   }
+  return r;
+}
+
+static bool __timer_deffered_sched_handler(void *data)
+{
+  ktimer_t *timer=(ktimer_t *)data;
+
+  return ( !(timer->da.flags & __DEF_ACT_FIRED_MASK) &&
+           timer->time_x > system_ticks);
+}
+
+long sleep(ulong_t ticks)
+{
+  ktimer_t timer;
+  long r;
+
+  if( !ticks ) {
+    return 0;
+  }
+
+  init_timer(&timer,system_ticks+ticks,DEF_ACTION_UNBLOCK);
+  timer.da.d.target=current_task();
+
+  r=add_timer(&timer);
+  if( !r ) {
+    sched_change_task_state_deferred(current_task(),TASK_STATE_SLEEPING,
+                                     __timer_deffered_sched_handler,&timer);
+    if( task_was_interrupted(current_task()) ) {
+      r=-EINTR;
+    }
+  } else if( r > 0 ) { /* Expired. */
+    r=0;
+  }
+
   return r;
 }
