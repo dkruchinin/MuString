@@ -55,6 +55,7 @@ static void __timer_test(void)
       tx=100+90*i;
     }
 
+    timers[i].da.priority=50-(i*3);
     init_timer(&timers[i],tx);
   }
   kprintf("Done.\n");

@@ -186,7 +186,7 @@ void fire_deffered_actions(void)
       action=container_of(list_node_first(&acts->pending_actions),
                           deffered_irq_action_t,node);
 
-//      if( current_task()->priority >= action->priority ) {
+      if( current_task()->priority >= action->priority ) {
         list_node_t *prev=action->node.prev;
 
         list_del(&action->node);
@@ -208,12 +208,12 @@ void fire_deffered_actions(void)
         acts->num_actions--;
         action->host=NULL;
         //arch_sched_set_def_works_pending();
-//      } else {
+      } else {
         /* Bad luck - current thread has higher priority than any of pending
          * deffered actions.
          */
-//        action=NULL;
-//      }
+        action=NULL;
+      }
     }
 
     if( !action ) { /* No valid actions found. */
