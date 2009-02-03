@@ -119,8 +119,7 @@ static vmrange_t *merge_vmranges(vmrange_t *prev_vmr, vmrange_t *next_vmr)
   ttree_delete(&prev_vmr->parent_vmm->vmranges_tree, &next_vmr->bounds);
   prev_vmr->bounds.space_end = next_vmr->bounds.space_end;
   prev_vmr->hole_size = next_vmr->hole_size;
-  prev_vmr->parent_vmm->num_vmrs--;  
-  memfree(next_vmr);
+  destroy_vmrange(next_vmr);
 
   return prev_vmr;
 }
@@ -138,7 +137,6 @@ static vmrange_t *split_vmrange(vmrange_t *vmrange, uintptr_t va_from, uintptr_t
   if (!new_vmr)
     return NULL;
 
-  kprintf("new_vmr: %p, %p\n", new_vmr->bounds.space_start, new_vmr->bounds.space_end);
   VMM_VERBOSE("%s: Split VM range [%p, %p) to [%p, %p) and [%p, %p)\n",
               vmm_get_name_dbg(vmrange->parent_vmm), vmrange->bounds.space_start,
               vmrange->bounds.space_end, vmrange->bounds.space_start,
@@ -439,45 +437,57 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
 
 void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
 {
-  vmrange_set_t vmrs;
+  ttree_cursor_t cursor;
   uintptr_t va_to = va_from + (npages << PAGE_WIDTH);
+  vmrange_t *vmr;
 
   ASSERT(!(va_from & PAGE_MASK));
-  vmranges_find_covered(vmm, va_from, va_from + (npages << PAGE_WIDTH), &vmrs);
-  if (!vmrs.vmr)
-    return;
-  if ((vmrs.vmr->bounds.space_start < va_from) &&
-      (vmrs.vmr->bounds.space_end > va_to)) {
-    kprintf("FOUND: %p %p\n", vmrs.vmr->bounds.space_start, vmrs.vmr->bounds.space_end);
-    if (!split_vmrange(vmrs.vmr, va_from, va_to)) {
+  ttree_cursor_init(&vmm->vmranges_tree, &cursor);
+  vmr = vmrange_find(vmm, va_from, va_from + PAGE_SIZE, &cursor);
+  if (!vmr) {
+    if (!ttree_cursor_next(&cursor))
+      vmr = ttree_item_from_cursor(&cursor);
+    else
+      return;
+  }
+  if ((vmr->bounds.space_start < va_from) &&
+      (vmr->bounds.space_end > va_to)) {
+    if (!split_vmrange(vmr, va_from, va_to)) {
       kprintf(KO_ERROR "unmap_vmranges: Failed to split VM range [%p, %p). -ENOMEM\n",
-              vmrs.vmr->bounds.space_start, vmrs.vmr->bounds.space_end);
+              vmr->bounds.space_start, vmr->bounds.space_end);
     }
 
     munmap_core(&vmm->rpd, va_from, npages);
     return;
   }
-  else if (va_from > vmrs.vmr->bounds.space_start) {
-    vmrs.vmr->hole_size += vmrs.vmr->bounds.space_end - va_from;    
-    munmap_core(&vmm->rpd, va_from, vmrs.vmr->bounds.space_end);
-    vmrs.vmr->bounds.space_end = va_from;
+  else if (va_from > vmr->bounds.space_start) {
+    vmr->hole_size += vmr->bounds.space_end - va_from;    
+    munmap_core(&vmm->rpd, va_from, vmr->bounds.space_end);
+    vmr->bounds.space_end = va_from;
   }
 
-  vmrange_set_next(&vmrs);
-  while (vmrs.vmr) {
-    if (unlikely(vmrs.va_to < vmrs.vmr->bounds.space_end)) {
+  va_from = vmr->bounds.space_end;
+  if (ttree_cursor_next(&cursor) < 0)
+    return;
+  while (va_from < va_to) {
+    vmr = ttree_item_from_cursor(&cursor);
+    munmap_core(&vmm->rpd, va_from, ((va_to - va_from) << PAGE_WIDTH));
+    if (unlikely(va_to < vmr->bounds.space_end)) {
       ttree_cursor_t csr_prev;
 
-      ttree_cursor_copy(&csr_prev, &vmrs.cursor);
-      vmrs.vmr->bounds.space_start = vmrs.va_to;
+      ttree_cursor_copy(&csr_prev, &cursor);
+      vmr->bounds.space_start = va_to;
       if (!ttree_cursor_prev(&csr_prev)) {
-        vmrange_t *vmr = ttree_item_from_cursor(&csr_prev);
-        vmr->hole_size = vmrs.vmr->bounds.space_start - vmr->bounds.space_end;
+        vmrange_t *vmr_prev = ttree_item_from_cursor(&csr_prev);
+        vmr_prev->hole_size = vmr->bounds.space_start - vmr_prev->bounds.space_end;
       }
+
+      break;
     }
 
-    munmap_core(&vmm->rpd, vmrs.va_from, ((vmrs.va_to - vmrs.va_from) << PAGE_WIDTH));
-    vmrange_set_next(&vmrs);
+    ttree_delete_placeful(&cursor);
+    va_from = vmr->bounds.space_end;
+    destroy_vmrange(vmr);
   }
 }
 

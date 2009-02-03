@@ -167,8 +167,32 @@ static void __unmap_chunk(test_framework_t *tf, vmm_t *vmm, uintptr_t va_from,
                va_from - PAGE_SIZE, va_from + (pages << PAGE_WIDTH));
     tf->failed();
   }  
-  
 }
+
+static void __check_num_vmrs(test_framework_t *tf, vmm_t *vmm, uintptr_t from, uintptr_t to, int expected)
+{
+  int i;
+  vmrange_set_t vmrs;
+
+  vmranges_find_covered(vmm, from, to, &vmrs);
+  if (!vmrs.vmr) {
+    tf->printf("Can't find VM ranges covered by diapason [%p, %p)\n", from, to);
+    tf->failed();
+  }
+
+  i = 0;
+  while (vmrs.vmr) {
+    i++;
+    vmrange_set_next(&vmrs);
+  }
+  if (i != expected) {
+    tf->printf("Unexpected number of VM ranges covered by diapason [%p, %p] (%d). %d was expected!\n",
+               from, to, i, expected);
+    tf->failed();
+  }
+}
+
+static const int TOTAL = 128;
 
 static void unmap_split_test(test_framework_t *tf, vmm_t *vmm)
 {
@@ -176,52 +200,86 @@ static void unmap_split_test(test_framework_t *tf, vmm_t *vmm)
   uintptr_t start = USPACE_VA_BOTTOM + PAGE_SIZE;
   page_idx_t pgs = 1024;
   ttree_cursor_t csr;
+  int total = TOTAL;
+  int num = 1;
 
+  while (total--) {
+    ttree_cursor_init(&vmm->vmranges_tree, &csr);
+    __unmap_chunk(tf, vmm, start, pgs, &csr);
+    if (csr.state != TT_CSR_TIED) {
+      tf->printf("Cursor must be in a tied state!\n");
+      ttree_display_cursor_dbg(&csr);
+      tf->failed();
+    }
+  
+    vmr = ttree_item_from_cursor(&csr);
+    __validate_hole_sz(tf, vmr, pgs << PAGE_WIDTH);
+    if (vmr->bounds.space_end != start) {
+      tf->printf("Unexpected top virtual address of range(%p). %p was expected!\n",
+                 vmr->bounds.space_end, start);
+      tf->failed();
+    }
+    if (ttree_cursor_next(&csr) < 0) {
+      tf->printf("ttree_cursor_next failed!\n");
+      ttree_display_cursor_dbg(&csr);
+      tf->failed();
+    }
+
+    vmr = ttree_item_from_cursor(&csr);
+    if (vmr->bounds.space_start != (start + (pgs << PAGE_WIDTH))) {
+      tf->printf("Unexpected bottom virtual address of range(%p). %p was expected!\n",
+                 vmr->bounds.space_start, start + (pgs << PAGE_WIDTH));
+      tf->failed();
+    }
+    
+    __validate_hole_sz(tf, vmr, 0);
+    if (vmm->num_vmrs != ++num) {
+      tf->printf("Unexpected number of VM ranges: %d. (%d was expected)!\n", vmm->num_vmrs, num);
+      tf->failed();
+    }
+
+    start += (pgs + 1) << PAGE_WIDTH;
+  }
+
+  tf->printf("Unmap big chunk of address space\n");
+  __check_num_vmrs(tf, vmm, USPACE_VA_BOTTOM, USPACE_VA_TOP, num);
+  start += PAGE_SIZE * 2;
   ttree_cursor_init(&vmm->vmranges_tree, &csr);
-  __unmap_chunk(tf, vmm, start, pgs, &csr);
+  __unmap_chunk(tf, vmm, start, (USPACE_VA_TOP - start - PAGE_SIZE) >> PAGE_WIDTH, &csr);
   if (csr.state != TT_CSR_TIED) {
     tf->printf("Cursor must be in a tied state!\n");
     ttree_display_cursor_dbg(&csr);
     tf->failed();
   }
-  
-  vmranges_print_tree_dbg(vmm);
+
   vmr = ttree_item_from_cursor(&csr);
-  __validate_hole_sz(tf, vmr, pgs << PAGE_WIDTH);
+  __validate_hole_sz(tf, vmr, USPACE_VA_TOP - (start + PAGE_SIZE));
   if (vmr->bounds.space_end != start) {
-    tf->printf("Unexpected top virtual address of range(%p). %p was expected!\n",
-               vmr->bounds.space_end, start);
+    tf->printf("Unexpected top virtual address of range [%p, %p). Expected: %p!\n",
+               vmr->bounds.space_start, vmr->bounds.space_end, start);
     tf->failed();
   }
   if (ttree_cursor_next(&csr) < 0) {
-    tf->printf("ttree_cursor_next failed!\n");
+    tf->printf("Invalid cursor:\n");
     ttree_display_cursor_dbg(&csr);
     tf->failed();
   }
 
   vmr = ttree_item_from_cursor(&csr);
-  if (vmr->bounds.space_start != (start + (pgs << PAGE_WIDTH))) {
-    tf->printf("Unexpected bottom virtual address of range(%p). %p was expected!\n",
-               vmr->bounds.space_start, start + (pgs << PAGE_WIDTH));
-    tf->failed();
-  }
-
   __validate_hole_sz(tf, vmr, 0);
-  if (vmm->num_vmrs != 2) {
-    tf->printf("Unexpected number of VM ranges: %d. (2 was expected)!\n", vmm->num_vmrs);
+  if (vmr->bounds.space_start != (USPACE_VA_TOP - PAGE_SIZE)) {
+    tf->printf("Unexpected bottom virtual address of VM range [%p, %p). Expected: %p\n",
+               vmr->bounds.space_start, vmr->bounds.space_end, USPACE_VA_TOP - PAGE_SIZE);
     tf->failed();
   }
 
-  start = USPACE_VA_TOP - ((pgs + 1) << PAGE_WIDTH);
-  ttree_cursor_init(&vmm->vmranges_tree, &csr);
-  __unmap_chunk(tf, vmm, start, pgs, &csr);
-  if (csr.state != TT_CSR_TIED) {
-    tf->printf("Cursor must be in a tied state!\n");
-    ttree_display_cursor_dbg(&csr);
+  __check_num_vmrs(tf, vmm, USPACE_VA_BOTTOM, USPACE_VA_TOP, num + 1);
+  tf->printf("Unmap the rest of used virtual space\n");
+  unmap_vmranges(vmm, USPACE_VA_BOTTOM, (USPACE_VA_TOP - USPACE_VA_BOTTOM) >> PAGE_WIDTH);
+  if (vmm->num_vmrs != 0) {
+    tf->printf("Unexpected number of VM ranges in a VMM: %d. 0 was expected!\n", vmm->num_vmrs);
     tf->failed();
   }
-  
-  for (;;);
 }
 
 static void tc_vma(void *ctx)
