@@ -32,4 +32,23 @@
     }                                                   \
   } while(0)
 
+#define skiplist_del(ptr,type,lh,ln)              \
+  do {                                            \
+    list_node_t *prev=((type *)ptr)->ln.prev;     \
+    type *at=(type *)ptr;                         \
+    list_del(&at->ln);                            \
+                                                  \
+    if( !list_is_empty(&at->lh) ) {                             \
+      type *a=container_of(list_node_first(&at->lh),type,ln);   \
+      list_del(&a->ln);                                         \
+      if( !list_is_empty(&at->lh) ) {                           \
+        list_move2head(&a->lh,&at->lh);                         \
+      }                                                         \
+      a->ln.prev=prev;                                          \
+      a->ln.next=prev->next;                                    \
+      prev->next->prev=&a->ln;                                  \
+      prev->next=&a->ln;                                        \
+    }                                                           \
+  } while(0)
+
 #endif

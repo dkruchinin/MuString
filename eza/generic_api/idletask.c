@@ -70,6 +70,7 @@ static void __timer_test(void)
     add_timer(&timers[i]);
   }
 
+  delete_timer(&timers[2]);
   kprintf("Done.\n");
 }
 
