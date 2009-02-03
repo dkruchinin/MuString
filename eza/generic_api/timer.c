@@ -87,7 +87,6 @@ void process_timers(void)
   long is;
   struct rb_node *n;
   ulong_t mtickv=system_ticks-(system_ticks % CONFIG_TIMER_GRANULARITY);
-  static int __rounds=0;
 
   LOCK_SW_TIMERS_R(is);
   n=timers_rb_root.rb_node;
@@ -122,17 +121,7 @@ void process_timers(void)
         UNLOCK_MAJOR_TIMER_TICK(major_tick,is);
 
         /* Let's handle all the timers we have found. */
-        kprintf("** %d timers found for %d.\n",tt->num_actions,tt->time_x);
         schedule_deffered_actions(&tt->actions,tt->num_actions);
-        kprintf("      MERGED.\n");
-
-        __rounds++;
-
-        if( __rounds == 4 ) {
-          kprintf(" ** FIRING ACTIONS.\n");
-          fire_deffered_actions();
-          kprintf("     FIRED.\n");
-        }
         break;
       }
     }
@@ -251,7 +240,7 @@ long add_timer(ktimer_t *t)
       if( tt->time_x == t->time_x ) {
         tt->num_actions++;
         skiplist_add(&t->da,&tt->actions,deffered_irq_action_t,node,head,priority);
-        goto out_insert;
+         goto out_insert;
       } else if( tt->time_x > t->time_x ) {
         list_insert_before(&t->minor_tick.node,ln);
         goto out_insert;
@@ -263,11 +252,11 @@ long add_timer(ktimer_t *t)
   }
   /* By default - add this timer to the end of the list. */
   list_add2tail(lh,&t->minor_tick.node);
+  list_add2tail(&t->minor_tick.actions,&t->da.node);
 
 out_insert:
   t->minor_tick.major_tick=mt;
   t->minor_tick.num_actions=1;
-  list_add2tail(&t->minor_tick.actions,&t->da.node);
   UNLOCK_MAJOR_TIMER_TICK(mt,is);
   r=0;
 out:

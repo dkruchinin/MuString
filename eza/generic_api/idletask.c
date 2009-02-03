@@ -47,23 +47,29 @@ static void __timer_test(void)
 
   kprintf("Initializing timers ... ");
   for(i=0;i<NUM_TIMERS;i++) {
-    timers[i].da.priority=i+10;
+    int prio,type;
+
+    tx=100+90*i;
+    type=DEF_ACTION_SIGACTION;
 
     if( i == 2 ) {
       tx=100+90;
-    } else {
-      tx=100+90*i;
+      type=DEF_ACTION_UNBLOCK;
     }
 
-    timers[i].da.priority=50-(i*3);
-    init_timer(&timers[i],tx);
+    init_timer(&timers[i],tx,type);
+
+    prio=i+10;
+    if( i == 2 ) {
+      prio=14;
+    }
+    timers[i].da.priority=prio;
   }
-  kprintf("Done.\n");
 
   for(i=0;i<NUM_TIMERS;i++) {
-    kprintf("Adding timer %d\n",i);
     add_timer(&timers[i]);
   }
+  kprintf("Done.\n");
 }
 
 void timer_thread(void *d)

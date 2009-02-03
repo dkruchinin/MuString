@@ -5,38 +5,31 @@
 
 #define skiplist_add(ptr,lh,type,ln,plh,cv)       \
   do {                                            \
-    if( list_is_empty((lh)) ) {                   \
+     if( list_is_empty((lh)) ) {                     \
       list_add2tail((lh),&((type*)(ptr))->ln);    \
     } else {                                      \
-      list_node_t *next=((list_head_t *)lh)->head.next,*prev=NULL;      \
+      list_head_t *_lh=(list_head_t *)lh;           \
       type *da;                                     \
       bool inserted=false;                          \
-      type *a=container_of(ptr,type,ln);            \
+      type *a=(type *)ptr;                          \
+      list_node_t *_ln;                             \
                                                     \
-      do {                                          \
-        da=container_of(next,type,ln);              \
+      list_for_each(_lh,_ln) {                           \
+        da=container_of(_ln,type,ln);                    \
         if( da->cv > a->cv ) {                      \
-          break;                                    \
-        } else if( da->cv == a->cv ) {              \
-          list_add2tail(&da->plh,&a->ln);           \
+          list_insert_before(&a->ln,_ln);           \
           inserted=true;                            \
           break;                                    \
-        }                                           \
-        prev=next;                                  \
-        next=next->next;                            \
-      } while(next != list_head((list_head_t *)lh));    \
-                                                        \
+        } else if( da->cv == a->cv ) {              \
+          inserted=true;                            \
+          list_add2tail(&da->plh,&a->ln);           \
+          break;                                        \
+        }                                               \
+      }                                                 \
       if( !inserted ) {                                 \
-        if( prev != NULL ) {                            \
-          a->ln.next=prev->next;                          \
-          prev->next->prev=&a->ln;                        \
-          prev->next=&a->ln;                              \
-          a->ln.prev=prev;                                      \
-        } else {                                                \
-          list_add2head((list_head_t *)lh,&a->ln);              \
-        }                                                       \
-      }                                                         \
-    }                                                           \
+        list_add2tail(_lh,&a->ln);                      \
+      }                                                 \
+    }                                                   \
   } while(0)
 
 #endif

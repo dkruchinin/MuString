@@ -61,7 +61,7 @@ typedef struct __timer_tick {
 #define TIMER_TICK_INIT(tt,tx)                    \
   (tt)->time_x=(tx);                              \
   list_init_node(&(tt)->node);                    \
-   list_init_head(&(tt)->actions);                \
+  list_init_head(&(tt)->actions);                 \
   (tt)->num_actions=0;                            \
   (tt)->major_tick=NULL
 
@@ -95,8 +95,8 @@ void adjust_timer(ktimer_t *t,long_t delta);
 void process_timers(void);
 void timer_cleanup_expired_ticks(void);
 
-#define init_timer(t,tx)                                 \
-  DEFFERED_ACTION_INIT(&(t)->da,DEF_ACTION_CUSTOM,0);    \
+#define init_timer(t,tx,tp)                              \
+  DEFFERED_ACTION_INIT(&(t)->da,(tp),0);                 \
   (t)->time_x=(tx);                                      \
   TIMER_TICK_INIT(&(t)->minor_tick,(t)->time_x);         \
   (t)->da.priority=current_task()->priority

@@ -44,8 +44,7 @@ typedef struct __percpu_def_actions {
 typedef enum __def_action_type {
   DEF_ACTION_EVENT,
   DEF_ACTION_SIGACTION,
-  DEF_ACTION_CUSTOM,
-
+  DEF_ACTION_UNBLOCK,
 } def_action_type_t;
 
 #define __DEF_ACT_PENDING_BIT_IDX     0
