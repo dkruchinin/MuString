@@ -40,12 +40,39 @@
 #include <eza/process.h>
 #include <eza/ptd.h>
 
+#define USER_PAGES_CHUNK  64
+
+static status_t __create_empty_user_area(task_t *task,ulong_t virt,
+                                         ulong_t pages,ulong_t flags)
+{
+  status_t r;
+
+  while( pages ) {
+    ulong_t to_map=(pages <= USER_PAGES_CHUNK) ? pages : USER_PAGES_CHUNK;
+    page_frame_t *pf;
+
+    pf=alloc_pages(to_map,AF_ZERO | AF_PGEN);
+    if( !pf ) {
+      return -ENOMEM;
+    }
+
+    r=mmap(task->page_dir,virt,pframe_number(pf),to_map,flags);
+    if( r ) {
+      return -ENOMEM;
+    }
+
+    virt += (to_map << PAGE_WIDTH);
+    pages-=to_map;
+  }
+
+  return 0;
+}
+
 static status_t __create_task_mm(task_t *task, int num)
 {
   uintptr_t code;
   size_t code_size,data_size,text_size,bss_size;
   page_frame_t *stack;
-  page_frame_t *bss;
   ulong_t *pp;
   elf_head_t ehead;
   elf_pr_t epr;
@@ -146,12 +173,6 @@ static status_t __create_task_mm(task_t *task, int num)
   } else 
     bss_size>>=PAGE_WIDTH;
 
-  /* alloc memory for bss */
-  bss=alloc_pages(bss_size,AF_PGEN|AF_ZERO);
-  if(!bss)
-    return -ENOMEM;
-
-
   /*  kprintf("elf entry -> %p\n",ehead.e_entry); */
 
   /*remap pages*/
@@ -163,9 +184,11 @@ static status_t __create_task_mm(task_t *task, int num)
   if (r)
     return r;
 
-  r = mmap(task->page_dir, bss_virt, pframe_number(bss), bss_size, MAP_USER | MAP_RW);
-  if (r)
+  /* Create a BSS area. */
+  r=__create_empty_user_area(task,bss_virt,bss_size,MAP_USER | MAP_RW);
+  if( r ) {
     return r;
+  }
 
   r = mmap(task->page_dir, USPACE_END-0x40000, pframe_number(stack), USER_STACK_SIZE, MAP_USER | MAP_RW);
   if (r)
