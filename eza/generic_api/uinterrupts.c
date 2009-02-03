@@ -126,7 +126,7 @@ static irq_counter_array_t *__allocate_irq_counter_array(task_t *task,ulong_t nc
 
   if( array ) {
     array->num_counters=nc;
-    DEFFERED_ACTION_INIT(array->de,DEF_ACTION_EVENT,__DEF_ACT_SINGLETON_MASK);
+    DEFFERED_ACTION_INIT(&array->de,DEF_ACTION_EVENT,__DEF_ACT_SINGLETON_MASK);
 
     list_init_head(&array->counter_handlers);
     event_initialize(&array->de.d._event);

@@ -83,5 +83,6 @@ void initialize_deffered_actions(void);
 void schedule_deffered_action(deffered_irq_action_t *a);
 void fire_deffered_actions(void);
 void execute_deffered_action(deffered_irq_action_t *a);
+void schedule_deffered_actions(list_head_t *actions,ulong_t count);
 
 #endif

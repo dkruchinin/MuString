@@ -46,6 +46,48 @@ void initialize_deffered_actions(void)
   }
 }
 
+void schedule_deffered_actions(list_head_t *actions,ulong_t num_actions)
+{
+  percpu_def_actions_t *acts=&cpu_actions[cpu_id()];
+  long is;
+
+  spinlock_lock_irqsave(&acts->lock,is);
+
+  acts->num_actions +=num_actions;
+  if( list_is_empty(&acts->pending_actions) ) {
+    list_move2head(&acts->pending_actions,actions);
+  } else {
+    while( !list_is_empty(actions) ) {
+      list_node_t *ln;
+      deffered_irq_action_t *a=container_of(list_node_first(actions),
+                                            deffered_irq_action_t,node);
+
+      list_del(&a->node);
+
+      list_for_each(&acts->pending_actions,ln) {
+        deffered_irq_action_t *da=container_of(ln,deffered_irq_action_t,node);
+
+        if( da->priority > a->priority ) {
+          list_insert_before(&a->node,ln);
+          goto finished;
+        } else if( da->priority == a->priority ) {
+          list_add2tail(&da->head,&a->node);
+
+          if( !list_is_empty(&a->head) ) {
+            list_move2tail(&da->head,&a->head);
+          }
+          goto finished;
+        }
+      }
+      list_add2tail(&acts->pending_actions,&a->node);
+    finished:
+      continue;
+    }
+  }
+
+  spinlock_unlock_irqrestore(&acts->lock,is);
+}
+
 void schedule_deffered_action(deffered_irq_action_t *a) {
   percpu_def_actions_t *acts=&cpu_actions[cpu_id()];
   long is,old_acts;
@@ -110,6 +152,8 @@ void execute_deffered_action(deffered_irq_action_t *a)
   }
 
   arch_bit_clear(&a->flags,__DEF_ACT_PENDING_BIT_IDX);
+  kprintf("** Executing action: %d, priority=%d\n",a->type,
+          a->priority);
 }
 
 void fire_deffered_actions(void)
@@ -118,6 +162,11 @@ void fire_deffered_actions(void)
   long is;
   deffered_irq_action_t *action;
 
+  //[!!!!]
+  preempt_disable();
+
+  kprintf( "   [FIRE]: %d actions pending.\n",
+           acts->num_actions );
   /* To prevent recursive invocations. */
   spinlock_lock_irqsave(&acts->lock,is);
   if( acts->executers || !acts->num_actions ) {
@@ -137,7 +186,7 @@ void fire_deffered_actions(void)
       action=container_of(list_node_first(&acts->pending_actions),
                           deffered_irq_action_t,node);
 
-      if( current_task()->priority >= action->priority ) {
+//      if( current_task()->priority >= action->priority ) {
         list_node_t *prev=action->node.prev;
 
         list_del(&action->node);
@@ -158,17 +207,17 @@ void fire_deffered_actions(void)
 
         acts->num_actions--;
         action->host=NULL;
-        arch_sched_set_def_works_pending();
-      } else {
+        //arch_sched_set_def_works_pending();
+//      } else {
         /* Bad luck - current thread has higher priority than any of pending
          * deffered actions.
          */
-        action=NULL;
-      }
+//        action=NULL;
+//      }
     }
 
     if( !action ) { /* No valid actions found. */
-      arch_sched_reset_def_works_pending();
+      //arch_sched_reset_def_works_pending();
     }
     spinlock_unlock_irqrestore(&acts->lock,is);
 

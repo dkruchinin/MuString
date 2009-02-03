@@ -87,6 +87,7 @@ void process_timers(void)
   long is;
   struct rb_node *n;
   ulong_t mtickv=system_ticks-(system_ticks % CONFIG_TIMER_GRANULARITY);
+  static int __rounds=0;
 
   LOCK_SW_TIMERS_R(is);
   n=timers_rb_root.rb_node;
@@ -106,17 +107,33 @@ void process_timers(void)
 
   UNLOCK_SW_TIMERS_R(is);
 
-  /* Let's see if we have any timers for this major tick. */
-  if( major_tick ) {
+  if( major_tick ) { /* Let's see if we have any timers for this major tick. */
     list_head_t *lh=&major_tick->minor_ticks[(system_ticks-mtickv)/MINOR_TICK_GROUP_SIZE];
     list_node_t *ln;
 
     list_for_each(lh,ln) {
       timer_tick_t *tt=container_of(ln,timer_tick_t,node);
+      if( tt->time_x == system_ticks ) { /* Got something for this tick. */
+        ASSERT(tt->num_actions);
+        ASSERT(tt->major_tick == major_tick);
 
-      if( tt->time_x == system_ticks ) {
-        kprintf("[TT]: Found %d actions for %d. MAJOR: %d\n",
-                tt->num_actions,tt->time_x,major_tick->time_x);
+        LOCK_MAJOR_TIMER_TICK(major_tick,is);
+        list_del(&tt->node);
+        UNLOCK_MAJOR_TIMER_TICK(major_tick,is);
+
+        /* Let's handle all the timers we have found. */
+        kprintf("** %d timers found for %d.\n",tt->num_actions,tt->time_x);
+        schedule_deffered_actions(&tt->actions,tt->num_actions);
+        kprintf("      MERGED.\n");
+
+        __rounds++;
+
+        if( __rounds == 4 ) {
+          kprintf(" ** FIRING ACTIONS.\n");
+          fire_deffered_actions();
+          kprintf("     FIRED.\n");
+        }
+        break;
       }
     }
   }
@@ -147,8 +164,6 @@ long add_timer(ktimer_t *t)
   }
 
   mtickv=t->time_x-(t->time_x % CONFIG_TIMER_GRANULARITY);
-  kprintf("* Adding timer for %d, major tick is %d, %p\n",
-          t->time_x,mtickv,t);
 
   /* First try to locate an existing major tick or create a new one.
    */
@@ -212,8 +227,6 @@ long add_timer(ktimer_t *t)
       mt=major_tick;
       rb_link_node(&major_tick->rbnode,n,p);
       rb_insert_color(&major_tick->rbnode,&timers_rb_root);
-      kprintf("  ++ New node inserted at %d,%p\n",
-              mt->time_x,mt);
     } else {
       /* Expired while allocating a new major tick. */
       UNLOCK_SW_TIMERS(is);
@@ -231,23 +244,30 @@ long add_timer(ktimer_t *t)
 
   LOCK_MAJOR_TIMER_TICK(mt,is);
   lh=&mt->minor_ticks[(t->time_x-mtickv)/MINOR_TICK_GROUP_SIZE];
-  list_for_each( lh,ln ) {
-    timer_tick_t *tt=container_of(ln,timer_tick_t,node);
+  if( !list_is_empty(lh) ) {
+    list_for_each( lh,ln ) {
+      timer_tick_t *tt=container_of(ln,timer_tick_t,node);
 
-    if( tt->time_x == t->time_x ) {
-      tt->num_actions++;
-      skiplist_add(&t->da,&tt->actions,deffered_irq_action_t,node,head,priority);
-      goto dont_insert_tick;
-    }
-    if( tt->time_x > t->time_x ) {
-      break;
+      if( tt->time_x == t->time_x ) {
+        tt->num_actions++;
+        skiplist_add(&t->da,&tt->actions,deffered_irq_action_t,node,head,priority);
+        goto out_insert;
+      } else if( tt->time_x > t->time_x ) {
+        list_insert_before(&t->minor_tick.node,ln);
+        goto out_insert;
+      }
+      /* Fallthrough in case of the highest tick value - it will be added to
+       * the end of the list.
+       */
     }
   }
+  /* By default - add this timer to the end of the list. */
+  list_add2tail(lh,&t->minor_tick.node);
 
+out_insert:
+  t->minor_tick.major_tick=mt;
   t->minor_tick.num_actions=1;
   list_add2tail(&t->minor_tick.actions,&t->da.node);
-  list_insert_before(&t->minor_tick.node,ln);
-dont_insert_tick:
   UNLOCK_MAJOR_TIMER_TICK(mt,is);
   r=0;
 out:
