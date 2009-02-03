@@ -47,7 +47,7 @@ void initialize_deffered_actions(void)
   }
 }
 
-void schedule_deffered_actions(list_head_t *actions,ulong_t num_actions)
+void schedule_deffered_actions(list_head_t *actions)
 {
   percpu_def_actions_t *acts=&cpu_actions[cpu_id()];
   long is;
@@ -55,10 +55,10 @@ void schedule_deffered_actions(list_head_t *actions,ulong_t num_actions)
 
   spinlock_lock_irqsave(&acts->lock,is);
 
-  acts->num_actions +=num_actions;
   if( list_is_empty(&acts->pending_actions) ) {
     list_move2head(&acts->pending_actions,actions);
-    a=container_of(list_node_first(actions),deffered_irq_action_t,node);
+    a=container_of(list_node_first(&acts->pending_actions),
+                   deffered_irq_action_t,node);
 
     if( a->priority <= current_task()->priority ) {
       arch_sched_set_def_works_pending();
@@ -137,7 +137,6 @@ void schedule_deffered_action(deffered_irq_action_t *a) {
       }
     }
   }
-  acts->num_actions++;
 
   /* Current task needs to be rescheduled as soon as possible. */
   if( a->priority <= current_task()->priority ) {
@@ -150,15 +149,17 @@ void execute_deffered_action(deffered_irq_action_t *a)
 {
   switch( a->type ) {
     case DEF_ACTION_EVENT:
-      event_raise(&a->d._event);
+      //event_raise(&a->d._event);
       break;
     case DEF_ACTION_SIGACTION:
       break;
     case  DEF_ACTION_UNBLOCK:
-      sched_change_task_state(a->d.target,TASK_STATE_RUNNABLE);
+      //sched_change_task_state(a->d.target,TASK_STATE_RUNNABLE);
       break;
   }
 
+  kprintf("** Firing action of type %d, with priority %d\n",
+          a->type,a->priority);
   arch_bit_set(&a->flags,__DEF_ACT_FIRED_BIT_IDX);
 }
 
@@ -170,7 +171,7 @@ void fire_deffered_actions(void)
 
   /* To prevent recursive invocations. */
   spinlock_lock_irqsave(&acts->lock,is);
-  if( acts->executers || !acts->num_actions ) {
+  if( acts->executers || list_is_empty(&acts->pending_actions) ) {
     preempt_enable();
     spinlock_unlock_irqrestore(&acts->lock,is);
     return;
@@ -179,12 +180,12 @@ void fire_deffered_actions(void)
   }
   spinlock_unlock_irqrestore(&acts->lock,is);
 
+  fired=0;
   do {
-    action=NULL;
-    fired=0;
-
     spinlock_lock_irqsave(&acts->lock,is);
-    if( acts->num_actions ) {
+    action=NULL;
+
+    if( !list_is_empty(&acts->pending_actions) ) {
       action=container_of(list_node_first(&acts->pending_actions),
                           deffered_irq_action_t,node);
 
@@ -207,7 +208,6 @@ void fire_deffered_actions(void)
           prev->next=&a->node;
         }
 
-        acts->num_actions--;
         action->host=NULL;
         arch_sched_set_def_works_pending();
       } else {

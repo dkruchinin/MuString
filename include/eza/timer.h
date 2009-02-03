@@ -54,7 +54,6 @@ typedef struct __timer_tick {
   ulong_t time_x;      /* Trigger time. */
   list_node_t node;    /* To link us with our major tick. */
   list_head_t actions; /* Deffered actions for this tick. */
-  ulong_t num_actions; /* Numbers of pending actions in 'actions'. */
   struct __major_timer_tick *major_tick;
 } timer_tick_t;
 
@@ -62,7 +61,6 @@ typedef struct __timer_tick {
   (tt)->time_x=(tx);                              \
   list_init_node(&(tt)->node);                    \
   list_init_head(&(tt)->actions);                 \
-  (tt)->num_actions=0;                            \
   (tt)->major_tick=NULL
 
 #define LOCK_MAJOR_TIMER_TICK(t,_is)            \

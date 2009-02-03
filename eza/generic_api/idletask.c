@@ -52,6 +52,7 @@ static void __timer_test(void)
     tx=100+90*i;
     type=DEF_ACTION_SIGACTION;
 
+
     if( i == 2 ) {
       tx=100+90;
       type=DEF_ACTION_UNBLOCK;
@@ -60,15 +61,15 @@ static void __timer_test(void)
     init_timer(&timers[i],tx,type);
 
     prio=i+10;
+
     if( i == 2 ) {
       prio=14;
     }
-    timers[i].da.priority=prio;
-  }
 
-  for(i=0;i<NUM_TIMERS;i++) {
+    timers[i].da.priority=prio;
     add_timer(&timers[i]);
   }
+
   kprintf("Done.\n");
 }
 
@@ -76,9 +77,8 @@ void timer_thread(void *d)
 {
   int ticks=27;
 
-  while( 1 ) {
-    sleep(ticks);
-  }
+  //sleep(ticks);
+  __timer_test();
   for(;;);
 }
 

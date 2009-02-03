@@ -41,6 +41,7 @@
 /*spinlock*/
 static SPINLOCK_DEFINE(timer_lock);
 static SPINLOCK_DEFINE(sw_timers_lock);
+static SPINLOCK_DEFINE(sw_timers_list_lock);
 
 /*list of the timers*/
 static LIST_DEFINE(known_hw_timers);
@@ -109,27 +110,61 @@ void process_timers(void)
   if( major_tick ) { /* Let's see if we have any timers for this major tick. */
     list_head_t *lh=&major_tick->minor_ticks[(system_ticks-mtickv)/MINOR_TICK_GROUP_SIZE];
     list_node_t *ln;
+    timer_tick_t *tt;
 
+    LOCK_MAJOR_TIMER_TICK(major_tick,is);
     list_for_each(lh,ln) {
-      timer_tick_t *tt=container_of(ln,timer_tick_t,node);
+      tt=container_of(ln,timer_tick_t,node);
       if( tt->time_x == system_ticks ) { /* Got something for this tick. */
-        ASSERT(tt->num_actions);
         ASSERT(tt->major_tick == major_tick);
 
-        LOCK_MAJOR_TIMER_TICK(major_tick,is);
         list_del(&tt->node);
-        UNLOCK_MAJOR_TIMER_TICK(major_tick,is);
-
-        /* Let's handle all the timers we have found. */
-        schedule_deffered_actions(&tt->actions,tt->num_actions);
-        break;
+        goto out;
       }
+    }
+    tt=NULL;
+  out:
+    UNLOCK_MAJOR_TIMER_TICK(major_tick,is);
+
+    if( tt ) { /* Let's handle all the timers we have found. */
+      schedule_deffered_actions(&tt->actions);
     }
   }
 }
 
 void timer_cleanup_expired_ticks(void)
 {
+}
+
+void delete_timer(ktimer_t *timer)
+{
+  long is;
+  timer_tick_t *tt=&timer->minor_tick;
+
+  if( !tt->major_tick ) { /* Ignore clear timers. */
+    return;
+  }
+
+  LOCK_MAJOR_TIMER_TICK(tt->major_tick,is);
+  if( list_node_is_bound(&tt->node) ) {
+    /* Active root tick node, reorganize all timers associated with it. */
+    if( 1 ) {
+      /* The simpliest case - only one timer in this tick, no rebalance. */
+      kprintf("delete_timer() [1]\n");
+      list_del(&tt->node);
+    } else {
+      /* Need some rebalance. */
+      kprintf("delete_timer() [2]\n");
+    }
+    UNLOCK_MAJOR_TIMER_TICK(tt->major_tick,is);
+  } else {
+    /* In case of child timer, just remove it's deferred action from the list.*/
+    spinlock_lock(&sw_timers_list_lock);
+
+    spinlock_unlock(&sw_timers_list_lock);
+    UNLOCK_MAJOR_TIMER_TICK(timer->minor_tick.major_tick,is);
+  }
+  put_major_tick(tt->major_tick);
 }
 
 long add_timer(ktimer_t *t)
@@ -239,9 +274,8 @@ long add_timer(ktimer_t *t)
       timer_tick_t *tt=container_of(ln,timer_tick_t,node);
 
       if( tt->time_x == t->time_x ) {
-        tt->num_actions++;
         skiplist_add(&t->da,&tt->actions,deffered_irq_action_t,node,head,priority);
-         goto out_insert;
+        goto out_insert;
       } else if( tt->time_x > t->time_x ) {
         list_insert_before(&t->minor_tick.node,ln);
         goto out_insert;
@@ -257,7 +291,6 @@ long add_timer(ktimer_t *t)
 
 out_insert:
   t->minor_tick.major_tick=mt;
-  t->minor_tick.num_actions=1;
   UNLOCK_MAJOR_TIMER_TICK(mt,is);
   r=0;
 out:
@@ -291,6 +324,7 @@ long sleep(ulong_t ticks)
   if( !r ) {
     sched_change_task_state_deferred(current_task(),TASK_STATE_SLEEPING,
                                      __timer_deffered_sched_handler,&timer);
+    
     if( task_was_interrupted(current_task()) ) {
       r=-EINTR;
     }

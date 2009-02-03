@@ -37,7 +37,7 @@ typedef uint16_t da_counter_t;
 
 typedef struct __percpu_def_actions {
   list_head_t pending_actions;
-  ulong_t num_actions,executers;
+  ulong_t executers;
   spinlock_t lock;
 } percpu_def_actions_t;
 
@@ -61,6 +61,7 @@ typedef struct __deffered_irq_action {
   list_head_t head;
   list_node_t node;
   ulong_t priority;
+  spinlock_t *__lock;
 
   union {
     event_t _event;                /* DEF_ACTION_EVENT */
@@ -76,6 +77,7 @@ typedef struct __deffered_irq_action {
   (da)->type=(t);                                \
   (da)->flags=(f);                               \
   (da)->host=NULL;                               \
+  (da)->__lock=NULL;                             \
   } while(0)
 
 void initialize_deffered_actions(void);
@@ -83,6 +85,6 @@ void initialize_deffered_actions(void);
 void schedule_deffered_action(deffered_irq_action_t *a);
 void fire_deffered_actions(void);
 void execute_deffered_action(deffered_irq_action_t *a);
-void schedule_deffered_actions(list_head_t *actions,ulong_t count);
+void schedule_deffered_actions(list_head_t *actions);
 
 #endif
