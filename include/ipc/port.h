@@ -85,6 +85,7 @@ typedef struct __port_msg_info {
   uint32_t msg_len;
   tid_t sender_tid;
   uid_t sender_uid;
+  uid_t sender_gid;
 } port_msg_info_t;
 
 #define IPC_LOCK_PORT(p) spinlock_lock(&p->lock)
