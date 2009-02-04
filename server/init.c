@@ -213,7 +213,7 @@ void server_run_tasks(void)
     kprintf("[SRV] Starting servers: %d ... \n",i);
     //kconsole->disable();
   }
-  return;
+
   for(a=0;a<i;a++) {
     ulong_t flags=0;
 

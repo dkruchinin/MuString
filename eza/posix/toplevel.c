@@ -27,15 +27,18 @@
 #include <eza/errno.h>
 #include <eza/signal.h>
 
-status_t sys_timer_create(clockid_t clockid,struct sigevent *evp,
-                          posixid_t *timerid)
+long sys_timer_create(clockid_t clockid,struct sigevent *evp,
+                      posixid_t *timerid)
 {
   task_t *caller=current_task();
   posix_stuff_t *stuff;
   struct sigevent kevp;
-  long id;
-  status_t r;
-  posix_timer_t *ptimer;
+  long id,r;
+  posix_timer_t *ptimer=NULL;
+
+  if( clockid != CLOCK_REALTIME ) {
+    return -EINVAL;
+  }
 
   if( evp ) {
     if( copy_from_user(&kevp,evp,sizeof(kevp)) ) {
@@ -48,31 +51,36 @@ status_t sys_timer_create(clockid_t clockid,struct sigevent *evp,
     INIT_SIGEVENT(kevp);
   }
 
-  stuff=get_task_posix_stuff(caller);
-  if( !stuff ) {
-    return -EINVAL;
+  ptimer=memalloc(sizeof(*ptimer));
+  if( !ptimer ) {
+    return -ENOMEM;
   }
 
+  stuff=get_task_posix_stuff(caller);
+
   LOCK_POSIX_STUFF_W(stuff);
+  r=-EAGAIN;
+  if( ++stuff->timers > CONFIG_POSIX_MAX_TIMERS ) {
+    goto out;
+  }
   id=posix_allocate_obj_id(stuff);
   if( id < 0 ) {
-    r=-EAGAIN;
     goto out;
   }
   UNLOCK_POSIX_STUFF_W(stuff);
-
-  ptimer=memalloc(sizeof(*ptimer));
-  if( !ptimer ) {
-    r=-ENOMEM;
-    goto free_id;
-  }
 
   if( !evp ) {
     kevp.sigev_value.sival_int=id;
   }
 
-  POSIX_KOBJ_INIT(&ptimer->kpo,POSIX_OBJ_TIMER);
-  ptimer->sevent=kevp;
+  POSIX_KOBJ_INIT(&ptimer->kpo,POSIX_OBJ_TIMER,id);
+  init_timer(&ptimer->ktimer,0,DEF_ACTION_SIGACTION);
+
+  switch( kevp.sigev_notify ) {
+    case SIGEV_SIGNAL:
+      ptimer->ktimer.da.d.pid=caller->pid;
+      break;
+  }
 
   if( copy_to_user(timerid,&id,sizeof(id)) ) {
     r=-EFAULT;
@@ -81,6 +89,7 @@ status_t sys_timer_create(clockid_t clockid,struct sigevent *evp,
 
   LOCK_POSIX_STUFF_W(stuff);
   posix_insert_object(stuff,&ptimer->kpo,id);
+  stuff->timers++;
   UNLOCK_POSIX_STUFF_W(stuff);
 
   release_task_posix_stuff(stuff);
@@ -89,7 +98,45 @@ free_id:
   LOCK_POSIX_STUFF_W(stuff);
   posix_free_obj_id(stuff,id);
 out:
+  stuff->timers--;
   UNLOCK_POSIX_STUFF_W(stuff);
+  release_task_posix_stuff(stuff);
+
+  if( ptimer ) {
+    memfree(ptimer);
+  }
+  return r;
+}
+
+long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
+{
+  long r=0;
+  task_t *caller=current_task();
+  posix_stuff_t *stuff=get_task_posix_stuff(caller);
+  posix_timer_t *ptimer=posix_lookup_timer(stuff,id);
+
+  if( !ptimer ) {
+    r=-EINVAL;
+    goto put_stuff;
+  }
+  
+  kprintf("[!!!] Timer %d located ! %p, CMD=%d\n",
+          id,ptimer,cmd);
+
+  switch( cmd ) {
+    case __POSIX_TIMER_SETTIME:
+      break;
+    case __POSIX_TIMER_GETTIME:
+      break;
+    case __POSIX_TIMER_GETOVERRUN:
+      break;
+    default:
+      r=-EINVAL;
+      break;
+  }
+
+  release_posix_timer(ptimer);
+put_stuff:
   release_task_posix_stuff(stuff);
   return r;
 }

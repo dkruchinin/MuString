@@ -61,16 +61,16 @@ typedef struct __deffered_irq_action {
   list_head_t head;
   list_node_t node;
   ulong_t priority;
-
   spinlock_t *__lock;
+
   list_head_t *reuse_list;
+  spinlock_t *reuse_lock;
 
   union {
     event_t _event;                /* DEF_ACTION_EVENT */
-    struct sigevent _sigevent;     /* DEF_ACTION_SIGACTION */
+    pid_t    pid;                  /* DEF_ACTION_SIGACTION */
     task_t *target;                /* DEF_ACTION_UNBLOCK */
   } d;
-  percpu_def_actions_t *host;
 } deffered_irq_action_t;
 
 #define DEFFERED_ACTION_INIT(da,t,f)    do {    \
@@ -78,7 +78,7 @@ typedef struct __deffered_irq_action {
   list_init_node(&(da)->node);                   \
   (da)->type=(t);                                \
   (da)->flags=(f);                               \
-  (da)->__lock=NULL;                             \
+  (da)->__lock=(da)->reuse_lock=NULL;            \
   (da)->reuse_list=NULL;                         \
   } while(0)
 

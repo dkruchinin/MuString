@@ -150,6 +150,7 @@ void execute_deffered_action(deffered_irq_action_t *a)
       //event_raise(&a->d._event);
       break;
     case DEF_ACTION_SIGACTION:
+      
       break;
     case  DEF_ACTION_UNBLOCK:
       //sched_change_task_state(a->d.target,TASK_STATE_RUNNABLE);
@@ -158,7 +159,19 @@ void execute_deffered_action(deffered_irq_action_t *a)
 
   kprintf("** Firing action of type %d, with priority %d\n",
           a->type,a->priority);
+
   arch_bit_set(&a->flags,__DEF_ACT_FIRED_BIT_IDX);
+
+  /* Check if this action is reusable. */
+  if( a->reuse_list ) {
+    long is;
+
+    ASSERT(!list_node_is_bound(&a->node));
+
+    spinlock_lock_irqsave(a->reuse_lock,is);
+    list_add2tail(a->reuse_list,&a->node);
+    spinlock_unlock_irqrestore(a->reuse_lock,is);
+  }
 }
 
 void fire_deffered_actions(void)

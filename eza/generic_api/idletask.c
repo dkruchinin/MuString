@@ -93,13 +93,6 @@ void idle_loop(void)
   }
 #endif
 
-  if( !cpu_id() ) {
-    if( kernel_thread(timer_thread,NULL,NULL) ) {
-      panic("Can't lounch a test thread !\n");
-    }
-    //__timer_test();
-  }
-
   for( ;; ) {
 #ifndef CONFIG_TEST
     if( swks.system_ticks_64 >= target_tick ) {

@@ -69,6 +69,8 @@
 #define SC_THREAD_KILL         31
 #define SC_SIGPROCMASK         32
 #define SC_THREAD_EXIT         33
+#define SC_TIMER_CREATE        34
+#define SC_TIMER_CONTROL       35
 
 #ifndef __ASM__
 

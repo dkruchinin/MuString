@@ -31,7 +31,7 @@
 typedef long clock_t;
 
 typedef enum {
-  CLOCK_REALTIME,
+  CLOCK_REALTIME=0,
 } clockid_t;
 
 uint32_t delay_loop;
@@ -43,7 +43,19 @@ typedef struct __timeval {
   ulong_t tv_nsec;  /* microseconds */
 } timeval_t;
 
+typedef struct itimerspec {
+  timeval_t it_interval,it_value;
+} itimerspec_t;
+
 #define system_ticks  swks.system_ticks_64
+
+#define TIMER_ABSTIME  0x1
+
+typedef enum __posix_timer_command {
+  __POSIX_TIMER_SETTIME=0,
+  __POSIX_TIMER_GETTIME=1,
+  __POSIX_TIMER_GETOVERRUN=2,
+} posix_timer_command_t;
 
 #define NANOSLEEP_MAX_SECS  1000000000
 
