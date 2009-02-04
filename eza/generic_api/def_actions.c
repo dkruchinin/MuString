@@ -124,8 +124,6 @@ void schedule_deffered_action(deffered_irq_action_t *a) {
       next=next->next;
     } while( next != list_head(&acts->pending_actions) );
 
-    a->host=acts;
-
     if( !inserted ) {
       if( prev != NULL ) {
         a->node.next=prev->next;
@@ -217,7 +215,6 @@ void fire_deffered_actions(void)
           spinlock_unlock(action->__lock);
         }
 
-        action->host=NULL;
         arch_sched_set_def_works_pending();
       } else {
         /* Bad luck - current thread has higher priority than any of pending

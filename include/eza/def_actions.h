@@ -61,7 +61,9 @@ typedef struct __deffered_irq_action {
   list_head_t head;
   list_node_t node;
   ulong_t priority;
+
   spinlock_t *__lock;
+  list_head_t *reuse_list;
 
   union {
     event_t _event;                /* DEF_ACTION_EVENT */
@@ -76,8 +78,8 @@ typedef struct __deffered_irq_action {
   list_init_node(&(da)->node);                   \
   (da)->type=(t);                                \
   (da)->flags=(f);                               \
-  (da)->host=NULL;                               \
   (da)->__lock=NULL;                             \
+  (da)->reuse_list=NULL;                         \
   } while(0)
 
 void initialize_deffered_actions(void);
