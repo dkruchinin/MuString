@@ -132,7 +132,7 @@ status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
     chunk=bufs->chunks;    
     bufsize=bufs->length;
     dest_kaddr=(char *)*chunk;
-    page_end=dest_kaddr+bufs->length;
+    page_end=dest_kaddr+bufs->first;
 
     /* Process one buffer. */
     while( data_size ) {
