@@ -135,5 +135,11 @@ size_t vsnprintf(char *dest, const size_t dsize, const char *fmt, va_list ap);
 size_t kbuf_insert(const char *, const size_t);
 char *kbuf_get(void);
 
+#ifdef CONFIG_DEBUG
+#define kprintf_dbg(fmt, args...) kprintf(KO_DEBUG, fmt, ##args)
+#else
+#define kprintf_dbg(fmt, args...)
+#endif /* CONFIG_DEBUG */
+
 #endif /* __ASM__ */
 #endif /* __KPRINTF_H__ */

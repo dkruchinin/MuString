@@ -26,12 +26,12 @@
 #include <ipc/ipc.h>
 #include <eza/task.h>
 #include <eza/smp.h>
-#include <ds/waitqueue.h>
 #include <ipc/poll.h>
 #include <eza/time.h>
 #include <mm/slab.h>
 #include <eza/errno.h>
 #include <mm/pfalloc.h>
+#include <eza/waitqueue.h>
 #include <eza/arch/page.h>
 #include <eza/scheduler.h>
 #include <eza/usercopy.h>

@@ -22,7 +22,7 @@
  */
 
 
-#include <ds/waitqueue.h>
+#include <eza/waitqueue.h>
 #include <eza/scheduler.h>
 #include <eza/task.h>
 #include <eza/spinlock.h>

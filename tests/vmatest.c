@@ -47,7 +47,6 @@ static void map_merge_test(test_framework_t *tf, vmm_t *vmm)
     }
 
     tf->printf("[OK] (addr=%p)\n", ret);
-    vmranges_print_tree_dbg(vmm);
     if (vmm->num_vmrs != 1) {
       tf->printf("Number of VM ranges in a vmranges_tree must be equal to 1, "
                  "but it's %d indeed!\n", vmm->num_vmrs);
@@ -90,7 +89,6 @@ static void map_merge_test(test_framework_t *tf, vmm_t *vmm)
     tf->failed();
   }
 
-  vmranges_print_tree_dbg(vmm);
   vmr2 = vmrange_find(vmm, USPACE_VA_TOP - PAGE_SIZE, USPACE_VA_TOP, NULL);
   if (!vmr2) {
     tf->printf("Can not find VM range including interval [%p, %p)!\n",
@@ -102,7 +100,6 @@ static void map_merge_test(test_framework_t *tf, vmm_t *vmm)
   __validate_hole_sz(tf, vmr, free_space);
   last_va = vmr2->bounds.space_start;
   free_space = vmr->hole_size;
-  vmranges_print_tree_dbg(vmm);
   pgs = 128;
   tf->printf("Fill the hole up by %d pages at each step...\n", pgs);
   for (;;) {
@@ -121,7 +118,6 @@ static void map_merge_test(test_framework_t *tf, vmm_t *vmm)
     free_space -= PAGE_SIZE * pgs;
     tf->printf("FP: %ld\n", free_space >> PAGE_WIDTH);
     tf->printf("[OK]. (addr = %p)\n", ret);
-    vmranges_print_tree_dbg(vmm);
     vmr = vmrange_find(vmm, last_va, last_va + PAGE_SIZE * pgs, NULL);
     if (!vmr) {
       tf->printf("Can not find VM range including diapason %p -> %p\n",

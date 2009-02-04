@@ -72,6 +72,7 @@ static sync_obj_ops_t __rawevent_ops = {
   .dtor=sync_default_dtor,
 };
 
+#if 0
 static bool __uevent_sched_handler(void *data)
 {
   wqueue_task_t *wt=(wqueue_task_t *)data;
@@ -79,6 +80,7 @@ static bool __uevent_sched_handler(void *data)
 
   return !e->__ecount;
 }
+#endif
 
 int sync_create_uevent(kern_sync_object_t **obj,void *uobj,
                             uint8_t *attrs,ulong_t flags)
@@ -96,7 +98,6 @@ int sync_create_uevent(kern_sync_object_t **obj,void *uobj,
   atomic_set(&e->k_syncobj.refcount,1);
 
   waitqueue_initialize(&e->__wq);
-  e->__wq.acts.sleep_if_needful=__uevent_sched_handler;
   spinlock_initialize(&e->__lock);
 
   *obj=(kern_sync_object_t*)e;

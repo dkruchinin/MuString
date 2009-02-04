@@ -31,7 +31,7 @@
 #include <eza/task.h>
 #include <eza/mutex.h>
 #include <mm/slab.h>
-#include <ds/waitqueue.h>
+#include <eza/waitqueue.h>
 #include <eza/spinlock.h>
 
 #define SYNC_OBJS_PER_PROCESS   16384

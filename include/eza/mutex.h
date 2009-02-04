@@ -24,7 +24,7 @@
 #ifndef __MUTEX_H__
 #define __MUTEX_H__
 
-#include <ds/waitqueue.h>
+#include <eza/waitqueue.h>
 #include <eza/spinlock.h>
 #include <eza/arch/types.h>
 
