@@ -1342,6 +1342,13 @@ static void __prioritized_port_test(void *ctx)
           tf->abort();
         }
 
+        /* Make sure kernel provided us with sender's TID and UID properly. */
+	if( msg_info.sender_tid != t->tid || msg_info.sender_uid != t->uid ) {
+          tf->printf(SERVER_THREAD"[PRIO PORT] Wrong sender info ! TID (%d:%d), UID (%d:%d)\n",
+                     t->tid,msg_info.sender_tid,t->uid,msg_info.sender_uid);
+          tf->abort();
+	}
+
         /* OK, now compare priority */
         if( t->static_priority != prio ) {
           tf->printf(SERVER_THREAD"[PRIO PORT]: Priority mismatch ! %d instead of %d\n",

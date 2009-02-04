@@ -380,6 +380,9 @@ static status_t __transfer_message_data_to_receiver(ipc_port_message_t *msg,
       info.sender_pid=msg->sender->pid;
       info.msg_id=msg->id;
       info.msg_len=recv_len;
+      info.sender_tid=msg->sender->tid;
+      info.sender_uid=msg->sender->uid;
+
       if( copy_to_user(stats,&info,sizeof(info)) ) {
         r=-EFAULT;
       }
