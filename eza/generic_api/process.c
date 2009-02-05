@@ -209,10 +209,6 @@ static bool __check_task_exec_attrs(exec_attrs_t *ea)
   valid=valid_user_address(ea->stack);
   valid *=valid_user_address(ea->entrypoint);
 
-  if( ea->arg ) {
-    valid *=valid_user_address(ea->arg);
-  }
-
   if( ea->per_task_data ) {
     valid *=valid_user_address(ea->per_task_data);
   }
