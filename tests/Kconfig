@@ -45,4 +45,8 @@ config TEST_VMA
        bool "Test general VMA functinality"
        default n
 
+config TEST_RWSEM
+       bool "Test Read/Write semaphore"
+       default n
+
 endif

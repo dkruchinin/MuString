@@ -351,7 +351,6 @@ int sleep(ulong_t ticks)
     }
     sched_change_task_state_deferred(current_task(),TASK_STATE_SLEEPING,
                                      __sleep_timer_lazy_routine,&timer);
-
     delete_timer(&timer);
   }
   return 0;

@@ -55,6 +55,7 @@ void pqueue_insert_core(pqueue_t *pq, pqueue_node_t *pq_node, prio_t prio)
   }
 
   list_add_before(next, &pq_node->node);
+  ASSERT(list_is_empty(&pq_node->head));
 }
 
 void pqueue_delete_core(pqueue_t *pq, pqueue_node_t *pq_node)

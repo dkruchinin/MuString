@@ -52,7 +52,7 @@ static inline bool mutex_is_locked(mutex_t *mutex)
 
 #define MUTEX_INITIALIZE(name)                  \
     {       .lock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V),  \
-            .wq = WQUEUE_INITIALIZE_PRIO((name).wq),             \
+            .wq = WQUEUE_INITIALIZE((name).wq),                  \
             .executer = NULL,   }
 
 void mutex_initialize(mutex_t *mutex);

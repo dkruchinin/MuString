@@ -118,10 +118,10 @@ void waitqueue_dump(wqueue_t *wq);
 #endif /* CONFIG_DEBUG_WAITQUEUE */
 
 
-#define WQUEUE_DEFINE_PRIO(name)                \
-    wqueue_t (name) = WQUEUE_INITIALIZE_PRIO(name)
+#define WQUEUE_DEFINE(name)                     \
+    wqueue_t (name) = WQUEUE_INITIALIZE(name)
 
-#define WQUEUE_INITIALIZE_PRIO(name)                                  \
+#define WQUEUE_INITIALIZE(name)                                       \
   {   .pqueue = PQUEUE_INITIALIZE((name).pqueue),                     \
       .num_waiters = 0,  }
 
