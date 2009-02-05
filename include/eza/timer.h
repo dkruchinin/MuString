@@ -99,5 +99,9 @@ void timer_cleanup_expired_ticks(void);
   TIMER_TICK_INIT(&(t)->minor_tick,(t)->time_x);         \
   (t)->da.priority=current_task()->priority
 
+#define TIMER_RESET_TIME(_t,_tx)                \
+  (_t)->time_x=(_tx);                           \
+  (_t)->minor_tick.time_x=(_tx)
+
 #endif /*__EZA_TIMER_H__*/
 

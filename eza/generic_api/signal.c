@@ -90,7 +90,7 @@ bool update_pending_signals(task_t *task)
  * -ENOMEM: no memory for a new queue item.
  */
 static status_t __send_task_siginfo(task_t *task,siginfo_t *info,
-                                    bool force_delivery)
+                                    void *kern_priv,bool force_delivery)
 {
   int sig=info->si_signo;
   status_t r;
@@ -118,6 +118,7 @@ static status_t __send_task_siginfo(task_t *task,siginfo_t *info,
     if( qitem ) {
       qitem->h.idx=sig;
       qitem->info=*info;
+      qitem->kern_priv=kern_priv;
 
       sigqueue_add_item(&task->siginfo.sigqueue,&qitem->h);
       r=0;
@@ -151,7 +152,7 @@ status_t send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery)
   status_t r;
 
   LOCK_TASK_SIGNALS(task);
-  r=__send_task_siginfo(task,info,force_delivery);
+  r=__send_task_siginfo(task,info,NULL,force_delivery);
   UNLOCK_TASK_SIGNALS(task);
 
   if( !r ) {
@@ -163,7 +164,7 @@ status_t send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery)
   return r < 0 ? r : 0;
 }
 
-static status_t __send_signal_to_process(pid_t pid,siginfo_t *siginfo)
+status_t send_process_siginfo(pid_t pid,siginfo_t *siginfo,void *kern_priv)
 {
   task_t *root=pid_to_task(pid);
   task_t *target=NULL;
@@ -230,7 +231,7 @@ static status_t __send_signal_to_process(pid_t pid,siginfo_t *siginfo)
   }
 
 send_signal:
-  __send_task_siginfo(target,siginfo,false);
+  __send_task_siginfo(target,siginfo,kern_priv,false);
   UNLOCK_TASK_SIGNALS(target);
 
   if( unlock_childs ) {
@@ -247,7 +248,7 @@ status_t sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
   siginfo_t k_siginfo;
 
   if( !valid_signal(sig) ) {
-    kprintf("sys_kill: bad signal %d!\n",sig);
+    kprintf_dbg("sys_kill: bad signal %d!\n",sig);
     return -EINVAL;
   }
 
@@ -277,7 +278,7 @@ status_t sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
     /* Send signal to every process in process group we belong to. */
   } else if( pid > 0 ) {
     /* Send signal to target process. */
-    r=__send_signal_to_process(pid,&k_siginfo);
+    r=send_process_siginfo(pid,&k_siginfo,NULL);
   } else if( pid == -1 ) {
     /* Send signal to all processes except the init process. */
   } else {
@@ -287,7 +288,7 @@ status_t sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
   return r;
 }
 
-status_t sys_sigprocmask(int how,const sigset_t *set,sigset_t *oldset)
+status_t sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset)
 {
   task_t *target=current_task();
   sigset_t kset,wset;
@@ -426,8 +427,6 @@ status_t sys_signal(int sig,sa_handler_t handler)
   sigemptyset(act.sa_mask);
 
   r=sigaction(&act,&oact,sig);
-  kprintf( "sys_signal(%d,%p): %d\n",
-           sig,handler,r);
   return !r ? (status_t)oact.a.sa_sigaction : r;
 }
 

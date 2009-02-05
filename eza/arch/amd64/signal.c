@@ -31,6 +31,9 @@
 #include <eza/arch/current.h>
 #include <kernel/vm.h>
 #include <eza/process.h>
+#include <eza/timer.h>
+#include <eza/posix.h>
+#include <mlibc/kprintf.h>
 
 #define XMM_CTX_SIZE  512
 
@@ -75,12 +78,12 @@ static status_t __setup_trampoline_ctx(struct __signal_context *__user ctx,
   if( copy_to_user(&ctx->trampl_ctx.handler,&kt,sizeof(kt)) ) {
     return -EFAULT;
   }
-/*
-  kprintf( "TRAMPLCTX: %p, handler: %p, arg1=%p,arg2=%p,arg3=%p\n",
-           &ctx->trampl_ctx,
-           ctx->trampl_ctx.handler,ctx->trampl_ctx.arg1,
-           ctx->trampl_ctx.arg2,ctx->trampl_ctx.arg3);
-*/
+
+  kprintf_dbg( "TRAMPLCTX: %p, handler: %p, arg1=%p,arg2=%p,arg3=%p\n",
+               &ctx->trampl_ctx,
+               ctx->trampl_ctx.handler,ctx->trampl_ctx.arg1,
+               ctx->trampl_ctx.arg2,ctx->trampl_ctx.arg3);
+
   return 0;
 }
 
@@ -172,8 +175,8 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
 
   sigitem=extract_one_signal_from_queue(caller);
   if( !sigitem ) {
-    kprintf("** No signals for delivery for %d/%d !\n",
-            current_task()->pid,current_task()->tid);
+    kprintf_dbg("** No signals for delivery for %d/%d !\n",
+                current_task()->pid,current_task()->tid);
     for(;;);
   }
 
@@ -220,6 +223,37 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
     }
   }
 
+  if( sigitem->kern_priv ) {
+    /* Have to perform some signal-related kernel work (for example,
+     * rearm the timer related to this signal).
+     */
+    posix_stuff_t *stuff=caller->posix_stuff;
+    posix_timer_t *ptimer=(posix_timer_t *)sigitem->kern_priv;
+
+    LOCK_POSIX_STUFF_W(stuff);
+    if( ptimer->interval ) {
+      ulong_t next_tick=ptimer->ktimer.time_x+ptimer->interval;
+      ulong_t overrun;
+
+      /* Calculate overrun for this timer,if any. */
+      if( next_tick <= system_ticks ) {
+        overrun=(system_ticks-ptimer->ktimer.time_x)/ptimer->interval;
+        next_tick=system_ticks%ptimer->interval+ptimer->interval;
+      } else {
+        overrun=0;
+      }
+
+      /* Rearm this timer. */
+      ptimer->overrun=overrun;
+      TIMER_RESET_TIME(&ptimer->ktimer,next_tick);
+      add_timer(&ptimer->ktimer);
+
+      kprintf_dbg("[++] Rearming timer: TICK=%d,interval=%d,next_tick=%d, OVRRUN: %d\n",
+                  system_ticks,ptimer->interval,next_tick,overrun);
+    }
+    UNLOCK_POSIX_STUFF_W(stuff);
+  }
+
 out_recalc:
   update_pending_signals(current_task());
   free_sigqueue_item(sigitem);
@@ -234,12 +268,12 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
 {
   ulong_t uworks=read_task_pending_uworks(current_task());
 
-  kprintf("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
-          reason,retcode,
-          current_task()->pid,current_task()->tid,
-          kstack);
-  kprintf("[UWORKS]: UWORKS=0x%X\n",
-          uworks);
+  kprintf_dbg("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
+              reason,retcode,
+              current_task()->pid,current_task()->tid,
+              kstack);
+  kprintf_dbg("[UWORKS]: UWORKS=0x%X\n",
+              uworks);
 
   /* First, check for pending disintegration requests. */
   if( uworks & ARCH_CTX_UWORKS_DISINT_REQ_MASK ) {
@@ -254,8 +288,8 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
 
   /* Next, check for pending signals. */
   if( uworks & ARCH_CTX_UWORKS_SIGNALS_MASK ) {
-    kprintf("[UWORKS]: Pending signals: 0x%X\n",
-            current_task()->siginfo.pending);
+    kprintf_dbg("[UWORKS]: Pending signals: 0x%X\n",
+                current_task()->siginfo.pending);
     __handle_pending_signals(reason,retcode,kstack);
   }
 }

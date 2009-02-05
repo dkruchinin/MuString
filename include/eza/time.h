@@ -57,9 +57,13 @@ typedef enum __posix_timer_command {
   __POSIX_TIMER_GETOVERRUN=2,
 } posix_timer_command_t;
 
-#define NANOSLEEP_MAX_SECS  1000000000
+#define NANOSLEEP_MAX_SECS   1000000000
+#define NANOSLEEP_MAX_NSECS  1000000000
 
-ulong_t time_to_ticks(timeval_t *tv);
+#define timeval_is_valid(t)  ((t)->tv_sec < NANOSLEEP_MAX_SECS &&       \
+                              (t)->tv_nsec < NANOSLEEP_MAX_NSECS )
+
+#define time_to_ticks(_tv)  (timeval_is_valid((_tv)) ? (_tv)->tv_sec*HZ + (_tv)->tv_nsec/(NANOSLEEP_MAX_NSECS/HZ) : 0 )
 
 #endif
 

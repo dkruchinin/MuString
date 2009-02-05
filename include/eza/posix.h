@@ -38,6 +38,7 @@ typedef struct __posix_kern_obj {
 typedef struct __posix_timer {
   posix_kern_obj_t kpo;
   ktimer_t ktimer;
+  ulong_t interval,overrun;
 } posix_timer_t;
 
 #define LOCK_POSIX_STUFF_W(p)

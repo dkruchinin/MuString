@@ -31,7 +31,7 @@ posix_stuff_t *allocate_task_posix_stuff(void)
     for(i=0;i<CONFIG_POSIX_HASH_GROUPS;i++) {
       list_init_head(&stuff->list_hash[i]);
     }
-    stuff->active_timers=0;
+    stuff->timers=0;
     idx_allocator_initialize(&stuff->posix_ids,CONFIG_POSIX_MAX_OBJECTS);
   }
 

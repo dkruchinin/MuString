@@ -127,7 +127,7 @@ void process_timers(void)
     UNLOCK_MAJOR_TIMER_TICK(major_tick,is);
 
     if( tt ) { /* Let's handle all the timers we have found. */
-      kprintf("> Scheduling timers for %d.\n",tt->time_x);
+      kprintf_dbg("process_timers(): Scheduling timers for %d.\n",tt->time_x);
       schedule_deffered_actions(&tt->actions);
     }
   }
@@ -184,7 +184,7 @@ long add_timer(ktimer_t *t)
   list_head_t *lh;
   list_node_t *ln;
 
-  if( !t->time_x ) {
+  if( !t->time_x || !t->minor_tick.time_x ) {
     return -EINVAL;
   }
 
