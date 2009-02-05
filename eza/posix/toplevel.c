@@ -195,6 +195,7 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
       r=__get_timer_status(ptimer,(itimerspec_t *)arg1);
       break;
     case __POSIX_TIMER_GETOVERRUN:
+      r=ptimer->overrun;
       break;
     default:
       r=-EINVAL;
@@ -202,5 +203,5 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
   }
 
   release_posix_timer(ptimer);
-  return (r >= 0) ? 0 : r;
+  return r;
 }

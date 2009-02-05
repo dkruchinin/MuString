@@ -260,7 +260,6 @@ long add_timer(ktimer_t *t)
     } else {
       /* Expired while allocating a new major tick. */
       UNLOCK_SW_TIMERS(is);
-      r=1;
       goto out;
     }
   major_tick_found:
