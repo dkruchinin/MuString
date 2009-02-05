@@ -65,5 +65,9 @@ typedef enum __posix_timer_command {
 
 #define time_to_ticks(_tv)  (timeval_is_valid((_tv)) ? (_tv)->tv_sec*HZ + (_tv)->tv_nsec/(NANOSLEEP_MAX_NSECS/HZ) : 0 )
 
+#define ticks_to_time(_t,_ticks) do {                           \
+    (_t)->tv_sec=(_ticks)/HZ;                                   \
+    (_t)->tv_nsec=((_ticks) % HZ)*(NANOSLEEP_MAX_NSECS/HZ);     \
+  } while(0)
 #endif
 

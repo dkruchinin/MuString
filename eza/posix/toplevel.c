@@ -26,6 +26,7 @@
 #include <kernel/vm.h>
 #include <eza/errno.h>
 #include <eza/signal.h>
+#include <eza/arch/interrupt.h>
 
 long sys_timer_create(clockid_t clockid,struct sigevent *evp,
                       posixid_t *timerid)
@@ -57,6 +58,7 @@ long sys_timer_create(clockid_t clockid,struct sigevent *evp,
     return -ENOMEM;
   }
 
+  memset(ptimer,0,sizeof(*ptimer));
   stuff=caller->posix_stuff;
 
   LOCK_POSIX_STUFF_W(stuff);
@@ -112,6 +114,27 @@ out:
   return r;
 }
 
+static long __get_timer_status(posix_timer_t *ptimer,itimerspec_t *userspec)
+{
+  itimerspec_t kspec;
+  ktimer_t *timer=&ptimer->ktimer;
+
+  ticks_to_time(&kspec.it_interval,ptimer->interval);
+
+  /* We disable interrupts to prevent us from being preempted, and,
+   * therefore, from calculating wrong time delta.
+   */
+  interrupts_disable();
+  if( timer->time_x > system_ticks ) {
+    ticks_to_time(&kspec.it_value,timer->time_x - system_ticks);
+  } else {
+    kspec.it_value.tv_sec=kspec.it_value.tv_nsec=0;
+  }
+  interrupts_enable();
+
+  return copy_to_user(userspec,&kspec,sizeof(kspec)) ? -EFAULT : 0;
+}
+
 long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
 {
   long r=0;
@@ -119,10 +142,13 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
   posix_stuff_t *stuff=caller->posix_stuff;
   posix_timer_t *ptimer=posix_lookup_timer(stuff,id);
   itimerspec_t tspec;
+  ktimer_t *ktimer;
 
   if( !ptimer ) {
     return -EINVAL;
   }
+
+  ktimer=&ptimer->ktimer;
 
   switch( cmd ) {
     case __POSIX_TIMER_SETTIME:
@@ -133,8 +159,18 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
       if( !arg2 || copy_from_user(&tspec,(void *)arg2,sizeof(tspec)) ) {
         r=-EFAULT;
       } else {
+        /* Copy to userspace the rest of the expiration time in advance
+         * to avoid timer cleanup in case user provided a bad area.
+         */
+        if( arg3 ) {
+          r=__get_timer_status(ptimer,(itimerspec_t *)arg3 );
+          if( r ) {
+            break;
+          }
+        }
+
         if( !(tspec.it_value.tv_sec | tspec.it_value.tv_nsec) ) {
-          if( ptimer->ktimer.time_x ) {
+          if( ktimer->time_x ) {
             /* Disarm real timer  */
           }
         } else {
@@ -149,13 +185,14 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
             }
 
             ptimer->interval=time_to_ticks(&tspec.it_interval);
-            TIMER_RESET_TIME(&ptimer->ktimer,tx);
-            r=add_timer(&ptimer->ktimer);
+            TIMER_RESET_TIME(ktimer,tx);
+            r=add_timer(ktimer);
           }
         }
       }
       break;
     case __POSIX_TIMER_GETTIME:
+      r=__get_timer_status(ptimer,(itimerspec_t *)arg1);
       break;
     case __POSIX_TIMER_GETOVERRUN:
       break;
