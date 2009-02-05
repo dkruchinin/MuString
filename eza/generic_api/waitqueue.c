@@ -49,15 +49,15 @@ int waitqueue_insert_core(wqueue_t *wq, wqueue_task_t *wq_task, wqueue_insop_t i
     /* Check for pending actions. */
     if (likely(!task_was_interrupted(wq_task->task)))
       goto out;
-        
-    ret = -EINTR;      
+
+    ret = -EINTR;
     remove_task:
     wq->num_waiters--;
     wq_task->wq = NULL;
     pqueue_delete_core(&wq->pqueue, &wq_task->pq_node);
   }
   
-  out:  
+  out:
   return ret;
 }
 
@@ -85,7 +85,7 @@ int waitqueue_pop(wqueue_t *wq, task_t **task)
   pqn = pqueue_pick_min_core(&wq->pqueue);
   ASSERT(pqn != NULL);
   if (task)
-    *task = ((wqueue_task_t *)container_of(pqn, wqueue_task_t, pq_node))->task;
+    *task = (container_of(pqn, wqueue_task_t, pq_node))->task;
 
   waitqueue_delete_core(container_of(pqn, wqueue_task_t, pq_node), WQ_DELETE_WAKEUP);
   out:
@@ -113,9 +113,9 @@ int waitqueue_delete(wqueue_task_t *wq_task, wqueue_delop_t dop)
 int waitqueue_delete_core(wqueue_task_t *wq_task, wqueue_delop_t dop)
 {
   int ret = 0;
-  wqueue_t *wq = wq_task->q;
+  wqueue_t *wq = wq_task->wq;
 
-  if(!wq_task->q)
+  if(!wq_task->wq)
     return 0;
   if (waitqueue_is_empty(wq))
     panic("__waitqueue_delete: Hey! Someone is trying to remove task from an empty wait queue. Liar!\n");

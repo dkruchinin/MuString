@@ -48,7 +48,7 @@ static int __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
 
         waitqueue_prepare_task(&wt,current_task());
         wt.private=e;
-        waitqueue_push(&e->__wq,&wt);
+        waitqueue_push_intr(&e->__wq,&wt);
 
         __LOCK_EVENT(e);
       }

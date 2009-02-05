@@ -52,7 +52,6 @@ typedef struct __wait_queue {
 typedef struct __wqueue_task {
   wqueue_t *wq;
   struct __task_struct *task; /**< The task itself */
-  wqueue_t *q;       /**< A pointer to parent wait queue */
   pqueue_node_t pq_node;
   void *private;
 } wqueue_task_t;
@@ -94,7 +93,7 @@ static inline bool waitqueue_is_empty(wqueue_t *wq)
 static inline void waitqueue_prepare_task(wqueue_task_t *wq_task, struct __task_struct *task)
 {
   wq_task->task = task;
-  wq_task->q = NULL;
+  wq_task->wq = NULL;
 }
 
 #define waitqueue_push(wq, wq_task)                     \

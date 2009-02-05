@@ -1,5 +1,5 @@
 #include <test.h>
-#include <ds/waitqueue.h>
+#include <eza/waitqueue.h>
 #include <kernel/syscalls.h>
 #include <eza/task.h>
 #include <eza/arch/atomic.h>
@@ -38,12 +38,12 @@ static void wq_test_thread(void *ctx)
 
   waitqueue_prepare_task(&wqt, current_task());  
   atomic_inc(&wqt_main.sleepers);
-  ret = waitqueue_push(&wqt_main.wq, &wqt);
+  ret = waitqueue_push_intr(&wqt_main.wq, &wqt);
   if (ret) {
     tctx->tf->printf("Can't push thread %d\n");
     tctx->tf->abort();
   }
-
+  
   atomic_dec(&wqt_main.sleepers);
 }
 
@@ -67,7 +67,7 @@ static void wq_tests_runner(void *ctx)
   waitqueue_dump(&wqt_main.wq);
   /* sort priorities */
   for (i = 0; i < WQ_NPRIORS; i++) {
-    for (j = i; j < WQ_NPRIORS; j++) {
+    for (j = i + 1; j < WQ_NPRIORS; j++) {
       if (WQ_TEST_PRIORS[j] < WQ_TEST_PRIORS[i]) {
         priority_t tmp = WQ_TEST_PRIORS[j];
 
@@ -88,10 +88,17 @@ static void wq_tests_runner(void *ctx)
       tf->abort();
     }
     if (task->static_priority != WQ_TEST_PRIORS[i++]) {
-      tf->printf("Popped task with priority %d, but %d was expected!");
+      tf->printf("Popped task with priority %d, but %d was expected!\n",
+                 task->static_priority, WQ_TEST_PRIORS[i - 1]);
+      kprintf("PRIORS: [ ");
+      for (i = 0; i < WQ_NPRIORS; i++)
+        kprintf("%d, ", WQ_TEST_PRIORS[i]);
+      kprintf("]\n");
+      waitqueue_dump(&wqt_main.wq);
       tf->abort();
     }
   }
+  
   while (atomic_get(&wqt_main.sleepers));
   tf->printf("Ok, all guys are waked up now.\n");
   waitqueue_dump(&wqt_main.wq);

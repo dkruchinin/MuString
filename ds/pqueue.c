@@ -37,27 +37,27 @@ void pqueue_insert_core(pqueue_t *pq, pqueue_node_t *pq_node, prio_t prio)
   list_node_t *next = NULL;
   
   pq_node->prio = prio;
-  list_init_head(&pq->queue);
+  list_init_head(&pq_node->head);
   next = list_head(&pq->queue);
-  while (likely(!list_is_empty(&pq->queue))) {
+  if (likely(!list_is_empty(&pq->queue))) {
     pqueue_node_t *n;
 
-    list_for_each(&pq->queue, n, next) {
+    list_for_each_entry(&pq->queue, n, node) {
       if (n->prio > pq_node->prio) {
         next = &n->node;
         break;
       }
       else if (n->prio == pq_node->prio) {
-        next = list_head(&pq->head);
-        break
+        next = list_head(&n->head);
+        break;
       }
     }
   }
 
-  list_add(next, &pq_node->node);
+  list_add_before(next, &pq_node->node);
 }
 
-void pqueue_delete_core(pqueue_t *pq, pq_node_t *pq_node)
+void pqueue_delete_core(pqueue_t *pq, pqueue_node_t *pq_node)
 {
   pqueue_node_t *n;
 
@@ -70,12 +70,13 @@ void pqueue_delete_core(pqueue_t *pq, pq_node_t *pq_node)
   }
 
   list_del(&pq_node->node);
+  list_init_head(&pq_node->head);
 }
 
 void pqueue_insert(pqueue_t *pq, pqueue_node_t *pq_node, prio_t prio)
 {
   spinlock_lock(&pq->qlock);
-  pqueue_insert_core(pq, pq_node);
+  pqueue_insert_core(pq, pq_node, prio);
   spinlock_unlock(&pq->qlock);
 }
 
@@ -86,7 +87,7 @@ void pqueue_delete(pqueue_t *pq, pqueue_node_t *pq_node)
     return;
   }
 
-  splinlock_lock(&pq->qlock);
+  spinlock_lock(&pq->qlock);
   pqueue_delete_core(pq, pq_node);
   spinlock_unlock(&pq->qlock);
 }
@@ -104,12 +105,16 @@ pqueue_node_t *pqueue_pick_min(pqueue_t *pq)
   return min;
 }
 
-void pqueue_delete_min(pqueue_t *pq)
+pqueue_node_t *pqueue_delete_min(pqueue_t *pq)
 {
+  pqueue_node_t *pqn = NULL;
+  
   if (pqueue_is_empty(pq))
-    return;
+    return pqn;
 
   spinlock_lock(&pq->qlock);
-  pqueue_delete_min_core(pq);
+  pqn = pqueue_delete_min_core(pq);
   spinlock_unlock(&pq->qlock);
+
+  return pqn;
 }
