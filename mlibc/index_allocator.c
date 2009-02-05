@@ -50,6 +50,7 @@ int idx_allocator_get_entry(idx_allocator_t *ia)
       if( idx == INVALID_BIT_INDEX ) {
         idx=-1;
       } else {
+        reset_and_test_bit_mem(ia->entries.bitmap,idx);
         ia->values_left--;
       }
     }

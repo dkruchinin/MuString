@@ -44,6 +44,7 @@
 #include <eza/sync.h>
 #include <eza/signal.h>
 #include <eza/sigqueue.h>
+#include <eza/posix.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
@@ -323,6 +324,22 @@ static status_t __setup_signals(task_t *task,task_t *parent,ulong_t flags)
   return 0;
 }
 
+static status_t __setup_posix(task_t *task,task_t *parent,
+                              task_privelege_t priv,ulong_t flags)
+{
+  if( (flags & CLONE_MM) && priv != TPL_KERNEL ) {
+    task->posix_stuff=parent->posix_stuff;
+    atomic_inc(&task->posix_stuff->use_counter);
+    return 0;
+  } else {
+    task->posix_stuff=allocate_task_posix_stuff();
+    if( task->posix_stuff ) {
+      return 0;
+    }
+    return -ENOMEM;
+  }
+}
+
 status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t,
                          task_creation_attrs_t *attrs)
 {
@@ -408,6 +425,11 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
     goto free_uevents;
   }
 
+  r=__setup_posix(task,parent,priv,flags);
+  if( r ) {
+    goto free_signals;
+  }
+  
   /* Setup task's initial state. */
   task->state = TASK_STATE_JUST_BORN;
   task->cpu = cpu_id();
@@ -421,6 +443,8 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
 
   *t = task;
   return 0;
+free_signals:
+  /* TODO: [mt] Free signals data properly. */
 free_uevents:
   /* TODO: [mt] Free userspace events properly. */
 free_sync_data:

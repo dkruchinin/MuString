@@ -67,7 +67,6 @@ typedef struct __siginfo {
   int      si_fd;       /* File descriptor */
 } siginfo_t;
 
-
 #define INIT_SIGINFO_CURR(s)  do {              \
   memset((s),0,sizeof(siginfo_t));              \
   (s)->si_pid=current_task()->pid;              \
@@ -188,6 +187,7 @@ static inline void put_signal_handlers(sighandlers_t *s)
 typedef struct __sigq_item {
   sq_header_t h;   /* Must be the first member ! */
   siginfo_t info;
+  void *kern_priv;  /* Kernel private data for deffered signal processing. */
 } sigq_item_t;
 
 void initialize_signals(void);
@@ -197,6 +197,8 @@ sigq_item_t *extract_one_signal_from_queue(task_t *task);
 #define pending_signals_present(t) ((t)->siginfo.pending != 0)
 
 status_t send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery);
+status_t send_process_siginfo(pid_t pid,siginfo_t *siginfo,void *kern_priv);
+
 bool update_pending_signals(task_t *task);
 status_t send_task_siginfo_forced(task_t *task,siginfo_t *info);
 sighandlers_t * allocate_signal_handlers(void);

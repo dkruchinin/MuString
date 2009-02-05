@@ -37,23 +37,21 @@ typedef uint16_t da_counter_t;
 
 typedef struct __percpu_def_actions {
   list_head_t pending_actions;
-  ulong_t num_actions,executers;
+  ulong_t executers;
   spinlock_t lock;
-  long fired_actions_bitmap[__DA_BITMASK_SIZE];
-  long pending_actions_bitmap[__DA_BITMASK_SIZE];
-  da_counter_t fired_actions_counters[SCHED_PRIO_MAX];
 } percpu_def_actions_t;
 
 typedef enum __def_action_type {
   DEF_ACTION_EVENT,
   DEF_ACTION_SIGACTION,
+  DEF_ACTION_UNBLOCK,
 } def_action_type_t;
 
-#define __DEF_ACT_PENDING_BIT_IDX     0
+#define __DEF_ACT_FIRED_BIT_IDX     0
 #define __DEF_ACT_SINGLETON_BIT_IDX   16
 
 typedef enum {
-  __DEF_ACT_PENDING_MASK=(1<<__DEF_ACT_PENDING_BIT_IDX),
+  __DEF_ACT_FIRED_MASK=(1<<__DEF_ACT_FIRED_BIT_IDX),
   __DEF_ACT_SINGLETON_MASK=(1<<__DEF_ACT_SINGLETON_BIT_IDX),
 } def_action_masks_t;
 
@@ -62,22 +60,24 @@ typedef struct __deffered_irq_action {
   def_action_type_t type;
   list_head_t head;
   list_node_t node;
-  task_t *target;
+  ulong_t priority;
+  spinlock_t *__lock;
+  void *kern_priv;
 
   union {
-    event_t _event;
-    struct sigevent _sigevent;
+    event_t _event;         /* DEF_ACTION_EVENT */
+    siginfo_t siginfo;      /* DEF_ACTION_SIGACTION */
+    task_t *target;         /* DEF_ACTION_UNBLOCK */
   } d;
-  percpu_def_actions_t *host;
 } deffered_irq_action_t;
 
 #define DEFFERED_ACTION_INIT(da,t,f)    do {    \
-  list_init_head(&(da).head);                   \
-  list_init_node(&(da).node);                   \
-  (da).target=NULL;                             \
-  (da).type=(t);                                \
-  (da).flags=(f);                               \
-  (da).host=NULL;                               \
+  list_init_head(&(da)->head);                   \
+  list_init_node(&(da)->node);                   \
+  (da)->type=(t);                                \
+  (da)->flags=(f);                               \
+  (da)->__lock=NULL;                             \
+  (da)->kern_priv=NULL;                          \
   } while(0)
 
 void initialize_deffered_actions(void);
@@ -85,5 +85,6 @@ void initialize_deffered_actions(void);
 void schedule_deffered_action(deffered_irq_action_t *a);
 void fire_deffered_actions(void);
 void execute_deffered_action(deffered_irq_action_t *a);
+void schedule_deffered_actions(list_head_t *actions);
 
 #endif

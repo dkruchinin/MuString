@@ -31,6 +31,7 @@
 #include <eza/arch/current.h>
 #include <eza/event.h>
 #include <eza/arch/bits.h>
+#include <config.h>
 
 static percpu_def_actions_t cpu_actions[CONFIG_NRCPUS];
 
@@ -46,60 +47,97 @@ void initialize_deffered_actions(void)
   }
 }
 
-void schedule_deffered_action(deffered_irq_action_t *a) {
+void schedule_deffered_actions(list_head_t *actions)
+{
   percpu_def_actions_t *acts=&cpu_actions[cpu_id()];
-  long is,old_acts;
+  long is;
+  deffered_irq_action_t *a;
 
   spinlock_lock_irqsave(&acts->lock,is);
-  old_acts=acts->num_actions;
 
-  if( a->flags & __DEF_ACT_SINGLETON_MASK ) { /* Singleton. */
-    if( !arch_bit_test_and_set(&a->flags,__DEF_ACT_PENDING_BIT_IDX) ) {
-      if( list_is_empty(&acts->pending_actions) ) {
-        list_add2tail(&acts->pending_actions,&a->node);
-      } else {
-        list_node_t *next=acts->pending_actions.head.next,*prev=NULL;
-        deffered_irq_action_t *da;
-        bool inserted=false;
+  if( list_is_empty(&acts->pending_actions) ) {
+    list_move2head(&acts->pending_actions,actions);
+    a=container_of(list_node_first(&acts->pending_actions),
+                   deffered_irq_action_t,node);
 
-        /* Update pending bitmask. */
-        set_and_test_bit_mem(acts->pending_actions_bitmap,
-                             a->target->static_priority);
-
-        do {
-          da=container_of(next,deffered_irq_action_t,node);
-          if( da->target->static_priority > a->target->static_priority ) {
-            break;
-          } else if( da->target->static_priority == a->target->static_priority ) {
-            list_add2tail(&da->head,&a->node);
-            inserted=true;
-            break;
-          }
-          prev=next;
-          next=next->next;
-        } while( next != list_head(&acts->pending_actions) );
-
-        a->host=acts;
-
-        if( !inserted ) {
-          if( prev != NULL ) {
-            a->node.next=prev->next;
-            prev->next->prev=&a->node;
-            prev->next=&a->node;
-            a->node.prev=prev;
-          } else {
-            list_add2head(&acts->pending_actions,&a->node);
-          }
-        }
-      }
-      acts->num_actions++;
+    if( a->priority <= current_task()->priority ) {
+      arch_sched_set_def_works_pending();
     }
   } else {
+  repeat:
+    while( !list_is_empty(actions) ) {
+      list_node_t *ln,*sln;
+      a=container_of(list_node_first(actions),deffered_irq_action_t,node);
+
+      list_del(&a->node);
+
+      if( a->priority <= current_task()->priority ) {
+        arch_sched_set_def_works_pending();
+      }
+
+      list_for_each_safe(&acts->pending_actions,ln,sln) {
+        deffered_irq_action_t *da=container_of(ln,deffered_irq_action_t,node);
+
+        if( da->priority > a->priority ) {
+          list_insert_before(&a->node,ln);
+          goto repeat;
+        } else if( da->priority == a->priority ) {
+          list_add2tail(&da->head,&a->node);
+
+          if( !list_is_empty(&a->head) ) {
+            list_move2tail(&da->head,&a->head);
+          }
+          goto repeat;
+        }
+      }
+      list_add2tail(&acts->pending_actions,&a->node);
+    }
+  }
+
+  spinlock_unlock_irqrestore(&acts->lock,is);
+}
+
+void schedule_deffered_action(deffered_irq_action_t *a) {
+  percpu_def_actions_t *acts=&cpu_actions[cpu_id()];
+  long is;
+
+  spinlock_lock_irqsave(&acts->lock,is);
+
+  if( list_is_empty(&acts->pending_actions) ) {
+    list_add2tail(&acts->pending_actions,&a->node);
+  } else {
+    list_node_t *next=acts->pending_actions.head.next,*prev=NULL;
+    deffered_irq_action_t *da;
+    bool inserted=false;
+
+    do {
+      da=container_of(next,deffered_irq_action_t,node);
+      if( da->priority > a->priority ) {
+        break;
+      } else if( da->priority == a->priority ) {
+        list_add2tail(&da->head,&a->node);
+
+        inserted=true;
+        break;
+      }
+      prev=next;
+      next=next->next;
+    } while( next != list_head(&acts->pending_actions) );
+
+    if( !inserted ) {
+      if( prev != NULL ) {
+        a->node.next=prev->next;
+        prev->next->prev=&a->node;
+        prev->next=&a->node;
+        a->node.prev=prev;
+      } else {
+        list_add2head(&acts->pending_actions,&a->node);
+      }
+    }
   }
 
   /* Current task needs to be rescheduled as soon as possible. */
-  if( acts->num_actions != old_acts &&
-      a->target->static_priority <= current_task()->priority ) {
+  if( a->priority <= current_task()->priority ) {
     arch_sched_set_def_works_pending();
   }
   spinlock_unlock_irqrestore(&acts->lock,is);
@@ -112,21 +150,27 @@ void execute_deffered_action(deffered_irq_action_t *a)
       event_raise(&a->d._event);
       break;
     case DEF_ACTION_SIGACTION:
+      kprintf_dbg("execute_deffered_action(): prio=%d. Sending signal %d to %d\n",
+                  a->priority,a->d.siginfo.si_signo,a->d.siginfo.si_pid);
+      send_process_siginfo(a->d.siginfo.si_pid,&a->d.siginfo,a->kern_priv);
+      break;
+    case  DEF_ACTION_UNBLOCK:
+      activate_task(a->d.target);
       break;
   }
 
-  arch_bit_clear(&a->flags,__DEF_ACT_PENDING_BIT_IDX);
+  arch_bit_set(&a->flags,__DEF_ACT_FIRED_BIT_IDX);
 }
 
 void fire_deffered_actions(void)
 {
   percpu_def_actions_t *acts=&cpu_actions[cpu_id()];
-  long is;
+  long is,fired;
   deffered_irq_action_t *action;
 
   /* To prevent recursive invocations. */
   spinlock_lock_irqsave(&acts->lock,is);
-  if( acts->executers || !acts->num_actions ) {
+  if( acts->executers || list_is_empty(&acts->pending_actions) ) {
     preempt_enable();
     spinlock_unlock_irqrestore(&acts->lock,is);
     return;
@@ -135,24 +179,24 @@ void fire_deffered_actions(void)
   }
   spinlock_unlock_irqrestore(&acts->lock,is);
 
+  fired=0;
   do {
+    spinlock_lock_irqsave(&acts->lock,is);
     action=NULL;
 
-    spinlock_lock_irqsave(&acts->lock,is);
-    if( acts->num_actions ) {
+    if( !list_is_empty(&acts->pending_actions) ) {
       action=container_of(list_node_first(&acts->pending_actions),
                           deffered_irq_action_t,node);
 
-      if( current_task()->priority >= action->target->static_priority &&
-          action->target->static_priority <= find_first_bit_mem(acts->fired_actions_bitmap,
-                                                                __DA_BITMASK_SIZE) ) {
+      if( current_task()->priority >= action->priority ) {
         list_node_t *prev=action->node.prev;
 
-        /* Mark this action as 'fired'. */
-        set_and_test_bit_mem(acts->fired_actions_bitmap,action->target->static_priority);
-        acts->fired_actions_counters[action->target->static_priority]++;
-
+        /* Remove action under protection of the lock. */
+        if( action->__lock ) {
+          spinlock_lock(action->__lock);
+        }
         list_del(&action->node);
+
         if( !list_is_empty(&action->head) ) {
           deffered_irq_action_t *a=container_of(list_node_first(&action->head),
                                                 deffered_irq_action_t,node);
@@ -168,8 +212,10 @@ void fire_deffered_actions(void)
           prev->next=&a->node;
         }
 
-        acts->num_actions--;
-        action->host=NULL;
+        if( action->__lock ) {
+          spinlock_unlock(action->__lock);
+        }
+
         arch_sched_set_def_works_pending();
       } else {
         /* Bad luck - current thread has higher priority than any of pending
@@ -186,8 +232,9 @@ void fire_deffered_actions(void)
 
     if( action ) {
       execute_deffered_action(action);
+      fired++;
     }
-  } while(action != NULL);
+  } while(action != NULL && fired < CONFIG_MAX_DEFERRED_ACTIONS_PER_TICK);
 
   spinlock_lock_irqsave(&acts->lock,is);
   acts->executers--;

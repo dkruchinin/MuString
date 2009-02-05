@@ -9,4 +9,20 @@ config ALWAYS_INLINE
        optimisation. Note: disabling of this option is not a very good idea, but in some
        cases(for example for debugging) it may have a sense.
 
+config TIMER_GRANULARITY
+       int "Granularity of timer major tick"
+       range 32 64 
+       default "32"
+       help
+       Granularity (in timer tick) of major tick.
+
+config MAX_DEFERRED_ACTIONS_PER_TICK
+       int "Maximum amount of deferred actions fired at one time."
+       range 1 512 
+       default "32"
+       help
+       Maximum amount of deferred interrupt actions kernel fires per at one time tick.
+       If more than such amount of deferred actions are ready for firing at the same time,
+       the rest of these actions will be processed during the next suitable suituation.
+
 endmenu
