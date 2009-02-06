@@ -154,7 +154,7 @@ void schedule(void);
 int sys_yield(void);
 long sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
 long do_scheduler_control(struct __task_struct *task, ulong_t cmd, ulong_t arg);
-int sleep(ulong_t ticks);
+long sleep(ulong_t ticks);
 
 #ifdef CONFIG_SMP
 

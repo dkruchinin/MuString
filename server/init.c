@@ -40,10 +40,10 @@
 
 #define USER_PAGES_CHUNK  64
 
-static status_t __create_empty_user_area(task_t *task,ulong_t virt,
+static int __create_empty_user_area(task_t *task,ulong_t virt,
                                          ulong_t pages,ulong_t flags)
 {
-  status_t r;
+  int r;
 
   while( pages ) {
     ulong_t to_map=(pages <= USER_PAGES_CHUNK) ? pages : USER_PAGES_CHUNK;

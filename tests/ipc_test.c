@@ -24,6 +24,7 @@
 #include <eza/errno.h>
 #include <eza/process.h>
 #include <ds/linked_array.h>
+#include <eza/usercopy.h>
 
 #define TEST_ID  "IPC subsystem test"
 #define SERVER_THREAD  "[SERVER THREAD] "
@@ -1071,7 +1072,7 @@ static long __ovf_port;
 static void __stack_overflow_client(void *ctx)
 {
   DECLARE_TEST_CONTEXT;
-  status_t r;
+  int r;
   unsigned char d[sizeof(ovf_header_t)+2];
   unsigned char *p1=&d[0];
   ovf_header_t *ovf_header=(ovf_header_t*)&d[1];
@@ -1163,7 +1164,7 @@ static void __stack_overflow_client(void *ctx)
 static void __stack_overflow_test(void *ctx)
 {
   DECLARE_TEST_CONTEXT;
-  status_t r,i;
+  int r,i;
   unsigned char d[__CP_BUFSIZE+2];
   unsigned char *p1=&d[0];
   unsigned char *dst=&d[1];

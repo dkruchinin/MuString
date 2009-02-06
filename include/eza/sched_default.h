@@ -63,11 +63,11 @@
 #define EZA_SCHED_INITIAL_TASK_PRIORITY EZA_SCHED_DEF_NONRT_PRIO
 
 /* 64-bit bits-related stuff. */
-#define SET_BITMAP_BIT(array,bit) \
-  set_and_test_bit_mem(&array->bitmap[0],bit)
+#define SET_BITMAP_BIT(array,bit)                               \
+  set_and_test_bit_mem((&array->bitmap[0]),bit)
 
 #define RESET_BITMAP_BIT(array,bit) \
-  reset_and_test_bit_mem(&array->bitmap[0],bit)
+  reset_and_test_bit_mem((&array->bitmap[0]),bit)
 
 #define FIND_FIRST_BITMAP_BIT(array) \
   find_first_bit_mem(&array->bitmap[0],EZA_SCHED_TOTAL_WIDTH)

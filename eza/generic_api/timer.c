@@ -134,9 +134,6 @@ void process_timers(void)
   }
 }
 
-void adjust_timer(timer_t *timer,long delta)
-{
-}
 
 void delete_timer(ktimer_t *timer)
 {

@@ -323,8 +323,8 @@ static int __setup_signals(task_t *task,task_t *parent,ulong_t flags)
   return 0;
 }
 
-static status_t __setup_posix(task_t *task,task_t *parent,
-                              task_privelege_t priv,ulong_t flags)
+static long __setup_posix(task_t *task,task_t *parent,
+                          task_privelege_t priv,ulong_t flags)
 {
   if( (flags & CLONE_MM) && priv != TPL_KERNEL ) {
     task->posix_stuff=parent->posix_stuff;

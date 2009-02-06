@@ -324,38 +324,6 @@ out_release:
 
 extern int sched_verbose1;
 
-static void __sleep_timer_handler(ulong_t data)
-{
-  sched_verbose1=0;
-  sched_change_task_state((task_t *)data,TASK_STATE_RUNNABLE);
-}
-
-static bool __sleep_timer_lazy_routine(void *data)
-{
-  timer_t *t=(timer_t*)data;
-  return t->time_x > system_ticks;
-}
-
-int sleep(ulong_t ticks)
-{
-  if( ticks ) {
-    timer_t timer;
-
-    init_timer(&timer);
-    timer.handler=__sleep_timer_handler;
-    timer.data=(ulong_t)current_task();
-    timer.time_x=system_ticks+ticks;
-
-    if( !add_timer(&timer) ) {
-      return -EAGAIN;
-    }
-    sched_change_task_state_deferred(current_task(),TASK_STATE_SLEEPING,
-                                     __sleep_timer_lazy_routine,&timer);
-    delete_timer(&timer);
-  }
-  return 0;
-}
-
 
 #ifdef CONFIG_SMP
 #include <eza/arch/apic.h>

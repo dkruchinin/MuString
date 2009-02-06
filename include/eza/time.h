@@ -49,8 +49,6 @@ typedef struct itimerspec {
   timeval_t it_interval,it_value;
 } itimerspec_t;
 
-#define system_ticks  swks.system_ticks_64
-
 #define TIMER_ABSTIME  0x1
 
 typedef enum __posix_timer_command {
@@ -71,5 +69,5 @@ typedef enum __posix_timer_command {
     (_t)->tv_sec=(_ticks)/HZ;                                   \
     (_t)->tv_nsec=((_ticks) % HZ)*(NANOSLEEP_MAX_NSECS/HZ);     \
   } while(0)
-#endif
 
+#endif

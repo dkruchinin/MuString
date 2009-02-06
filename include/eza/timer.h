@@ -88,10 +88,10 @@ typedef struct __major_timer_tick {
 } major_timer_tick_t;
 
 void init_timers(void);
-void init_timer(timer_t *t);
-bool add_timer(timer_t *t);
-void delete_timer(timer_t *t);
-void adjust_timer(timer_t *t,long delta);
+void init_timer(ktimer_t *t);
+long add_timer(ktimer_t *t);
+void delete_timer(ktimer_t *t);
+void adjust_timer(ktimer_t *t,long delta);
 void process_timers(void);
 void timer_cleanup_expired_ticks(void);
 

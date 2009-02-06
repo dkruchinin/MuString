@@ -89,13 +89,8 @@ bool update_pending_signals(task_t *task)
  *   1: signal wasn't queued since it was ignored.
  * -ENOMEM: no memory for a new queue item.
  */
-<<<<<<< .merge_file_MFSjnY
-static status_t __send_task_siginfo(task_t *task,siginfo_t *info,
-                                    void *kern_priv,bool force_delivery)
-=======
 static int __send_task_siginfo(task_t *task,siginfo_t *info,
-                                    bool force_delivery)
->>>>>>> .merge_file_YzDoLT
+                                    void *kern_priv,bool force_delivery)
 {
   int sig=info->si_signo;
   int r;
@@ -169,11 +164,7 @@ int send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery)
   return r < 0 ? r : 0;
 }
 
-<<<<<<< .merge_file_MFSjnY
-status_t send_process_siginfo(pid_t pid,siginfo_t *siginfo,void *kern_priv)
-=======
-static int __send_signal_to_process(pid_t pid,siginfo_t *siginfo)
->>>>>>> .merge_file_YzDoLT
+int send_process_siginfo(pid_t pid,siginfo_t *siginfo,void *kern_priv)
 {
   task_t *root=pid_to_task(pid);
   task_t *target=NULL;
@@ -297,11 +288,7 @@ int sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
   return r;
 }
 
-<<<<<<< .merge_file_MFSjnY
-status_t sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset)
-=======
-long sys_sigprocmask(int how,const sigset_t *set,sigset_t *oldset)
->>>>>>> .merge_file_YzDoLT
+long sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset)
 {
   task_t *target=current_task();
   sigset_t kset,wset;

@@ -56,7 +56,7 @@ typedef struct __posix_timer {
 
 static inline int posix_allocate_obj_id(posix_stuff_t *stuff)
 {
-  return idx_allocator_get_entry(&stuff->posix_ids);
+  return idx_allocate(&stuff->posix_ids);
 }
 
 void posix_free_obj_id(posix_stuff_t *stuff,long id);
