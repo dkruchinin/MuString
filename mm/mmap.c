@@ -31,6 +31,8 @@
 #include <mm/memobj.h>
 #include <mm/vmm.h>
 #include <mm/pfi.h>
+#include <eza/mutex.h>
+#include <eza/rwsem.h>
 #include <eza/spinlock.h>
 #include <kernel/syscalls.h>
 #include <mlibc/kprintf.h>
@@ -238,6 +240,7 @@ vmm_t *vmm_create(void)
   memset(vmm, 0, sizeof(*vmm));
   ttree_init(&vmm->vmranges_tree, __vmranges_cmp, vmrange_t, bounds);
   atomic_set(&vmm->vmm_users, 1);
+  rwsem_initialize(&vmm->rwsem);
   if (ptable_rpd_initialize(&vmm->rpd) < 0) {
     memfree(vmm);
     vmm = NULL;
@@ -504,6 +507,73 @@ int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages
   return __mmap_core(rpd, va, npages, &pfi, flags);
 }
 
+int vmm_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
+{
+  memobj_t *memobj = vmr->memobj;  
+  int ret;
+  off_t off;
+
+  ASSERT(memobj != NULL);
+  addr = PAGE_ALIGN_DOWN(addr);
+  off = addr2memobj_offs(vmr, addr);
+  if (off >= memobj->size)
+    return -EINVAL;
+  if (((pfmask & PFLT_WRITE) &&
+       ((vmr->flags & (VMR_READ | VMR_WRITE)) == VMR_READ))
+      || (vmr->flags & VMR_NONE)) {
+    return -EACCES;
+  }
+
+  mutex_lock(&memobj->mutex);
+  ret = memobj->mops.handle_page_fault(memobj, vmr, off, pfmask);
+  mutex_unlock(&memobj->mutex);
+  return ret;
+}
+
+long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, int memobj_id, off_t offset)
+{
+  memobj_t *memobj;
+  vmm_t *vmm = current_task()->task_mm;
+  long ret;
+
+  if (flags & VMR_ANON) {
+    memobj = memobj_find_by_id(NULL_MEMOBJ_ID);
+    ASSERT(memobj != NULL);    
+  }
+  else {
+    if (!memobj_id || (offset & PAGE_MASK)
+        || ((prot & VMR_FIXED) && (flags & PAGE_MASK)))
+      return -EINVAL;
+
+    memobj = memobj_find_by_id(memobj_id);
+    if (!memobj)
+      return -ENOENT;
+  }
+  if (!size)
+    return -EINVAL;
+  
+  addr = PAGE_ALIGN_DOWN(addr);
+  rwsem_down_write(&vmm->rwsem);
+  ret = vmrange_map(memobj, vmm, addr, size >> PAGE_WIDTH,
+                    (prot & VMR_PROTO_MASK) | (flags << VMR_FLAGS_OFFS), offset >> PAGE_WIDTH);
+  rwsem_up_write(&vmm->rwsem);
+
+  return ret;
+}
+
+void sys_munmap(uintptr_t addr, size_t length)
+{
+  vmm_t *vmm = current_task()->task_mm;
+  
+  addr = PAGE_ALIGN_DOWN(addr);
+  length = PAGE_ALIGN_DOWN(length);
+  if (!addr || !length || !valid_user_address_range(addr, length))
+    return;
+
+  rwsem_down_write(&vmm->rwsem);
+  unmap_vmranges(vmm, addr, length >> PAGE_WIDTH);
+  rwsem_up_write(&vmm->rwsem);
+}
 
 #ifdef CONFIG_DEBUG_MM
 #include <eza/task.h>

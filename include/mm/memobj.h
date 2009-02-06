@@ -5,6 +5,7 @@
 #include <ds/ttree.h>
 #include <ds/list.h>
 #include <mm/page.h>
+#include <eza/mutex.h>
 #include <mlibc/types.h>
 
 #ifndef CONFIG_MEMOBJS_MAX
@@ -14,31 +15,33 @@
 typedef unsigned long memobj_id_t;
 
 typedef enum __memobj_nature {
-  MEMOBJ_SHARED     = 0x01,
-  MEMOBJ_TYPED      = 0x02,
-  MEMOBJ_PERSISTENT = 0x04,
-  MEMOBJ_FIXEDADDR  = 0x08,
-  MEMOBJ_IMMORTAL   = 0x10,
+  MEMOBJ_NCACHE  = 0x01,
+  MEMOBJ_LAZY    = 0x02,
+  MEMOBJ_STICKY  = 0x04,
+  MEMOBJ_GENERIC = 0x08,
 } memobj_nature_t;
 
 struct __memobj;
-/* TODO DK: extends basic memobjs operations... */
+struct __vmrange;
+
 typedef struct __memobj_ops {
-  int (*synchronize)(struct __memobj *memobj);
-  int (*truncate)(struct __memobj *memobj);
-  int (*putpage)(struct __memobj *memobj);
-  int (*getpage)(struct __memobj *memobj);
+  int (*handle_page_fault)(struct __memobj *memobj, struct __vmrange *vmr, off_t offs, uint32_t pfmask);  
 } memobj_ops_t;
 
 
 typedef struct __memobj {
   memobj_id_t id;
-  ttree_t pages_cache;
-  list_head_t pagelist_lru;
   memobj_ops_t mops;
+  ttree_t pagemap;
+  mutex_t mutex;
+  off_t size;
   atomic_t users_count;
-  memobj_nature_t nature;
+  memobj_nature_t nature;  
+  void *ctx;
 } memobj_t;
+
+#define NULL_MEMOBJ_ID 0
+extern memobj_t null_memobj;
 
 void memobj_subsystem_initialize(void);
 memobj_t *memobj_find_by_id(memobj_id_t memobj_id);

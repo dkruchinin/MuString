@@ -32,6 +32,7 @@
 #include <mm/pfalloc.h>
 #include <mm/memobj.h>
 #include <mlibc/types.h>
+#include <eza/rwsem.h>
 #include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
 
@@ -40,6 +41,7 @@
 #endif /* CONFIG_DEBUG_MM */
 
 #define VMR_PROTO_MASK (VMR_NONE | VMR_READ | VMR_WRITE | VMR_EXEC)
+#define VMR_FLAGS_OFFS 4
 
 typedef enum __vmrange_flags {
   VMR_NONE     = 0x0001,
@@ -81,12 +83,13 @@ typedef struct __vm_mandmap {
   kmap_flags_t flags;  
 } vm_mandmap_t;
 
-typedef struct __vmragnge {
+typedef struct __vmrange {
   struct range_bounds bounds;
   struct __vmm *parent_vmm;
   memobj_t *memobj;
   uintptr_t hole_size;
-  vmrange_flags_t flags;
+  off_t offset;
+  vmrange_flags_t flags;  
 } vmrange_t;
 
 typedef struct __vmm {
@@ -95,6 +98,7 @@ typedef struct __vmm {
   vmrange_t *lru_range;
   atomic_t vmm_users;
   rpd_t rpd;
+  rwsem_t rwsem;
   uintptr_t aspace_start;
   ulong_t num_vmrs;
   page_idx_t num_pages;
@@ -163,8 +167,8 @@ void vmm_initialize(void);
 void vmm_subsystem_initialize(void);
 void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name);
 int vm_mandmaps_roll(vmm_t *target_mm);
-
 vmm_t *vmm_create(void);
+int vmm_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask);
 long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages,
                  vmrange_flags_t flags, int offs_pages);
 void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages);
@@ -187,6 +191,11 @@ static inline void vmrange_set_next(vmrange_set_t *vmrs)
 static inline void munmap_core(rpd_t *rpd, uintptr_t va, ulong_t npages)
 {
   ptable_unmap(rpd, va, npages);
+}
+
+static inline off_t addr2memobj_offs(vmrange_t *vmr, uintptr_t addr)
+{
+  return (vmr->offset + (addr - vmr->bounds.space_start));
 }
 
 #ifdef CONFIG_DEBUG_MM

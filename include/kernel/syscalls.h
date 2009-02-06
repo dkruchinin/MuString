@@ -69,7 +69,7 @@
 #define SC_THREAD_KILL         31
 #define SC_SIGPROCMASK         32
 #define SC_THREAD_EXIT         33
-#define SC_MUNMAP              35
+#define SC_MUNMAP              34
 
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */
@@ -160,8 +160,8 @@ int sys_task_control( pid_t pid, ulong_t cmd, ulong_t arg);
  * @param offset - offset of the shared area to map
  *
  */
-long sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_t offset);
-
+long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, int memobj_id, off_t offset);
+void sys_munmap(uintptr_t addr, size_t length);
 
 /**
  * @fn status_t sys_create_port( ulong_t flags, ulong_t queue_size )
@@ -467,8 +467,6 @@ long sys_thread_kill(pid_t prcess,tid_t tid,int sig);
 long sys_sigprocmask(int how,const sigset_t *set,sigset_t *oldset);
 
 void sys_thread_exit(int code);
-
-void sys_munmap(void *addr, size_t length);
 #endif
 
 #endif

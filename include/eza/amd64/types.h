@@ -38,6 +38,7 @@ typedef unsigned long uintptr_t;
 
 /* bit-related types. */
 typedef uint32_t bit_idx_t;
+typedef uint64_t off_t;
 
 #define TYPE_LONG_SHIFT  6
 #define BITS_PER_LONG  64

@@ -13,7 +13,6 @@ typedef unsigned int uint_t;
 typedef unsigned long ulong_t;
 typedef uint_t bool;
 typedef ulong_t size_t;
-typedef uintptr_t off_t;
 
 #ifdef CONFIG_ALWAYS_INLINE
 #define always_inline inline __attribute__((always_inline))

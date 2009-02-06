@@ -57,10 +57,17 @@ typedef ulong_t page_idx_t;
  */
 typedef uint16_t page_flags_t;
 
+/* page frame flags */
 #define PF_PDMA       0x01 /**< DMA pool is page owner */
 #define PF_PGEN       0x02 /**< GENERAL pool is page owner */
 #define PF_RESERVED   0x04 /**< Page is reserved */
 #define PF_SLAB_LOCK  0x08 /**< Page lock (used by slab allocator) */
+
+/* page fault flags */
+#define PFLT_NOT_PRESENT 0x01
+#define PFLT_PROTECT     0x02
+#define PFLT_READ        0x04
+#define PFLT_WRITE       0x08
 
 #define __pool_type(flags) ((flags) >> 1)
 #define PAGE_POOLS_MASK (PF_PGEN | PF_PDMA)
