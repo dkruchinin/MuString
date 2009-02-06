@@ -174,7 +174,6 @@ void delete_timer(ktimer_t *timer)
 
 long add_timer(ktimer_t *t)
 {
-  major_timer_tick_t *major_tick=NULL;
   long is;
   struct rb_node *n;
   ulong_t mtickv;
@@ -188,16 +187,17 @@ long add_timer(ktimer_t *t)
     return -EINVAL;
   }
 
-  if( t->time_x <= system_ticks  ) {
-    return 0;
-  }
-
   mtickv=t->time_x-(t->time_x % CONFIG_TIMER_GRANULARITY);
   t->da.__lock=&sw_timers_list_lock;
 
   /* First try to locate an existing major tick or create a new one.
    */
-  LOCK_SW_TIMERS_R(is);
+  LOCK_SW_TIMERS(is);
+  if( t->time_x <= system_ticks  ) {
+    r=-EAGAIN;
+    goto out;
+  }
+
   n=timers_rb_root.rb_node;
   while( n ) {
     mt=rb_entry(n,major_timer_tick_t,rbnode);
@@ -207,72 +207,59 @@ long add_timer(ktimer_t *t)
     } else if( mtickv > mt->time_x )  {
       n=n->rb_right;
     } else {
-      major_tick=mt;
       get_major_tick(mt);
       break;
     }
   }
-  UNLOCK_SW_TIMERS_R(is);
 
   /* No major tick for target time point, so we should create a new one.
    */
-  if( !major_tick ) {
-    major_tick=memalloc(sizeof(*major_tick));
+  if( !n ) {
+    mt=memalloc(sizeof(*mt));
 
-    if( !major_tick ) {
+    if( !mt ) {
       r=-ENOMEM;
       goto out;
     }
 
     /* Initialize a new entry. */
-    atomic_set(&major_tick->use_counter,1);
-    major_tick->time_x=mtickv;
-    spinlock_initialize(&major_tick->lock);
+    atomic_set(&mt->use_counter,1);
+    mt->time_x=mtickv;
+    spinlock_initialize(&mt->lock);
 
     for( i=0;i<MINOR_TICK_GROUPS;i++ ) {
-      list_init_head(&major_tick->minor_ticks[i]);
+      list_init_head(&mt->minor_ticks[i]);
     }
 
     /* Now insert new tick into RB tree. */
-    LOCK_SW_TIMERS(is);
-    if( t->time_x > system_ticks ) {
-      p=&timers_rb_root.rb_node;
-      n=NULL;
+    p=&timers_rb_root.rb_node;
+    n=NULL;
 
-      while( *p ) {
-        n=*p;
-        mt=rb_entry(n,major_timer_tick_t,rbnode);
+    while( *p ) {
+      n=*p;
+      major_timer_tick_t *_mt=rb_entry(n,major_timer_tick_t,rbnode);
 
-        if( mtickv < mt->time_x ) {
-          p=&(*p)->rb_left;
-        } else if( mtickv > mt->time_x ) {
-          p=&(*p)->rb_right;
-        } else {
-          /* Hmmmm. Someone else populated the same major tick concurrently. */
-          get_major_tick(mt);
-          goto major_tick_found;
-        }
+      if( mtickv < _mt->time_x ) {
+        p=&(*p)->rb_left;
+      } else if( mtickv > _mt->time_x ) {
+        p=&(*p)->rb_right;
       }
-      get_major_tick(major_tick); /* Add one extra reference. */
-      mt=major_tick;
-      rb_link_node(&major_tick->rbnode,n,p);
-      rb_insert_color(&major_tick->rbnode,&timers_rb_root);
-    } else {
-      /* Expired while allocating a new major tick. */
-      UNLOCK_SW_TIMERS(is);
-      goto out;
     }
-  major_tick_found:
-    UNLOCK_SW_TIMERS(is);
-  } else {
-    mt=major_tick;
+    rb_link_node(&mt->rbnode,n,p);
+    rb_insert_color(&mt->rbnode,&timers_rb_root);
   }
+  UNLOCK_SW_TIMERS(is);
 
   /* OK, our major tick was located so we can add our timer to it.
    */
   t->minor_tick.major_tick=mt;
 
   LOCK_MAJOR_TIMER_TICK(mt,is);
+  if( t->time_x <= system_ticks  ) {
+    r=-EAGAIN;
+    goto out_unlock_tick;
+  }
+
   lh=&mt->minor_ticks[(t->time_x-mtickv)/MINOR_TICK_GROUP_SIZE];
   if( !list_is_empty(lh) ) {
     list_for_each( lh,ln ) {
@@ -296,12 +283,13 @@ long add_timer(ktimer_t *t)
 
 out_insert:
   t->minor_tick.major_tick=mt;
-  UNLOCK_MAJOR_TIMER_TICK(mt,is);
   r=0;
+out_unlock_tick:
+  UNLOCK_MAJOR_TIMER_TICK(mt,is);
+  /* TODO: [mt] Cleanup major tick structure upon timer expiration. */
+  return r;
 out:
-  if( major_tick != NULL ) {
-    put_major_tick(major_tick);
-  }
+  UNLOCK_SW_TIMERS(is);
   return r;
 }
 
