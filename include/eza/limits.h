@@ -4,6 +4,8 @@
 #include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
 
+#define LIMIT_UNLIMITED ~0UL
+
 #define LIMIT_IPC_MAX_PORTS  0
 #define LIMIT_IPC_MAX_PORT_MESSAGES  1
 #define LIMIT_IPC_MAX_USER_BUFFERS 2

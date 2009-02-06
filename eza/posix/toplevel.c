@@ -23,8 +23,8 @@
 #include <kernel/syscalls.h>
 #include <eza/posix.h>
 #include <eza/task.h>
-#include <kernel/vm.h>
 #include <eza/errno.h>
+#include <eza/usercopy.h>
 #include <eza/signal.h>
 #include <eza/arch/interrupt.h>
 

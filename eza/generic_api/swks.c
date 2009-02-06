@@ -24,43 +24,25 @@
  *
  */
 
-#include <eza/arch/types.h>
-#include <eza/arch/interrupt.h>
+#include <mlibc/types.h>
 #include <eza/arch/timer.h>
 #include <eza/swks.h>
+#include <mm/page.h>
+#include <mm/vmm.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/string.h>
-#include <eza/smp.h>
-#include <eza/vm.h>
-#include <kernel/vm.h>
-#include <mm/mmap.h>
+#include <eza/arch/mm.h>
 
 /* Here it is ! */
-swks_t swks  __attribute__((aligned(PAGE_SIZE)));
-static vm_range_t swks_area;
+swks_t __page_aligned__ swks;
 
 void initialize_swks(void)
 {
-  int i;
-  char *p = (char *)&swks;
-  for (i = 0; i < sizeof(swks); i++) {
-    *p++ = 0;
-  }
-
+  memset(&swks, 0, sizeof(swks));
   swks.system_ticks_64 = INITIAL_TICKS_VALUE;
   swks.nr_cpus = CONFIG_NRCPUS;
   swks.timer_frequency = HZ;
   /*kprintf("[LW] Calibrating delay loop ...");
   swks.delay_loop=arch_calibrate_delay_loop();
   kprintf("%ld.\n",swks.delay_loop);*/
-
-  arch_initialize_swks();
-
-  /* Make the SWKS be mapped into every user address space. */
-  swks_area.phys_addr=k2p(&swks) & PAGE_ADDR_MASK;
-  swks_area.virt_addr=SWKS_VIRT_ADDR;
-  swks_area.num_pages=SWKS_PAGES;
-  swks_area.map_flags=MAP_USER | MAP_READ | MAP_USER;
-
-  vm_register_user_mandatory_area(&swks_area);
 }

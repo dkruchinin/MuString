@@ -23,7 +23,7 @@
  */
 
 #include <eza/time.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/swks.h>
 #include <eza/arch/timer.h>
 #include <eza/scheduler.h>
@@ -31,9 +31,9 @@
 #include <eza/arch/current.h>
 #include <eza/arch/apic.h>
 #include <eza/timer.h>
+#include <eza/usercopy.h>
 #include <kernel/syscalls.h>
 #include <eza/time.h>
-#include <kernel/vm.h>
 #include <eza/arch/interrupt.h>
 #include <eza/errno.h>
 #include <eza/signal.h>
@@ -57,7 +57,17 @@ void timer_interrupt_handler(void *data)
   sched_timer_tick();
 }
 
-status_t sys_nanosleep(timeval_t *in,timeval_t *out)
+ulong_t time_to_ticks(timeval_t *tv)
+{
+  if( tv->tv_sec >= NANOSLEEP_MAX_SECS ||
+      tv->tv_nsec >= 1000000000 ) {
+    return 0;
+  }
+
+  return tv->tv_sec*HZ + tv->tv_nsec / (1000000000/HZ);
+}
+
+int sys_nanosleep(timeval_t *in,timeval_t *out)
 {
   timeval_t tv;
   ulong_t ticks;

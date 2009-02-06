@@ -28,7 +28,6 @@
 #include <eza/arch/asm.h>
 #include <eza/task.h>
 #include <eza/arch/cpu.h>
-#include <eza/context.h>
 
 extern cpu_sched_stat_t PER_CPU_VAR(cpu_sched_stat);
 

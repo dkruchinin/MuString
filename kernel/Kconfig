@@ -25,4 +25,8 @@ config MAX_DEFERRED_ACTIONS_PER_TICK
        If more than such amount of deferred actions are ready for firing at the same time,
        the rest of these actions will be processed during the next suitable suituation.
 
+config DEBUG
+       bool "Enable general debugging"
+       default n
+
 endmenu

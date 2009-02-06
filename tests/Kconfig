@@ -31,5 +31,22 @@ config TEST_SIGNALS
        bool "Signal subsystem test"
        default n
 
+config TEST_TLSF
+       bool "TLSF memory allocator test"
+       default n
+       select DEBUG_MM
+
+config TEST_MAPUNMAP
+       bool "Map/Unmap general test"
+       default n
+       select DEBUG_PTABLE
+
+config TEST_VMA
+       bool "Test general VMA functinality"
+       default n
+
+config TEST_RWSEM
+       bool "Test Read/Write semaphore"
+       default n
 
 endif

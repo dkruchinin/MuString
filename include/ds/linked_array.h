@@ -24,7 +24,7 @@
 #ifndef __LINKED_ARRAY_H__
 #define __LINKED_ARRAY_H__
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 
 #define INVALID_ITEM_IDX  ~(ulong_t)0
 

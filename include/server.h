@@ -24,7 +24,7 @@
 #ifndef __SERVER_H__
 #define __SERVER_H__
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 
 #define MAX_PRIVBOOT_SERVERS  16
 
@@ -34,7 +34,7 @@ typedef struct __init_server {
 } init_server_t;
 
 typedef struct __init_type {
-  count_t c; /* # of servers */
+  ulong_t c; /* # of servers */
   init_server_t server[MAX_PRIVBOOT_SERVERS];
 } init_t; /* general init servers structure */
 

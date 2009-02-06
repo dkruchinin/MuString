@@ -67,7 +67,7 @@ static void __free_ipc_private_data(task_ipc_priv_t *p)
   memfree(p);
 }
 
-status_t setup_task_ipc(task_t *task)
+int setup_task_ipc(task_t *task)
 {
   task_ipc_t *ipc;
   task_ipc_priv_t *ipc_priv;

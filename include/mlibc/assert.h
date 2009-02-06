@@ -51,11 +51,11 @@
  */
 
 
+#include <config.h>
 #include <eza/kernel.h>
 
+#ifdef CONFIG_DEBUG
 #define CT_ASSERT(cond) ((void)sizeof(char[1 - 2 * !(cond)]))
-
-#ifdef DEBUG_GENERAL
 #define ASSERT(cond)                                    \
   do {                                                  \
     if (!(cond)) {                                      \
@@ -65,8 +65,9 @@
   }                                                     \
 } while (0)
 #else
+#define CT_ASSERT(cond)
 #define ASSERT(cond)
-#endif /* DEBUG_DENERAL */
+#endif /* CONFIG_DEBUG */
 
 #endif /* __ASSERT_H__ */
 

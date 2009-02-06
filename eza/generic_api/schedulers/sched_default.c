@@ -23,7 +23,7 @@
 
 #include <eza/arch/types.h>
 #include <eza/resource.h>
-#include <mm/mmap.h>
+#include <mm/vmm.h>
 #include <mm/pfalloc.h>
 #include <eza/kstack.h>
 #include <eza/spinlock.h>
@@ -135,7 +135,7 @@ static void __initialize_cpu_sched_data(eza_sched_cpudata_t *cpudata, cpu_id_t c
   cpudata->cpu_id = cpu;
 }
 
-static status_t __setup_new_task(task_t *task)
+static int __setup_new_task(task_t *task)
 {
   eza_sched_taskdata_t *sdata = __allocate_task_sched_data();
 
@@ -187,10 +187,10 @@ static cpu_id_t def_cpus_supported(void){
   return EZA_SCHED_CPUS;
 }
 
-static status_t def_add_cpu(cpu_id_t cpu)
+static int def_add_cpu(cpu_id_t cpu)
 {
   eza_sched_cpudata_t *cpudata;
-  status_t r;
+  int r;
  
   if(cpu >= EZA_SCHED_CPUS || sched_cpu_data[cpu] != NULL) {
     return -EINVAL;
@@ -270,7 +270,7 @@ static void def_scheduler_tick(void)
   UNLOCK_CPU_SCHED_DATA(cpudata);
 }
 
-static status_t def_add_task(task_t *task)
+static int def_add_task(task_t *task)
 {
   cpu_id_t cpu = cpu_id();
   eza_sched_taskdata_t *sdata;
@@ -368,9 +368,9 @@ get_next_task:
 }
 
 /* NOTE: Currently works only for current task ! */
-static status_t def_del_task(task_t *task)
+static int def_del_task(task_t *task)
 {
-  status_t r;
+  int r;
   gc_action_t action;
   eza_sched_cpudata_t *sched_data=CPU_SCHED_DATA();
 
@@ -432,12 +432,12 @@ static inline void __reschedule_task(task_t *t)
 
 int __big_verbose=0;
 
-static status_t __change_task_state(task_t *task,task_state_t new_state,
+static int __change_task_state(task_t *task,task_state_t new_state,
                                     deferred_sched_handler_t h,void *data,
                                     ulong_t mask)
 {
   ulong_t is;
-  status_t r=0;
+  int r=0;
   eza_sched_cpudata_t *sched_data;
   task_state_t prev_state;
   eza_sched_taskdata_t *tdata = EZA_TASK_SCHED_DATA(task);
@@ -511,12 +511,12 @@ out_unlock:
   return r;
 }
 
-status_t def_change_task_state(task_t *task,task_state_t new_state,ulong_t mask)
+int def_change_task_state(task_t *task,task_state_t new_state,ulong_t mask)
 {
   return __change_task_state(task,new_state,NULL,NULL,mask);
 }
 
-static status_t def_setup_idle_task(task_t *task)
+static int def_setup_idle_task(task_t *task)
 {
   eza_sched_taskdata_t *sdata;
 
@@ -577,7 +577,7 @@ static void __shuffle_task(task_t *target,eza_sched_taskdata_t *sdata, uint32_t 
 
 /* NOTE: Upon entering this routine target task is unlocked.
  */
-static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
+static long def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
 {
   eza_sched_taskdata_t *sdata = EZA_TASK_SCHED_DATA(target);
   bool trusted=trusted_task(target);
@@ -608,7 +608,7 @@ static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
           if( trusted ) {
             interrupts_disable();
             LOCK_TASK_STRUCT(target);
-            ASSERT(!(task->flags & TF_USPC_BLOCKED));
+            ASSERT(!(target->flags & TF_USPC_BLOCKED));
             __shuffle_task(target,sdata, arg);
             
             UNLOCK_TASK_STRUCT(target);
@@ -638,7 +638,7 @@ static status_t def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
   return -EINVAL;
 }
 
-static status_t def_change_task_state_deferred(task_t *task, task_state_t state,
+static int def_change_task_state_deferred(task_t *task, task_state_t state,
                                               deferred_sched_handler_t handler,
                                                void *data,ulong_t mask)
 {
@@ -654,10 +654,10 @@ static void __self_move_gc_actor(void *data,ulong_t arg)
   schedule_task_migration(t,t->target_cpu);
 }
 
-static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu)
+static int def_move_task_to_cpu(task_t *task,cpu_id_t cpu)
 {
   migration_action_t t;
-  status_t r=0;
+  int r=0;
 
   if(cpu >= EZA_SCHED_CPUS || !sched_cpu_data[cpu]) {
     return -EINVAL;
@@ -686,7 +686,7 @@ static status_t def_move_task_to_cpu(task_t *task,cpu_id_t cpu)
       /* Since we can't put ourself into sleep and than schedule our migration,
        * we should ask the GC thread to migrate us.
        */
-      gc_init_action(&a,__self_move_gc_actor,task,(long_t)&t);
+      gc_init_action(&a,__self_move_gc_actor,task,(long)&t);
       gc_schedule_action(&a);
     }
 

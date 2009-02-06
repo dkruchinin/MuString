@@ -36,9 +36,7 @@ task_t *idle_tasks[CONFIG_NRCPUS];
 ulong_t syscall_counter = 0;
 
 void idle_loop(void)
-{
-  uint64_t target_tick = swks.system_ticks_64 + 100;
-
+{  
 #ifdef CONFIG_TEST
   if( !cpu_id() ) {
     run_tests();

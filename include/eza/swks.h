@@ -28,11 +28,9 @@
 #ifndef __SWKS_H__
 #define __SWKS_H__ 
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/interrupt.h>
 #include <eza/scheduler.h>
-#include <mm/mm.h>
-#include <eza/arch/page.h>
 
 enum __swks_constants {
   INITIAL_TICKS_VALUE = 0,
@@ -54,24 +52,19 @@ typedef struct __swks {
   /* CPU-related statistics. */
   uint8_t nr_cpus;
   cpu_stats_t cpu_stat[CONFIG_NRCPUS];
-
+  /* IO ports stuff. */
+  ulong_t ioports_available;
+#if 0
   /* Memory-related statistics. */
   page_idx_t mem_total_pages, mem_pages_in_use;
 
   /* Processes-related information. */
   pid_t total_processes, runnable_processes;
-  pid_t sleeping_processes, zombies;
-
-  /* clock settings */
-  uint64_t delay_loop;
-
   /* version info */
   uint16_t version;
   uint16_t sub_version;
   uint16_t release;
-
-  /* IO ports stuff. */
-  ulong_t ioports_available;  
+#endif
 } swks_t;
 
 

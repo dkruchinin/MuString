@@ -45,9 +45,9 @@ static bool __is_active_vector(irq_t vec)
   return true;
 }
 
-static status_t __install_handler(idt_handler_t h, irq_t vec)
+static int __install_handler(idt_handler_t h, irq_t vec)
 {
-  status_t r;
+  int r;
   amd64_idt_entry_t *e;
 
   if(h == NULL || vec >= AMD64_IDT_ENTRIES || vec < IRQ_BASE) {
@@ -66,7 +66,7 @@ static status_t __install_handler(idt_handler_t h, irq_t vec)
   return r;
 }
 
-static status_t __free_handler(irq_t vec)
+static int __free_handler(irq_t vec)
 {
   return -EAGAIN;
 }

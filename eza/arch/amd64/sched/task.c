@@ -27,9 +27,9 @@
 #include <mlibc/string.h>
 #include <eza/arch/page.h>
 #include <mlibc/kprintf.h>
-#include <mm/mm.h>
 #include <mm/page.h>
-#include <mm/mmap.h>
+#include <mm/vmm.h>
+#include <mm/pfi.h>
 #include <eza/errno.h>
 #include <mlibc/string.h>
 #include <eza/smp.h>
@@ -39,9 +39,9 @@
 #include <eza/arch/scheduler.h>
 #include <eza/arch/current.h>
 #include <eza/process.h>
+#include <eza/arch/context.h>
 #include <eza/arch/profile.h>
-#include <eza/arch/mm_types.h>
-#include <kernel/vm.h>
+#include <eza/arch/ptable.h>
 
 /* Located on 'amd64/asm.S' */
 extern void kthread_fork_path(void);
@@ -84,10 +84,10 @@ static void __arch_setup_ctx(task_t *newtask,uint64_t rsp,
   arch_context_t *ctx = (arch_context_t*)&(newtask->arch_context[0]);
 
   __setup_arch_segment_regs(ctx,priv);
-  
-  /* Setup CR3 */
+ 
   ctx->rsp = rsp;
-  ctx->cr3 = _k2p((uintptr_t)pframe_to_virt(newtask->page_dir));
+  /* Setup CR3 */
+  ctx->cr3 = _k2p((uintptr_t)pframe_to_virt(newtask->rpd.pml4));
   ctx->user_rsp = 0;
 
   /* Default TSS value which means: use per-CPU TSS. */
@@ -104,51 +104,13 @@ void kernel_thread_helper(void (*fn)(void*), void *data)
   sys_exit(0);
 }
 
-/* For initial stack filling. */
-static page_frame_t *next_frame;
-
-static void __iter_stub(page_frame_iterator_t *pfi)
-{
-  panic("unimplemented!");
-}
-
-static void acc_next_frame(page_frame_iterator_t *pfi)
-{
-  ASSERT(pfi->type == PF_ITER_ALLOC);
-
-  pfi->state = ITER_RUN;
-  if(next_frame != NULL ) {
-    pfi->pf_idx = pframe_number(next_frame);
-  } else {
-    page_frame_t *frame = alloc_page(AF_PGEN);
-    if( frame == NULL ) {
-      panic( "initialize_idle_tasks(): Can't allocate a page !" );
-    }
-
-    pfi->pf_idx = pframe_number(frame);
-  }
-}
-
-static void init_pfiter_alloc(page_frame_iterator_t *pfi)
-{
-  pfi->first = __iter_stub;
-  pfi->last = __iter_stub;
-  pfi->next = acc_next_frame;
-  pfi->prev = __iter_stub;
-  iter_init(pfi, PF_ITER_ALLOC);
-  iter_set_ctx(pfi, NULL);
-}
-
 void initialize_idle_tasks(void)
 {
   task_t *task;
   page_frame_t *ts_page;
   int r, cpu;
   cpu_sched_stat_t *sched_stat;
-  mmap_info_t minfo;
 
-  memset(&minfo, 0, sizeof(minfo));  
-  init_pfiter_alloc(&minfo.pfi);
   for( cpu = 0; cpu < CONFIG_NRCPUS; cpu++ ) {
     ts_page = alloc_page(AF_PGEN | AF_ZERO);
     if( ts_page == NULL ) {
@@ -169,7 +131,7 @@ void initialize_idle_tasks(void)
 
 
     /* Initialize page tables to default kernel page directory. */
-    task->page_dir = kernel_root_pagedir;
+    ptable_rpd_clone(&task->rpd, &kernel_rpd);
 
     /* Initialize kernel stack.
      * Since kernel stacks aren't properly initialized, we can't use standard
@@ -179,14 +141,22 @@ void initialize_idle_tasks(void)
       panic( "initialize_idle_tasks(): Can't initialize kernel stack for idle task !" ); 
     }
 
-    next_frame = NULL;
-    minfo.va_from = task->kernel_stack.low_address;
-    minfo.va_to = minfo.va_from + ((KERNEL_STACK_PAGES - 1) << PAGE_WIDTH);
-    minfo.flags = MAP_RW;
-    r = mmap_pages(task->page_dir, &minfo);
-    
-    if( r != 0 ) {
-      panic( "initialize_idle_tasks(): Can't map kernel stack for idle task !" );
+    /* FIXME DK: redisign! */
+    {
+        page_frame_t *pf = alloc_pages(KERNEL_STACK_PAGES, AF_PGEN);
+        page_frame_iterator_t pfi;
+        ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
+        
+        if (!pf)
+            panic("Can't allocate %d pages for kernel stack!", KERNEL_STACK_PAGES);
+
+        pfi_index_init(&pfi, &pfi_index_ctx, pframe_number(pf), pframe_number(pf) + KERNEL_STACK_PAGES - 1);
+        iter_first(&pfi);
+        r = ptable_map(&task->rpd, task->kernel_stack.low_address, KERNEL_STACK_PAGES,
+                       &pfi, PDE_RW | PDE_NX);
+        if( r != 0 ) {
+            panic("Can't map kernel stack for idle task !");
+        }
     }
     /* Setup arch-specific task context. */
     __arch_setup_ctx(task,0,TPL_KERNEL);
@@ -204,10 +174,10 @@ void initialize_idle_tasks(void)
   }
 }
 
-status_t kernel_thread(void (*fn)(void *), void *data, task_t **out_task)
+int kernel_thread(void (*fn)(void *), void *data, task_t **out_task)
 {
   task_t *newtask;
-  status_t r;
+  int r;
 
   r = create_task(current_task(),KERNEL_THREAD_FLAGS,TPL_KERNEL,&newtask,
                   NULL);
@@ -308,7 +278,7 @@ static void __apply_task_exec_attrs(regs_t *regs,exec_attrs_t *exec_attrs,
   task_ctx->per_task_data=exec_attrs->per_task_data;
 }
 
-status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
+int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
                                  task_privelege_t priv,task_t *parent,
                                  task_creation_attrs_t *attrs)
 {
@@ -380,10 +350,10 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   return 0;
 }
 
-status_t arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
+int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
 {
   regs_t *regs=(regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
-  status_t r=0;
+  int r=0;
   arch_context_t *arch_ctx;
   exec_attrs_t *attrs;
   ulong_t l;

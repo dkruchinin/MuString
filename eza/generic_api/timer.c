@@ -35,8 +35,9 @@
 #include <eza/arch/interrupt.h>
 #include <eza/time.h>
 #include <eza/def_actions.h>
-#include <mlibc/rbtree.h>
-#include <mlibc/skiplist.h>
+#include <ds/rbtree.h>
+#include <ds/skiplist.h>
+#include <mlibc/types.h>
 
 /*spinlock*/
 static SPINLOCK_DEFINE(timer_lock);
@@ -68,7 +69,7 @@ static void init_hw_timers (void)
 void hw_timer_register (hw_timer_t *ctrl)
 {
   GRAB_HW_TIMER_LOCK();
-  list_add(list_node_first(&known_hw_timers), &ctrl->l);
+  list_add_before(list_node_first(&known_hw_timers), &ctrl->l);
   RELEASE_HW_TIMER_LOCK();
 }
 
@@ -133,7 +134,7 @@ void process_timers(void)
   }
 }
 
-void timer_cleanup_expired_ticks(void)
+void adjust_timer(timer_t *timer,long delta)
 {
 }
 

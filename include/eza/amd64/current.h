@@ -1,10 +1,33 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ *
+ * include/eza/arch/current.h
+ *
+ */
+
 #ifndef __AMD64_CURRENT_H__
 #define __AMD64_CURRENT_H__ 
 
 #ifndef __ASM__
 
-#include <eza/arch/types.h>
-#include <eza/container.h>
+#include <mlibc/stddef.h>
+#include <mlibc/types.h>
+#include <eza/arch/cpu.h>
 
 struct __task_struct;
 
@@ -54,27 +77,27 @@ typedef struct __cpu_sched_stat {
 
 #define read_css_field(field,v) \
   __asm__ __volatile__(  "movq %%gs:(%0), %%rax" \
-                         :"=a"(v) : "R" ( offset_of(cpu_sched_stat_t,field)) );
+                         :"=a"(v) : "R" ( offsetof(cpu_sched_stat_t,field)) );
 
 #define write_css_field(field,v) \
   __asm__ volatile(  "movq %%r, %%gs:(%%rbx)" \
-                     ::"a"(v), "b"( offset_of(cpu_sched_stat_t,field)) : "%rax" );
+                     ::"a"(v), "b"( offsetof(cpu_sched_stat_t,field)) : "%rax" );
 
 #define inc_css_field(field) \
   __asm__ volatile(  "incq %%gs:(%0)" \
-                     :: "r"(offset_of(cpu_sched_stat_t,field)) );
+                     :: "r"(offsetof(cpu_sched_stat_t,field)) );
 
 #define dec_css_field(field) \
   __asm__ volatile(  "decq %%gs:(%0)" \
-                     :: "r"(offset_of(cpu_sched_stat_t,field)) );
+                     :: "r"(offsetof(cpu_sched_stat_t,field)) );
 
 #define set_css_task_flag(flag) \
   __asm__ volatile(  "bts %0, %%gs:(%1)" \
-                     :: "r"(flag), "r"(offset_of(cpu_sched_stat_t,flags)) );
+                     :: "r"(flag), "r"(offsetof(cpu_sched_stat_t,flags)) );
 
 #define reset_css_task_flag(flag) \
   __asm__ volatile(  "btr %0, %%gs:(%1)" \
-                     :: "r"(flag), "r"(offset_of(cpu_sched_stat_t,flags)) );
+                     :: "r"(flag), "r"(offsetof(cpu_sched_stat_t,flags)) );
 
 struct __task_struct;
 

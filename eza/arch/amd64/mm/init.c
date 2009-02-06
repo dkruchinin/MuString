@@ -25,7 +25,6 @@
 #include <eza/arch/types.h>
 #include <eza/arch/asm.h>
 #include <eza/arch/cpu.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/bios.h>
 #include <eza/smp.h>
 #include <eza/interrupt.h>

@@ -1,7 +1,8 @@
 #ifndef __POSIX_H__
 #define __POSIX_H__
 
-#include <mlibc/index_allocator.h>
+#include <ds/rbtree.h>
+#include <ds/idx_allocator.h>
 #include <eza/siginfo.h>
 #include <eza/signal.h>
 #include <eza/mutex.h>

@@ -24,9 +24,11 @@
 #ifndef __ARCH_BIOS_H__
 #define __ARCH_BIOS_H__
 
-#include <eza/arch/types.h>
+#include <eza/arch/page.h>
+#include <mlibc/types.h>
 
-#define BIOS_EBDA_P  0x40e
+#define LAST_BIOS_PAGE (BIOS_END_ADDR >> PAGE_WIDTH)
+#define BIOS_EBDA_P    0x40e
 
 extern uintptr_t ebda;
 extern void arch_bios_init(void);

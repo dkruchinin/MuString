@@ -23,27 +23,28 @@
 
 #include <ipc/buffer.h>
 #include <eza/task.h>
-#include <kernel/vm.h>
 #include <eza/errno.h>
 #include <ipc/ipc.h>
 #include <mm/pfalloc.h>
-#include <mm/mmap.h>
+#include <mm/vmm.h>
 #include <ds/linked_array.h>
 #include <eza/limits.h>
-#include <eza/vm.h>
 #include <eza/arch/page.h>
 #include <mm/page.h>
-#include <kernel/vm.h>
 #include <mlibc/stddef.h>
 #include <ipc/gen_port.h>
+#include <eza/usercopy.h>
 
-status_t ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
+#define LOCK_TASK_VM(x)
+#define UNLOCK_TASK_VM(x)
+
+int ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
                                 uintptr_t *addr_array,ipc_user_buffer_t *bufs)
 {
-  page_frame_t *pd = owner->page_dir;
+  rpd_t *rpd = task_get_rpd(owner);
   page_idx_t idx;
   ulong_t chunk_num;
-  status_t r=-EFAULT;
+  int r=-EFAULT;
   uintptr_t adr,*pchunk;
 
   LOCK_TASK_VM(owner);
@@ -56,21 +57,21 @@ status_t ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
     buf->chunks=addr_array;
 
     /* Process the first chunk. */
-    idx=mm_pin_virt_addr(pd,start_addr);
+    idx=mm_vaddr2page_idx(rpd,start_addr);
     if( idx < 0 ) {
       goto out;
     }
 
     pchunk=buf->chunks;
 
-    adr=(start_addr+PAGE_SIZE) & PAGE_ADDR_MASK;
+    adr=(start_addr+PAGE_SIZE) & ~PAGE_MASK;
     first=adr-start_addr;
     if( size <= first ) {
       first = size;
     }
 
     buf->first=first;
-    *pchunk=(uintptr_t)pframe_id_to_virt(idx)+(start_addr & ~PAGE_ADDR_MASK);
+    *pchunk=(uintptr_t)pframe_id_to_virt(idx)+(start_addr & PAGE_MASK);
 
     size-=first;
     start_addr+=first;
@@ -78,7 +79,7 @@ status_t ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
 
     /* Process the rest of chunks. */
     while( size ) {
-      idx=mm_pin_virt_addr(pd, start_addr);
+      idx=mm_vaddr2page_idx(rpd, start_addr);
       if(idx < 0) {
         goto out;
       }
@@ -105,7 +106,7 @@ out:
   return r;
 }
 
-status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
+int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
                                       struct __iovec *iovecs,ulong_t numvecs,
                                       bool to_buffer)
 {
@@ -114,7 +115,7 @@ status_t ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
   ulong_t to_copy,iov_size,bufsize,data_size;
   char *dest_kaddr;
   char *user_addr;
-  status_t r;
+  int r;
 
   for(bufsize=0,to_copy=0;to_copy<numbufs;to_copy++) {
     bufsize+=bufs[to_copy].length;

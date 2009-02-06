@@ -24,17 +24,21 @@
 #ifndef __TASK_H__
 #define __TASK_H__ 
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/kstack.h>
 #include <eza/arch/context.h>
 #include <mlibc/index_array.h>
 #include <mm/page.h>
+#include <mm/vmm.h>
 #include <eza/limits.h>
-#include <eza/tevent.h>
 #include <eza/sigqueue.h>
 #include <eza/mutex.h>
 #include <eza/event.h>
 #include <eza/scheduler.h>
+
+typedef uint32_t time_slice_t;
+typedef uint16_t uid_t;
+
 
 #define INVALID_PID  ((pid_t)~0) 
 /* TODO: [mt] Manage NUM_PIDS properly ! */
@@ -65,8 +69,40 @@
 
 #define LOCK_TASK_MEMBERS(t) spinlock_lock(&t->member_lock)
 #define UNLOCK_TASK_MEMBERS(t) spinlock_unlock(&t->member_lock)
+#define TASK_EVENT_TERMINATION  0x1
+#define NUM_TASK_EVENTS  1
+#define ALL_TASK_EVENTS_MASK  ((1<<NUM_TASK_EVENTS)-1)
+#define LOCK_TASK_EVENTS_R(t)
+#define UNLOCK_TASK_EVENTS_R(t)
+#define LOCK_TASK_EVENTS_W(t)
+#define UNLOCK_TASK_EVENTS_W(t)
 
-typedef uint32_t time_slice_t;
+
+typedef struct __task_event_ctl_arg {
+  ulong_t ev_mask;
+  ulong_t port;
+} task_event_ctl_arg;
+
+typedef struct __task_event_descr {
+  pid_t pid;
+  tid_t tid;
+  ulong_t ev_mask;
+} task_event_descr_t;
+
+struct __ipc_gen_port;
+
+typedef struct __task_event_listener {
+  struct __ipc_gen_port *port;
+  struct __task_struct *listener;
+  list_node_t owner_list;
+  list_node_t llist;
+  ulong_t events;
+} task_event_listener_t;
+
+typedef struct __task_events {
+  list_head_t my_events;
+  list_head_t listeners;
+} task_events_t;
 
 typedef enum __task_creation_flag_t {
   CLONE_MM=0x1,
@@ -105,6 +141,11 @@ typedef struct __signal_struct {
 #define __TF_UNDER_MIGRATION_BIT  1
 #define __TF_EXITING_BIT  2
 #define __TF_DISINTEGRATION_BIT  3
+
+typedef enum __task_privilege {
+  TPL_KERNEL = 0,  /* Kernel task - the most serious level. */
+  TPL_USER = 1,    /* User task - the least serious level */
+} task_privelege_t;
 
 typedef enum __task_flags {
   TF_USPC_BLOCKED=(1<<__TF_USPC_BLOCKED_BIT),/**< Block facility to change task's static priority outside the kernel **/
@@ -146,7 +187,10 @@ typedef struct __task_struct {
   priority_t static_priority, priority, orig_priority;
 
   kernel_stack_t kernel_stack;
-  page_frame_t *page_dir;
+  union {
+    rpd_t rpd;
+    vmm_t *task_mm;
+  };
   list_node_t pid_list;
   task_flags_t flags;
 
@@ -173,7 +217,7 @@ typedef struct __task_struct {
 
   /* Limits-related stuff. */
   task_limits_t *limits;
-
+  task_privelege_t priv;
   /* Lock for protecting changing and outer access the following fields:
    * ipc,ipc_priv,limits
    */
@@ -226,6 +270,14 @@ typedef struct __task_creation_attrs {
   exec_attrs_t exec_attrs;
 } task_creation_attrs_t;
 
+static inline rpd_t *task_get_rpd(task_t *task)
+{
+  if (likely(task->priv != TPL_KERNEL))
+    return &task->task_mm->rpd;
+
+  return &task->rpd;
+}
+
 /**
  * @fn void initialize_task_subsystem(void)
  * @brief Initializes kernel task subsystem.
@@ -253,7 +305,7 @@ void initialize_task_subsystem(void);
  *                   May be NULL if no descriptor required et all.
  * @return Return codes are identical to the 'create_task()' function.
  */
-status_t kernel_thread(void (*fn)(void *), void *data, task_t **out_task);
+int kernel_thread(void (*fn)(void *), void *data, task_t **out_task);
 
 /**
  * @fn status_t arch_setup_task_context(task_t *newtask,
@@ -271,9 +323,9 @@ status_t kernel_thread(void (*fn)(void *), void *data, task_t **out_task);
  * @param priv - Privilege level of target task.
  * @param attrs - Attributes of new task.
  */
-status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t flags,
-                                 task_privelege_t priv,task_t *parent,
-                                 task_creation_attrs_t *attrs);
+int arch_setup_task_context(task_t *newtask,task_creation_flags_t flags,
+                            task_privelege_t priv,task_t *parent,
+                            task_creation_attrs_t *attrs);
 
 /**
  * @fn arch_process_context_control(task_t *task,ulong_t cmd,ulong_t arg)
@@ -288,11 +340,11 @@ status_t arch_setup_task_context(task_t *newtask,task_creation_flags_t flags,
  * Note: See 'sys_process_control' for the list of available commands and their
  *       detailed symantics.
  */
-status_t arch_process_context_control(task_t *task,ulong_t cmd,ulong_t arg);
+int arch_process_context_control(task_t *task,ulong_t cmd,ulong_t arg);
 
 
-status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
-                     task_t **new_task,task_creation_attrs_t *attrs);
+int create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
+                task_t **new_task,task_creation_attrs_t *attrs);
 
 /**
  * @fn status_t create_new_task(task_t *parent, task_t **t,
@@ -304,8 +356,8 @@ status_t create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
  * doesn't register new task in the scheduler.
  * See 'create_task()' for details.
  */
- status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv,
-                          task_t **t,task_creation_attrs_t *attrs);
+int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv,
+                    task_t **t,task_creation_attrs_t *attrs);
 
 /**
  * @fn void free_task_struct(task_t *task)
@@ -321,6 +373,12 @@ void free_task_struct(task_t *task);
 #define is_thread(task)  ((task)->group_leader && (task)->group_leader != (task))
 
 void cleanup_thread_data(void *t,ulong_t arg);
+
+void task_event_notify(ulong_t events);
+int task_event_attach(struct __task_struct *target,
+                      struct __task_struct *listener,
+                           task_event_ctl_arg *ctl_arg);
+void exit_task_events(struct __task_struct *target);
 
 /* Default kernel threads flags. */
 #define KERNEL_THREAD_FLAGS  (CLONE_MM)

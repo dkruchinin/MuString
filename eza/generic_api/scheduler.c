@@ -26,14 +26,12 @@
 #include <mlibc/kprintf.h>
 #include <eza/scheduler.h>
 #include <eza/kernel.h>
-#include <eza/swks.h>
 #include <eza/smp.h>
 #include <eza/arch/scheduler.h>
 #include <eza/arch/types.h>
 #include <eza/arch/bits.h>
 #include <eza/task.h>
 #include <eza/scheduler.h>
-#include <eza/swks.h>
 #include <eza/kstack.h>
 #include <mlibc/index_array.h>
 #include <eza/task.h>
@@ -159,7 +157,7 @@ bool sched_unregister_scheduler(scheduler_t *sched)
   return r;
 }
 
-status_t sched_change_task_state_mask(task_t *task,ulong_t state,
+int sched_change_task_state_mask(task_t *task,ulong_t state,
                                       ulong_t mask)
 {
   /* TODO: [mt] implement security check on task state change. */
@@ -169,7 +167,7 @@ status_t sched_change_task_state_mask(task_t *task,ulong_t state,
   return active_scheduler->change_task_state(task,state,mask);
 }
 
-status_t sched_change_task_state_deferred_mask(task_t *task,ulong_t state,
+int sched_change_task_state_deferred_mask(task_t *task,ulong_t state,
                                                deferred_sched_handler_t handler,void *data,
                                                ulong_t mask)
 {
@@ -180,7 +178,7 @@ status_t sched_change_task_state_deferred_mask(task_t *task,ulong_t state,
   return -ENOTTY;
 }
 
-status_t sched_add_task(task_t *task)
+int sched_add_task(task_t *task)
 {
   if(active_scheduler != NULL) {
     return active_scheduler->add_task(task);
@@ -188,7 +186,7 @@ status_t sched_add_task(task_t *task)
   return -ENOTTY;
 }
 
-status_t sched_setup_idle_task(task_t *task)
+int sched_setup_idle_task(task_t *task)
 {
   if(active_scheduler != NULL) {
     return active_scheduler->setup_idle_task(task);
@@ -196,7 +194,7 @@ status_t sched_setup_idle_task(task_t *task)
   return -ENOTTY;
 }
 
-status_t sched_add_cpu(cpu_id_t cpu)
+int sched_add_cpu(cpu_id_t cpu)
 {
   if( active_scheduler != NULL ) {
     return active_scheduler->add_cpu(cpu);
@@ -209,7 +207,7 @@ void update_idle_tick_statistics(scheduler_cpu_stats_t *stats)
   stats->idle_ticks++;
 }
 
-status_t sched_del_task(task_t *task)
+int sched_del_task(task_t *task)
 {
   if( active_scheduler != NULL ) {
     return active_scheduler->del_task(task);
@@ -217,7 +215,7 @@ status_t sched_del_task(task_t *task)
   return -ENOTTY;
 }
 
-status_t sched_move_task_to_cpu(task_t *task,cpu_id_t cpu)
+int sched_move_task_to_cpu(task_t *task,cpu_id_t cpu)
 {
   if( active_scheduler != NULL && active_scheduler->move_task_to_cpu ) {
       return active_scheduler->move_task_to_cpu(task,cpu);
@@ -239,14 +237,14 @@ void sched_timer_tick(void)
   }
 }
 
-status_t sys_yield(void)
+int sys_yield(void)
 {
   schedule();
   return 0;
 }
 
 
-status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
+long do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
 {
   switch( cmd ) {
     case SYS_SCHED_CTL_GET_AFFINITY_MASK:
@@ -290,10 +288,10 @@ status_t do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
   }
 }
 
-status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg)
+long sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg)
 {
   task_t *target;
-  status_t r;
+  long r;
 
   if(cmd > SCHEDULER_MAX_COMMON_IOCTL) {
     return  -EINVAL;
@@ -324,10 +322,45 @@ out_release:
   return r;
 }
 
+extern int sched_verbose1;
+
+static void __sleep_timer_handler(ulong_t data)
+{
+  sched_verbose1=0;
+  sched_change_task_state((task_t *)data,TASK_STATE_RUNNABLE);
+}
+
+static bool __sleep_timer_lazy_routine(void *data)
+{
+  timer_t *t=(timer_t*)data;
+  return t->time_x > system_ticks;
+}
+
+int sleep(ulong_t ticks)
+{
+  if( ticks ) {
+    timer_t timer;
+
+    init_timer(&timer);
+    timer.handler=__sleep_timer_handler;
+    timer.data=(ulong_t)current_task();
+    timer.time_x=system_ticks+ticks;
+
+    if( !add_timer(&timer) ) {
+      return -EAGAIN;
+    }
+    sched_change_task_state_deferred(current_task(),TASK_STATE_SLEEPING,
+                                     __sleep_timer_lazy_routine,&timer);
+    delete_timer(&timer);
+  }
+  return 0;
+}
+
+
 #ifdef CONFIG_SMP
 #include <eza/arch/apic.h>
 
-status_t schedule_task_migration(migration_action_t *a,cpu_id_t cpu)
+int schedule_task_migration(migration_action_t *a,cpu_id_t cpu)
 {
   if( cpu < CONFIG_NRCPUS ) {
     spinlock_lock(&migration_locks[cpu]);
@@ -344,11 +377,11 @@ void do_smp_scheduler_interrupt_handler(void)
 {
 }
 
-static status_t __move_task_to_this_cpu(task_t *t)
+static int __move_task_to_this_cpu(task_t *t)
 {
   eza_sched_cpudata_t *src_cpu,*dst_cpu;
   eza_sched_taskdata_t *tdata = EZA_TASK_SCHED_DATA(t);
-  status_t r;
+  int r;
   ulong_t is,is2,my_cpu=cpu_id();
 
 lock_cpus_data:

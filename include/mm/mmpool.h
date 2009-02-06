@@ -106,8 +106,16 @@ extern mm_pool_t mm_pools[NOF_MM_POOLS]; /**< An array of all pools */
   ((pool)->allocator.alloc_pages(n, (pool)->allocator.alloc_ctx))
 
 /* [internal] free pages to pool */
-#define __pool_free_pages(pool, pages)                                  \
-  ((pool)->allocator.free_pages(pages, (pool)->allocator.alloc_ctx))
+#define __pool_free_pages(pool, pages, numpgs)                          \
+  ((pool)->allocator.free_pages(pages, numpgs, (pool)->allocator.alloc_ctx))
+
+#define __pool_pblock_size(pool, pblock)        \
+  ((pool)->allocator.pages_block_size(pblock, (pool)->allocator.alloc_ctx))
+
+#define __pool_block_size_max(pool)             \
+  ((pool)->allocator.block_sz_max)
+#define __pool_block_size_min(pool)             \
+  ((pool)->allocator.block_sz_min)
 
 /**
  * @brief Get pool by its type

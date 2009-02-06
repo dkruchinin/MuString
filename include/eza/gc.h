@@ -68,7 +68,7 @@ void spawn_percpu_threads(void);
 #define GC_TASK_RESOURCE  0x1
 
 static inline void gc_init_action(gc_action_t *action,gc_actor_t actor,
-                                  void *data,long_t data_arg)
+                                  void *data,long data_arg)
 {
   action->action=actor;
   action->data=data;
@@ -95,11 +95,11 @@ typedef struct __migration_action_t {
   task_t *task;
   event_t e;
   list_node_t l;
-  status_t status;
+  int status;
   cpu_id_t target_cpu;
 } migration_action_t;
 
-status_t schedule_task_migration(migration_action_t *a,cpu_id_t cpu);
+int schedule_task_migration(migration_action_t *a,cpu_id_t cpu);
 
 #endif
 

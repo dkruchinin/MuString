@@ -20,7 +20,6 @@ choice
           
 config PFA_TLSF
        bool "TLSF"
-
 endchoice
 
 config PFA_MAX_PAGES
@@ -32,6 +31,25 @@ config PFA_MAX_PAGES
 
 config DEBUG_MM
        bool "Enable memory manager main debugging"
+       default n
+       help
+         Enable general memory manager debugging. If the option is enabled
+         various runtime checks and special debug functions will execute.
+         Also some debug API will be compiled.
 
 config DEBUG_SLAB
        bool "Enable slab allocator debugging"
+       help
+         Enable debugging of SLAB memory allocator. If the option is enabled
+         many verbose information about SLAB subsystem internals will display.
+         DEBUG_SLAB also enables slab pages protection. So allocation from slab
+         will be a bit slower and each memory cache will take more space.
+
+config DEBUG_PTABLE
+       bool "Debug low-level page table interface"
+       default n
+       select DEBUG_MM
+       help
+         Enabling of this option causes displaying of various page-tables related
+         verbose information and some external runtime checks. In general it shouldn't
+         strongly affect the speed.

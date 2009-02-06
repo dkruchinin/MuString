@@ -25,8 +25,10 @@
 #ifndef __TIME_H__
 #define __TIME_H__ 
 
-#include <eza/arch/types.h>
 #include <eza/swks.h>
+#include <mlibc/types.h>
+
+#define system_ticks  (swks.system_ticks_64)
 
 typedef long clock_t;
 

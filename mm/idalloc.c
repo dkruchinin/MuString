@@ -139,23 +139,3 @@ void idalloc_deinit(void)
   spinlock_unlock(&idalloc_meminfo.lock);
 }
 
-void *idalloc_allocate_vregion(ulong_t pages)
-{
-  void *vaddr=NULL;
-
-  if( !idalloc_meminfo.is_enabled ) {
-    return NULL;
-  }
-
-  spinlock_lock(&idalloc_meminfo.lock);
-  if( idalloc_meminfo.avail_vpages < pages ) {
-    goto out;
-  }
-
-  idalloc_meminfo.avail_vpages-=pages;
-  idalloc_meminfo.virt_top-=pages*PAGE_SIZE;
-  vaddr=(void *)idalloc_meminfo.virt_top;
-out:
-  spinlock_unlock(&idalloc_meminfo.lock);
-  return vaddr;
-}

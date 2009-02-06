@@ -1,4 +1,4 @@
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <ipc/port.h>
 #include <eza/task.h>
 #include <eza/interrupt.h>
@@ -7,13 +7,12 @@
 #include <eza/spinlock.h>
 #include <mm/slab.h>
 #include <eza/smp.h>
-#include <kernel/vm.h>
-#include <eza/vm.h>
+#include <mm/page.h>
 #include <mm/pfalloc.h>
-#include <mm/mm.h>
-#include <mm/mmap.h>
+#include <mm/vmm.h>
 #include <eza/scheduler.h>
 #include <eza/kconsole.h>
+#include <eza/usercopy.h>
 #include <eza/def_actions.h>
 
 static SPINLOCK_DEFINE(descrs_lock);
@@ -21,6 +20,8 @@ static uintr_descr_t descriptors[NUM_IRQS];
 
 #define LOCK_DESCRIPTORS spinlock_lock(&descrs_lock)
 #define UNLOCK_DESCRIPTORS spinlock_unlock(&descrs_lock)
+#define LOCK_TASK_VM(t)
+#define UNLOCK_TASK_VM(t)
 
 static void __raw_uinterrupt_handler(void *priv)
 {
@@ -46,10 +47,10 @@ static void __unregister_interrupt_listener(irq_t irq,void *private_data)
   __clean_interrupt_descriptor(irq);
 }
 
-status_t static register_interrupt_listener(irq_t irq,irq_listener_t listener,
+static long register_interrupt_listener(irq_t irq,irq_listener_t listener,
                                             void *private_data)
 {
-  status_t r;
+  long r;
   uintr_descr_t *descr;
 
   if( irq >= NUM_IRQS || !listener ) {
@@ -151,21 +152,21 @@ static void __raw_irq_array_handler(irq_t irq,void *priv)
   }
 }
 
-status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
+long sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
                                       ulong_t addr,ulong_t flags)
 {
-  status_t id;
+  long id;
   irq_counter_array_t *array;
+  page_idx_t pfn;
   ulong_t *ids;
-  task_t *caller;
+   task_t *caller;
   ulong_t i;
   irq_counter_handler_t *h;
-  page_idx_t idx;
   page_frame_t *pframe;
   ulong_t *kaddr;
 
   if( !irq_array || !irqs || irqs > MAX_IRQS_PER_THREAD ||
-      (addr & PAGE_OFFSET_MASK) ) {
+      (addr & PAGE_MASK) ) {
     return -EINVAL;
   }
 
@@ -179,10 +180,10 @@ status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   caller=current_task();
 
   LOCK_TASK_VM(caller);
-  idx=mm_pin_virt_addr(caller->page_dir,addr);
-  if(idx >= 0) {
-    pframe=pframe_by_number(idx);
-    get_page(pframe);
+  pfn = mm_vaddr2page_idx(task_get_rpd(caller), addr);
+  if(pfn != PAGE_IDX_INVAL) {
+    pframe = pframe_by_number(pfn);
+    pin_page_frame(pframe);
     kaddr=pframe_to_virt(pframe);
   }
   UNLOCK_TASK_VM(caller);
@@ -265,7 +266,7 @@ out:
 unlock:
   UNLOCK_TASK_USPACE_IRQS(caller);
   if(pframe) {
-    put_page(pframe);
+    unpin_page_frame(pframe);
   }
   return id;
 }
@@ -279,7 +280,7 @@ static irq_counter_array_t *__get_irq_array(task_t *task,ulong_t id)
   return NULL;
 }
 
-status_t sys_wait_on_irq_array(ulong_t id)
+int sys_wait_on_irq_array(ulong_t id)
 {
   irq_counter_array_t *array=__get_irq_array(current_task(),id);
 

@@ -1,7 +1,14 @@
+KERNEL_NAME       := Quoppa
+KERNEL_MAJOR_VER  := 0
+KERNEL_MIDDLE_VER := 0
+KERNEL_MINOR_VER  := 1
+
 ifndef $(BUILD_ROOT)
 	BUILD_ROOT := $(CURDIR)
 endif
 
+KERNELVERSION := $(KERNEL_MAJOR_VER).$(KERNEL_MIDDLE_VER).$(KERNEL_MINOR_VER)
+VERFILE := include/version.h
 ODIR := vmjari_objs
 OBJECTS :=
 CC := $(TOOLCHAIN)gcc
@@ -22,7 +29,7 @@ LN := ln
 RM := rm
 CP := cp
 MKDIR := mkdir
-ECHO ?= echo
+ECHO := /bin/echo
 
 ifeq ($(VERBOSE),y)
 Q := 
@@ -47,13 +54,14 @@ export HOSTCC HOSTLD HOSTCFLAGS HOSTLDFLAGS
 export GREP MAKE LN RM GMAP MKDIR CP
 export CFLAGS LDFLAGS INCLUDE
 export BUILD_ROOT ARCH NOCOLOR OBJECTS
+export KERNELVERSION
 
 include include/Makefile.inc
 
 -include .config
 -include eza/arch/$(ARCH)/Makefile.inc
 
-GENERICS = eza mm mlibc ipc server
+GENERICS = eza mm mlibc ipc server ds
 ifeq ($(CONFIG_TEST),y)
 GENERICS += tests
 endif
@@ -74,7 +82,7 @@ ifeq ($(shell [ -f $(BUILD_ROOT)/.config ] && echo "ok"),)
 	$(Q)$(MAKE) help_config
 endif
 
-prepare: check_config
+prepare: check_config $(VERFILE)
 	$(Q)$(call create_symlinks)
 	$(Q)$(MKDIR) -p $(ODIR)
 
@@ -94,14 +102,16 @@ clean:
 	$(Q)$(RM) -rf $(ODIR)
 	$(Q)$(RM) -f muielf vmuielf boot.img
 	$(Q)$(MAKE) -C. $(addprefix clean_, $(GENERICS))
+
+clean_host:
 	$(call echo-header,"Cleaning host")
 	$(Q)$(MAKE) -C kbuild clean
 
 cleanconf:
 	$(call echo-header,"Cleaning configs")
-	$(Q)$(RM) -rf .config include/autoconf.h include/config/*
+	$(Q)$(RM) -rf .config include/autoconf.h include/config/* $(VERFILE)
 
-distclean: clean cleanconf
+distclean: clean_host clean cleanconf
 
 $(ODIR)/rmap.o: $(ODIR)/rmap.bin
 	$(call create_rmap)
@@ -153,7 +163,19 @@ ifneq ($(NOBUILDIMG),y)
 	@echo "*********************************************************************************"
 endif
 
-config:
+$(VERFILE):	
+	$(Q)$(ECHO) "#ifndef __VERSION_H__" > $(VERFILE)
+	$(Q)$(ECHO) "#define __VERSION_H__" >> $(VERFILE)
+	$(Q)$(ECHO) >> $(VERFILE)
+	$(Q)$(ECHO) "#define KERNEL_VERSION $(KERNEL_MAJOR_VER)" >> $(VERFILE)
+	$(Q)$(ECHO) "#define KERNEL_SUBVERSION $(KERNEL_MIDDLE_VER)" >> $(VERFILE)
+	$(Q)$(ECHO) "#define KERNEL_RELEASE $(KERNEL_MINOR_VER)" >> $(VERFILE)
+	$(Q)$(ECHO) >> $(VERFILE)
+	$(Q)$(ECHO) "#define KERNEL_RELEASE_NAME \"$(KERNEL_NAME)\"" >> $(VERFILE)
+	$(Q)$(ECHO) >> $(VERFILE)
+	$(Q)$(ECHO) "#endif /* __VERSION_H__ */" >> $(VERFILE)
+
+config: host
 	$(Q)$(MKDIR) -p $(BUILD_ROOT)/include/config
 	$(Q)$(MAKE) -C kbuild conf BUILD_ROOT=$(BUILD_ROOT)
 	$(Q)$(BUILD_ROOT)/kbuild/conf $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
@@ -161,7 +183,7 @@ config:
 
 menuconfig: host
 	$(Q)$(MKDIR) -p $(BUILD_ROOT)/include/config
-	$(Q)$(MAKE) -C kbuild BUILD_ROOT=$(BUILD_ROOT)
+	$(Q)$(MAKE) mconf -C kbuild BUILD_ROOT=$(BUILD_ROOT)
 	$(Q)$(BUILD_ROOT)/kbuild/mconf $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
 	$(Q)$(BUILD_ROOT)/kbuild/conf -s $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
 	$(Q)$(ECHO) "ARCH=$(arch)" >> .config
@@ -192,3 +214,4 @@ help_config:
 	$(call show_archs)
 	$(Q)$(ECHO)
 	$(Q)exit 2
+

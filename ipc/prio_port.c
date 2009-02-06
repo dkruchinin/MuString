@@ -30,7 +30,6 @@
 #include <mm/page.h>
 #include <ds/linked_array.h>
 #include <ipc/ipc.h>
-#include <eza/container.h>
 #include <ipc/buffer.h>
 #include <mm/slab.h>
 #include <ipc/gen_port.h>
@@ -43,11 +42,11 @@ typedef struct __prio_port_data_storage {
   ulong_t num_waiters;
 } prio_port_data_storage_t;
 
-static status_t prio_init_data_storage(struct __ipc_gen_port *port,
+static int prio_init_data_storage(struct __ipc_gen_port *port,
                                        task_t *owner,ulong_t queue_size)
 {
   prio_port_data_storage_t *ds;
-  status_t r;
+  int r;
 
   if( port->data_storage ) {
     return -EBUSY;
@@ -138,7 +137,7 @@ static void __remove_message(ipc_port_message_t *msg)
   }
 }
 
-static status_t prio_insert_message(struct __ipc_gen_port *port,
+static int prio_insert_message(struct __ipc_gen_port *port,
                                    ipc_port_message_t *msg)
 {
   prio_port_data_storage_t *ds=(prio_port_data_storage_t *)port->data_storage;
@@ -181,7 +180,7 @@ static void prio_free_data_storage(struct __ipc_gen_port *port)
 {
 }
 
-static status_t prio_remove_message(struct __ipc_gen_port *port,
+static int prio_remove_message(struct __ipc_gen_port *port,
                                     ipc_port_message_t *msg)
 {
   prio_port_data_storage_t *ds=(prio_port_data_storage_t*)port->data_storage;

@@ -7,7 +7,6 @@
 #include <eza/scheduler.h>
 #include <eza/swks.h>
 #include <mlibc/string.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/preempt.h>
 #include <eza/spinlock.h>
 #include <ipc/ipc.h>
@@ -23,7 +22,6 @@
 #include <test.h>
 #include <mm/slab.h>
 #include <eza/errno.h>
-#include <eza/tevent.h>
 #include <eza/process.h>
 
 #define TEST_ID  "Signal subsystem test"

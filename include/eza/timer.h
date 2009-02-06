@@ -27,11 +27,12 @@
 
 #include <config.h>
 #include <ds/list.h>
-#include <eza/arch/types.h>
 #include <eza/def_actions.h>
-#include <mlibc/rbtree.h>
+#include <ds/rbtree.h>
 #include <eza/arch/atomic.h>
 #include <eza/spinlock.h>
+#include <mlibc/types.h>
+#include <eza/interrupt.h>
 
 typedef struct __hw_timer_type {
   list_node_t l;
@@ -87,9 +88,10 @@ typedef struct __major_timer_tick {
 } major_timer_tick_t;
 
 void init_timers(void);
-long add_timer(ktimer_t *t);
-void delete_timer(ktimer_t *t);
-void adjust_timer(ktimer_t *t,long_t delta);
+void init_timer(timer_t *t);
+bool add_timer(timer_t *t);
+void delete_timer(timer_t *t);
+void adjust_timer(timer_t *t,long delta);
 void process_timers(void);
 void timer_cleanup_expired_ticks(void);
 

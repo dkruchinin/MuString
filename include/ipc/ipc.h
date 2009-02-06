@@ -68,7 +68,7 @@ typedef struct __task_ipc_priv {
   ipc_pstats_t pstats;
 } task_ipc_priv_t;
 
-status_t setup_task_ipc(task_t *task);
+int setup_task_ipc(task_t *task);
 void release_task_ipc_priv(task_ipc_priv_t *priv);
 
 #define LOCK_IPC(ipc)  mutex_lock(&(ipc)->mutex)

@@ -23,18 +23,18 @@
 
 #include <eza/arch/types.h>
 #include <kernel/syscalls.h>
-#include <kernel/vm.h>
 #include <ipc/ipc.h>
 #include <eza/task.h>
 #include <eza/smp.h>
-#include <ds/waitqueue.h>
 #include <ipc/poll.h>
 #include <eza/time.h>
 #include <mm/slab.h>
 #include <eza/errno.h>
 #include <mm/pfalloc.h>
+#include <eza/waitqueue.h>
 #include <eza/arch/page.h>
 #include <eza/scheduler.h>
+#include <eza/usercopy.h>
 #include <eza/arch/atomic.h>
 #include <ipc/gen_port.h>
 
@@ -55,9 +55,9 @@ static bool poll_deferred_sched_handler(void *data)
   return atomic_get(&p->task->ipc_priv->pstats.active_queues)==p->nqueues;
 }
 
-status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
+long sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
 {
-  status_t nevents;
+  long nevents;
   task_t *caller=current_task();
   ulong_t size=nfds*sizeof(poll_kitem_t);
   poll_kitem_t *pkitems;

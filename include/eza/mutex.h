@@ -24,7 +24,7 @@
 #ifndef __MUTEX_H__
 #define __MUTEX_H__
 
-#include <ds/waitqueue.h>
+#include <eza/waitqueue.h>
 #include <eza/spinlock.h>
 #include <eza/arch/types.h>
 
@@ -36,13 +36,11 @@ struct __task_struct;
  * @brief General mutex structure
  *
  */
-struct __mutex {
+typedef struct __mutex {
   spinlock_t lock;
-  struct __wait_queue wq;
+  wqueue_t wq;
   struct __task_struct *executer;
-};
-
-typedef struct __mutex mutex_t;
+} mutex_t;
 
 static inline bool mutex_is_locked(mutex_t *mutex)
 {
@@ -54,7 +52,7 @@ static inline bool mutex_is_locked(mutex_t *mutex)
 
 #define MUTEX_INITIALIZE(name)                  \
     {       .lock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V),  \
-            .wq = WQUEUE_INITIALIZE_PRIO((name).wq),             \
+            .wq = WQUEUE_INITIALIZE((name).wq),                  \
             .executer = NULL,   }
 
 void mutex_initialize(mutex_t *mutex);

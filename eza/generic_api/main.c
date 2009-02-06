@@ -22,18 +22,13 @@
  *
  */
 
+#include <config.h>
+#include <mm/vmm.h>
 #include <mm/slab.h>
-#include <eza/arch/page.h>
-#include <eza/arch/cpu.h>
 #include <eza/kconsole.h>
-#include <eza/kernel.h>
-#include <eza/context.h>
-#include <eza/mm_init.h>
 #include <mlibc/kprintf.h>
-#include <profile.h>
 #include <server.h>
 #include <align.h>
-#include <misc.h>
 #include <version.h>
 #include <eza/smp.h>
 #include <eza/arch/task.h>
@@ -47,12 +42,10 @@
 #include <eza/arch/smp.h>
 #include <eza/arch/apic.h>
 #include <eza/arch/atomic.h>
-#include <eza/arch/mm.h>
 #include <ipc/port.h>
 #include <eza/resource.h>
 #include <eza/arch/interrupt.h>
 #include <eza/gc.h>
-#include <eza/arch/mm.h>
 #include <eza/signal.h>
 
 init_t init={ /* initially created for userspace task, requered for servers loading */
@@ -118,12 +111,10 @@ void main_routine(void) /* this function called from boostrap assembler code */
   kcons->enable();
   //print_kernel_version_info();
   kprintf("[MB] Modules: %d\n",init.c);
-  kprintf("[LW] Initialized CPU vectors.\n");
 
-  mm_init();
-
+  mm_initialize();
   slab_allocator_init();
-
+  vmm_initialize();
   initialize_scheduler();
 
   initialize_timer();

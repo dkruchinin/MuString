@@ -27,7 +27,6 @@
 #include <eza/arch/types.h>
 #include <eza/arch/asm.h>
 #include <eza/arch/apic.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/interrupt.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>

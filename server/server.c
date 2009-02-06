@@ -22,7 +22,6 @@
  */
 
 #include <eza/arch/types.h>
-#include <mm/mmap.h>
 #include <mlibc/kprintf.h>
 #include <server.h>
 
@@ -36,7 +35,7 @@ uintptr_t server_get_start_phy_addr(void)
   if(server_get_num()>0) 
     return init.server[0].addr;
   else
-    return nil;
+    return 0;
 }
 
 uintptr_t server_get_end_phy_addr(void)
@@ -47,7 +46,7 @@ uintptr_t server_get_end_phy_addr(void)
     if(i>MAX_PRIVBOOT_SERVERS)      i=MAX_PRIVBOOT_SERVERS;
     return init.server[i-1].addr+init.server[i-1].size;
   } else
-    return nil;
+      return 0;
 }
 
 

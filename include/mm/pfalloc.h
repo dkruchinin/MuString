@@ -31,13 +31,14 @@
 #define __PFALLOC_H__ 
 
 #include <mm/page.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 
 /* Allocation flags */
-#define __AF_PLAST PF_PGEN
-#define AF_PDMA PF_PDMA           /**< Allocate page from DMA pool */
-#define AF_PGEN PF_PGEN           /**< Allocate page from GENERAL pool */
-#define AF_ZERO (__AF_PLAST << 1) /**< Allocate clean page block(fill block with zeros) */
+#define __AF_PLAST  PF_PGEN
+#define AF_PDMA     PF_PDMA           /**< Allocate page from DMA pool */
+#define AF_PGEN     PF_PGEN           /**< Allocate page from GENERAL pool */
+#define AF_ZERO     (__AF_PLAST << 1) /**< Allocate clean page block(fill block with zeros) */
+#define AF_CLEAR_RC (__AF_PLAST << 2) /**< Allocate pages with refcounts set to 0 */
 
 /**
  * @typedef uint8_t pfalloc_flags_t
@@ -59,10 +60,16 @@ typedef enum __pfalloc_type {
  * Page frame allocator abstract type
  */
 typedef struct __pf_allocator {
-  page_frame_t *(*alloc_pages)(int n, void *data);      /**< A pointer to function that can alloc n pages */
-  void (*free_pages)(page_frame_t *pframe, void *data); /**< A pointer to function that can free pages */
-  void *alloc_ctx;                                      /**< Internal allocator private data */
-  pfalloc_type_t type;                                  /**< Allocator type */
+  /**< A pointer to function that can alloc n pages */
+  page_frame_t *(*alloc_pages)(page_idx_t n, void *data);
+  /**< A pointer to function that can free pages */
+  void (*free_pages)(page_frame_t *pframe, page_idx_t num_pages, void *data);
+  /**< Get size of pages block starting from pages_block_start */ 
+  page_idx_t (*pages_block_size)(page_frame_t *pages_block_start, void *data);
+  void *alloc_ctx;         /**< Internal allocator private data */
+  page_idx_t block_sz_min; /**< Minimum number of pages in an allocatable block */
+  page_idx_t block_sz_max; /**< Maximum number of pages in an allocatable block */
+  pfalloc_type_t type;     /**< Allocator type */
 } pf_allocator_t;
 
 /**
@@ -76,6 +83,8 @@ typedef struct __pf_allocator {
  */
 #define alloc_page(flags)                       \
   alloc_pages(1, flags)
+#define free_page(page)                         \
+  free_pages(page, 1)
 
 /**
  * @brief Allocate @a n continous pages
@@ -85,7 +94,7 @@ typedef struct __pf_allocator {
  *
  * @see alloc_page
  */
-page_frame_t *alloc_pages(int n, pfalloc_flags_t flags);
+page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags);
 
 /**
  * @brief free continous block of pages starting from @a pages
@@ -93,22 +102,27 @@ page_frame_t *alloc_pages(int n, pfalloc_flags_t flags);
  * @note Internal page frames allocator *must* be able to determine block size by
  *       the very first page frame in block.
  */
-void free_pages(page_frame_t *pages);
+void free_pages(page_frame_t *pages, page_idx_t num_pages);
+page_idx_t pages_block_size(page_frame_t *first_page);
+
+struct __vmm;
+
+page_frame_t *alloc_pages_ncont(page_idx_t npages, pfalloc_flags_t flags);
+void free_pages_ncont(page_frame_t *pages);
 
 static inline void *alloc_pages_addr(int n, pfalloc_flags_t flags)
 {
-  page_frame_t *pf = alloc_pages(n,flags);
-  if( pf != NULL ) {
-      return pframe_to_virt(pf);
-  }
+  page_frame_t *pf = alloc_pages(n, flags);
+  if(pf)
+    return pframe_to_virt(pf);
+
   return NULL;
 }
 
 static inline void free_pages_addr(void *addr)
 {
-  if( addr != NULL ) {
-    free_pages(virt_to_pframe(addr));
-  }
+  page_frame_t *pf = virt_to_pframe(addr);
+  free_pages(pf, pages_block_size(pf));
 }
 
 #endif /* __PFALLOC_H__ */

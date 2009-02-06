@@ -33,6 +33,23 @@
 #include <eza/arch/cpu.h>
 	
 #define START_STACK	(BOOT_OFFSET - BOOT_STACK_SIZE)
+#define PTL_NO_EXEC        (1<<63)
+#define PTL_ACCESSED       (1<<5)
+#define PTL_CACHE_DISABLE  (1<<4)
+#define PTL_CACHE_THROUGH  (1<<3)
+#define PTL_USER           (1<<2)
+#define PTL_WRITABLE       (1<<1)
+#define PTL_PRESENT        1
+#define PTL_2MB_PAGE       (1<<7)
+#define _PTL_ENTRIES       512
+#define PTL0_ENTRIES_ARCH  _PTL_ENTRIES
+#define PTL1_ENTRIES_ARCH  _PTL_ENTRIES
+#define PTL2_ENTRIES_ARCH  _PTL_ENTRIES
+#define PTL3_ENTRIES_ARCH  _PTL_ENTRIES
+#define PTL0_SIZE_ARCH     PAGE_SIZE
+#define PTL1_SIZE_ARCH     PAGE_SIZE
+#define PTL2_SIZE_ARCH     PAGE_SIZE
+#define PTL3_SIZE_ARCH     PAGE_SIZE
 	
 .section K_TEXT_START, "ax"
 

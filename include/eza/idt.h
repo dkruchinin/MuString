@@ -12,8 +12,8 @@ typedef struct __idt {
   irq_t (*vectors_available)(void);
   irq_t (*first_available_vector)(void);
   bool (*is_active_vector)(irq_t vec);
-  status_t (*install_handler)(idt_handler_t h, irq_t vec);
-  status_t (*free_handler)(irq_t vec);
+  int (*install_handler)(idt_handler_t h, irq_t vec);
+  int (*free_handler)(irq_t vec);
   void (*initialize)(void);
 } idt_t;
 
