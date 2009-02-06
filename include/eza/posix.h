@@ -75,8 +75,8 @@ static inline void posix_insert_object(posix_stuff_t *stuff,
   list_add2tail(lh,&obj->l);
 }
 
-static posix_kern_obj_t *posix_locate_object(posix_stuff_t *stuff,ulong_t id,
-                                             posix_obj_type_t type)
+static posix_kern_obj_t *__posix_locate_object(posix_stuff_t *stuff,ulong_t id,
+                                               posix_obj_type_t type)
 {
   list_head_t *lh=&stuff->list_hash[id/(CONFIG_POSIX_MAX_OBJECTS/CONFIG_POSIX_HASH_GROUPS)];  
   posix_kern_obj_t *obj;
@@ -86,7 +86,6 @@ static posix_kern_obj_t *posix_locate_object(posix_stuff_t *stuff,ulong_t id,
     return NULL;
   }
 
-  LOCK_POSIX_STUFF_R(stuff);
   list_for_each(lh,ln) {
     obj=container_of(ln,posix_kern_obj_t,l);
     if( obj->objid == id && obj->type == type ) {
@@ -96,12 +95,18 @@ static posix_kern_obj_t *posix_locate_object(posix_stuff_t *stuff,ulong_t id,
   }
   obj=NULL;
 found:
-  UNLOCK_POSIX_STUFF_R(stuff);
   return obj;
 }
 
-#define posix_lookup_timer(stuff,id)                                    \
-  (posix_timer_t *)posix_locate_object((stuff),id,POSIX_OBJ_TIMER)
+static inline posix_timer_t *posix_lookup_timer(posix_stuff_t *stuff,ulong_t id)
+{
+  posix_timer_t *t;
+
+  LOCK_POSIX_STUFF_R(stuff);
+  t=(posix_timer_t *)__posix_locate_object(stuff,id,POSIX_OBJ_TIMER);
+  UNLOCK_POSIX_STUFF_R(stuff);
+  return t;
+}
 
 posix_stuff_t *allocate_task_posix_stuff(void);
 #define posix_validate_sigevent(se) ( ((se)->sigev_notify == SIGEV_SIGNAL) && \

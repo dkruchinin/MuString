@@ -27,6 +27,7 @@
 #include <eza/errno.h>
 #include <eza/signal.h>
 #include <eza/arch/interrupt.h>
+#include <eza/arch/profile.h>
 
 long sys_timer_create(clockid_t clockid,struct sigevent *evp,
                       posixid_t *timerid)
@@ -114,41 +115,32 @@ out:
   return r;
 }
 
-static long __get_timer_status(posix_timer_t *ptimer,itimerspec_t *userspec)
+static void __get_timer_status(posix_timer_t *ptimer,itimerspec_t *kspec)
 {
-  itimerspec_t kspec;
   ktimer_t *timer=&ptimer->ktimer;
 
-  ticks_to_time(&kspec.it_interval,ptimer->interval);
+  ticks_to_time(&kspec->it_interval,ptimer->interval);
 
   /* We disable interrupts to prevent us from being preempted, and,
    * therefore, from calculating wrong time delta.
    */
   interrupts_disable();
   if( timer->time_x > system_ticks ) {
-    ticks_to_time(&kspec.it_value,timer->time_x - system_ticks);
+    ticks_to_time(&kspec->it_value,timer->time_x - system_ticks);
   } else {
-    kspec.it_value.tv_sec=kspec.it_value.tv_nsec=0;
+    kspec->it_value.tv_sec=kspec->it_value.tv_nsec=0;
   }
   interrupts_enable();
-
-  return copy_to_user(userspec,&kspec,sizeof(kspec)) ? -EFAULT : 0;
 }
 
 long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
 {
-  long r=0;
+  long r=-EINVAL;
   task_t *caller=current_task();
   posix_stuff_t *stuff=caller->posix_stuff;
-  posix_timer_t *ptimer=posix_lookup_timer(stuff,id);
-  itimerspec_t tspec;
+  posix_timer_t *ptimer;
+  itimerspec_t tspec,kspec;
   ktimer_t *ktimer;
-
-  if( !ptimer ) {
-    return -EINVAL;
-  }
-
-  ktimer=&ptimer->ktimer;
 
   switch( cmd ) {
     case __POSIX_TIMER_SETTIME:
@@ -159,42 +151,61 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
       if( !arg2 || copy_from_user(&tspec,(void *)arg2,sizeof(tspec)) ) {
         r=-EFAULT;
       } else {
-        /* Copy to userspace the rest of the expiration time in advance
-         * to avoid timer cleanup in case user provided a bad area.
+        bool valid_timeval=timeval_is_valid(&tspec.it_value) && timeval_is_valid(&tspec.it_interval);
+        ulong_t tx=time_to_ticks(&tspec.it_value);
+        ulong_t itx=time_to_ticks(&tspec.it_interval);
+        ulong_t t1,t2;
+
+        /* We need to hold the lock during the whole process, so lookup
+         * target timer explicitely.
          */
-        if( arg3 ) {
-          r=__get_timer_status(ptimer,(itimerspec_t *)arg3 );
-          if( r ) {
-            break;
-          }
+        LOCK_POSIX_STUFF_W(stuff);
+        __READ_TIMESTAMP_COUNTER(t1);
+        ptimer=(posix_timer_t*)__posix_locate_object(stuff,id,POSIX_OBJ_TIMER);
+        if( !ptimer ) {
+          UNLOCK_POSIX_STUFF_W(stuff);
+          break;
         }
 
+        ktimer=&ptimer->ktimer;
         if( !(tspec.it_value.tv_sec | tspec.it_value.tv_nsec) ) {
           if( ktimer->time_x ) {
             /* Disarm real timer  */
           }
-        } else {
-          if( !timeval_is_valid(&tspec.it_value) ||
-              !timeval_is_valid(&tspec.it_interval) ) {
-            r=-EINVAL;
-          } else {
-            ulong_t tx=time_to_ticks(&tspec.it_value);
+        } else if( valid_timeval ) {
+          if( !(arg1 & TIMER_ABSTIME) ) {
+            tx+=system_ticks;
+          }
 
-            if( !(arg1 & TIMER_ABSTIME) ) {
-              tx+=system_ticks;
-            }
+          ptimer->interval=itx;
+          TIMER_RESET_TIME(ktimer,tx);
+          r=add_timer(ktimer);
+        }
+        __READ_TIMESTAMP_COUNTER(t2);
+        UNLOCK_POSIX_STUFF_W(stuff);
 
-            ptimer->interval=time_to_ticks(&tspec.it_interval);
-            TIMER_RESET_TIME(ktimer,tx);
-            r=add_timer(ktimer);
+        if( !r && arg3 ) {
+          __get_timer_status(ptimer,&kspec);
+          if( copy_to_user((itimerspec_t *)arg3,&kspec,sizeof(kspec)) )  {
+            r=-EFAULT;
+            /* TODO: [mt] Cleanup timer upon -EFAULT. */
           }
         }
       }
       break;
     case __POSIX_TIMER_GETTIME:
-      r=__get_timer_status(ptimer,(itimerspec_t *)arg1);
+      ptimer=posix_lookup_timer(stuff,id);
+      if( !ptimer ) {
+        break;
+      }
+      __get_timer_status(ptimer,&kspec);
+      r=copy_to_user((itimerspec_t *)arg1,&kspec,sizeof(kspec)) ? -EFAULT : 0;
       break;
     case __POSIX_TIMER_GETOVERRUN:
+      ptimer=posix_lookup_timer(stuff,id);
+      if( !ptimer ) {
+        break;
+      }
       r=ptimer->overrun;
       break;
     default:
@@ -202,6 +213,8 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
       break;
   }
 
-  release_posix_timer(ptimer);
+  if( ptimer ) {
+    release_posix_timer(ptimer);
+  }
   return r;
 }
