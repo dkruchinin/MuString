@@ -35,6 +35,7 @@
 #include <mm/slab.h>
 #include <ipc/gen_port.h>
 #include <ds/list.h>
+#include <mlibc/skiplist.h>
 
 typedef struct __prio_port_data_storage {
   list_head_t prio_head,all_messages,id_waiters;
@@ -42,6 +43,8 @@ typedef struct __prio_port_data_storage {
   linked_array_t msg_array;
   ulong_t num_waiters;
 } prio_port_data_storage_t;
+
+#define __remove_message(msg)  skiplist_del((msg),ipc_port_message_t,h,l)
 
 static status_t prio_init_data_storage(struct __ipc_gen_port *port,
                                        task_t *owner,ulong_t queue_size)
@@ -88,53 +91,22 @@ static void __add_one_message(list_head_t *list,
   if( list_is_empty(list) ) {
     list_add2head(list,&msg->l);
   } else {
-    list_node_t *next=list->head.next,*prev=NULL;
-    bool inserted=false;
+    list_node_t *n;
     ulong_t p2=msg->sender->static_priority;
 
-    do {
-      ipc_port_message_t *m=container_of(next,ipc_port_message_t,l);
+    list_for_each(list,n) {
+      ipc_port_message_t *m=container_of(n,ipc_port_message_t,l);
       ulong_t p1=m->sender->static_priority;
 
       if( p1 > p2 ) {
-        break;
+        list_insert_before(&msg->l,&m->l);
+        return;
       } else if( p1 == p2 ) {
         list_add2tail(&m->h,&msg->l);
-        inserted=true;
-      }
-      prev=next;
-      next=next->next;
-    } while(next != list_head(list) );
-
-    if( !inserted ) {
-      if( prev != NULL ) {
-        msg->l.next=prev->next;
-        prev->next->prev=&msg->l;
-        prev->next=&msg->l;
-        msg->l.prev=prev;
-      } else {
-        list_add2head(list,&msg->l);
+        return;
       }
     }
-  }
-}
-
-static void __remove_message(ipc_port_message_t *msg)
-{
-  list_node_t *prev=msg->l.prev;
-
-  list_del(&msg->l);
-  if( !list_is_empty(&msg->h) ) {
-    ipc_port_message_t *m=container_of(list_node_first(&msg->h),
-                                       ipc_port_message_t,l);
-    list_del(&m->l);
-    if( !list_is_empty(&msg->h) ) {
-      list_move2head(&m->h,&msg->h);
-    }
-    m->l.prev=prev;
-    m->l.next=prev->next;
-    prev->next->prev=&m->l;
-    prev->next=&m->l;
+    list_add2tail(list,&msg->l);
   }
 }
 
