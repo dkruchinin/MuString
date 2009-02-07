@@ -610,7 +610,9 @@ int ipc_port_send_iov(struct __ipc_gen_port *port,
   }
 
   if( !r ) {
-    if( !(port->flags & IPC_PORT_SHUTDOWN ) ) {
+      if( !(port->flags & IPC_PORT_SHUTDOWN ) ) {
+          msg->replied_size = 1000000;
+          kprintf("IM ==> %p\n", msg_ops->insert_message);
       r=msg_ops->insert_message(port,msg);
     } else {
       r=-EPIPE;
@@ -631,7 +633,9 @@ int ipc_port_send_iov(struct __ipc_gen_port *port,
 
   wait_for_reply:
     IPC_TASK_ACCT_OPERATION(sender);
+    kprintf("client is sleeping -> %ld\n\n", current_task()->pid);
     r=event_yield(&msg->event);
+    kprintf("client has just woken up -> %ld, RS: %d\n\n", current_task()->pid, msg->replied_size);
     IPC_TASK_UNACCT_OPERATION(sender);
 
     if( task_was_interrupted(sender) ) {
@@ -647,12 +651,14 @@ int ipc_port_send_iov(struct __ipc_gen_port *port,
           /* If server neither received nor replied to our message, we can
            * remove it from the queue without any problems.
            */
+            kprintf("removed -> %ld\n\n", current_task()->pid);
           msg_ops->remove_message(port,msg);
           break;
         case MSG_STATE_DATA_TRANSFERRED:
           /* Server successfully received data from our message but not replied yet,
            * so we should remove message in port-specific way.
            */
+            kprintf("dq -> %ld\n\n", current_task()->pid);
           msg_ops->dequeue_message(port,msg);
           break;
         case MSG_STATE_REPLY_BEGIN:
@@ -705,6 +711,7 @@ int ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
 
   if( !port->msg_ops->remove_message ||
       !(port->flags & IPC_BLOCKED_ACCESS)) {
+      kprintf("== zzzz\n");
     return -EINVAL;
   }
 
@@ -719,6 +726,7 @@ int ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
         msg->state=MSG_STATE_REPLY_BEGIN;
       }
     } else {
+        kprintf("== 222zzzz\n");
       r=-EINVAL;
     }
   } else {

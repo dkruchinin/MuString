@@ -15,7 +15,7 @@ typedef long posixid_t;
 #define CONFIG_POSIX_MAX_TIMERS  32
 #define CONFIG_POSIX_HASH_GROUPS  8
 
-#define CONFIG_POSIX_MAX_OBJECTS  (CONFIG_POSIX_MAX_TIMERS)
+#define CONFIG_POSIX_MAX_OBJECTS  (CONFIG_POSIX_MAX_TIMERS) * 32
 
 /* Structures that defines all POSIX-related stuff. */
 typedef struct __posix_stuff {

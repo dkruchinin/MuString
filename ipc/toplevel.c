@@ -85,12 +85,14 @@ static long __reply_iov(ulong_t port,ulong_t msg_id,
 
     reply_size += reply_iov[i].iov_len;
     if( reply_size > MAX_PORT_MSG_LENGTH ) {
+        kprintf("== reply_size\n");
       return -EINVAL;
     }
   }
 
   p=__ipc_get_port(current_task(),port);
   if( !p ) {
+      kprintf("== !p\n");
     return -EINVAL;
   }
 

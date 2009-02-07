@@ -150,9 +150,11 @@ static int prio_insert_message(struct __ipc_gen_port *port,
   list_add2tail(&ds->all_messages,&msg->messages_list);
 
   if( id != INVALID_ITEM_IDX ) { /* Insert this message in the array directly. */
+      kprintf("Insert id == %d\n", id);
     ds->message_ptrs[id]=msg;
     __add_one_message(&ds->prio_head,msg);
   } else { /* No free slots - put this message to the waitlist. */
+      kprintf("Fucking id is invalid!!!!\n");
     id=WAITQUEUE_MSG_ID;
     ds->num_waiters++;
     __add_one_message(&ds->id_waiters,msg);
@@ -169,6 +171,8 @@ static ipc_port_message_t *prio_extract_message(ipc_gen_port_t *p,ulong_t flags)
   if( !list_is_empty(&ds->prio_head) ) {
     ipc_port_message_t *msg=container_of(list_node_first(&ds->prio_head),
                                          ipc_port_message_t,l);
+    if (ds->message_ptrs[msg->id] == NULL)
+        kprintf("WTF?\n");
     __remove_message(msg);
     p->avail_messages--;
     return msg;
@@ -262,7 +266,7 @@ static void prio_dequeue_message(struct __ipc_gen_port *port,
 
 static ipc_port_message_t *prio_lookup_message(struct __ipc_gen_port *port,
                                                ulong_t msg_id)
-{
+{    
   if( msg_id < port->capacity ) {
     prio_port_data_storage_t *ds=(prio_port_data_storage_t*)port->data_storage;
     ipc_port_message_t *msg=ds->message_ptrs[msg_id];
@@ -272,8 +276,12 @@ static ipc_port_message_t *prio_lookup_message(struct __ipc_gen_port *port,
       port->total_messages--;
       linked_array_free_item(&ds->msg_array,msg_id);
     }
+    if (!msg) {
+        kprintf("Message for id %d wasn't found\n", msg_id);
+    }
     return msg;
   }
+
   return NULL;
 }
 

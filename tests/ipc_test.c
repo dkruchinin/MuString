@@ -1313,6 +1313,7 @@ static void __prioritized_port_test(void *ctx)
 
         tf->printf(SERVER_THREAD"[PRIO PORT] Receiving a message that has %d middle parts. SIZE=%d\n",
                    parts,MESSAGE_SIZE(parts));
+        msg_info.msg_id = 666;
         r=sys_port_receive(__prio_port,IPC_BLOCKED_ACCESS,(ulong_t)__vectored_msg_server_rcv_buf,
                            sizeof(__vectored_msg_server_rcv_buf),&msg_info);
         tf->printf(SERVER_THREAD"[PRIO PORT]Vectored message received. MESSAGE SIZE=%d\n",
