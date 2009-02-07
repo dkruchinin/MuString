@@ -15,7 +15,7 @@
  * 02111-1307, USA.
  * 
  * (c) Copyright 2005 Dan Kruchinin
- * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2005,2008 Tirra <tirra.newly@gmail.com>
  *
  * eza/generic_api/vga.c: simple VGA functions
