@@ -406,7 +406,7 @@ static page_frame_t *alloc_slab_pages(memcache_t *cache)
 
 static inline void free_slab_pages(page_frame_t *pages)
 {
-  free_pages(pages);
+  free_pages(pages, pages_block_size(pages));
 }
 
 static void prepare_slab_pages(slab_t *slab)
@@ -776,8 +776,9 @@ memcache_t *create_memcache(const char *name, size_t size,
   if (was_const)
     cache->flags |= SMCF_CONST;
 
-  kprintf(" Created memory cache \"%s\" [pages per slab:%d, slabs:%d, objsize=%d]\n",
-          name, cache->pages_per_slab, atomic_get(&cache->nslabs), cache->object_size);
+  kprintf("[SLAB] Memory cache \"%s\" was created\n", name);
+  SLAB_VERBOSE(" [pages per slab:%d, slabs:%d, objsize=%d]\n",
+               cache->pages_per_slab, atomic_get(&cache->nslabs), cache->object_size);
   return cache;
   
   err:
@@ -840,7 +841,7 @@ void *alloc_from_memcache(memcache_t *cache)
     
     /*
      * Unfortunately our percpu guy is already full,
-     * this means it must be replaces(if there is enough memory
+     * this means it must be replaced(if there is enough memory
      * to allocate it :)).
      */
     __slab_lock(old_slab); /* Full slab is locked only for disabling preemption */

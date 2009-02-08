@@ -138,16 +138,16 @@ typedef union {
   } __attribute__ ((packed));
 } apic_svr_t;
 
-typedef union {
+typedef union {  
   uint32_t reg;
   struct {
-    uint32_t tx_cs_err : 1,
-      rx_cs_err : 1,
-      tx_accept_err : 1,
-      rx_accept_err : 1,
-      __res0 : 1,
-      tx_illegal_vector : 1,
-      rx_illegal_vector : 1,
+      unsigned tx_cs_err : 1,
+       rx_cs_err : 1,
+       tx_accept_err : 1,
+       rx_accept_err : 1,
+       __res0 : 1,
+       tx_illegal_vector : 1,
+       rx_illegal_vector : 1,
       reg_illegal_addr : 1,
       __res1 : 24;
   } __attribute__ ((packed));

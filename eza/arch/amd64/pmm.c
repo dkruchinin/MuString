@@ -22,16 +22,17 @@
  *
  */
 
+#include <config.h>
 #include <eza/arch/types.h>
 #include <eza/arch/page.h>
-#include <eza/arch/mm_types.h>
+#include <eza/arch/cpu.h>
+#include <eza/arch/gdt.h>
 #include <mlibc/string.h>
 #include <eza/arch/asm.h>
 #include <eza/smp.h>
 #include <eza/arch/gdt.h>
 #include <eza/errno.h>
 #include <eza/interrupt.h>
-#include <mm/mm.h>
 #include <eza/arch/mm.h>
 
 /* Global per-CPU GDT entries. */

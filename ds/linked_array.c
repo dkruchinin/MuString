@@ -14,7 +14,7 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *
  * mlibc/linked_array.c: Implementation of the linked array data type.
@@ -119,12 +119,12 @@ ulong_t linked_array_alloc_item(linked_array_t *arr)
       item = INVALID_ITEM_IDX;
       break;
   }
-
   if(arr->head == arr->items-1) {
-    arr->head=arr->items;
+      arr->head=arr->items;
   } else {
-    arr->head = h;
+      arr->head = h;
   }
+    
   return item;
 }
 

@@ -50,7 +50,7 @@ static inline bit_idx_t find_first_bit64( uint64_t v )
   return idx;
 }
 
-static inline bit_idx_t find_first_bit_mem(long *ptr, long count)
+static inline bit_idx_t find_first_bit_mem(void *ptr, long count)
 {
   bit_idx_t idx;
 
@@ -65,12 +65,12 @@ static inline bit_idx_t find_first_bit_mem(long *ptr, long count)
       "jmp 0b\n"
       "1: add %%rax, %%rdx\n"
       "2:\n"
-  : "=d" (idx) : "b" (count), "c" (ptr), "d" (INVALID_BIT_INDEX) );
+      : "=d" (idx) : "b" (count), "c" ((long *)ptr), "d" (INVALID_BIT_INDEX) );
 
   return idx;
 }
 
-static inline bit_idx_t reset_and_test_bit_mem(uint64_t *ptr, bit_idx_t bit )
+static inline bit_idx_t reset_and_test_bit_mem(void *ptr, bit_idx_t bit )
 {
   bit_idx_t prev_state;
 
@@ -83,12 +83,12 @@ static inline bit_idx_t reset_and_test_bit_mem(uint64_t *ptr, bit_idx_t bit )
     "btr %%rax, (%%rdx)\n"
     "movq $0, %%rax\n"
     "adc $0, %%rax\n"
-  : "=r"(prev_state) : "b" (bit), "d" (ptr) );
+    : "=r"(prev_state) : "b" (bit), "d" ((uintptr_t *)ptr) );
 
   return prev_state;
 }
 
-static inline bit_idx_t set_and_test_bit_mem(long *ptr, bit_idx_t bit)
+static inline bit_idx_t set_and_test_bit_mem(void *ptr, bit_idx_t bit)
 {
   bit_idx_t prev_state;
 
@@ -101,7 +101,7 @@ static inline bit_idx_t set_and_test_bit_mem(long *ptr, bit_idx_t bit)
     "bts %%rax, (%%rdx)\n"
     "movq $0, %%rax\n"
     "adc $0, %%rax\n"
-  : "=r"(prev_state) : "b" (bit), "d" (ptr) );
+    : "=r"(prev_state) : "b" (bit), "d" ((long *)ptr) );
 
   return prev_state;
 }

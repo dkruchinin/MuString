@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2009 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
  * eza/amd64/faults/mem_faults.c: contains routines for dealing with
  *   memory-related x86_64 CPU fauls.
@@ -25,16 +26,23 @@
 #include <eza/arch/types.h>
 #include <eza/arch/page.h>
 #include <eza/arch/fault.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/interrupt.h>
+#include <mm/vmm.h>
+#include <mm/page.h>
 #include <eza/kernel.h>
 #include <mlibc/kprintf.h>
 #include <eza/arch/mm.h>
 #include <eza/smp.h>
 #include <eza/kconsole.h>
 #include <eza/arch/context.h>
-#include <mm/mmap.h>
 #include <eza/signal.h>
+
+#define PFAULT_NP(errcode) (((errcode) & 0x1) == 0)
+#define PFAULT_PROTECT(errcode) ((errcode) & 0x01)
+#define PFAULT_READ(errcode) (((errcode) & 0x02) == 0)
+#define PFAULT_WRITE(errcode) ((errcode) & 0x02)
+#define PFAULT_SVISOR(errcode) (((errcode) & 0x04) == 0)
+#define PFAULT_USER(errcode) ((errcode) & 0x04)
 
 #define get_fault_address(x) \
     __asm__ __volatile__( "movq %%cr2, %0" : "=r"(x) )
@@ -55,13 +63,13 @@ static void __dump_regs(regs_t *r,ulong_t rip)
 static bool __read_user_safe(uintptr_t addr,uintptr_t *val)
 {
   uintptr_t *p;
-  page_idx_t pidx=mm_pin_virt_addr(current_task()->page_dir,addr);
+  page_idx_t pidx = mm_vaddr2page_idx(&current_task()->rpd, addr);  
 
-  if( pidx < 0 ) {
+  if( pidx == PAGE_IDX_INVAL ) {
     return false;
   }
 
-  p=(uintptr_t*)(pframe_id_to_virt(pidx)+(addr & PAGE_OFFSET_MASK));
+  p=(uintptr_t*)(pframe_id_to_virt(pidx)+(addr & PAGE_MASK));
   *val=*p;
   return true;
 }
@@ -136,14 +144,40 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
   task_t *faulter=current_task();
 
   get_fault_address(invalid_address);
-
-  if( kernel_fault(stack_frame) )
+  if(PFAULT_SVISOR(stack_frame->error_code))
     goto kernel_fault;
+  else {
+    /*
+     * PF in user-space. Try to find out correspondig VM range and handle the faut
+     * using range's memory object.
+     */
 
+    vmm_t *vmm = current_task()->task_mm;
+    vmrange_t *vmr;    
+    uint32_t errmask = 0;
+    int ret = -EFAULT;
+
+    if (!PFAULT_READ(stack_frame->error_code))
+      errmask |= PFLT_WRITE;
+    if (PFAULT_PROTECT(stack_frame->error_code))
+      errmask |= PFLT_PROTECT;
+    else
+      errmask |= PFLT_NOT_PRESENT;
+    
+    rwsem_down_read(&vmm->rwsem);
+    vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(invalid_address), invalid_address + PAGE_SIZE, NULL);
+    if (vmr)
+      ret = vmm_handle_page_fault(vmr, invalid_address, errmask);
+    
+    rwsem_up_read(&vmm->rwsem);
+    if (ret < 0)
+      goto kernel_fault;
+  }
   if( __send_sigsegv_on_faults )
     goto send_sigsegv;
-
-  default_console()->enable();
+  if (!default_console()->is_enabled)
+    default_console()->enable();
+  
   kprintf("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
   goto stop_cpu;
@@ -156,7 +190,9 @@ kernel_fault:
     return;
   }
 
-  default_console()->enable();
+  if (!default_console()->is_enabled)
+    default_console()->enable();
+  
   kprintf("[CPU %d] Unhandled kernel-mode PF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
 stop_cpu:

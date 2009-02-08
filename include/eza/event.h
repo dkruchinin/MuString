@@ -85,7 +85,7 @@ static bool event_defered_sched_handler(void *data)
 static inline int event_yield(event_t *event)
 {
   struct __task_struct *t;
-  status_t r=-EINVAL;
+  int r=-EINVAL;
   long is;
 
   LOCK_EVENT(event,is);

@@ -71,14 +71,16 @@
 #define SC_THREAD_EXIT         33
 #define SC_TIMER_CREATE        34
 #define SC_TIMER_CONTROL       35
+#define SC_MUNMAP              36
 
 #ifndef __ASM__
+typedef uint32_t shm_id_t; /* FIXME: remove after merging */
 
 /**
  * @fn status_t sys_get_pid(void)
  * @return PID of the calling process.
  */
-status_t sys_get_pid(void);
+long sys_get_pid(void);
 
 
 /**
@@ -106,7 +108,7 @@ status_t sys_get_pid(void);
  *         Otherwise, negation of the following error codes is returned:
  *         ENOMEM   No memory was available.
  */
-status_t sys_create_task(ulong_t flags,task_creation_attrs_t *a);
+long sys_create_task(ulong_t flags,task_creation_attrs_t *a);
 
 
 /**
@@ -148,7 +150,7 @@ status_t sys_create_task(ulong_t flags,task_creation_attrs_t *a);
  *    EFAULT - argument points to insufficient address in userspace;
  *    
  */
-status_t sys_task_control( pid_t pid, ulong_t cmd, ulong_t arg);
+int sys_task_control( pid_t pid, ulong_t cmd, ulong_t arg);
 
 /**
  * @fn status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_t offset);
@@ -160,8 +162,8 @@ status_t sys_task_control( pid_t pid, ulong_t cmd, ulong_t arg);
  * @param offset - offset of the shared area to map
  *
  */
-status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_t offset);
-
+long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, int memobj_id, off_t offset);
+void sys_munmap(uintptr_t addr, size_t length);
 
 /**
  * @fn status_t sys_create_port( ulong_t flags, ulong_t queue_size )
@@ -188,7 +190,7 @@ status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_
  *    ERERM  - calling process wasn't allowed to create a new IPC port.
  *    EINVAL - insufficient flags passed.
  */
-status_t sys_create_port( ulong_t flags, ulong_t queue_size );
+long sys_create_port( ulong_t flags, ulong_t queue_size );
 
 /**
  * @fn status_t sys_port_send(pid_t pid,ulong_t port,uintptr_t snd_buf,
@@ -217,9 +219,9 @@ status_t sys_create_port( ulong_t flags, ulong_t queue_size );
  *             b) message had insufficient size (currently only up to 2MB
  *                can be transferred via ports).
  */
-status_t sys_port_send(ulong_t channel,
-                       uintptr_t snd_buf,ulong_t snd_size,
-                       uintptr_t rcv_buf,ulong_t rcv_size);
+size_t sys_port_send(ulong_t channel,
+                     uintptr_t snd_buf,ulong_t snd_size,
+                     uintptr_t rcv_buf,ulong_t rcv_size);
 
 /**
  * @fn status_t sys_port_receive( ulong_t port, ulong_t flags, ulong_t recv_buf,
@@ -244,8 +246,8 @@ status_t sys_port_send(ulong_t channel,
  *     EWOULDBLOCK - Non-blocking access was requested and there are
  *                   no messages available in the queue.
  */
-status_t sys_port_receive( ulong_t port, ulong_t flags, ulong_t recv_buf,
-                           ulong_t recv_len,port_msg_info_t *msg_info);
+size_t sys_port_receive( ulong_t port, ulong_t flags, ulong_t recv_buf,
+                         ulong_t recv_len,port_msg_info_t *msg_info);
 
 /**
  * @fn status_t sys_port_reply(ulong_t port, ulong_t msg_id,ulong_t reply_buf,
@@ -262,8 +264,8 @@ status_t sys_port_receive( ulong_t port, ulong_t flags, ulong_t recv_buf,
  * @param reply_buf Buffer that contains data to reply.
  * @param reply_len Number of bytes to send.
  */
-status_t sys_port_reply(ulong_t port, ulong_t msg_id,ulong_t reply_buf,
-                        ulong_t reply_len);
+size_t sys_port_reply(ulong_t port, ulong_t msg_id,ulong_t reply_buf,
+                      ulong_t reply_len);
 
 /**
  * @fn status_t sys_allocate_ioports(ulong_t first_port,ulong_t num_ports)
@@ -282,7 +284,7 @@ status_t sys_port_reply(ulong_t port, ulong_t msg_id,ulong_t reply_buf,
  *   ENOMEM - No free memory to complete the request.
  *   EBUSY - Target I/O ports are already in use.
  */
-status_t sys_allocate_ioports(ulong_t first_port,ulong_t num_ports);
+int sys_allocate_ioports(ulong_t first_port,ulong_t num_ports);
 
 /**
  * @fn status_t sys_free_ioports(ulong_t first_port,ulong_t num_ports)
@@ -300,7 +302,7 @@ status_t sys_allocate_ioports(ulong_t first_port,ulong_t num_ports);
  *   EINVAL - insufficient I/O ports range was provided.
  *   EACCES - Target I/O ports don't belong to the calling process.
  */
-status_t sys_free_ioports(ulong_t first_port,ulong_t num_ports);
+int sys_free_ioports(ulong_t first_port,ulong_t num_ports);
 
 /**
  * @fn status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
@@ -343,8 +345,8 @@ status_t sys_free_ioports(ulong_t first_port,ulong_t num_ports);
  *              another process.
  *      ENOMEM  No free memory for internal kernel structures.
  */
-status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
-                                      ulong_t addr,ulong_t flags);
+long sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
+                                  ulong_t addr,ulong_t flags);
 
 /**
  * @fn status_t sys_wait_on_irq_array(ulong_t id)
@@ -360,7 +362,7 @@ status_t sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
  * @return After occuring one or more IRQs, this function returns zero.
  *         If insufficient buffer ID was used, -EINVAL is returned.
  */
-status_t sys_wait_on_irq_array(ulong_t id);
+int sys_wait_on_irq_array(ulong_t id);
 
 /**
  * @fn status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
@@ -385,7 +387,7 @@ status_t sys_wait_on_irq_array(ulong_t id);
  *         EINVAL - insufficient @a pfds or @a nfds passed.
  *         EFAULT - @pfds pointed to insufficient memory area.
  */
-status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout);
+long sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout);
 
 /**
  * @fn status_t sys_nanosleep(timeval_t *in,timeval_t *out)
@@ -397,7 +399,7 @@ status_t sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout);
  *     EFAULT - insufficient address was passed.
  *     EINVAL - seconds or nanoseconds exceed 1000000000.
  */
-status_t sys_nanosleep(timeval_t *in,timeval_t *out);
+int sys_nanosleep(timeval_t *in,timeval_t *out);
 
 /**
  * @fn status_t sys_scheduler_control(pid_t pid,ulong_t cmd,ulong_t arg)
@@ -416,7 +418,7 @@ status_t sys_nanosleep(timeval_t *in,timeval_t *out);
  *     EPERM - operation was not allowed.
  *     ESRCH - insufficient pid passed.
  */
-status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
+long sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
 
 /**
  * @fn status_t sys_get_tid(void)
@@ -427,7 +429,7 @@ status_t sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
  * to its PID) is returned. In case of a thread, a value greater than MAX_PID
  * is returned as its thread ID.
  */
-status_t sys_get_tid(void);
+long sys_get_tid(void);
 
 /**
  * @fn void sys_exit(int code)
@@ -437,37 +439,36 @@ status_t sys_get_tid(void);
  */
 void sys_exit(int code);
 
-status_t sys_open_channel(pid_t pid,ulong_t port,ulong_t flags);
+long sys_open_channel(pid_t pid,ulong_t port,ulong_t flags);
 
-status_t sys_close_channel(ulong_t channel);
+long sys_close_channel(ulong_t channel);
 
-status_t sys_close_port(ulong_t port);
+long sys_close_port(ulong_t port);
 
-status_t sys_control_channel(ulong_t channel,ulong_t cmd,ulong_t arg);
+long sys_control_channel(ulong_t channel,ulong_t cmd,ulong_t arg);
 
-status_t sys_port_send_iov(ulong_t channel,
+long sys_port_send_iov(ulong_t channel,
                            iovec_t iov[],ulong_t numvecs,
                            uintptr_t rcv_buf,ulong_t rcv_size);
 
-status_t sys_sync_create_object(sync_object_type_t obj_type,
+long sys_sync_create_object(sync_object_type_t obj_type,
                                 void *uobj,uint8_t *attrs,
                                 ulong_t flags);
 
-status_t sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg);
+long sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg);
 
-status_t sys_port_send_iov_v(ulong_t channel,
+long sys_port_send_iov_v(ulong_t channel,
                              iovec_t snd_iov[],ulong_t snd_numvecs,
                              iovec_t rcv_iov[],ulong_t rcv_numvecs);
 
-status_t sys_port_reply_iov(ulong_t port,ulong_t msg_id,
+long sys_port_reply_iov(ulong_t port,ulong_t msg_id,
                             iovec_t reply_iov[],ulong_t numvecs);
 
-status_t sys_thread_kill(pid_t prcess,tid_t tid,int sig);
+long sys_thread_kill(pid_t prcess,tid_t tid,int sig);
 
-status_t sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset);
+long sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset);
 
 void sys_thread_exit(int code);
-
 #endif
 
 #endif

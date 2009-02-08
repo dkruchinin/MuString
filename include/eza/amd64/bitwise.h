@@ -29,12 +29,10 @@
  * @author Dan Kruchinin
  */
 
-#ifndef __AMD64_BITWISE_H__
-#define __AMD64_BITWISE_H__
+#ifndef __ARCH_BITWISE_H__
+#define __ARCH_BITWISE_H__
 
-#include <config.h>
-#include <eza/arch/asm.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 
 #define ARCH_BIT_SET
 /* Atomic operation */
@@ -91,7 +89,6 @@ static always_inline int arch_bit_test_and_set(volatile void *bitmap, int bit)
   return val;
 }
 
-
 #define ARCH_BIT_FIND_LSF
 static always_inline long arch_bit_find_lsf(unsigned long word)
 {
@@ -102,12 +99,31 @@ static always_inline long arch_bit_find_lsf(unsigned long word)
   return word;
 }
 
+#define ARCH_ZERO_BIT_FIND_LSF
+static always_inline long arch_zero_bit_find_lsf(unsigned long word)
+{
+  __asm__ ("bsf %1, %2\n\t"
+           : "=r" (word)
+           : "r" (~word), "r" ((long)-1));
+
+  return word;
+}
+
 #define ARCH_BIT_FIND_MSF
 static always_inline long arch_bit_find_msf(unsigned long word)
 {
   __asm__ ("bsr %1, %2\n\t"
            : "=r" (word)
            : "r" (word), "r" ((long)-1));
+  return word;
+}
+
+#define ARCH_ZERO_BIT_FIND_MSF
+static always_inline long arch_zero_bit_find_msf(unsigned long word)
+{
+  __asm__ ("bsr %1, %2\n\t"
+           : "=r" (word)
+           : "r" (~word), "r" ((long)-1));
   return word;
 }
 
@@ -131,4 +147,4 @@ static always_inline void arch_bits_and(volatile void *word, unsigned long mask)
                     : "memory");
 }
 
-#endif /* __AMD64_BITWISE_H__ */
+#endif /* __ARCH_BITWISE_H__ */

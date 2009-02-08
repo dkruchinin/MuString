@@ -25,11 +25,11 @@
 #include <eza/process.h>
 #include <eza/errno.h>
 #include <eza/arch/context.h>
-#include <kernel/vm.h>
 #include <eza/signal.h>
 #include <mm/slab.h>
 #include <mm/pfalloc.h>
 #include <eza/security.h>
+#include <eza/usercopy.h>
 
 static memcache_t *sigq_cache;
 
@@ -89,11 +89,11 @@ bool update_pending_signals(task_t *task)
  *   1: signal wasn't queued since it was ignored.
  * -ENOMEM: no memory for a new queue item.
  */
-static status_t __send_task_siginfo(task_t *task,siginfo_t *info,
+static int __send_task_siginfo(task_t *task,siginfo_t *info,
                                     void *kern_priv,bool force_delivery)
 {
   int sig=info->si_signo;
-  status_t r;
+  int r;
   bool send_signal;
 
   if( force_delivery ) {
@@ -147,9 +147,9 @@ static void __send_siginfo_postlogic(task_t *task,siginfo_t *info)
   }
 }
 
-status_t send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery)
+int send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery)
 {
-  status_t r;
+  int r;
 
   LOCK_TASK_SIGNALS(task);
   r=__send_task_siginfo(task,info,NULL,force_delivery);
@@ -164,7 +164,7 @@ status_t send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery)
   return r < 0 ? r : 0;
 }
 
-status_t send_process_siginfo(pid_t pid,siginfo_t *siginfo,void *kern_priv)
+int send_process_siginfo(pid_t pid,siginfo_t *siginfo,void *kern_priv)
 {
   task_t *root=pid_to_task(pid);
   task_t *target=NULL;
@@ -242,9 +242,9 @@ send_signal:
   return 0;
 }
 
-status_t sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
+int sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
 {
-  status_t r;
+  int r;
   siginfo_t k_siginfo;
 
   if( !valid_signal(sig) ) {
@@ -288,7 +288,7 @@ status_t sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
   return r;
 }
 
-status_t sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset)
+long sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset)
 {
   task_t *target=current_task();
   sigset_t kset,wset;
@@ -308,7 +308,7 @@ status_t sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset)
   }
 
   if( set != NULL ) {
-    if( copy_from_user(&kset,set,sizeof(kset)) ) {
+    if( copy_from_user(&kset,(void *)set,sizeof(kset)) ) {
       return -EFAULT;
     }
     kset &= ~UNTOUCHABLE_SIGNALS;
@@ -336,10 +336,10 @@ status_t sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset)
   return 0;
 }
 
-status_t sys_thread_kill(pid_t process,tid_t tid,int sig)
+long sys_thread_kill(pid_t process,tid_t tid,int sig)
 {
   task_t *target;
-  status_t r;
+  long r;
   siginfo_t k_siginfo;
 
   if( !valid_signal(sig) || !is_tid(tid) ) {
@@ -369,7 +369,7 @@ out:
   return r;
 }
 
-static status_t sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
+static int sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
                           int sig) {
   task_t *caller=current_task();
   sa_sigaction_t s=sact->a.sa_sigaction;
@@ -413,10 +413,10 @@ static status_t sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
   return 0;
 }
 
-status_t sys_signal(int sig,sa_handler_t handler)
+long sys_signal(int sig,sa_handler_t handler)
 {
   kern_sigaction_t act,oact;
-  status_t r;
+  int r;
 
   if( (sig == SIGKILL || sig == SIGSTOP) && (sa_sigaction_t)handler != SIG_DFL ) {
     return -EINVAL;
@@ -427,15 +427,15 @@ status_t sys_signal(int sig,sa_handler_t handler)
   sigemptyset(act.sa_mask);
 
   r=sigaction(&act,&oact,sig);
-  return !r ? (status_t)oact.a.sa_sigaction : r;
+  return !r ? (long)oact.a.sa_sigaction : r;
 }
 
-status_t sys_sigaction(int signum,sigaction_t *act,
+int sys_sigaction(int signum,sigaction_t *act,
                        sigaction_t *oldact)
 {
   kern_sigaction_t kact,koact;
   sigaction_t uact;
-  status_t r;
+  int r;
 
   if( !valid_signal(signum) || signum == SIGKILL ||
       signum == SIGSTOP ) {

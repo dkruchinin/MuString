@@ -211,13 +211,8 @@ void enable_all_irqs(void)
 void do_irq(irq_t irq)
 {
   if( irq < NUM_IRQS ) {
-    int cpu = cpu_id();
-
     int handlers = 0;
-    cpu_stats_t *cpu_stat = &swks.cpu_stat[cpu];
     irq_action_t *action;
-
-    cpu_stat->irq_stat[irq]++;
 
     /* Call all handlers. */
     list_for_each_entry(&irqs[irq].actions, action, l) {

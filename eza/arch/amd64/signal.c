@@ -20,24 +20,25 @@
  * eza/arch/amd64/signal.c: AMD64-specific code for signal delivery.
  */
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <mlibc/kprintf.h>
 #include <eza/smp.h>
 #include <eza/task.h>
 #include <eza/arch/context.h>
 #include <eza/signal.h>
-#include <kernel/vm.h>
 #include <eza/errno.h>
 #include <eza/arch/current.h>
-#include <kernel/vm.h>
 #include <eza/process.h>
 #include <eza/timer.h>
 #include <eza/posix.h>
 #include <mlibc/kprintf.h>
+#include <eza/usercopy.h>
 
 #define XMM_CTX_SIZE  512
 
-#define USPACE_TRMPL(a) USPACE_ADDR((a),UTRAMPOLINE_VIRT_ADDR)
+#define USPACE_TRMPL(a) USPACE_ADDR((a),__utrampoline_virt)
+
+uintptr_t __utrampoline_virt;
 
 struct __trampoline_ctx {
   uint64_t handler,arg1,arg2,arg3;
@@ -53,7 +54,7 @@ struct __signal_context {
   struct __gen_ctx gen_ctx;
   siginfo_t siginfo;
   sigset_t saved_blocked;
-  status_t retcode;
+  int retcode;
   uintptr_t retaddr;
 };
 
@@ -61,7 +62,7 @@ struct __signal_context {
 extern void trampoline_sighandler_invoker_int(void);
 extern void trampoline_sighandler_invoker_int_bottom(void);
 
-static status_t __setup_trampoline_ctx(struct __signal_context *__user ctx,
+static int __setup_trampoline_ctx(struct __signal_context *__user ctx,
                                        siginfo_t *siginfo,sa_sigaction_t act)
 {
   struct __trampoline_ctx kt;
@@ -100,7 +101,7 @@ static void __perform_default_action(int sig)
   for(;;);
 }
 
-static status_t __setup_int_context(uint64_t retcode,uintptr_t kstack,
+static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
                                     siginfo_t *info,sa_sigaction_t act,
                                     ulong_t extra_bytes,
                                     struct __signal_context **pctx)
@@ -164,7 +165,7 @@ static status_t __setup_int_context(uint64_t retcode,uintptr_t kstack,
 static void __handle_pending_signals(int reason, uint64_t retcode,
                                      uintptr_t kstack)
 {
-  status_t r;
+  int r;
   sigq_item_t *sigitem;
   sa_sigaction_t act;
   task_t *caller=current_task();
@@ -294,10 +295,10 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
   }
 }
 
-status_t sys_sigreturn(uintptr_t ctx)
+int sys_sigreturn(uintptr_t ctx)
 {
   struct __signal_context *uctx=(struct __signal_context *)ctx;
-  status_t retcode;
+  int retcode;
   task_t *caller=current_task();
   uintptr_t kctx=caller->kernel_stack.high_address-sizeof(struct __gpr_regs)-
                  sizeof(struct __int_stackframe);
@@ -322,7 +323,7 @@ status_t sys_sigreturn(uintptr_t ctx)
   UNLOCK_TASK_SIGNALS(caller);
 
   /* Restore GPRs. */
-  if( copy_from_user(kctx,&uctx->gen_ctx.gpr_regs,sizeof(struct __gpr_regs) ) ) {
+  if( copy_from_user((void *)kctx,&uctx->gen_ctx.gpr_regs,sizeof(struct __gpr_regs) ) ) {
     goto bad_ctx;
   }
 
@@ -331,7 +332,7 @@ status_t sys_sigreturn(uintptr_t ctx)
   kctx &= 0xfffffffffffffff0;
 
   /* Restore XMM context. */
-  if( copy_from_user(kctx,uctx->gen_ctx.xmm,XMM_CTX_SIZE) ) {
+  if( copy_from_user((void *)kctx,uctx->gen_ctx.xmm,XMM_CTX_SIZE) ) {
     goto bad_ctx;
   }
 

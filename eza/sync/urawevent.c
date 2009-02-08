@@ -23,8 +23,8 @@
 #include <eza/arch/types.h>
 #include <eza/mutex.h>
 #include <eza/sync.h>
-#include <kernel/vm.h>
 #include <eza/task.h>
+#include <eza/usercopy.h>
 #include <mm/slab.h>
 #include <eza/arch/atomic.h>
 #include <eza/mutex.h>
@@ -34,7 +34,7 @@
 
 extern int __big_verbose;
 
-static status_t __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
+static int __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
 {
   sync_uevent_t *e=__UEVENT_OBJ(obj);
   wqueue_task_t wt;
@@ -48,7 +48,7 @@ static status_t __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t a
 
         waitqueue_prepare_task(&wt,current_task());
         wt.private=e;
-        waitqueue_push(&e->__wq,&wt);
+        waitqueue_push_intr(&e->__wq,&wt);
 
         __LOCK_EVENT(e);
       }
@@ -72,6 +72,7 @@ static sync_obj_ops_t __rawevent_ops = {
   .dtor=sync_default_dtor,
 };
 
+#if 0
 static bool __uevent_sched_handler(void *data)
 {
   wqueue_task_t *wt=(wqueue_task_t *)data;
@@ -79,8 +80,9 @@ static bool __uevent_sched_handler(void *data)
 
   return !e->__ecount;
 }
+#endif
 
-status_t sync_create_uevent(kern_sync_object_t **obj,void *uobj,
+int sync_create_uevent(kern_sync_object_t **obj,void *uobj,
                             uint8_t *attrs,ulong_t flags)
 {
   sync_uevent_t *e=memalloc(sizeof(*e));
@@ -96,7 +98,6 @@ status_t sync_create_uevent(kern_sync_object_t **obj,void *uobj,
   atomic_set(&e->k_syncobj.refcount,1);
 
   waitqueue_initialize(&e->__wq);
-  e->__wq.acts.sleep_if_needful=__uevent_sched_handler;
   spinlock_initialize(&e->__lock);
 
   *obj=(kern_sync_object_t*)e;

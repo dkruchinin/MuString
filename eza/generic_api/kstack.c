@@ -28,7 +28,7 @@
 #include <mlibc/stddef.h>
 #include <eza/arch/page.h>
 #include <eza/kstack.h>
-#include <mm/mm.h>
+#include <eza/arch/mm.h>
 
 static kernel_stack_allocator_context_t main_stack_ctx;
 
@@ -122,7 +122,7 @@ int free_kernel_stack(bit_idx_t id)
 
 void initialize_kernel_stack_allocator(void)
 {
-  starting_kernel_stack_address = kernel_min_vaddr;
+  starting_kernel_stack_address = KERNEL_BASE;
   initialize_stack_allocator_context(&main_stack_ctx);
 }
 

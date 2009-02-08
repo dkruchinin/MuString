@@ -26,10 +26,10 @@ ipc_channel_t *ipc_allocate_channel(void);
 ipc_channel_t *ipc_get_channel(task_t *task,ulong_t ch_id);
 void ipc_unref_channel(ipc_channel_t *channel,ulong_t count);
 void ipc_shutdown_channel(ipc_channel_t *channel);
-status_t ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
+int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
                           ulong_t flags);
-status_t ipc_close_channel(task_t *owner,ulong_t ch_id);
-status_t ipc_channel_control(task_t *caller,int channel,ulong_t cmd,
+int ipc_close_channel(task_t *owner,ulong_t ch_id);
+int ipc_channel_control(task_t *caller,int channel,ulong_t cmd,
                              ulong_t arg);
 
 #define LOCK_CHANNEL(c) spinlock_lock(&c->lock)
@@ -37,10 +37,10 @@ status_t ipc_channel_control(task_t *caller,int channel,ulong_t cmd,
 
 #define ipc_put_channel(c)  ipc_unref_channel(c,1)
 
-static inline status_t ipc_get_channel_port(ipc_channel_t *c,
+static inline int ipc_get_channel_port(ipc_channel_t *c,
                                             ipc_gen_port_t **outport) {
   ipc_gen_port_t *p;
-  status_t r;
+  int r;
   
   LOCK_CHANNEL(c);
   p=c->server_port;

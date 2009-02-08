@@ -28,8 +28,7 @@
 .global trampoline_sighandler_invoker_sys
 .global trampoline_sighandler_invoker_int
 .global trampoline_sighandler_invoker_int_bottom
-
-	.align PAGE_SIZE
+.align PAGE_SIZE
 
 __userspace_trampoline_codepage:
 trampoline_sighandler_invoker_int:

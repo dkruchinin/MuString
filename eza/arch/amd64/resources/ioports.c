@@ -23,23 +23,21 @@
 
 #include <eza/resource.h>
 #include <mm/pfalloc.h>
-#include <eza/arch/mm_types.h>
 #include <eza/errno.h>
 #include <eza/arch/context.h>
 #include <mm/pfalloc.h>
 #include <mlibc/stddef.h>
-#include <eza/vm.h>
 #include <eza/arch/interrupt.h>
 
-status_t arch_allocate_ioports(task_t *task,ulong_t start_port,
-                               ulong_t end_port)
+int arch_allocate_ioports(task_t *task,ulong_t start_port,
+                          ulong_t end_port)
 {
   arch_context_t *ctx = (arch_context_t*)&(task->arch_context[0]);
   tss_t *tss, *master_tss;
-  status_t r;
+  int r;
   ulong_t start_idx,end_idx,start_bit,end_bit;
 
-  LOCK_TASK_VM(task);
+  //LOCK_TASK_VM(task);
 
   /* If task has default TSS, then we can expand its TSS to
    * fit the default number of I/O ports provided.
@@ -59,7 +57,7 @@ status_t arch_allocate_ioports(task_t *task,ulong_t start_port,
     /* Initialize main fields for new TSS. */
     master_tss=get_cpu_tss(task->cpu);
     copy_tss(tss,master_tss);
-    tss->iomap_base=offset_of(tss_t,iomap);
+    tss->iomap_base=offsetof(tss_t,iomap);
 
     /* Now reload this TSS. */
     interrupts_disable();
@@ -98,19 +96,19 @@ status_t arch_allocate_ioports(task_t *task,ulong_t start_port,
 
   r=0;
 out_unlock:
-  UNLOCK_TASK_VM(task);
+  //UNLOCK_TASK_VM(task);
   return r;
 }
 
-status_t arch_free_ioports(task_t *task,ulong_t start_port,
+int arch_free_ioports(task_t *task,ulong_t start_port,
                            ulong_t end_port)
 {
   arch_context_t *ctx = (arch_context_t*)&(task->arch_context[0]);
   tss_t *tss;
-  status_t r;
+  int r;
   ulong_t start_idx,end_idx,start_bit,end_bit;
 
-  LOCK_TASK_VM(task);
+  //LOCK_TASK_VM(task);
 
   tss=ctx->tss;
   if( !tss ) {
@@ -147,6 +145,6 @@ status_t arch_free_ioports(task_t *task,ulong_t start_port,
   
   r=0;
 out_unlock:
-  UNLOCK_TASK_VM(task);
+  //UNLOCK_TASK_VM(task);
   return r;
 }

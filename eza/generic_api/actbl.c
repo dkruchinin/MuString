@@ -28,11 +28,9 @@
  */
 
 #include <eza/arch/types.h>
-#include <mm/mm.h>
 #include <mm/page.h>
-#include <mm/mmap.h>
 #include <mm/idalloc.h>
-#include <eza/arch/page.h>
+#include <mm/vmm.h>
 #include <eza/errno.h>
 #include <eza/actbl.h>
 
@@ -59,7 +57,7 @@ static bool phys_range_is_mapped(int start_idx, int n)
 	for (i = start_idx; i < j; i++) {
 		va = (uintptr_t)pframe_id_to_virt(i);
 		frame = pframe_by_number(i);
-		if (!mm_virt_addr_is_mapped(kernel_root_pagedir, va))
+		if (!mm_vaddr_is_mapped(&kernel_rpd, va))
 			break;
 	}
 
@@ -95,7 +93,7 @@ static int map_acpi_tables(uint32_t *phys_addrs, int naddrs, uintptr_t va, uint3
 	*base_addr = sidx << PAGE_WIDTH;
 	if (i) {
 		/* map needed physical memory */
-		mmap_kern(va, sidx, m, MAP_READ);
+        mmap_kern(va, sidx, m, KMAP_KERN | KMAP_READ);
 	}
 	if (m > mapped_pages)
 		mapped_pages = m;
@@ -153,7 +151,7 @@ static struct acpi_madt *find_madt(uint32_t *phys_addrs, int cnt, uintptr_t va)
 			p = (uint8_t*)va;
 		} else {
 			j = 1;
-			base = phys_addrs[i] & PAGE_ADDR_MASK;
+			base = phys_addrs[i] & ~PAGE_MASK;
 			p = pframe_id_to_virt(phys_addrs[i] >> PAGE_WIDTH);
 		}	
 
@@ -212,21 +210,27 @@ int get_acpi_lapic_info(uint32_t *lapic_base, uint8_t *lapic_ids, int size, int 
 	} else 
 		return 0;
 
-	va = (uintptr_t)idalloc_allocate_vregion(MAX_MAPPED_PAGES + EXTRA_PAGES * 2);
+    /*
+     * FIXME: actually it's not valid to use __allocate_vregion
+     * from arch-independent code. __allocate_vregion is, strictly
+     * speaking, architecture-dependent function, thus virtual address
+     * for ACPI *should not* be allocated right here.
+     */
+	va = __allocate_vregion(MAX_MAPPED_PAGES + EXTRA_PAGES * 2);
 	if (!va)
 		return -ENOMEM;
 
 	va1 = va + PAGE_SIZE * EXTRA_PAGES;	
 	s = rsdp->rsdt_addr >> PAGE_WIDTH;
 	if (!phys_range_is_mapped(s, EXTRA_PAGES)) {
-		if (mmap_kern(va, s, EXTRA_PAGES, MAP_READ) < 0)
+		if (mmap_kern(va, s, EXTRA_PAGES, KMAP_KERN | KMAP_READ) < 0)
 			return -ENOMEM;
 
 		p = (uint8_t*)va;
 	} else
 		p = pframe_id_to_virt(s);
 
-	rsdt = (struct acpi_rsdt*)(p + (rsdp->rsdt_addr & PAGE_OFFSET_MASK));
+	rsdt = (struct acpi_rsdt*)(p + (rsdp->rsdt_addr & PAGE_MASK));
 	if (verify_checksum((uint8_t*)rsdt, rsdt->header.len)) {
 		s = (rsdt->header.len - sizeof(rsdt->header)) / sizeof(rsdt->tbl_addrs);
 		madt = find_madt(rsdt->tbl_addrs, s, va1);

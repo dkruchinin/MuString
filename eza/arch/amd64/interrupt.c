@@ -27,7 +27,6 @@
 #include <eza/time.h>
 #include <eza/arch/8259.h>
 #include <eza/arch/apic.h>
-#include <eza/arch/mm_types.h>
 #include <eza/kernel.h>
 #include <eza/arch/interrupt.h>
 #include <eza/smp.h>
@@ -48,7 +47,7 @@ static void install_generic_irq_handlers(void)
 static void install_smp_irq_handlers(void)
 {
   const idt_t *idt;
-  status_t r;
+  long r;
 
   idt = get_idt();
   r = idt->install_handler(smp_local_timer_interrupt_handler,

@@ -60,15 +60,14 @@
 #ifndef __TLSF_H__
 #define __TLSF_H__
 
+#include <config.h>
 #include <ds/list.h>
 #include <mlibc/stddef.h>
 #include <mm/page.h>
 #include <mm/mmpool.h>
 #include <mm/pfalloc.h>
 #include <eza/spinlock.h>
-#include <eza/arch/types.h>
-
-#define TLSF_DEBUG
+#include <mlibc/types.h>
 
 #define TLSF_FLD_SIZE       5 /**< TLSF first level directory size */
 #define TLSF_SLD_SIZE       4 /**< TLSF second level directory size */
@@ -124,10 +123,12 @@ typedef struct __tlsf {
  */
 void tlsf_alloc_init(mm_pool_t *pool);
 
-#ifdef TLSF_DEBUG
-void tlsf_memdump(void *_tlsf);
+#ifdef CONFIG_DEBUG_MM
+void tlsf_memdump_dbg(void *_tlsf);
+void tlsf_validate_dbg(void *_tlsf);
 #else
-#define tlsf_memdump(_tlsf)
-#endif /* TLSF_DEBUG */
+#define tlsf_memdump_dbg(_tlsf)
+#define tlsf_validate_dbg(_tlsf)
+#endif /* CONFIG_MM_DEBUG */
 
 #endif /* __TLSF_H__ */

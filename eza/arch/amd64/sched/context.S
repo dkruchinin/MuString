@@ -31,7 +31,6 @@
 .global arch_hw_activate_task1
 
 #include <eza/arch/context.h>
-#include <eza/container.h>
 #include <eza/arch/current.h>
 
 arch_context_save:

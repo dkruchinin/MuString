@@ -1,11 +1,13 @@
 #ifndef __SIGQUEUE_H__
 #define __SIGQUEUE_H__
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <ds/list.h>
 #include <eza/errno.h>
 #include <eza/arch/bitwise.h>
 #include <mlibc/assert.h>
+
+typedef uint64_t sigset_t;
 
 #define __SQ_SHIFT  3
 #define __SQ_GRANULARITY  (1<<__SQ_SHIFT)
@@ -31,7 +33,7 @@ static inline void sigqueue_initialize(sigqueue_t *sq,sigset_t *pmask)
   }
 }
 
-static inline status_t sigqueue_add_item(sigqueue_t *sq,sq_header_t *item)
+static inline int sigqueue_add_item(sigqueue_t *sq,sq_header_t *item)
 {
   if( item->idx >= __SQ_MAXID ) {
     return -EINVAL;
@@ -45,7 +47,7 @@ static inline status_t sigqueue_add_item(sigqueue_t *sq,sq_header_t *item)
   return 0;
 }
 
-static inline sq_header_t *sigqueue_remove_item(sigqueue_t *sq,long_t idx,
+static inline sq_header_t *sigqueue_remove_item(sigqueue_t *sq,long idx,
                                                  bool remove_all)
 {
   sq_header_t *item;

@@ -1,8 +1,7 @@
 #include <eza/posix.h>
 #include <eza/task.h>
-#include <mm/mm.h>
 #include <mm/pfalloc.h>
-#include <mm/mmap.h>
+#include <ds/idx_allocator.h>
 #include <eza/arch/atomic.h>
 #include <eza/mutex.h>
 
@@ -32,7 +31,7 @@ posix_stuff_t *allocate_task_posix_stuff(void)
       list_init_head(&stuff->list_hash[i]);
     }
     stuff->timers=0;
-    idx_allocator_initialize(&stuff->posix_ids,CONFIG_POSIX_MAX_OBJECTS);
+    idx_allocator_init(&stuff->posix_ids,CONFIG_POSIX_MAX_OBJECTS);
   }
 
   return stuff;

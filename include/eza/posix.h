@@ -1,7 +1,8 @@
 #ifndef __POSIX_H__
 #define __POSIX_H__
 
-#include <mlibc/index_allocator.h>
+#include <ds/rbtree.h>
+#include <ds/idx_allocator.h>
 #include <eza/siginfo.h>
 #include <eza/signal.h>
 #include <eza/mutex.h>
@@ -14,7 +15,7 @@ typedef long posixid_t;
 #define CONFIG_POSIX_MAX_TIMERS  32
 #define CONFIG_POSIX_HASH_GROUPS  8
 
-#define CONFIG_POSIX_MAX_OBJECTS  (CONFIG_POSIX_MAX_TIMERS)
+#define CONFIG_POSIX_MAX_OBJECTS  (CONFIG_POSIX_MAX_TIMERS) * 32
 
 /* Structures that defines all POSIX-related stuff. */
 typedef struct __posix_stuff {
@@ -55,7 +56,7 @@ typedef struct __posix_timer {
 
 static inline int posix_allocate_obj_id(posix_stuff_t *stuff)
 {
-  return idx_allocator_get_entry(&stuff->posix_ids);
+  return idx_allocate(&stuff->posix_ids);
 }
 
 void posix_free_obj_id(posix_stuff_t *stuff,long id);

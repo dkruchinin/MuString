@@ -21,30 +21,29 @@
  */
 
 #include <ds/list.h>
+#include <mlibc/index_array.h>
 #include <eza/task.h>
 #include <eza/smp.h>
 #include <eza/kstack.h>
 #include <eza/errno.h>
-#include <mm/mm.h>
 #include <mm/pfalloc.h>
-#include <mm/mmap.h>
-#include <eza/amd64/context.h>
-#include <eza/arch/scheduler.h>
-#include <eza/arch/types.h>
+#include <mm/vmm.h>
+#include <mm/slab.h>
 #include <eza/kernel.h>
 #include <eza/arch/task.h>
-#include <mlibc/index_array.h>
 #include <eza/spinlock.h>
 #include <eza/arch/preempt.h>
-#include <eza/vm.h>
 #include <eza/limits.h>
 #include <ipc/ipc.h>
 #include <eza/uinterrupt.h>
-#include <mm/slab.h>
 #include <eza/sync.h>
 #include <eza/signal.h>
 #include <eza/sigqueue.h>
 #include <eza/posix.h>
+#include <eza/arch/ptable.h>
+#include <eza/arch/context.h>
+#include <eza/arch/scheduler.h>
+#include <mlibc/types.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
@@ -121,7 +120,7 @@ static void __free_tid(tid_t tid,task_t *group_leader)
 {
 }
 
-static status_t __alloc_pid_and_tid(task_t *parent,ulong_t flags,
+static int __alloc_pid_and_tid(task_t *parent,ulong_t flags,
                                     pid_t *ppid, tid_t *ptid,
                                     task_privelege_t priv)
 {
@@ -130,7 +129,7 @@ static status_t __alloc_pid_and_tid(task_t *parent,ulong_t flags,
 
   /* Init task ? */
   if( flags & TASK_INIT ) {
-    status_t r;
+    int r;
 
     LOCK_PID_ARRAY;
     if( !init_launched ) {
@@ -252,9 +251,9 @@ static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
   return task;
 }
 
-static status_t __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
+static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
 {
-  status_t r;
+  int r;
 
   if( flags & CLONE_IPC ) {
     if( !parent->ipc ) {
@@ -273,7 +272,7 @@ static status_t __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
   }
 }
 
-static status_t __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags,
+static int __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags,
                                        task_privelege_t priv)
 {
   if( flags & CLONE_MM ) {
@@ -290,7 +289,7 @@ static status_t __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags
   return task->sync_data ? 0 : -ENOMEM;
 }
 
-static status_t __setup_signals(task_t *task,task_t *parent,ulong_t flags)
+static int __setup_signals(task_t *task,task_t *parent,ulong_t flags)
 {
   sighandlers_t *shandlers=NULL;
   sigset_t blocked=0,ignored=DEFAULT_IGNORED_SIGNALS;
@@ -324,8 +323,8 @@ static status_t __setup_signals(task_t *task,task_t *parent,ulong_t flags)
   return 0;
 }
 
-static status_t __setup_posix(task_t *task,task_t *parent,
-                              task_privelege_t priv,ulong_t flags)
+static long __setup_posix(task_t *task,task_t *parent,
+                          task_privelege_t priv,ulong_t flags)
 {
   if( (flags & CLONE_MM) && priv != TPL_KERNEL ) {
     task->posix_stuff=parent->posix_stuff;
@@ -340,11 +339,35 @@ static status_t __setup_posix(task_t *task,task_t *parent,
   }
 }
 
-status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t,
+static int initialize_task_mm(task_t *orig, task_t *target,
+                              task_creation_flags_t flags, task_privelege_t priv)
+{
+  int ret = 0;
+  
+  if (!orig || priv == TPL_KERNEL)
+    ptable_rpd_clone(&target->rpd, &kernel_rpd);
+  else if (flags & CLONE_MM) {
+    target->task_mm = orig->task_mm;
+    atomic_inc(&orig->task_mm->vmm_users);
+  }
+  else {
+    target->task_mm = vmm_create();
+    if (!target->task_mm)
+      ret = -ENOMEM;
+    else {
+      map_kernel_area(target->task_mm); /* FIXME DK: remove after debugging */
+      ret = vm_mandmaps_roll(target->task_mm);
+    }
+  }
+
+  return ret;
+}
+
+int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t,
                          task_creation_attrs_t *attrs)
 {
   task_t *task;
-  status_t r = -ENOMEM;
+  int r = -ENOMEM;
   page_frame_t *stack_pages;
   pid_t pid;
   tid_t tid;
@@ -376,7 +399,7 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
   }
 
   /* Initialize task's MM. */
-  r = vm_initialize_task_mm(parent,task,flags,priv);
+  r = initialize_task_mm(parent,task,flags,priv);
   if( r != 0 ) {
     goto free_stack;
   }
@@ -388,8 +411,8 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
     goto free_mm;
   }
 
-  r = mmap(task->page_dir, task->kernel_stack.low_address, pframe_number(stack_pages),
-           KERNEL_STACK_PAGES, MAP_RW);
+  r = mmap_kern(task->kernel_stack.low_address, pframe_number(stack_pages), KERNEL_STACK_PAGES,
+                KMAP_READ | KMAP_WRITE | KMAP_KERN);
   if( r != 0 ) {
     goto free_stack_pages;
   }
@@ -438,6 +461,7 @@ status_t create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, tas
   task->scheduler = NULL;
   task->sched_data = NULL;
   task->flags = 0;
+  task->priv = priv;
 
   __add_to_parent(task,parent,flags,priv);
 

@@ -57,12 +57,9 @@ typedef struct __idalloc_meminfo {
   spinlock_t lock;          /**< Obvious */
   int npages;               /**< Total number of pages idalloc owns */
   bool is_enabled;          /**< True if idalloc is enabled and false otherwise */
-  ulong_t num_vpages;       /**< Size of virtual area pool in pages */
-  ulong_t avail_vpages;     /**< Amount of available pages in virtual area pool */
-  uintptr_t virt_top;       /**< First available address of virtual area pool */
 } idalloc_meminfo_t;
 
-extern idalloc_meminfo_t idalloc_meminfo; /**< Global structure containing all idalloc informaion */
+extern idalloc_meminfo_t idalloc_meminfo;      /**< Global structure containing all idalloc informaion */
 
 /**
  * @brief Enable init-data allocator
@@ -90,7 +87,5 @@ static inline bool idalloc_is_enabled(void)
 {
   return idalloc_meminfo.is_enabled;
 }
-
-void *idalloc_allocate_vregion(ulong_t pages);
 
 #endif /* __IDALLOC_H__ */

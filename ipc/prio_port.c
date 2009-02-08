@@ -30,7 +30,6 @@
 #include <mm/page.h>
 #include <ds/linked_array.h>
 #include <ipc/ipc.h>
-#include <eza/container.h>
 #include <ipc/buffer.h>
 #include <mm/slab.h>
 #include <ipc/gen_port.h>
@@ -46,11 +45,11 @@ typedef struct __prio_port_data_storage {
 
 #define __remove_message(msg)  skiplist_del((msg),ipc_port_message_t,h,l)
 
-static status_t prio_init_data_storage(struct __ipc_gen_port *port,
-                                       task_t *owner,ulong_t queue_size)
+static int prio_init_data_storage(struct __ipc_gen_port *port,
+                                  task_t *owner,ulong_t queue_size)
 {
   prio_port_data_storage_t *ds;
-  status_t r;
+  int r;
 
   if( port->data_storage ) {
     return -EBUSY;
@@ -110,7 +109,7 @@ static void __add_one_message(list_head_t *list,
   }
 }
 
-static status_t prio_insert_message(struct __ipc_gen_port *port,
+static int prio_insert_message(struct __ipc_gen_port *port,
                                    ipc_port_message_t *msg)
 {
   prio_port_data_storage_t *ds=(prio_port_data_storage_t *)port->data_storage;
@@ -123,7 +122,7 @@ static status_t prio_insert_message(struct __ipc_gen_port *port,
   list_add2tail(&ds->all_messages,&msg->messages_list);
 
   if( id != INVALID_ITEM_IDX ) { /* Insert this message in the array directly. */
-    ds->message_ptrs[id]=msg;
+     ds->message_ptrs[id]=msg;
     __add_one_message(&ds->prio_head,msg);
   } else { /* No free slots - put this message to the waitlist. */
     id=WAITQUEUE_MSG_ID;
@@ -142,6 +141,8 @@ static ipc_port_message_t *prio_extract_message(ipc_gen_port_t *p,ulong_t flags)
   if( !list_is_empty(&ds->prio_head) ) {
     ipc_port_message_t *msg=container_of(list_node_first(&ds->prio_head),
                                          ipc_port_message_t,l);
+    if (ds->message_ptrs[msg->id] == NULL)
+        kprintf("WTF?\n");
     __remove_message(msg);
     p->avail_messages--;
     return msg;
@@ -153,7 +154,7 @@ static void prio_free_data_storage(struct __ipc_gen_port *port)
 {
 }
 
-static status_t prio_remove_message(struct __ipc_gen_port *port,
+static int prio_remove_message(struct __ipc_gen_port *port,
                                     ipc_port_message_t *msg)
 {
   prio_port_data_storage_t *ds=(prio_port_data_storage_t*)port->data_storage;
@@ -235,7 +236,7 @@ static void prio_dequeue_message(struct __ipc_gen_port *port,
 
 static ipc_port_message_t *prio_lookup_message(struct __ipc_gen_port *port,
                                                ulong_t msg_id)
-{
+{    
   if( msg_id < port->capacity ) {
     prio_port_data_storage_t *ds=(prio_port_data_storage_t*)port->data_storage;
     ipc_port_message_t *msg=ds->message_ptrs[msg_id];
@@ -247,6 +248,7 @@ static ipc_port_message_t *prio_lookup_message(struct __ipc_gen_port *port,
     }
     return msg;
   }
+
   return NULL;
 }
 

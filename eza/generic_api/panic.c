@@ -31,19 +31,20 @@
 
 #define PANIC_BUF_SIZE 1024
 
-void panic(const char *fmt, ...)
+void panic_core(const char *fname, const char *fmt, ...)
 {
   va_list ap;
   char panic_buf[PANIC_BUF_SIZE];
 
   interrupts_disable();
-  default_console()->enable();
+  if (!default_console()->is_enabled)
+    default_console()->enable();
 
   va_start(ap, fmt);
   vsnprintf(panic_buf, sizeof(panic_buf), fmt, ap);
   va_end(ap);
   kprintf("\n========[!!PANIC!!]=========\n");
-  kprintf("%s\n", panic_buf);  
+  kprintf("[%s]: %s\n", fname, panic_buf);  
 
   for(;;);
 }

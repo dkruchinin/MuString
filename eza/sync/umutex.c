@@ -20,11 +20,11 @@
  * eza/sync/umutex.c: Implementation of userspace mutex core functionality.
  */
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/mutex.h>
 #include <eza/sync.h>
-#include <kernel/vm.h>
 #include <eza/task.h>
+#include <eza/usercopy.h>
 #include <mm/slab.h>
 #include <eza/arch/atomic.h>
 #include <eza/mutex.h>
@@ -32,7 +32,7 @@
 static pthread_mutexattr_t __default_mutex_attrs={(PTHREAD_PROCESS_PRIVATE)};
 
 /* Mutex-related logic. */
-static status_t __mutex_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
+static int __mutex_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
 {
   sync_umutex_t *umutex=__UMUTEX_OBJ(obj);
 
@@ -74,7 +74,7 @@ static sync_umutex_t *__allocate_umutex(void)
   return umutex;
 }
 
-status_t sync_create_mutex(kern_sync_object_t **obj,void *uobj,
+int sync_create_mutex(kern_sync_object_t **obj,void *uobj,
                            uint8_t *attrs,ulong_t flags)
 {
   sync_umutex_t *umutex=__allocate_umutex();

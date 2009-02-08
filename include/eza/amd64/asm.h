@@ -18,8 +18,7 @@
  * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *                (added CR3-related functions)
- * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
- *                (add lock prefix)
+ * (c) Copyright 2009 Dan Kruchinin
  *
  * include/eza/amd64/asm.h: generic assembler functions
  *
@@ -29,24 +28,10 @@
 #define __ASM_H__
 
 #include <config.h>
-#include <eza/arch/types.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/page.h>
-
-#ifdef CONFIG_SMP
-/*
- * x86 and x86_64(amd64) architectures provide lock prefix
- * that guaranty atomic execution limited set of operations
- * such as:
- * ADC, ADD, AND, BTC, BTR, BTS, CMPXCHG, CMPXCHG8B, CMPXCHG16B, DEC,
- * INC, NEG, NOT, OR, SBB, SUB, XADD, XCHG, and XOR
- * (list of operations supporting lock prefix was taken from amd64 manual,
- * volume 3)
- */
-#define __LOCK_PREFIX "lock "
-#else
-#define __LOCK_PREFIX ""
-#endif /* CONFIG_SMP */
+#include <eza/arch/cpu.h>
+#include <eza/arch/ptable.h>
+#include <mlibc/types.h>
 
 extern void set_efer_flag(int flag);
 
@@ -105,29 +90,6 @@ static inline void tr_load(uint16_t s)
   asm volatile("ltr %0" : : "r" (s));
 }
 
-/* restore interrupts priority, i.e. restore EFLAGS */
-static inline void interrupts_restore(ipl_t b)
-{
-  __asm__ volatile (
-		    "pushq %0\n"
-		    "popfq\n"
-		    : : "r" (b)
-		    );
-}
-
-static inline ipl_t interrupts_read(void)
-{
-  ipl_t o;
-
-  __asm__ volatile (
-		    "pushfq\n"
-		    "popq %0\n"
-		    : "=r" (o)
-		    );
-
-  return o;
-}
-
 /* MSR and others */
 
 /* write msr */
@@ -139,30 +101,13 @@ static inline void write_msr(uint32_t msr,uint64_t v)
 }
 
 /* just read msr */
-static inline unative_t read_msr(uint32_t msr)
+static inline uint64_t read_msr(uint32_t msr)
 {
   uint32_t ax,dx;
 
   __asm__ volatile ("rdmsr;" : "=a" (ax), "=d" (dx) : "c" (msr));
 
   return ((uint64_t)dx << 32) | ax;
-}
-
-/* CR3 management. See manual for details about 'PCD' and 'PWT' fields. */
-static inline void load_cr3( uintptr_t phys_addr, uint8_t pcd, uint8_t pwt )
-{
-  uintptr_t cr3_val = ( ((pwt & 1) << 3) | ((pcd & 1) << 4) );
-  
-  /* Normalize new PML4 base. */
-  phys_addr >>= 12;
-
-  /* Setup 20 lowest bits of the PML4 base. */
-  cr3_val |= ((phys_addr & 0xfffff) << 12);
-
-  /* Setup highest 20 bits of the PML4 base. */
-  cr3_val |= ((phys_addr & (uintptr_t)0xfffff00000) << 12);
-
-  __asm__ volatile(  "movq %0, %%cr3" :: "r" (cr3_val) );
 }
 
 /* Load RSP with a given value. It MUST NOT be a function since after
@@ -172,6 +117,45 @@ static inline void load_cr3( uintptr_t phys_addr, uint8_t pcd, uint8_t pwt )
   __asm__ volatile (\
      "mov %%rax,%%rsp\n" \
      :: "a" (sp) )
+
+/* CR3 management. See manual for details about 'PCD' and 'PWT' fields. */
+#if 0
+static inline void load_cr3(uintptr_t phys_addr, uint8_t pcd, uint8_t pwt)
+{
+  uintptr_t cr3_val = (((pwt & 1) << 3) | ((pcd & 1) << 4));
+  
+  /* Normalize new PML4 base. */
+  phys_addr >>= PAGE_WIDTH;
+
+  /* Setup 20 lowest bits of the PML4 base. */
+  cr3_val |= ((phys_addr & 0xfffff) << PAGE_WIDTH);
+
+  /* Setup highest 20 bits of the PML4 base. */
+  cr3_val |= ((phys_addr & (uintptr_t)0xfffff00000) << PAGE_WIDTH);
+  
+  __asm__ volatile("movq %0, %%cr3" :: "r" (cr3_val));
+}
+#endif
+
+static inline long read_cr3(void)
+{
+  long ret;
+  __asm__ volatile("movq %%cr3, %0\n\t"
+                   : "=r" (ret));
+
+  return ret;
+}
+
+static inline void write_cr3(long val)
+{
+  __asm__ volatile("movq %0, %%cr3\n\t"
+                   :: "r" (val));
+}
+
+static inline void load_cr3(pde_t *pde)
+{
+  write_cr3(k2p(pde));
+}
 
 #endif /* __ASM_H__ */
 

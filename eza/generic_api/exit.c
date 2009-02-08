@@ -28,7 +28,6 @@
 #include <eza/task.h>
 #include <ipc/ipc.h>
 #include <eza/security.h>
-#include <eza/tevent.h>
 #include <eza/process.h>
 #include <ipc/gen_port.h>
 #include <eza/signal.h>

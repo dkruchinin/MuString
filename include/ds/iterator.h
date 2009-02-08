@@ -44,14 +44,15 @@
 #include <mlibc/string.h>
 #include <mlibc/assert.h>
 #include <eza/kernel.h>
+#include <mlibc/types.h>
 
 /**
  * @enum iter_state
  * Possible iterator states.
  */
-enum iter_state {
-  ITER_RUN = 1, /**< Iterator is in "running" state. This means iteration can be continued */
-  ITER_STOP     /**< Iterator was stopped. This means either iteration wasn't started or was finished */
+enum iter_state {  
+  ITER_RUN = 1,
+  ITER_STOP,
 };
 
 /**
@@ -83,14 +84,14 @@ enum iter_state {
  */
 #define DEFINE_ITERATOR(name, members...)                   \
     typedef struct __iterator_##name {                      \
-        members;                                            \
+        members                                             \
         void (*first)(struct __iterator_##name *iter);      \
         void (*last)(struct __iterator_##name *iter);       \
         void (*next)(struct __iterator_##name *iter);       \
         void (*prev)(struct __iterator_##name *iter);       \
-        uint8_t state;                                      \
-        unsigned int type;                                  \
         void *__ctx;                                        \
+        enum iter_state state;                              \
+        uint_t type;                                        \
     } name##_iterator_t
 
 /**
@@ -115,7 +116,7 @@ enum iter_state {
  */
 #define DEFINE_ITERATOR_TYPES(name, types...)   \
   enum __iterator_##name##_type {               \
-    types,                                      \
+    types                                       \
   }                                             \
 
 /**
@@ -140,8 +141,11 @@ enum iter_state {
  */
 #define DEFINE_ITERATOR_CTX(iter_name, ctx_type, members...)    \
     ITERATOR_CTX(iter_name, ctx_type) {                         \
-        members;                                                \
+        members                                                 \
     }
+
+#define ITERATOR_CTX_VOID  NULL
+#define ITERATOR_TYPE_VOID -1
 
 /**
  * @def ITERATOR_CTX(iter_name, ctx_type)
@@ -163,14 +167,21 @@ enum iter_state {
 #define ITERATOR_CTX(iter_name, ctx_type)       \
   struct __##iter_name##_##ctx_type
 
+#define __check_iter_method(method_name, method, type)                  \
+  do {                                                                  \
+    if (!(method)) {                                                    \
+      panic("Method %s is not supported by iterator with type %d",      \
+            method_name, type);                                         \
+    }                                                                   \
+  } while (0)
+
 /**
  * @def iter_first(iter)
  * Go to the first iterator member
  *
  * @param iter - A pointer to iterator
  */
-#define iter_first(iter)                        \
-  ((iter)->first(iter))
+#define iter_first(iter) ((iter)->first(iter))
 
 /**
  * @def iter_last(iter)
@@ -178,8 +189,7 @@ enum iter_state {
  *
  * @param iter - A pointer to iterator
  */
-#define iter_last(iter)                         \
-  ((iter)->last(iter))
+#define iter_last(iter) ((iter)->last(iter))
 
 /**
  * @def iter_next(iter)
@@ -187,8 +197,7 @@ enum iter_state {
  *
  * @param iter - A pointer to iterator
  */
-#define iter_next(iter)                         \
-  ((iter)->next(iter))
+#define iter_next(iter) ((iter)->next(iter))
 
 /**
  * @def iter_prev(iter)
@@ -196,8 +205,7 @@ enum iter_state {
  *
  * @param iter - A pointer to iterator
  */
-#define iter_prev(iter)                         \
-  ((iter)->prev(iter))
+#define iter_prev(iter) ((iter)->prev(iter))
 
 /**
  * @def iter_isrunning(iter)
@@ -207,6 +215,7 @@ enum iter_state {
  * @return Boolean
  *
  * @see iter_isstopped
+ * @see iter_islying
  * @see iter_state
  */
 #define iter_isrunning(iter)                    \
@@ -220,9 +229,12 @@ enum iter_state {
  * @return Boolean
  *
  * @see iter_isrunning
+ * @see iter_islying
  * @see iter_state
  */
-#define iter_isstopped(iter) ((iter)->state == ITER_STOP)
+#define iter_isstopped(iter)                    \
+  ((iter)->state == ITER_STOP)
+
 
 /**
  * @def iter_fetch_ctx(iter)
@@ -253,10 +265,6 @@ enum iter_state {
   do {                                          \
     (iter)->type = (__type);                    \
     (iter)->state = ITER_STOP;                  \
-    ASSERT((iter)->next != NULL);               \
-    ASSERT((iter)->prev != NULL);               \
-    ASSERT((iter)->first != NULL);              \
-    ASSERT((iter)->last != NULL);               \
   } while (0)
 
 /**
@@ -279,5 +287,12 @@ enum iter_state {
 
 #define iterate_backward(iter)                  \
   for (iter_last(iter); iter_isrunning(iter); iter_prev(iter))
+
+#ifdef CONFIG_DEBUG_ITERATOR
+#define ITER_DBG_CHECK_TYPE(iter, checktype)         \
+  ASSERT((iter)->type == (chcektype))
+#else
+#define ITER_DBG_CHECK_TYPE(iter, checktype)
+#endif /* CONFIG_DEBUG_ITERATOR */
 
 #endif /* __ITERATOR_H__ */

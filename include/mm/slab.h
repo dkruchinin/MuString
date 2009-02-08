@@ -45,6 +45,7 @@
 #define SLAB_OBJLIST_END     ((char *)0xF00BAAF)
 /* Quantity of pages per slab for generic caches */
 #define GENERIC_SLAB_PAGES   1
+#define DEFAULT_SLAB_PAGES   1
 /* Minimal allowed object size */
 #define SLAB_OBJECT_MIN_SIZE 8 
 /* Max allowed object size */
@@ -133,7 +134,7 @@ typedef struct __slab {
 /* TODO DK: implement the following policies: SMCF_SHARED, SMCF_POISON, SMCF_MERGE */
 
 /* generic slabs default behaviour control flags */
-#define SLAB_GENERIC_FLAGS (SMCF_PDMA | SMCF_GENERIC)
+#define SLAB_GENERIC_FLAGS (SMCF_PGEN | SMCF_GENERIC)
 
 /**
  * @typedef uint8_t memcache_flags_t

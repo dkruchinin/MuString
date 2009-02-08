@@ -1,9 +1,9 @@
-#include <kernel/vm.h>
+#include <eza/usercopy.h>
 #include <mlibc/string.h>
 
-status_t copy_user(void *dest,void *src,ulong_t size)
+int copy_user(void *dest,void *src,ulong_t size)
 {
-  status_t r;
+  int r;
 
   __asm__ __volatile__(
     "0: cmp $0,%5\n"                                  \
@@ -140,12 +140,12 @@ status_t copy_user(void *dest,void *src,ulong_t size)
   return r;
 }
 
-status_t copy_to_user(void *dest,void *src,ulong_t size)
+int copy_to_user(void *dest,void *src,ulong_t size)
 {
     return copy_user(dest,src,size);
 }
 
-status_t copy_from_user(void *dest,void *src,ulong_t size)
+int copy_from_user(void *dest,void *src,ulong_t size)
 {
   return copy_user(dest,src,size);
 }

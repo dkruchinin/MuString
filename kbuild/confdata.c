@@ -434,7 +434,6 @@ int conf_write(const char *name)
 		out = fopen(newname, "w");
 	}
 	if (!out) {
-        printf("here\n");
 		return 1;
     }
 
@@ -543,7 +542,6 @@ int conf_write(const char *name)
 		strcat(dirname, ".old");
 		rename(newname, dirname);
 		if (rename(tmpname, newname)) {
-            printf("there\n");
 			return 1;
         }
 	}

@@ -21,10 +21,10 @@
  *
  */
 
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 #include <eza/arch/bios.h>
 
-uintptr_t ebda=nil;
+uintptr_t ebda=0;
 
 void arch_bios_init(void)
 {

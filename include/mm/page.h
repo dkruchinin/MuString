@@ -30,14 +30,16 @@
 #ifndef __PAGE_H__
 #define __PAGE_H__
 
+#include <config.h>
 #include <ds/iterator.h>
 #include <ds/list.h>
 #include <mlibc/stddef.h>
-#include <eza/spinlock.h>
+#include <mlibc/types.h>
 #include <eza/arch/page.h>
 #include <eza/arch/atomic.h>
-#include <eza/arch/types.h>
 
+#define PAGE_ALIGN(addr) (((addr) + PAGE_MASK) & ~PAGE_MASK)
+#define PAGE_ALIGN_DOWN(addr) ((addr) & ~PAGE_MASK)
 
 #define NOF_MM_POOLS 2 /**< Number of MM pools in system */
 
@@ -45,7 +47,9 @@
  * @typedef int page_idx_t
  * Page index.
  */
-typedef int page_idx_t;
+typedef ulong_t page_idx_t;
+
+#define PAGE_IDX_INVAL (~0U)
 
 /**
  * @typedef uint16_t page_flags_t;
@@ -53,16 +57,23 @@ typedef int page_idx_t;
  */
 typedef uint16_t page_flags_t;
 
+/* page frame flags */
 #define PF_PDMA       0x01 /**< DMA pool is page owner */
 #define PF_PGEN       0x02 /**< GENERAL pool is page owner */
 #define PF_RESERVED   0x04 /**< Page is reserved */
 #define PF_SLAB_LOCK  0x08 /**< Page lock (used by slab allocator) */
 
+/* page fault flags */
+#define PFLT_NOT_PRESENT 0x01
+#define PFLT_PROTECT     0x02
+#define PFLT_READ        0x04
+#define PFLT_WRITE       0x08
+
 #define __pool_type(flags) ((flags) >> 1)
 #define PAGE_POOLS_MASK (PF_PGEN | PF_PDMA)
 #define PAGE_PRESENT_MASK (PAGE_POOL_MASK | PF_RESERVED)
 
-typedef uint8_t pd_flags_t;
+#define __page_aligned__ __attribute__((__aligned__(PAGE_SIZE)))
 
 /**
  * @struct page_frame_t
@@ -77,19 +88,15 @@ typedef struct __page_frame {
   list_head_t head;    /**< Obvious */
   list_node_t node;    /**< Obvious */
   page_idx_t idx;      /**< Page frame index in the pframe_pages_array */
-  union {
-    atomic_t refcount;   /**< Number of references to the physical page */
-    struct {
-      pdir_level_t level;
-      pde_idx_t entries;
-    };
-  };
+  atomic_t refcount;   /**< Number of references to the physical page */
   page_flags_t flags;  /**< Page flags */
   uint32_t _private;   /**< Private data that may be used by internal page frame allocator */  
 } page_frame_t;
 
-#define PF_ITER_UNDEF_VAL (-0xf)
+extern page_frame_t *page_frames_array; /**< An array of all available physical pages */
+extern page_idx_t num_phys_pages;       /**< Number of physical pages in system */
 
+#define pframe_pool_type(page) (__pool_type((page)->flags & PAGE_POOLS_MASK))
 
 /**
  * @struct page_frame_iterator_t
@@ -97,23 +104,25 @@ typedef struct __page_frame {
  * @see DEFINE_ITERATOR
  */
 DEFINE_ITERATOR(page_frame,
-                page_idx_t pf_idx);
+                int error;
+                page_idx_t pf_idx;);
 
 /**
  * Page frame iterator supported types
  * @see DEFINE_ITERATOR_TYPES
  */
 DEFINE_ITERATOR_TYPES(page_frame,
-                      PF_ITER_ARCH,  /**< Architecture-dependent iterator used for page frames initialization */
-                      PF_ITER_INDEX, /**< Index-based iterator */
-                      PF_ITER_LIST,  /**< List-based iterator */
-                      PF_ITER_ALLOC  /**< Each next item of ALLOC iterator is dynamically allocated */
+                      PF_ITER_ARCH,   /**< Architecture-dependent iterator used for page frames initialization */
+                      PF_ITER_INDEX,  /**< Index-based iterator */
+                      PF_ITER_LIST,   /**< List-based iterator */
+                      PF_ITER_PTABLE, /**< Page table iterator */
+                      PF_ITER_PBLOCK, /**< Iterate through list of page blocks */
                       );
 
-extern page_frame_t *page_frames_array;
-
-#define PAGE_ALIGN(addr) align_up((uintptr_t)(addr), PAGE_SIZE)
-#define pframe_pool_type(page) (__pool_type((page)->flags & PAGE_POOLS_MASK))
+static inline bool page_idx_is_present(page_idx_t page_idx)
+{
+  return (page_idx <= num_phys_pages);
+}
 
 static inline void *pframe_to_virt(page_frame_t *frame)
 {
@@ -135,11 +144,6 @@ static inline void *pframe_phys_addr(page_frame_t *frame)
   return (void *)((uintptr_t)frame->idx << PAGE_WIDTH);
 }
 
-static inline void *virt_to_phys(void *virt)
-{
-  return virt - KERNEL_BASE;
-}
-
 static inline void *pframe_id_to_virt( page_idx_t idx )
 {
   return (void *)(KERNEL_BASE + (idx << PAGE_WIDTH));
@@ -147,21 +151,12 @@ static inline void *pframe_id_to_virt( page_idx_t idx )
 
 static inline page_idx_t virt_to_pframe_id(void *virt)
 {
-  page_idx_t idx = ((uintptr_t)virt - KERNEL_BASE) >> PAGE_WIDTH;
-  return idx;
+  return ((uintptr_t)virt - KERNEL_BASE) >> PAGE_WIDTH;
 }
 
 static inline page_frame_t *virt_to_pframe( void *addr )
 {
   return pframe_by_number(virt_to_pframe_id(addr));
-}
-
-static inline void put_page(page_frame_t *p)
-{
-}
-
-static inline void get_page(page_frame_t *p)
-{
 }
 
 /**
@@ -178,5 +173,4 @@ static inline void pframe_memnull(page_frame_t *start, int block_size)
 #else
 #define pframe_memnull(start, block_size) arch_page_memnull(start, block_size)
 #endif /* ARCH_PAGE_MEMNULL */
-
 #endif /* __PAGE_H__ */

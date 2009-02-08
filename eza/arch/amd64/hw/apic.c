@@ -23,23 +23,23 @@
  */
 
 #include <config.h>
+#include <mm/page.h>
+#include <mm/vmm.h>
 #include <eza/interrupt.h>
 #include <eza/arch/8259.h>
 #include <eza/arch/i8254.h>
 #include <eza/arch/types.h>
 #include <eza/arch/asm.h>
 #include <eza/arch/apic.h>
-#include <eza/arch/mm_types.h>
 #include <eza/arch/interrupt.h>
 #include <eza/arch/gdt.h>
-#include <mm/idalloc.h>
-#include <mm/mmap.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/unistd.h>
 #include <mlibc/string.h>
 #include <mlibc/bitwise.h>
 #include <eza/arch/interrupt.h>
 #include <eza/arch/smp.h>
+#include <eza/arch/mm.h>
 
 /*
  * Black mages from intel and amd wrote that
@@ -59,12 +59,13 @@ static int __map_apic_page(void)
   int32_t res;
   uintptr_t apic_vaddr;
 
-  apic_vaddr=(uintptr_t)idalloc_allocate_vregion(1);
+  apic_vaddr=__allocate_vregion(1);
   if( !apic_vaddr ) {
     panic( "[MM] Can't allocate memory range for mapping APIC !\n" );
   }
 
-  res = mmap_kern(apic_vaddr, local_apic_base >> PAGE_WIDTH, 1, MAP_RW | MAP_DONTCACHE | MAP_EXEC);
+  res = mmap_kern(apic_vaddr, local_apic_base >> PAGE_WIDTH, 1,
+                  KMAP_READ | KMAP_WRITE | KMAP_NOCACHE | KMAP_EXEC | KMAP_KERN);
   if(res<0) {
     panic("[MM] Cannot map IO page for APIC.\n");
   }
@@ -431,7 +432,7 @@ void local_apic_timer_calibrate(uint32_t hz)
   kprintf("Calibrating lapic delay_loop ...");
 
   x1=local_apic->timer_ccr.count; /*get current counter*/
-  local_apic->timer_icr.count=fil; /*fillful initial counter */
+  local_apic->timer_icr.count=0xffffffff; /*fillful initial counter */
 
   kprintf("ccr %ld\n",local_apic->timer_ccr.count);
 
