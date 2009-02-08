@@ -34,6 +34,7 @@
 #include <eza/mutex.h>
 #include <eza/rwsem.h>
 #include <eza/spinlock.h>
+#include <eza/security.h>
 #include <kernel/syscalls.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/types.h>
@@ -56,6 +57,8 @@ static SPINLOCK_DEFINE(__vmm_verb_lock);
     }                                           \
   } while (0)
 
+#else
+#define VMM_VERBOSE(fmt, args...)
 #endif /* CONFING_DEBUG_MM */
 
 static int __vmranges_cmp(void *r1, void *r2)
@@ -331,7 +334,7 @@ void vmranges_find_covered(vmm_t *vmm, uintptr_t va_from, uintptr_t va_to, vmran
 }
 
 long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages,
-                 vmrange_flags_t flags, int offs_pages)
+                 vmrange_flags_t flags, page_idx_t offs_pages)
 {
   vmrange_t *vmr;
   ttree_cursor_t cursor, csr_tmp;
@@ -347,6 +350,16 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
       || ((flags & VMR_NONE) && ((flags & VMR_PROTO_MASK) != VMR_NONE))) {
     err = -EINVAL;
     goto err;
+  }
+  if (flags & VMR_PHYS) {
+    if (!trusted_task(current_task())) {
+      err = -EPERM;
+      goto err;
+    }
+    if ((memobj != &null_memobj) || !offs_pages) {
+      err = -EINVAL;
+      goto err;
+    }
   }
   if (addr) {
     if (!valid_user_address_range(addr, (npages << PAGE_WIDTH))) {
@@ -423,7 +436,16 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
     goto err;
   }
 
-  ttree_insert_placeful(&cursor, vmr);  
+  ttree_insert_placeful(&cursor, vmr);
+  if (flags & VMR_PHYS) {
+    flags |= VMR_NOCACHE;
+    /* FIXME: physical mapping actually may be shared */
+    err = mmap_core(&vmm->rpd, offs_pages << PAGE_WIDTH, offs_pages, npages,
+                    flags & KMAP_FLAGS_MASK);
+    if (err)
+      goto err;
+  }
+  
   fix_vmrange_holes(vmm, vmr, &cursor);
   
   out:

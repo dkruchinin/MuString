@@ -55,7 +55,7 @@
 #define INTEL_FXSAVE         24
 
 #define IDT_ITEMS  256  /* interrupt descriptors */
-#define GDT_ITEMS  8   /* GDT */
+#define GDT_ITEMS  10   /* GDT */
 
 #define NIL_DES  0  /* nil(null) descriptor */
 #define KTEXT_DES    1 /* kernel space */

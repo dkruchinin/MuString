@@ -359,6 +359,7 @@ get_next_task:
   __UNLOCK_CPU_SCHED_DATA(sched_data);
 
   if( need_switch ) {
+    kprintf("activating task...\n");
     arch_activate_task(next);
   }
 

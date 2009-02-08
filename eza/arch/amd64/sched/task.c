@@ -383,6 +383,7 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
 
         interrupts_disable();
         if( task == current_task() ) {
+          kprintf("Am I here???\n");
           load_ldt(cpu_id(),arch_ctx->ldt,arch_ctx->ldt_limit);
         }
         interrupts_enable();

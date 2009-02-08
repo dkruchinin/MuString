@@ -112,7 +112,8 @@ void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_fr
 {
   regs_t *regs=(regs_t *)(((uintptr_t)stack_frame)-sizeof(struct __gpr_regs)-8);
 
-  default_console()->enable();
+  if (!default_console()->is_enabled)
+    default_console()->enable();
 
   if( kernel_fault(stack_frame) ) {
     goto kernel_fault;
