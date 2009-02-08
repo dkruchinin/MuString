@@ -185,7 +185,7 @@ static int __create_task_mm(task_t *task, int num)
     return r;
 
   /* Create a BSS area. */
-  r=__create_empty_user_area(task,bss_virt,bss_size,MAP_USER | MAP_RW);
+  r=__create_empty_user_area(task,bss_virt,bss_size, KMAP_READ | KMAP_WRITE);
   if( r ) {
     return r;
   }
