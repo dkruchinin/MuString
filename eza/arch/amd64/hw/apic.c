@@ -60,6 +60,7 @@ static int __map_apic_page(void)
   uintptr_t apic_vaddr;
 
   apic_vaddr=__allocate_vregion(1);
+  kprintf("VREGION = %p\n", apic_vaddr);
   if( !apic_vaddr ) {
     panic( "[MM] Can't allocate memory range for mapping APIC !\n" );
   }
@@ -369,11 +370,14 @@ static void __unmask_extint(void)
 /*init functions makes me happy*/
 int local_bsp_apic_init(void)
 {
+    kprintf("=> 1\n");
 	__map_apic_page();
 	if (__local_apic_init(true))
 		 return -1;
 
+    kprintf("=> 2\n");
 	local_apic_timer_init(LOCAL_TIMER_CPU_IRQ_VEC);
+    kprintf("=> 3\n");
 	__unmask_extint();
 
   return 0;

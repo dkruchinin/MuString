@@ -184,27 +184,34 @@ static int __create_task_mm(task_t *task, int num)
   if (r)
     return r;
 
+  kprintf("3\n");
   /* Create a BSS area. */
   r=__create_empty_user_area(task,bss_virt,bss_size, KMAP_READ | KMAP_WRITE);
   if( r ) {
     return r;
   }
 
+  kprintf("4\n");
   r = mmap_core(task_get_rpd(task), USPACE_VA_TOP-0x40000, pframe_number(stack), USER_STACK_SIZE, KMAP_READ | KMAP_WRITE);
   if (r)
     return r;
 
+  kprintf("5\n");
   /* Now allocate stack space for per-task user data. */
   ustack_top=USPACE_VA_TOP-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH);
   ustack_top-=PER_TASK_DATA_SIZE;
   ptd=user_to_kernel_vaddr(task_get_rpd(task),ustack_top);
 
+  kprintf("6\n");
   if( !ptd ) {
     return -1;
   }
+  kprintf("7\n");
   ptd->ptd_addr=(uintptr_t)ustack_top;
 
+  kprintf("8\n");
   r=do_task_control(task,SYS_PR_CTL_SET_PERTASK_DATA,(uintptr_t)ustack_top);
+  kprintf("9\n");
   if( r ) {
     return r;
   }
@@ -213,7 +220,9 @@ static int __create_task_mm(task_t *task, int num)
   ustack_top-=8;
 
   r=do_task_control(task,SYS_PR_CTL_SET_ENTRYPOINT,ehead.e_entry);
+  kprintf("10\n");
   r|=do_task_control(task,SYS_PR_CTL_SET_STACK,ustack_top);
+  kprintf("11\n");
 
   if (r)
     return r;
@@ -234,7 +243,7 @@ void server_run_tasks(void)
 
   if( i > 0 ) {
     kprintf("[SRV] Starting servers: %d ... \n",i);
-    kconsole->disable();
+    //kconsole->disable();
   }
 
   for(a=0;a<i;a++) {
@@ -264,7 +273,9 @@ void server_run_tasks(void)
              a+1);
     }
 
+    kprintf("12\n");
     r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
+    kprintf("13\n");
     if( r ) {
       panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);
     }

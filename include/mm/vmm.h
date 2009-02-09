@@ -40,7 +40,7 @@
 #define VMM_DBG_NAME_LEN 128
 #endif /* CONFIG_DEBUG_MM */
 
-#define VMR_PROTO_MASK (VMR_NONE | VMR_READ | VMR_WRITE | VMR_EXEC)
+#define VMR_PROTO_MASK (VMR_NONE | VMR_READ | VMR_WRITE | VMR_EXEC | VMR_NOCACHE)
 #define VMR_FLAGS_OFFS 4
 
 typedef enum __vmrange_flags {
@@ -170,7 +170,7 @@ int vm_mandmaps_roll(vmm_t *target_mm);
 vmm_t *vmm_create(void);
 int vmm_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask);
 long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages,
-                 vmrange_flags_t flags, int offs_pages);
+                 vmrange_flags_t flags, page_idx_t offs_pages);
 void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages);
 vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, ttree_cursor_t *cursor);
 void vmranges_find_covered(vmm_t *vmm, uintptr_t va_from, uintptr_t va_to, vmrange_set_t *vmrs);
