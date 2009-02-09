@@ -34,7 +34,7 @@
 #include <mm/slab.h>
 #include <ipc/gen_port.h>
 #include <ds/list.h>
-#include <mlibc/skiplist.h>
+#include <ds/skiplist.h>
 
 typedef struct __prio_port_data_storage {
   list_head_t prio_head,all_messages,id_waiters;
