@@ -278,7 +278,7 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
 
   /* First, check for pending disintegration requests. */
   if( uworks & ARCH_CTX_UWORKS_DISINT_REQ_MASK ) {
-    perform_disintegrate_work();
+    perform_disintegration_work();
 
     /* Only main threads will return to finalize their reborn.
      * There can be some signals waiting for delivery, so take it

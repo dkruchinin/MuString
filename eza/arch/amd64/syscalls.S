@@ -71,6 +71,8 @@ syscall_table:
 	.quad   sys_thread_exit
 	.quad   sys_timer_create
 	.quad   sys_timer_control               /* 35 */
+	.quad   sys_munmap
+	.quad   sys_thread_wait
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

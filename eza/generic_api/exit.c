@@ -32,6 +32,9 @@
 #include <ipc/gen_port.h>
 #include <eza/signal.h>
 #include <eza/event.h>
+#include <eza/wait.h>
+#include <eza/arch/spinlock.h>
+#include <eza/usercopy.h>
 
 #define __set_exiting_flag(exiter)              \
   LOCK_TASK_STRUCT((exiter));                   \
@@ -120,7 +123,6 @@ void do_exit(int code,ulong_t flags,ulong_t exitval)
 {
   task_t *exiter=current_task();
   list_node_t *ln;
-  list_head_t plist;
   disintegration_descr_t *dreq;
 
   if( !exiter->pid ) {
@@ -209,30 +211,29 @@ void do_exit(int code,ulong_t flags,ulong_t exitval)
     __exit_limits(exiter);
     __exit_ipc(exiter);
 
-    list_init_head(&plist);
     LOCK_TASK_STRUCT(exiter);
-    list_move2head(&plist,&exiter->jointed);
+    ce=exiter->cwaiter;
+    exiter->cwaiter=__UNUSABLE_PTR; /* We don't wake anybody up anymore ! */
     UNLOCK_TASK_STRUCT(exiter);
 
-    /*
-    if( !list_is_empty(&plist) ) {
-      list_for_each(&plist,ln) {
-        jointee_t *j=container_of(ln,jointee_t,l);
-        task_t *target=container_of(j,task_t,jointee);
+    while( !list_is_empty(&exiter->jointed) ) { /* Notify all waiting tasks. */
+      ln=list_node_first(&exiter->jointed);
+      jointee_t *j=container_of(ln,jointee_t,l);
+      task_t *waiter=container_of(j,task_t,jointee);
 
-        //j->u.exit_ptr=NULL;
-        //event_raise(&j->e);
-        kprintf("** [0x%X] [XXX] !\n",exiter->tid);
+      LOCK_TASK_STRUCT(waiter);
+      if( j->exiter == exiter ) {
+        j->exit_ptr=exitval;
+        event_raise(&j->e);
+        kprintf("do_exit(): woke up waiter: 0x%X\n",waiter->tid);
       }
-      }
-    */
+      list_del(ln);
+      UNLOCK_TASK_STRUCT(waiter);
+    }
 
     /* Next, notify our parent in case he needs it. */
     LOCK_TASK_CHILDS(exiter->group_leader);
     LOCK_TASK_STRUCT(exiter);
-    ce=exiter->cwaiter;
-    exiter->cwaiter=__UNUSABLE_PTR; /* We don't wake up anymore ! */
-
     /* Remove us from parent's list. */
     exiter->group_leader->tg_priv->num_threads--;
     list_del(&exiter->child_list);
@@ -251,13 +252,12 @@ void do_exit(int code,ulong_t flags,ulong_t exitval)
   if( !is_thread(exiter) ) {
     if( flags & EF_DISINTEGRATE ) {
       /* Prepare the final reincarnation event. */
-      event_initialize(&exiter->reinc_event);
-      event_set_task(&exiter->reinc_event,exiter);
+      event_initialize_task(&exiter->reinc_event,exiter);
 
       if( !__notify_disintegration_done(exiter->uworks_data.disintegration_descr,0) ) {
         /* OK, folks: for now we have no attached resources and userspace.
          * So we can't return from syscall until the process that initiated our
-         * disintegration reconstrucs our userspace. So sleep until it has changed
+         * disintegration has reconstructed our userspace. So sleep until it has changed
          * our state via 'SYS_PR_CTL_REINCARNATE_TASK'.
          */
         event_yield(&exiter->reinc_event);
@@ -305,11 +305,80 @@ void sys_exit(int code)
   do_exit(code,0,0);
 }
 
-void sys_thread_exit(int code)
+void sys_thread_exit(long value)
 {
+  do_exit(0,0,value);
 }
 
-void perform_disintegrate_work(void)
+long sys_wait_id(idtype_t idtype,id_t id,siginfo_t *siginfo,int options)
 {
-  do_exit(0,EF_DISINTEGRATE,0);
+  return 0;
+}
+
+long sys_waitpid(pid_t pid,int *status,int options)
+{
+  return 0;
+}
+
+long sys_thread_wait(tid_t tid,void **value_ptr)
+{
+  task_t *target=pid_to_task(tid);
+  task_t *caller=current_task();
+  long r;
+
+  if( !target ) {
+    return -ESRCH;
+  }
+
+  if( !is_thread(target) || target->pid != caller->pid ) {
+    return -EINVAL;
+  }
+
+  if( target == caller ) {
+    return -EDEADLOCK;
+  }
+
+  event_initialize_task(&caller->jointee.e,caller);
+
+  r=0;
+  LOCK_TASK_STRUCT(target);
+  if( target->cwaiter != __UNUSABLE_PTR ) {
+    caller->jointee.exiter=target;
+    list_add2tail(&target->jointed,&caller->jointee.l);
+  } else {
+    caller->jointee.exiter=NULL;
+    r=-EINVAL;
+  }
+  UNLOCK_TASK_STRUCT(target);
+
+  if( !r ) {
+    event_yield(&caller->jointee.e);
+
+    /* Check for asynchronous interruption. */
+    LOCK_TASK_STRUCT(caller);
+    if( task_was_interrupted(caller) ) {
+      /* We take into account only 'fairplay' interruption which means
+       * only interruption while we're on the waiting list. Otherwise,
+       * if target thread woke us up before the signal arrived (in such
+       * a situation we're not bound to it), we assume that -EINTR shouldn't
+       * be returned (but all pending signals will be delivered, nevertheless).
+       */
+      if( list_node_is_bound(&caller->jointee.l) ) {
+        list_del(&caller->jointee.l);
+        r=-EINTR;
+      }
+    }
+    caller->jointee.exiter=NULL;
+    UNLOCK_TASK_STRUCT(target);
+  }
+
+  if( !r && value_ptr ) {
+    r=copy_to_user(value_ptr,&caller->jointee.exit_ptr,
+                   sizeof(caller->jointee.exit_ptr));
+    if( r ) {
+      r=-EFAULT;
+    }
+  }
+
+  return r;
 }

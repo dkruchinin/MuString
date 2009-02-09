@@ -29,6 +29,7 @@
 #include <kernel/syscalls.h>
 #include <ipc/gen_port.h>
 #include <ipc/port.h>
+#include <eza/wait.h>
 
 #define SYS_PR_CTL_SET_ENTRYPOINT      0x0
 #define SYS_PR_CTL_SET_STACK           0x1
@@ -38,8 +39,17 @@
 #define SYS_PR_CTL_SET_PERTASK_DATA    0x5
 #define SYS_PR_CTL_DISINTEGRATE_TASK   0x6  /* Very strong spell. */
 #define SYS_PR_CTL_REINCARNATE_TASK    0x7  /* Another very strong spell. */
+#define SYS_PR_CTL_CANCEL_TASK         0x8
+#define SYS_PR_CTL_SET_CANCEL_STATE    0x9
+#define SYS_PR_CTL_SET_CANCEL_TYPE     0xA
 
-#define LOOKUP_ZOMBIES  0x1
+#define PTHREAD_CANCEL_ENABLE   1
+#define PTHREAD_CANCEL_DISABLE  0
+
+#define PTHREAD_CANCEL_DEFERRED      1
+#define PTHREAD_CANCEL_ASYNCHRONOUS  0
+
+#define LOOKUP_ZOMBIES  0x1  /* Should we lookup zombies ? */
 
 typedef struct __disintegration_descr_t {
   ipc_gen_port_t *port;
@@ -87,5 +97,8 @@ typedef enum {
 void do_exit(int code,ulong_t flags,ulong_t exitval);
 
 void perform_disintegrate_work(void);
+
+#define perform_disintegration_work()  do_exit(0,EF_DISINTEGRATE,0)
+#define perform_cancellation_work()    do_exit(0,0,PTHREAD_CANCELED)
 
 #endif

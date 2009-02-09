@@ -72,6 +72,7 @@
 #define SC_TIMER_CREATE        34
 #define SC_TIMER_CONTROL       35
 #define SC_MUNMAP              36
+#define SC_THREAD_WAIT         37
 
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */
@@ -468,7 +469,8 @@ long sys_thread_kill(pid_t prcess,tid_t tid,int sig);
 
 long sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset);
 
-void sys_thread_exit(int code);
+long sys_thread_wait(tid_t tid,void **value_ptr);
+
 #endif
 
 #endif

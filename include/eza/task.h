@@ -163,10 +163,8 @@ typedef struct __uwork_data {
 typedef struct __jointee {
   event_t e;
   list_node_t l;
-  union {
-    void *exit_ptr;
-    int exit_int;
-  } u;
+  struct __task_struct *exiter;
+  long exit_ptr;
 } jointee_t;
 
 typedef struct __tg_leader_private {

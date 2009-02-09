@@ -32,14 +32,16 @@ typedef struct __countered_event {
 
 #define event_is_active(e)  ((e)->task != NULL)
 
-static inline void event_initialize(event_t *event)
+static inline void event_initialize_task(event_t *event,struct __task_struct *task)
 {
   spinlock_initialize(&event->__lock);
   event->flags=0;
-  event->task=NULL;
+  event->task=task;
   event->ev_checker=NULL;
   event->private_data=NULL;
 }
+
+#define event_initialize(_e)  event_initialize_task((_e),NULL)
 
 static inline void event_reset(event_t *event)
 {
