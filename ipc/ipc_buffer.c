@@ -107,22 +107,61 @@ out:
 }
 
 int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
-                                      struct __iovec *iovecs,ulong_t numvecs,
-                                      bool to_buffer)
+                                 struct __iovec *iovecs,ulong_t numvecs,
+                                 ulong_t offset,bool to_buffer)
 {
   char *page_end;
   ulong_t *chunk;
   ulong_t to_copy,iov_size,bufsize,data_size;
   char *dest_kaddr;
   char *user_addr;
-  int r;
+  long r,buf_offset=offset;
+  ipc_user_buffer_t *start_buf=NULL;
 
   for(bufsize=0,to_copy=0;to_copy<numbufs;to_copy++) {
     bufsize+=bufs[to_copy].length;
+    if( offset ) {
+      if( !start_buf ) {
+        if( buf_offset < bufs[to_copy].length ) {
+          start_buf=&bufs[to_copy];
+          /* We don't adjust buffer size here since it will be recalculated
+           * later.
+           */
+        } else {
+          buf_offset-=bufs[to_copy].length;
+          bufsize-=bufs[to_copy].length;
+        }
+      }
+    }
   }
 
   for(iov_size=0,to_copy=0;to_copy<numvecs;to_copy++) {
     iov_size+=iovecs[to_copy].iov_len;
+  }
+
+  if( offset ) {
+    if( !start_buf ) {
+      return -EINVAL; /* Too big offset. */
+    }
+
+    /* Now we can adjust buffer size and get the first data chunk.
+     */
+    bufs=start_buf;
+    bufsize-=buf_offset;
+    if( buf_offset < bufs->first ) {
+      chunk=bufs->chunks;
+      dest_kaddr=(char *)*chunk;
+      page_end=dest_kaddr+bufs->first;
+      dest_kaddr+=offset;
+    } else {
+      int d=((buf_offset-bufs->first) >> PAGE_WIDTH)+1;
+
+      chunk=bufs->chunks+d;
+      dest_kaddr=(char *)*chunk;
+      page_end=dest_kaddr;
+      page_end+=((bufs->length - buf_offset) < PAGE_SIZE) ? bufs->length - buf_offset : PAGE_SIZE;
+      dest_kaddr+=((buf_offset-bufs->first) & PAGE_MASK);
+    }
   }
 
   data_size=MIN(bufsize,iov_size);
@@ -130,7 +169,7 @@ int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
   user_addr=iovecs->iov_base;
 
   for(;data_size;) {
-    chunk=bufs->chunks;    
+    chunk=bufs->chunks;
     bufsize=bufs->length;
     dest_kaddr=(char *)*chunk;
     page_end=dest_kaddr+bufs->first;

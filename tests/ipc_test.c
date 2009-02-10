@@ -834,7 +834,7 @@ static void __ipc_buffer_test(void *ctx)
 
   ipc_setup_buffer_pages(current_task(),rcv_iovecs,1,__buf_pages,bufs);
 
-  ipc_transfer_buffer_data_iov(bufs,1,snd_iovecs,6,true);
+  ipc_transfer_buffer_data_iov(bufs,1,snd_iovecs,6,0,true);
   if( __validate_vectored_message(__vectored_msg_server_rcv_buf,4,tf) ) {
     tf->passed();
   } else {
@@ -861,7 +861,7 @@ static void __ipc_buffer_test(void *ctx)
   tf->printf(" Done !\n" );
 
   tf->printf(SERVER_THREAD"Transferring data to the buffers ... " );
-  ipc_transfer_buffer_data_iov(bufs,1,snd_iovecs,8,true);
+  ipc_transfer_buffer_data_iov(bufs,1,snd_iovecs,8,0,true);
   tf->printf(" Done !" );
   if( __validate_vectored_message(__vectored_msg_server_rcv_buf,6,tf) ) {
     tf->passed();
@@ -887,7 +887,7 @@ static void __ipc_buffer_test(void *ctx)
   tf->printf("Done !\n" );
 
   tf->printf("Transferring data to the buffer ... " );
-  ipc_transfer_buffer_data_iov(bufs,2,snd_iovecs,__parts,true);
+  ipc_transfer_buffer_data_iov(bufs,2,snd_iovecs,__parts,0,true);
   tf->printf("Done !\n" );
   if( __validate_vectored_message(__vectored_msg_server_rcv_buf,MIDDLE_PARTS(__parts),tf) ) {
     tf->passed();
@@ -896,6 +896,57 @@ static void __ipc_buffer_test(void *ctx)
   }
 
   tf->printf(SERVER_THREAD"All IPC buffers functionality tests finished.\n");
+}
+
+static void __message_read_test(void *ctx)
+{
+  DECLARE_TEST_CONTEXT;
+  int port=sys_create_port(IPC_BLOCKED_ACCESS,0);
+  int r,i;
+  port_msg_info_t msg_info;
+
+  if( port < 0 ) {
+    tf->printf( "Can't create a port !\n" );
+    tf->abort();
+  }
+
+  __vectored_port=port;
+  if( kernel_thread(__vectored_messages_thread,ctx,NULL) ) {
+    tf->printf("Can't create the vectored messages tester !\n");
+    tf->abort();
+  }
+
+  for(i=0;i<5*TEST_ROUNDS;i++) {
+    ulong_t parts=(i%6)+1;
+    ulong_t *watchline;
+    ulong_t size;
+
+    CLEAR_SERVER_BUFFERS;
+
+    /* Setup memory watchline. */
+    size=MESSAGE_SIZE(parts);
+    watchline=(ulong_t*)(__vectored_msg_server_rcv_buf+size);
+    *watchline=WL_PATTERN;
+
+    tf->printf(SERVER_THREAD"RCV a message that has %d parts. SIZE=%d, NULL RCV buffer\n",
+               parts,MESSAGE_SIZE(parts));
+    r=sys_port_receive(port,IPC_BLOCKED_ACCESS,(ulong_t)0,
+                       0,&msg_info);
+    if( r ) {
+      tf->printf(SERVER_THREAD"Error during receive ! %d.\n",r);
+      tf->failed();
+    }
+
+    if( msg_info.msg_len == size ) {
+      tf->printf(SERVER_THREAD"Got a good message message of %d bytes.\n",size);
+    } else {
+      tf->printf(SERVER_THREAD"Bad message message size ! %d instead of %d bytes.\n",
+                 msg_info.msg_len,size);
+      tf->failed();
+    }
+    for(;;);
+  }
+  for(;;);
 }
 
 static void __vectored_messages_test(void *ctx)
@@ -1407,6 +1458,8 @@ static void __server_thread(void *ctx)
   port_msg_info_t msg_info;
 
   __server_pid=current_task()->pid;
+
+  //__message_read_test(ctx);
   __stack_overflow_test(ctx);
   __process_events_test(ctx);
   __prioritized_port_test(ctx);

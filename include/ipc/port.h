@@ -51,6 +51,7 @@ typedef enum __ipc_msg_state {
   MSG_STATE_DATA_TRANSFERRED,
   MSG_STATE_REPLY_BEGIN,
   MSG_STATE_REPLIED,
+  MSG_STATE_DATA_UNDER_ACCESS,
 } ipc_msg_state_t;
 
 typedef struct __ipc_port_message_t {

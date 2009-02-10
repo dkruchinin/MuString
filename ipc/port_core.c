@@ -40,6 +40,21 @@
 #include <eza/signal.h>
 #include <eza/usercopy.h>
 
+#define POST_MESSAGE_DATA_ACCESS_STEP(_p,_m,_r,_woe)    \
+  IPC_LOCK_PORT_W(_p);                             \
+  (_m)->state=MSG_STATE_DATA_TRANSFERRED;          \
+                                                   \
+  if( task_was_interrupted((_m)->sender) ) {       \
+    (_r)=-EPIPE;                                   \
+  }                                                \
+                                                   \
+  if( (_r) && (_woe) && !((_p)->flags & IPC_PORT_SHUTDOWN) ) {          \
+    (_p)->msg_ops->remove_message((_p),(_m));                           \
+    (_m)->replied_size=(_r);                                            \
+    event_raise(&(_m)->event);                                          \
+  }                                                                     \
+  IPC_UNLOCK_PORT_W((_p));
+
 static ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf,
                                                  ulong_t snd_size,bool copy_data)
 {
@@ -358,33 +373,45 @@ static int __put_receiver_into_sleep(task_t *receiver,ipc_gen_port_t *port)
 }
 
 static int __transfer_message_data_to_receiver(ipc_port_message_t *msg,
-                                                    iovec_t *iovec, ulong_t numvecs,
-                                                    port_msg_info_t *stats)
+                                               iovec_t *iovec, ulong_t numvecs,
+                                               port_msg_info_t *stats,
+                                               ulong_t offset)
 {
   int r,recv_len;
 
-  recv_len=MIN(iovec->iov_len,msg->data_size);
-  if( msg->data_size <= IPC_BUFFERED_PORT_LENGTH ) {
-    /* Short message - copy it from the buffer. */
-    r=copy_to_user((void *)iovec->iov_base,msg->send_buffer,recv_len);
+  if( iovec ) {
+    recv_len=MIN(iovec->iov_len,msg->data_size);
+    if( msg->data_size <= IPC_BUFFERED_PORT_LENGTH ) {
+      /* Short message - copy it from the send buffer.
+       */
+      if( !offset ) {
+        r=copy_to_user((void *)iovec->iov_base,msg->send_buffer,recv_len);
+      } else {
+      }
+    } else {
+      /* Long message - process it via IPC buffers.
+       */
+      r=ipc_transfer_buffer_data_iov(msg->snd_buf,msg->num_send_bufs,
+                                     iovec,numvecs,offset,false);
+    }
   } else {
-    /* Long message - process it via buffer. */
-    r=ipc_transfer_buffer_data_iov(msg->snd_buf,msg->num_send_bufs,
-                                   iovec,numvecs,false);
+    r=0;
   }
 
   if( !r ) {
+    if( stats ) {
       port_msg_info_t info;
 
       info.sender_pid=msg->sender->pid;
       info.msg_id=msg->id;
-      info.msg_len=recv_len;
+      info.msg_len=msg->data_size;
       info.sender_tid=msg->sender->tid;
       info.sender_uid=msg->sender->uid;
 
       if( copy_to_user(stats,&info,sizeof(info)) ) {
         r=-EFAULT;
       }
+    }
   } else {
     r=-EFAULT;
   }
@@ -392,16 +419,42 @@ static int __transfer_message_data_to_receiver(ipc_port_message_t *msg,
   return r;
 }
 
+long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
+                       iovec_t *rcv_iov,ulong_t numvecs,ulong_t offset) {
+  ipc_port_message_t *msg;
+  long r;
+
+  IPC_LOCK_PORT_W(port);
+  if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
+    msg=port->msg_ops->lookup_message(port,msg_id);
+    if( msg == __MSG_WAS_DEQUEUED ) { /* Client got lost. */
+      r=-ENXIO;
+    } else if( msg ) {
+      msg->state=MSG_STATE_DATA_UNDER_ACCESS;
+      r=0;
+    } else {
+      r=-EINVAL;
+    }
+  }
+  IPC_UNLOCK_PORT_W(port);
+
+  if( !r ) {
+    r=__transfer_message_data_to_receiver(msg,rcv_iov,numvecs,NULL,offset);
+    POST_MESSAGE_DATA_ACCESS_STEP(port,msg,r,false);
+  }
+
+  return r;
+}
+
 int ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
-                          iovec_t *iovec,ulong_t numvec,
-                          port_msg_info_t *msg_info)
+                     iovec_t *iovec,ulong_t numvec,
+                     port_msg_info_t *msg_info)
 {
   int r=-EINVAL;
   ipc_port_message_t *msg;
   task_t *owner=current_task();
-  ipc_port_msg_ops_t *msg_ops=port->msg_ops;
   
-  if( !iovec || !msg_info || !numvec ) {
+  if( !msg_info ) {
     return -EINVAL;
   }
 
@@ -434,7 +487,7 @@ recv_cycle:
       }
     } else {
       /* Got something ! */
-      msg=msg_ops->extract_message(port,flags);
+      msg=port->msg_ops->extract_message(port,flags);
       if( msg ) {
         msg->state=MSG_STATE_RECEIVED;
       }
@@ -444,7 +497,7 @@ recv_cycle:
 
 out:
   if( msg != NULL ) {
-    r=__transfer_message_data_to_receiver(msg,iovec,numvec,msg_info);
+    r=__transfer_message_data_to_receiver(msg,iovec,numvec,msg_info,0);
     bool free;
 
     /* OK, message was successfully transferred, so remove it from the port
@@ -453,7 +506,7 @@ out:
     IPC_LOCK_PORT_W(port);
     if( !(port->flags & IPC_PORT_SHUTDOWN) &&
         !(port->flags & IPC_BLOCKED_ACCESS) ) {
-      msg_ops->remove_message(port,msg);
+      port->msg_ops->remove_message(port,msg);
       free=true;
     } else {
       free=false;
@@ -463,25 +516,7 @@ out:
     if( free ) {
       put_ipc_port_message(msg);
     } else {
-      if( !r ) {
-        IPC_LOCK_PORT_W(port);
-        if( task_was_interrupted(msg->sender) ) {
-          r=-EPIPE;
-        } else {
-          msg->state=MSG_STATE_DATA_TRANSFERRED;
-        }
-        IPC_UNLOCK_PORT_W(port);
-      }
-
-      /* In case of errors remove message and wakeup client. */
-      if( r ) {
-        IPC_LOCK_PORT_W(port);
-        msg_ops->remove_message(port,msg);
-        IPC_UNLOCK_PORT_W(port);
-
-        msg->replied_size=r;
-        event_raise(&msg->event); /* Wakeup client in case of error. */
-      }
+      POST_MESSAGE_DATA_ACCESS_STEP(port,msg,r,true);
     }
   }
   return r;
@@ -523,8 +558,8 @@ void __ipc_put_port(ipc_gen_port_t *p)
 }
 
 static int __transfer_reply_data_iov(ipc_port_message_t *msg,
-                                          iovec_t *reply_iov,ulong_t numvecs,
-                                          bool from_server,ulong_t reply_len)
+                                     iovec_t *reply_iov,ulong_t numvecs,
+                                     bool from_server,ulong_t reply_len)
 {
   int r=0;
   ulong_t i,to_copy,rlen;
@@ -560,7 +595,7 @@ static int __transfer_reply_data_iov(ipc_port_message_t *msg,
       /* Long message - process it via buffer. */
       if( from_server ) {
         r=ipc_transfer_buffer_data_iov(msg->rcv_buf,msg->num_recv_buffers,
-                                       reply_iov,numvecs,true);
+                                       reply_iov,numvecs,0,true);
       } else {
         r=0;
       }
@@ -656,6 +691,7 @@ int ipc_port_send_iov(struct __ipc_gen_port *port,
           msg_ops->dequeue_message(port,msg);
           break;
         case MSG_STATE_REPLY_BEGIN:
+        case MSG_STATE_DATA_UNDER_ACCESS:
         case MSG_STATE_RECEIVED:
           /* Can't remove message right now, must wait for server to change
            * state of the message.

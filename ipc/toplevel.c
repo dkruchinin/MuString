@@ -85,14 +85,12 @@ static long __reply_iov(ulong_t port,ulong_t msg_id,
 
     reply_size += reply_iov[i].iov_len;
     if( reply_size > MAX_PORT_MSG_LENGTH ) {
-        kprintf("== reply_size\n");
       return -EINVAL;
     }
   }
 
   p=__ipc_get_port(current_task(),port);
   if( !p ) {
-      kprintf("== !p\n");
     return -EINVAL;
   }
 
@@ -126,15 +124,25 @@ size_t sys_port_reply(ulong_t port,ulong_t msg_id,ulong_t reply_buf,
 }
 
 size_t sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
-                          ulong_t recv_len,port_msg_info_t *msg_info)
+                        ulong_t recv_len,port_msg_info_t *msg_info)
 {
   ipc_gen_port_t *p;
   size_t r;
-  iovec_t iovec;
+  iovec_t iovec,*piovec;
 
-  if( !valid_user_address_range((ulong_t)msg_info,sizeof(*msg_info)) ||
-      !valid_user_address_range(recv_buf,recv_len) ) {
+  if( !valid_user_address_range((ulong_t)msg_info,sizeof(*msg_info)) ) {
     return -EFAULT;
+  }
+
+  if( recv_buf | recv_len ) {
+    if( !valid_user_address_range(recv_buf,recv_len) ) {
+      return -EFAULT;
+    }
+    iovec.iov_base=(void *)recv_buf;
+    iovec.iov_len=recv_len;
+    piovec=&iovec;
+  } else {
+    piovec=NULL;
   }
 
   p=__ipc_get_port(current_task(),port);
@@ -142,17 +150,14 @@ size_t sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
     return -EINVAL;
   }
 
-  iovec.iov_base=(void *)recv_buf;
-  iovec.iov_len=recv_len;
-
-  r=ipc_port_receive(p,flags,&iovec,1,msg_info);
+  r=ipc_port_receive(p,flags,piovec,1,msg_info);
   __ipc_put_port(p);
   return r;
 }
 
 static int __send_iov_v(ulong_t channel,
-                             iovec_t snd_kiovecs[],ulong_t snd_numvecs,
-                             iovec_t rcv_kiovecs[],ulong_t rcv_numvecs)
+                        iovec_t snd_kiovecs[],ulong_t snd_numvecs,
+                        iovec_t rcv_kiovecs[],ulong_t rcv_numvecs)
 {
   ipc_channel_t *c;
   ipc_gen_port_t *port;
@@ -255,9 +260,8 @@ size_t sys_port_send(ulong_t channel,
                       &rcv_kiovec,1);
 }
 
-long sys_port_send_iov(ulong_t channel,
-                           iovec_t iov[],ulong_t numvecs,
-                           uintptr_t rcv_buf,ulong_t rcv_size)
+long sys_port_send_iov(ulong_t channel,iovec_t iov[],ulong_t numvecs,
+                       uintptr_t rcv_buf,ulong_t rcv_size)
 {
   iovec_t kiovecs[MAX_IOVECS],rcv_kiovec;
 
@@ -279,3 +283,28 @@ long sys_control_channel(ulong_t channel,ulong_t cmd,ulong_t arg)
 {
   return ipc_channel_control(current_task(),channel,cmd,arg);
 }
+
+long sys_port_msg_read(ulong_t port,ulong_t msg_id,uintptr_t recv_buf,
+                       ulong_t recv_len,ulong_t offset)
+{
+  ipc_gen_port_t *p;
+  long r;
+  iovec_t iovec;
+
+  if( !valid_user_address_range(recv_buf,recv_len) ) {
+    return -EFAULT;
+  }
+
+  p=__ipc_get_port(current_task(),port);
+  if( !p ) {
+    return -EINVAL;
+  }
+
+  iovec.iov_base=(void *)recv_len;
+  iovec.iov_len=recv_len;
+
+  r=ipc_port_msg_read(p,msg_id,&iovec,1,offset);
+  __ipc_put_port(p);
+  return r;
+}
+
