@@ -123,6 +123,8 @@ int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
     if( offset ) {
       if( !start_buf ) {
         if( buf_offset < bufs[to_copy].length ) {
+          kprintf("  > Target buf: %d. buf offset: %d\n",to_copy,
+                  buf_offset);
           start_buf=&bufs[to_copy];
           /* We don't adjust buffer size here since it will be recalculated
            * later.
@@ -130,6 +132,7 @@ int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
         } else {
           buf_offset-=bufs[to_copy].length;
           bufsize-=bufs[to_copy].length;
+          kprintf(" .. Skipping buffer %d.\n",to_copy);
         }
       }
     }
@@ -148,11 +151,15 @@ int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
      */
     bufs=start_buf;
     bufsize-=buf_offset;
+    kprintf("  > BUFSIZE: %d, BUF_OFFSET: %d\n",
+            bufsize,buf_offset);
     if( buf_offset < bufs->first ) {
       chunk=bufs->chunks;
       dest_kaddr=(char *)*chunk;
       page_end=dest_kaddr+bufs->first;
-      dest_kaddr+=offset;
+      dest_kaddr+=buf_offset;
+      kprintf("  >> KPATTERN: 0x%X\n",
+              *(ulong_t *)dest_kaddr);
     } else {
       int d=((buf_offset-bufs->first) >> PAGE_WIDTH)+1;
 
@@ -168,12 +175,11 @@ int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
   iov_size=iovecs->iov_len;
   user_addr=iovecs->iov_base;
 
-  for(;data_size;) {
-    chunk=bufs->chunks;
-    bufsize=bufs->length;
-    dest_kaddr=(char *)*chunk;
-    page_end=dest_kaddr+bufs->first;
+  if( !offset ) {
+    goto copy_iteration;
+  }
 
+  for(;data_size;) {
     /* Process one buffer. */
     while( data_size ) {
       to_copy=MIN(bufsize,iov_size);
@@ -216,6 +222,11 @@ int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
         }
       }
     }
+  copy_iteration:
+    chunk=bufs->chunks;
+    bufsize=bufs->length;
+    dest_kaddr=(char *)*chunk;
+    page_end=dest_kaddr+bufs->first;
   }
   return 0;
 }

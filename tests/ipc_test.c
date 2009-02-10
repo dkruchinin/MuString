@@ -805,6 +805,7 @@ static void __validate_retval(int r,int expected,
 }
 
 static uintptr_t __buf_pages[512];
+static unsigned char *__zbuffer[MAX_MSG_SIZE];
 
 #define MIDDLE_PARTS(t)  ((t)-2)
 
@@ -814,6 +815,8 @@ static void __ipc_buffer_test(void *ctx)
   iovec_t snd_iovecs[MAX_IOVECS],rcv_iovecs[MAX_IOVECS];
   ipc_user_buffer_t bufs[MAX_IOVECS];
   ulong_t __parts;
+  unsigned char *p,*cmp;
+  int r,offset;
 
   tf->printf(SERVER_THREAD"Testing IPC buffers functionality.\n");
 
@@ -886,12 +889,42 @@ static void __ipc_buffer_test(void *ctx)
   ipc_setup_buffer_pages(current_task(),rcv_iovecs,2,__buf_pages,bufs);
   tf->printf("Done !\n" );
 
-  tf->printf("Transferring data to the buffer ... " );
+  tf->printf("Transferring data to the buffer (PATTERN=0x%X) ... ",
+             *(ulong_t *)snd_iovecs[1].iov_base);
   ipc_transfer_buffer_data_iov(bufs,2,snd_iovecs,__parts,0,true);
   tf->printf("Done !\n" );
   if( __validate_vectored_message(__vectored_msg_server_rcv_buf,MIDDLE_PARTS(__parts),tf) ) {
     tf->passed();
   } else {
+    tf->failed();
+  }
+
+  /*
+   * Testing IPC buffers data transfer using non-zero xfer offsets.
+   */
+  memset(__zbuffer,0,sizeof(__zbuffer));
+
+  offset=0;
+  rcv_iovecs[0].iov_base=__zbuffer;
+  rcv_iovecs[0].iov_len=sizeof(message_part_t)-offset;
+  p=__zbuffer+rcv_iovecs[0].iov_len;
+  *(ulong_t *)p=WL_PATTERN;
+
+  r=ipc_transfer_buffer_data_iov(bufs,2,rcv_iovecs,1,sizeof(message_header_t)+offset,false);
+  if( r ) {
+    tf->printf(SERVER_THREAD"Failed to read data from buffer [1] !\n");
+    tf->failed();
+  }
+
+  if( *(ulong_t *)p != WL_PATTERN ) {
+    tf->printf(SERVER_THREAD"Watchline mismatch after reading data from buffer [1] !\n");
+    tf->failed();
+  }
+
+  cmp=snd_iovecs[1].iov_base+offset;
+  kprintf("PATTERN: 0x%X\n",*(ulong_t *)cmp);
+  if( memcmp(__zbuffer,cmp,rcv_iovecs[0].iov_len) ) {
+    tf->printf(SERVER_THREAD"Message mismatch ! [1] !\n");
     tf->failed();
   }
 
@@ -1459,11 +1492,16 @@ static void __server_thread(void *ctx)
 
   __server_pid=current_task()->pid;
 
+  __ipc_buffer_test(ctx);
+  for(;;);
+
   //__message_read_test(ctx);
   __stack_overflow_test(ctx);
   __process_events_test(ctx);
   __prioritized_port_test(ctx);
-  __ipc_buffer_test(ctx);
+
+  //__ipc_buffer_test(ctx);
+
   __vectored_messages_test(ctx);
 
   for( i=0;i<SERVER_NUM_PORTS;i++) {
