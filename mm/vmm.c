@@ -253,7 +253,6 @@ static void __pfiter_pblock_first(page_frame_iterator_t *pfi)
   ctx = iter_fetch_ctx(pfi);
   ctx->cur_node = ctx->first_node;
   ctx->cur_idx = ctx->first_idx;
-  kprintf("==> %p to %p\n", ctx->cur_node, ctx->last_node);
   pfi->pf_idx =
     pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->cur_idx);
   pfi->state = ITER_RUN;

@@ -25,7 +25,9 @@ struct __memobj;
 struct __vmrange;
 
 typedef struct __memobj_ops {
-  int (*handle_page_fault)(struct __memobj *memobj, struct __vmrange *vmr, off_t offs, uint32_t pfmask);  
+  int (*handle_page_fault)(struct __memobj *memobj, struct __vmrange *vmr, off_t offs, uint32_t pfmask);
+  int (*populate_pages)(struct __memobj *memobj, struct __vmrange *vmr,
+                        uintptr_t addr, page_idx_t npages, off_t offs_pages);
 } memobj_ops_t;
 
 

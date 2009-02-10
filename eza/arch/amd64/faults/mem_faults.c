@@ -126,13 +126,13 @@ void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_fr
 kernel_fault:
   kprintf("[CPU %d] Unhandled kernel-mode GPF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
-stop_cpu:
+  stop_cpu:  
   __dump_regs(regs,stack_frame->rip);
 
   if( !kernel_fault(stack_frame) ) {
     __dump_stack(stack_frame->old_rsp);
   }
-
+  
   interrupts_disable();
   for(;;);
 }
@@ -167,12 +167,15 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
     
     rwsem_down_read(&vmm->rwsem);
     vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(invalid_address), invalid_address + PAGE_SIZE, NULL);
-    if (vmr)
+    if (vmr) {
       ret = vmm_handle_page_fault(vmr, invalid_address, errmask);
+    }
     
     rwsem_up_read(&vmm->rwsem);
     if (ret < 0)
-      goto kernel_fault;
+        goto kernel_fault;
+    
+    return;
   }
   if( __send_sigsegv_on_faults )
     goto send_sigsegv;
@@ -205,7 +208,7 @@ stop_cpu:
   }
 
   interrupts_disable();
-  for(;;);
+  for (;;);
 
 send_sigsegv:
   /* Send user the SIGSEGV signal. */

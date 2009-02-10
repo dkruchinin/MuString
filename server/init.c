@@ -70,9 +70,10 @@ static int __create_empty_user_area(task_t *task,ulong_t virt,
 
 static int __create_task_mm(task_t *task, int num)
 {
+  vmm_t *vmm = task->task_mm;
+  memobj_t *memobj = &null_memobj;
   uintptr_t code;
   size_t code_size,data_size,text_size,bss_size;
-  page_frame_t *stack;
   ulong_t *pp;
   elf_head_t ehead;
   elf_pr_t epr;
@@ -81,13 +82,9 @@ static int __create_task_mm(task_t *task, int num)
   size_t real_code_size=0,real_data_size=0;
   size_t last_data_size,real_data_offset=0;
   size_t last_offset,last_sect_size,last_data_offset;
-  int r;
+  long r;
   int i;
   per_task_data_t *ptd;
-
-  stack=alloc_pages(USER_STACK_SIZE,AF_PGEN|AF_ZERO);
-  if(!stack)
-    return -ENOMEM;
 
   code_size=init.server[num].size>>PAGE_WIDTH; /*it's a code size in pages */
   code_size++;
@@ -176,53 +173,54 @@ static int __create_task_mm(task_t *task, int num)
   /*  kprintf("elf entry -> %p\n",ehead.e_entry); */
 
   /*remap pages*/
+  r = vmrange_map(memobj, vmm, USPACE_VA_BOTTOM, text_size, VMR_READ | VMR_EXEC | VMR_PRIVATE | VMR_FIXED, 0);
+  if (!PAGE_ALIGN(r))
+    return r;
   r = mmap_core(task_get_rpd(task), USPACE_VA_BOTTOM, code >> PAGE_WIDTH, text_size, KMAP_READ | KMAP_EXEC);
   if (r)
     return r;
 
+  kprintf("TEXT: %p -> %p\n", USPACE_VA_BOTTOM, USPACE_VA_BOTTOM + (text_size << PAGE_WIDTH));
+  r = vmrange_map(memobj, vmm, real_data_offset, data_size, VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED, 0);
+  if (!PAGE_ALIGN(r))
+    return r;
   r = mmap_core(task_get_rpd(task), real_data_offset, data_bss >> PAGE_WIDTH, data_size, KMAP_READ | KMAP_WRITE);
   if (r)
     return r;
 
-  kprintf("3\n");
+  kprintf("DATA: %p -> %p\n", real_data_offset, real_data_offset + (data_size << PAGE_WIDTH));
   /* Create a BSS area. */
-  r=__create_empty_user_area(task,bss_virt,bss_size, KMAP_READ | KMAP_WRITE);
-  if( r ) {
+  r = vmrange_map(memobj, vmm, bss_virt, bss_size,
+                  VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED | VMR_POPULATE, 0);
+  /*r=__create_empty_user_area(task,bss_virt,bss_size, KMAP_READ | KMAP_WRITE);*/
+  if(!PAGE_ALIGN(r)) {
     return r;
   }
 
-  kprintf("4\n");
-  r = mmap_core(task_get_rpd(task), USPACE_VA_TOP-0x40000, pframe_number(stack), USER_STACK_SIZE, KMAP_READ | KMAP_WRITE);
-  if (r)
-    return r;
-
-  kprintf("5\n");
+  r = vmrange_map(memobj, vmm, USPACE_VA_TOP - 0x40000, USER_STACK_SIZE,
+                  VMR_READ | VMR_WRITE | VMR_STACK | VMR_PRIVATE | VMR_POPULATE | VMR_FIXED, 0);
+  /*r = mmap_core(task_get_rpd(task), USPACE_VA_TOP-0x40000, pframe_number(stack), USER_STACK_SIZE, KMAP_READ | KMAP_WRITE);*/
+  if (!PAGE_ALIGN(r))
+    return r;  
   /* Now allocate stack space for per-task user data. */
   ustack_top=USPACE_VA_TOP-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH);
   ustack_top-=PER_TASK_DATA_SIZE;
   ptd=user_to_kernel_vaddr(task_get_rpd(task),ustack_top);
-
-  kprintf("6\n");
+  ptd = (per_task_data_t *)((char *)ptd + (ustack_top - PAGE_ALIGN_DOWN(ustack_top)));
   if( !ptd ) {
     return -1;
   }
-  kprintf("7\n");
   ptd->ptd_addr=(uintptr_t)ustack_top;
 
-  kprintf("8\n");
   r=do_task_control(task,SYS_PR_CTL_SET_PERTASK_DATA,(uintptr_t)ustack_top);
-  kprintf("9\n");
   if( r ) {
     return r;
   }
 
   /* Insufficient return address to prevent task from returning to void. */
   ustack_top-=8;
-
   r=do_task_control(task,SYS_PR_CTL_SET_ENTRYPOINT,ehead.e_entry);
-  kprintf("10\n");
   r|=do_task_control(task,SYS_PR_CTL_SET_STACK,ustack_top);
-  kprintf("11\n");
 
   if (r)
     return r;
@@ -243,7 +241,7 @@ void server_run_tasks(void)
 
   if( i > 0 ) {
     kprintf("[SRV] Starting servers: %d ... \n",i);
-    //kconsole->disable();
+    kconsole->disable();
   }
 
   for(a=0;a<i;a++) {
@@ -273,9 +271,7 @@ void server_run_tasks(void)
              a+1);
     }
 
-    kprintf("12\n");
     r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
-    kprintf("13\n");
     if( r ) {
       panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);
     }

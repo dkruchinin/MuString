@@ -96,7 +96,7 @@ static int do_ptable_map(page_frame_t *dir, struct pt_mmap_info *minfo, int pde_
   pde_idx = vaddr2pde_idx(minfo->va_from, pde_level);
   num_entries = __count_num_entries(pde_idx, minfo->va_from, minfo->va_to, pde_level);
   if (pde_level == PTABLE_LEVEL_FIRST) {
-    /* we are standing at the lowest level page directory, so we can map given pages to page table from here. */
+      /* we are standing at the lowest level page directory, so we can map given pages to page table from here. */
     ptable_map_entries(pde_fetch(dir, pde_idx), num_entries, minfo->pfi, minfo->flags);
     minfo->va_from += num_entries << PAGE_WIDTH;
     return 0;
@@ -233,8 +233,9 @@ void ptable_map_entries(pde_t *start_pde, int num_entries, page_frame_iterator_t
   while (num_entries--) {
     bool pde_was_present;
 
+    ASSERT(!iter_isstopped(pfi));
     if (pfi->pf_idx == PAGE_IDX_INVAL)
-      panic("Unexpected page index. ERR = %d %d", pfi->error, num_entries);
+      panic("Unexpected page index. ERR = %d(%d)", pfi->error, num_entries);
 
     pde_was_present = !!(pde->flags & PDE_PRESENT);
     pde_set_page_idx(pde, pfi->pf_idx);
@@ -258,8 +259,7 @@ void ptable_map_entries(pde_t *start_pde, int num_entries, page_frame_iterator_t
     if ((flags & PDE_US) && page_idx_is_present(pfi->pf_idx))
       pin_page_frame(pframe_by_number(pfi->pf_idx));
 
-    pde++;
-    ASSERT(!iter_isstopped(pfi));
+    pde++;    
     iter_next(pfi);
   }
 }

@@ -87,7 +87,7 @@ static void __arch_setup_ctx(task_t *newtask,uint64_t rsp,
  
   ctx->rsp = rsp;
   /* Setup CR3 */
-  ctx->cr3 = _k2p((uintptr_t)pframe_to_virt(newtask->rpd.pml4));
+  ctx->cr3 = _k2p((uintptr_t)pframe_to_virt(task_get_rpd(newtask)->pml4));
   ctx->user_rsp = 0;
 
   /* Default TSS value which means: use per-CPU TSS. */
@@ -329,14 +329,14 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   }
 
   if( priv == TPL_USER ) {
-    /* Allocate LDT for this task. */
+      /* Allocate LDT for this task. */
+      kprintf("CREATE TASK LDT!\n");
     task_ctx->ldt_limit=LDT_ITEMS*sizeof(descriptor_t);
     task_ctx->ldt=(uintptr_t)memalloc(task_ctx->ldt_limit);
 
     if( !task_ctx->ldt ) {
       kprintf("** Can't allocate LDT for task %d/%d !\n",
               newtask->pid,newtask->tid);
-      for(;;);
       return -ENOMEM;
     }
     __setup_user_ldt(task_ctx->ldt);
@@ -383,7 +383,6 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
 
         interrupts_disable();
         if( task == current_task() ) {
-          kprintf("Am I here???\n");
           load_ldt(cpu_id(),arch_ctx->ldt,arch_ctx->ldt_limit);
         }
         interrupts_enable();

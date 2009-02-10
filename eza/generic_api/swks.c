@@ -42,6 +42,7 @@ void initialize_swks(void)
   swks.system_ticks_64 = INITIAL_TICKS_VALUE;
   swks.nr_cpus = CONFIG_NRCPUS;
   swks.timer_frequency = HZ;
+  arch_initialize_swks();
   /*kprintf("[LW] Calibrating delay loop ...");
   swks.delay_loop=arch_calibrate_delay_loop();
   kprintf("%ld.\n",swks.delay_loop);*/

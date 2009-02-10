@@ -1,3 +1,26 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2009 Dan Kruchinin <dan.kruchinin@gmail.com>
+ *
+ * mm/memobj.c - Memory objects subsystem
+ *
+ */
+
 #include <config.h>
 #include <ds/ttree.h>
 #include <ds/list.h>
@@ -6,6 +29,7 @@
 #include <mm/pfalloc.h>
 #include <mm/slab.h>
 #include <mm/memobj.h>
+#include <mm/pfi.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/types.h>
 #include <eza/arch/mm.h>
@@ -49,6 +73,31 @@ static int generic_handle_page_fault(memobj_t *memobj, vmrange_t *vmr, off_t off
   return ret;
 }
 
+static int generic_populate_pages(memobj_t *memobj, vmrange_t *vmr, uintptr_t addr,
+                                  page_idx_t npages, off_t offs_pages)
+{
+  int ret;
+  page_frame_t *pages;
+  page_frame_iterator_t pfi;
+  ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) pblock_ctx;
+  
+  ASSERT(memobj->id == NULL_MEMOBJ_ID);
+  ASSERT(vmr->parent_vmm != NULL);
+  pages = alloc_pages_ncont(npages, AF_ZERO | AF_PGEN | AF_CLEAR_RC);
+  if (!pages)
+    return -ENOMEM;
+
+  pfi_pblock_init(&pfi, &pblock_ctx, list_node_first(&pages->head), 0,
+                  list_node_last(&pages->head),
+                  pages_block_size(list_entry(list_node_last(&pages->head), page_frame_t, node)));
+  iter_first(&pfi);
+  ret = __mmap_core(&vmr->parent_vmm->rpd, addr, npages, &pfi, vmr->flags & KMAP_FLAGS_MASK);
+  if (ret)
+    free_pages_ncont(pages);
+
+  return ret;
+}
+
 static void __init_memobj(memobj_t *memobj, memobj_nature_t nature, off_t size)
 {
   memobj->size = size;
@@ -56,6 +105,7 @@ static void __init_memobj(memobj_t *memobj, memobj_nature_t nature, off_t size)
   mutex_initialize(&memobj->mutex);
   if (nature & MEMOBJ_GENERIC) {
     memobj->mops.handle_page_fault = generic_handle_page_fault;
+    memobj->mops.populate_pages = generic_populate_pages;
     memobj->nature = MEMOBJ_GENERIC;
   }
 }

@@ -41,7 +41,7 @@
 #endif /* CONFIG_DEBUG_MM */
 
 #define VMR_PROTO_MASK (VMR_NONE | VMR_READ | VMR_WRITE | VMR_EXEC | VMR_NOCACHE)
-#define VMR_FLAGS_OFFS 4
+#define VMR_FLAGS_OFFS 5
 
 typedef enum __vmrange_flags {
   VMR_NONE     = 0x0001,

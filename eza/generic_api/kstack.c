@@ -27,6 +27,7 @@
 #include <mlibc/kprintf.h>
 #include <mlibc/stddef.h>
 #include <eza/arch/page.h>
+#include <eza/task.h>
 #include <eza/kstack.h>
 #include <eza/arch/mm.h>
 
@@ -122,7 +123,7 @@ int free_kernel_stack(bit_idx_t id)
 
 void initialize_kernel_stack_allocator(void)
 {
-  starting_kernel_stack_address = KERNEL_BASE;
+  starting_kernel_stack_address = __allocate_vregion(KERNEL_STACK_PAGES * NUM_PIDS);
   initialize_stack_allocator_context(&main_stack_ctx);
 }
 

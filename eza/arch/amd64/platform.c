@@ -50,7 +50,7 @@ void arch_specific_init(void)
   uint8_t id;
 	
   kprintf("[HW] Init arch specific ...\n");
-  
+
   r = get_acpi_lapic_info(&apic_base, (uint8_t *)local_apic_ids, CONFIG_NRCPUS, &n);
   if (apic_base)
       local_apic_base = apic_base;
