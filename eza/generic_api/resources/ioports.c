@@ -200,9 +200,6 @@ static int __check_ioports( task_t *task,ulong_t first_port,
     return -EPERM;
   }
 
-  kprintf("%p < %p || %p >= %p || %p >= %p\n",
-          end_port, first_port, first_port, swks.ioports_available,
-          end_port, swks.ioports_available);
   if( end_port < first_port || first_port >= swks.ioports_available ||
       end_port >= swks.ioports_available ) {
     return -EINVAL;
@@ -218,13 +215,10 @@ int sys_allocate_ioports(ulong_t first_port,ulong_t num_ports)
   ioport_range_t *range;
   ulong_t end_port=first_port+num_ports-1;
 
-  kprintf("I'm going to allocate  %p to %p\n",  first_port, first_port + num_ports);
   caller=current_task();
   r=__check_ioports(caller,first_port,end_port);
-  if( r ) {
-    kprintf("SUJA!!!! %d\n", r);
+  if( r )
     return r;
-  }
   
   LOCK_IOPORTS;
 
@@ -248,13 +242,11 @@ int sys_allocate_ioports(ulong_t first_port,ulong_t num_ports)
     goto out_free_ports;
   }
 
-  kprintf("OK Port %p to %p: %d\n", first_port, first_port + num_ports, r);
   return 0;
 out_free_ports:
   __free_ioports_range(first_port,end_port);
 out:
   UNLOCK_IOPORTS;
-  kprintf("Port %p to %p: %d\n", first_port, first_port + num_ports, r);
   return r;
 }
 

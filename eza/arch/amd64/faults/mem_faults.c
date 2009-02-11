@@ -63,7 +63,7 @@ static void __dump_regs(regs_t *r,ulong_t rip)
 static bool __read_user_safe(uintptr_t addr,uintptr_t *val)
 {
   uintptr_t *p;
-  page_idx_t pidx = mm_vaddr2page_idx(&current_task()->rpd, addr);  
+  page_idx_t pidx = mm_vaddr2page_idx(task_get_rpd(current_task()), addr);
 
   if( pidx == PAGE_IDX_INVAL ) {
     return false;
@@ -164,23 +164,22 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
       errmask |= PFLT_PROTECT;
     else
       errmask |= PFLT_NOT_PRESENT;
-    
+
     rwsem_down_read(&vmm->rwsem);
     vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(invalid_address), invalid_address + PAGE_SIZE, NULL);
-    if (vmr) {
+    if (vmr)
       ret = vmm_handle_page_fault(vmr, invalid_address, errmask);
-    }
     
     rwsem_up_read(&vmm->rwsem);
     if (ret < 0)
-        goto kernel_fault;
+      goto kernel_fault;
     
     return;
   }
   if( __send_sigsegv_on_faults )
     goto send_sigsegv;
   if (!default_console()->is_enabled)
-    default_console()->enable();
+      default_console()->enable();
   
   kprintf("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);

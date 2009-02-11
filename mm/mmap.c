@@ -192,7 +192,7 @@ static int __map_phys_pages(vmm_t *vmm, uintptr_t va, uintptr_t phys,
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) index_ctx;
 
   pfi_index_init(&pfi, &index_ctx, phys >> PAGE_WIDTH,
-                 (phys >> PAGE_WIDTH) + npages - 1);
+                 (phys >> PAGE_WIDTH) + npages - 1);  
   iter_first(&pfi);
   return __mmap_core(&vmm->rpd, va, npages, &pfi, flags);
 }
@@ -356,6 +356,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   int err = 0;
   bool was_merged = false;
 
+  kprintf("%p, %ld, %p\n", addr, npages, offs_pages);
   vmr = NULL;
   ttree_cursor_init(&vmm->vmranges_tree, &cursor);
   if (!(flags & VMR_PROTO_MASK)
@@ -372,7 +373,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
       err = -EPERM;
       goto err;
     }
-    if ((memobj != &null_memobj) || !offs_pages) {
+    if (memobj != &null_memobj) {
       err = -EINVAL;
       goto err;
     }

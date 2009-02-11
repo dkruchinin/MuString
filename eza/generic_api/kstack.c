@@ -123,7 +123,7 @@ int free_kernel_stack(bit_idx_t id)
 
 void initialize_kernel_stack_allocator(void)
 {
-  starting_kernel_stack_address = __allocate_vregion(KERNEL_STACK_PAGES * NUM_PIDS);
+  starting_kernel_stack_address = __allocate_vregion(KERNEL_STACK_PAGES * NUM_PIDS * 4);
   initialize_stack_allocator_context(&main_stack_ctx);
 }
 
