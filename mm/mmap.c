@@ -193,6 +193,11 @@ static int __map_phys_pages(vmm_t *vmm, uintptr_t va, uintptr_t phys,
 
   pfi_index_init(&pfi, &index_ctx, phys >> PAGE_WIDTH,
                  (phys >> PAGE_WIDTH) + npages - 1);  
+  kprintf("PAGE: %d\n", (phys >> PAGE_WIDTH) + npages - 1);
+  panic("=???=> %p [%p]\n", va, phys);
+  if (((phys >> PAGE_WIDTH)) == 0) {
+      panic("==> %p\n", va);
+  }
   iter_first(&pfi);
   return __mmap_core(&vmm->rpd, va, npages, &pfi, flags);
 }
@@ -558,7 +563,6 @@ int vmm_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
   off_t off;
 
   ASSERT(memobj != NULL);
-  addr = PAGE_ALIGN_DOWN(addr);
   off = addr2memobj_offs(vmr, addr);
   if (((pfmask & PFLT_WRITE) &&
        ((vmr->flags & (VMR_READ | VMR_WRITE)) == VMR_READ))
