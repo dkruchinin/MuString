@@ -804,10 +804,15 @@ static void __validate_retval(int r,int expected,
   }
 }
 
+#define READ_LONGS  15500
 static uintptr_t __buf_pages[512];
-static unsigned char *__zbuffer[MAX_MSG_SIZE];
-
+static long __bufzone[32];
+static long __zbuffer_snd[READ_LONGS];
+static long __zbuffer_rcv[READ_LONGS];
+ 
 #define MIDDLE_PARTS(t)  ((t)-2)
+
+#define NUM_OFFSETS 20
 
 static void __ipc_buffer_test(void *ctx)
 {
@@ -815,8 +820,12 @@ static void __ipc_buffer_test(void *ctx)
   iovec_t snd_iovecs[MAX_IOVECS],rcv_iovecs[MAX_IOVECS];
   ipc_user_buffer_t bufs[MAX_IOVECS];
   ulong_t __parts;
-  unsigned char *p,*cmp;
-  int r,offset;
+  unsigned char *p;
+  int i,r,__offset;
+  long *lp;
+  int __offsets[NUM_OFFSETS]={315,10,715,1129,2390,3578,4096,4912,
+                              5791,6379,7490,8111,8757,9300,10319,10999,
+                              10999,11715,12514,13845};
 
   tf->printf(SERVER_THREAD"Testing IPC buffers functionality.\n");
 
@@ -902,32 +911,66 @@ static void __ipc_buffer_test(void *ctx)
   /*
    * Testing IPC buffers data transfer using non-zero xfer offsets.
    */
-  memset(__zbuffer,0,sizeof(__zbuffer));
+  for(i=0;i<READ_LONGS;i++) {
+    __zbuffer_snd[i]=i;
+  }
 
-  offset=0;
-  rcv_iovecs[0].iov_base=__zbuffer;
-  rcv_iovecs[0].iov_len=sizeof(message_part_t)-offset;
-  p=__zbuffer+rcv_iovecs[0].iov_len;
-  *(ulong_t *)p=WL_PATTERN;
+  snd_iovecs[0].iov_base=__zbuffer_snd;
+  snd_iovecs[0].iov_len=715*sizeof(long);
+  snd_iovecs[1].iov_base=snd_iovecs[0].iov_base+snd_iovecs[0].iov_len;
+  snd_iovecs[1].iov_len=9300*sizeof(long);
+  snd_iovecs[2].iov_base=snd_iovecs[1].iov_base+snd_iovecs[1].iov_len;
+  snd_iovecs[2].iov_len=sizeof(__zbuffer_snd)- snd_iovecs[0].iov_len- snd_iovecs[1].iov_len;
 
-  r=ipc_transfer_buffer_data_iov(bufs,2,rcv_iovecs,1,sizeof(message_header_t)+offset,false);
+  r=ipc_setup_buffer_pages(current_task(),snd_iovecs,3,__buf_pages,bufs);
   if( r ) {
-    tf->printf(SERVER_THREAD"Failed to read data from buffer [1] !\n");
-    tf->failed();
+    tf->printf("Can't create buffers for offset reading !\n");
+    tf->abort();
   }
 
-  if( *(ulong_t *)p != WL_PATTERN ) {
-    tf->printf(SERVER_THREAD"Watchline mismatch after reading data from buffer [1] !\n");
-    tf->failed();
-  }
+  tf->printf("Size of pattern for IPC buffers read tests is %d bytes.\n",
+             sizeof(__zbuffer_snd));
+  for(i=0;i<NUM_OFFSETS;i++) {
+    int j,op;
+    __offset=__offsets[i]*sizeof(long);
 
-  cmp=snd_iovecs[1].iov_base+offset;
-  kprintf("PATTERN: 0x%X\n",*(ulong_t *)cmp);
-  if( memcmp(__zbuffer,cmp,rcv_iovecs[0].iov_len) ) {
-    tf->printf(SERVER_THREAD"Message mismatch ! [1] !\n");
-    tf->failed();
-  }
+    rcv_iovecs[0].iov_base=__zbuffer_rcv;
+    rcv_iovecs[0].iov_len=sizeof(__zbuffer_snd)-__offset;
+    memset(__zbuffer_rcv,0,sizeof(__zbuffer_rcv));
 
+    p=(unsigned char *)rcv_iovecs[0].iov_base+rcv_iovecs[0].iov_len;
+    *(ulong_t *)p=WL_PATTERN;
+
+    tf->printf("Reading from buffer at offset %d (%d words of data) ... ",
+               __offset,(sizeof(__zbuffer_snd)-__offset)/sizeof(long));
+    r=ipc_transfer_buffer_data_iov(bufs,3,rcv_iovecs,1,__offset,false);
+
+    if( r ) {
+      tf->printf("\n"SERVER_THREAD"Failed to read data from buffer [1] : %d\n",r);
+      tf->failed();
+    } else {
+      tf->printf("Done.\n");
+    }
+
+    if( *(ulong_t *)p != WL_PATTERN ) {
+      tf->printf(SERVER_THREAD"[1] Watchline mismatch ! 0x%X instead of 0x%X !\n",
+                 *(ulong_t *)p,WL_PATTERN);
+      tf->failed();
+    }
+
+    lp=(long *)rcv_iovecs[0].iov_base;
+    op=__offsets[i];
+    tf->printf("    Verifying buffer (%d) words of data, start pattern= %d ... ",
+               rcv_iovecs[0].iov_len/sizeof(long),op);
+    for(j=0;j<rcv_iovecs[0].iov_len/sizeof(long);j++,lp++,op++) {
+      if( *lp != op ) {
+        tf->printf("\nMessage mismatch ! 0x%X instead of 0x%X at position %d.\n",
+                   *lp,op,__offsets[i]+j);
+        tf->failed();
+      }
+    }
+    tf->printf(" OK.\n");
+  }
   tf->printf(SERVER_THREAD"All IPC buffers functionality tests finished.\n");
 }
 
@@ -1492,16 +1535,10 @@ static void __server_thread(void *ctx)
 
   __server_pid=current_task()->pid;
 
-  __ipc_buffer_test(ctx);
-  for(;;);
-
-  //__message_read_test(ctx);
   __stack_overflow_test(ctx);
   __process_events_test(ctx);
   __prioritized_port_test(ctx);
-
-  //__ipc_buffer_test(ctx);
-
+  __ipc_buffer_test(ctx);
   __vectored_messages_test(ctx);
 
   for( i=0;i<SERVER_NUM_PORTS;i++) {

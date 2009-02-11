@@ -123,8 +123,6 @@ int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
     if( offset ) {
       if( !start_buf ) {
         if( buf_offset < bufs[to_copy].length ) {
-          kprintf("  > Target buf: %d. buf offset: %d\n",to_copy,
-                  buf_offset);
           start_buf=&bufs[to_copy];
           /* We don't adjust buffer size here since it will be recalculated
            * later.
@@ -132,7 +130,6 @@ int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
         } else {
           buf_offset-=bufs[to_copy].length;
           bufsize-=bufs[to_copy].length;
-          kprintf(" .. Skipping buffer %d.\n",to_copy);
         }
       }
     }
@@ -142,6 +139,9 @@ int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
     iov_size+=iovecs[to_copy].iov_len;
   }
 
+  data_size=MIN(bufsize,iov_size);
+  iov_size=iovecs->iov_len;
+
   if( offset ) {
     if( !start_buf ) {
       return -EINVAL; /* Too big offset. */
@@ -150,29 +150,23 @@ int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
     /* Now we can adjust buffer size and get the first data chunk.
      */
     bufs=start_buf;
-    bufsize-=buf_offset;
-    kprintf("  > BUFSIZE: %d, BUF_OFFSET: %d\n",
-            bufsize,buf_offset);
     if( buf_offset < bufs->first ) {
       chunk=bufs->chunks;
       dest_kaddr=(char *)*chunk;
       page_end=dest_kaddr+bufs->first;
       dest_kaddr+=buf_offset;
-      kprintf("  >> KPATTERN: 0x%X\n",
-              *(ulong_t *)dest_kaddr);
     } else {
-      int d=((buf_offset-bufs->first) >> PAGE_WIDTH)+1;
+      chunk=bufs->chunks+(((buf_offset-bufs->first) >> PAGE_WIDTH)+1);
+      page_end=(char *)*chunk+PAGE_SIZE;
+      dest_kaddr=(char *)*chunk+((buf_offset-bufs->first) & PAGE_MASK);
 
-      chunk=bufs->chunks+d;
-      dest_kaddr=(char *)*chunk;
-      page_end=dest_kaddr;
-      page_end+=((bufs->length - buf_offset) < PAGE_SIZE) ? bufs->length - buf_offset : PAGE_SIZE;
-      dest_kaddr+=((buf_offset-bufs->first) & PAGE_MASK);
+      if( (page_end - dest_kaddr) > bufs->length-buf_offset ) {
+        page_end=dest_kaddr+(bufs->length-buf_offset);
+      }
     }
+    bufsize=bufs->length-buf_offset;
   }
 
-  data_size=MIN(bufsize,iov_size);
-  iov_size=iovecs->iov_len;
   user_addr=iovecs->iov_base;
 
   if( !offset ) {
