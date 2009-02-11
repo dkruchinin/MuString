@@ -217,9 +217,8 @@ int sys_allocate_ioports(ulong_t first_port,ulong_t num_ports)
 
   caller=current_task();
   r=__check_ioports(caller,first_port,end_port);
-  if( r ) {
+  if( r )
     return r;
-  }
   
   LOCK_IOPORTS;
 

@@ -68,7 +68,6 @@ void idx_allocator_init(idx_allocator_t *ida, ulong_t idx_max)
     ida->ids_bmap = pframe_to_virt(pf);
   }
   else {
-    kprintf("1===> bmap_sz = %ld\n", bmap_sz);
     ASSERT(bmap_sz < SLAB_OBJECT_MAX_SIZE);
     ida->ids_bmap = memalloc(bmap_sz);
     if (!ida->ids_bmap)
@@ -77,7 +76,6 @@ void idx_allocator_init(idx_allocator_t *ida, ulong_t idx_max)
     memset(ida->ids_bmap, 0, bmap_sz);
   }
 
-  kprintf(":::::: %d\n", __get_main_bmap_size(ida));
   ida->main_bmap = memalloc(__get_main_bmap_size(ida));
   if (!ida->main_bmap)
     panic("Can not allocate %zd bytes from slab.", ida->size / WORDS_PER_ITEM);

@@ -44,10 +44,6 @@ void arch_smp_init(int ncpus)
   ptr_16_64_t gdtr;
   int i=1,r=0;
 
-  /* set BIOS area to don't make a POST on INIT signal */
-  outb(0x70, 0xf); 
-  outb(0x71, 0xa);
-
   /* ok setup new gdt */
   while(i<ncpus) {
     protected_ap_gdtr.limit=GDT_ITEMS * sizeof(struct __descriptor);

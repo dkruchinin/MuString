@@ -81,7 +81,7 @@ static int __vmranges_cmp(void *r1, void *r2)
 
 static inline bool can_be_merged(const vmrange_t *vmr, const memobj_t *memobj, vmrange_flags_t flags)
 {
-  return ((vmr->flags & ~__VMR_CLEAR_MASK) == (flags & ~__VMR_CLEAR_MASK)
+    return (((vmr->flags & ~__VMR_CLEAR_MASK) == (flags & ~__VMR_CLEAR_MASK))
           && ((vmr->memobj == memobj)));
 }
 
@@ -99,7 +99,7 @@ static vmrange_t *create_vmrange(vmm_t *parent_vmm, uintptr_t va_start,
   vmr->bounds.space_start = va_start;
   vmr->bounds.space_end = va_start + (npages << PAGE_WIDTH);
   vmr->memobj = NULL;
-  vmr->hole_size = 0;
+  vmr->hole_size = vmr->offset = 0;
   parent_vmm->num_vmrs++;
 
   return vmr;
@@ -159,7 +159,7 @@ static void fix_vmrange_holes(vmm_t *vmm, vmrange_t *vmrange, ttree_cursor_t *cu
 {
   vmrange_t *vmr;
   ttree_cursor_t csr;
-
+  
   ttree_cursor_copy(&csr, cursor);
   if (!ttree_cursor_prev(&csr)) {
     vmr = ttree_item_from_cursor(&csr);
@@ -185,6 +185,18 @@ static void fix_vmrange_holes(vmm_t *vmm, vmrange_t *vmrange, ttree_cursor_t *cu
   }
 }
 
+static int __map_phys_pages(vmm_t *vmm, uintptr_t va, uintptr_t phys,
+                            page_idx_t npages, kmap_flags_t flags)
+{
+  page_frame_iterator_t pfi;
+  ITERATOR_CTX(page_frame, PF_ITER_INDEX) index_ctx;
+
+  pfi_index_init(&pfi, &index_ctx, phys >> PAGE_WIDTH,
+                 (phys >> PAGE_WIDTH) + npages - 1);  
+  iter_first(&pfi);
+  return __mmap_core(&vmm->rpd, va, npages, &pfi, flags);
+}
+
 void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name)
 {
 #ifndef CONFIG_TEST
@@ -203,8 +215,11 @@ int vm_mandmaps_roll(vmm_t *target_mm)
   vm_mandmap_t *mandmap;
 
   list_for_each_entry(&__mandmaps_lst, mandmap, node) {
-    status = mmap_core(&target_mm->rpd, mandmap->virt_addr, mandmap->phys_addr << PAGE_WIDTH,
+    status = mmap_core(&target_mm->rpd, mandmap->virt_addr, mandmap->phys_addr >> PAGE_WIDTH,
                        mandmap->num_pages, mandmap->flags);
+    VMM_VERBOSE("[%s]: Mandatory mapping \"%s\" [%p -> %p] was initialized\n",
+                vmm_get_name_dbg(target_mm), mandmap->name,
+                mandmap->virt_addr, mandmap->virt_addr + (mandmap->num_pages << PAGE_WIDTH));
     if (status) {
       kprintf(KO_ERROR "Mandatory mapping \"%s\" failed [err=%d]: Can't mmap region %p -> %p starting"
               " from page with index #%x!\n",
@@ -341,6 +356,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   int err = 0;
   bool was_merged = false;
 
+  kprintf("%p, %ld, %p\n", addr, npages, offs_pages);
   vmr = NULL;
   ttree_cursor_init(&vmm->vmranges_tree, &cursor);
   if (!(flags & VMR_PROTO_MASK)
@@ -352,17 +368,19 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
     goto err;
   }
   if (flags & VMR_PHYS) {
+    flags |= VMR_NOCACHE;
     if (!trusted_task(current_task())) {
       err = -EPERM;
       goto err;
     }
-    if ((memobj != &null_memobj) || !offs_pages) {
+    if (memobj != &null_memobj) {
       err = -EINVAL;
       goto err;
     }
   }
   if (addr) {
-    if (!valid_user_address_range(addr, (npages << PAGE_WIDTH))) {
+    if (!(flags & VMR_PHYS) &&
+        !valid_user_address_range(addr, (npages << PAGE_WIDTH))) {
       if (flags & VMR_FIXED) {
         err = -ENOMEM;
         goto err;
@@ -427,29 +445,33 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
         merge_vmranges(prev, vmr);
     }
   }
-  if (was_merged)
-    goto out;
-  
-  vmr = create_vmrange(vmm, addr, npages, flags);
-  if (!vmr) {
-    err = -ENOMEM;
-    goto err;
+  if (!was_merged) {
+    vmr = create_vmrange(vmm, addr, npages, flags);
+    if (!vmr) {
+      err = -ENOMEM;
+      goto err;
+    }
+    
+    ttree_insert_placeful(&cursor, vmr);
   }
 
-  ttree_insert_placeful(&cursor, vmr);
+  vmr->memobj = memobj;
   if (flags & VMR_PHYS) {
-    flags |= VMR_NOCACHE;
-    /* FIXME: physical mapping actually may be shared */
-    err = mmap_core(&vmm->rpd, offs_pages << PAGE_WIDTH, offs_pages, npages,
-                    flags & KMAP_FLAGS_MASK);
+    err = __map_phys_pages(vmm, addr, offs_pages << PAGE_WIDTH, npages, flags & KMAP_FLAGS_MASK);
+    if (err)
+      goto err;
+  }  
+  else if (flags & VMR_POPULATE) {
+    mutex_lock(&memobj->mutex);
+    err = memobj->mops.populate_pages(memobj, vmr, addr, npages, offs_pages);
+    mutex_unlock(&memobj->mutex);
     if (err)
       goto err;
   }
-  
-  fix_vmrange_holes(vmm, vmr, &cursor);
-  
-  out:
-  return addr;
+  if (!was_merged)
+    fix_vmrange_holes(vmm, vmr, &cursor);
+
+  return (!(flags & VMR_STACK) ? addr : (addr + (npages << PAGE_WIDTH)));
   
   err:
   if (vmr) {
@@ -536,10 +558,7 @@ int vmm_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
   off_t off;
 
   ASSERT(memobj != NULL);
-  addr = PAGE_ALIGN_DOWN(addr);
   off = addr2memobj_offs(vmr, addr);
-  if (off >= memobj->size)
-    return -EINVAL;
   if (((pfmask & PFLT_WRITE) &&
        ((vmr->flags & (VMR_READ | VMR_WRITE)) == VMR_READ))
       || (vmr->flags & VMR_NONE)) {
@@ -554,32 +573,32 @@ int vmm_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
 
 long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, int memobj_id, off_t offset)
 {
-  memobj_t *memobj;
+  memobj_t *memobj = NULL;
   vmm_t *vmm = current_task()->task_mm;
   long ret;
-
-  if (flags & VMR_ANON) {
+  vmrange_flags_t vmrflags = (prot & VMR_PROTO_MASK) | (flags << VMR_FLAGS_OFFS);
+  
+  if ((vmrflags & VMR_ANON) || (memobj_id == NULL_MEMOBJ_ID)) {
     memobj = memobj_find_by_id(NULL_MEMOBJ_ID);
     ASSERT(memobj != NULL);    
   }
-  else {
-    if (!memobj_id || (offset & PAGE_MASK)
-        || ((prot & VMR_FIXED) && (flags & PAGE_MASK)))
+  else if (memobj_id) {
+    if ((offset & PAGE_MASK) || (vmrflags & VMR_ANON))
       return -EINVAL;
-
+    
     memobj = memobj_find_by_id(memobj_id);
     if (!memobj)
       return -ENOENT;
   }
-  if (!size)
-    return -EINVAL;
+  if (!size || ((vmrflags & VMR_FIXED) && (addr & PAGE_MASK)) ||
+      ((vmrflags & VMR_PHYS) && (offset & PAGE_MASK))) {
+      return -EINVAL;
+  }
   
-  addr = PAGE_ALIGN_DOWN(addr);
   rwsem_down_write(&vmm->rwsem);
   ret = vmrange_map(memobj, vmm, addr, size >> PAGE_WIDTH,
-                    (prot & VMR_PROTO_MASK) | (flags << VMR_FLAGS_OFFS), offset >> PAGE_WIDTH);
+                    vmrflags, offset >> PAGE_WIDTH);
   rwsem_up_write(&vmm->rwsem);
-
   return ret;
 }
 

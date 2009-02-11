@@ -47,9 +47,9 @@ void idle_loop(void)
   for( ;; ) {
 #ifndef CONFIG_TEST
     if( swks.system_ticks_64 >= target_tick ) {
-//      kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
-//               cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
-      target_tick += STEP;
+        /*kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
+               cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
+               target_tick += STEP;*/
     }
 #endif
 

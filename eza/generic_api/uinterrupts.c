@@ -165,13 +165,16 @@ long sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   page_frame_t *pframe;
   ulong_t *kaddr;
 
+  kprintf("IRQ array: %p\n", addr);
   if( !irq_array || !irqs || irqs > MAX_IRQS_PER_THREAD ||
       (addr & PAGE_MASK) ) {
+    kprintf("einval %p\n", addr);
     return -EINVAL;
   }
 
   if( !valid_user_address_range(irq_array,irqs*sizeof(ulong_t)) ||
       !valid_user_address_range(addr,PAGE_SIZE) ) {
+    kprintf("efault");
     return -EFAULT;
   }
 
@@ -190,12 +193,14 @@ long sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
 
   if( !pframe ) {
     id=-EFAULT;
+    kprintf("!pframe()!\n");
     goto unlock;
   }
 
   LOCK_TASK_USPACE_IRQS(caller);
   if( caller->uspace_events->uspace_irqs.array ) {
     id=-EBUSY;
+    kprintf("EBUSY\n");
     goto unlock;
   }
 
@@ -203,11 +208,13 @@ long sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   ids=(ulong_t *)memalloc(sizeof(ulong_t)*irqs);
   if( !ids ) {
     id=-ENOMEM;
+    kprintf("enomem!\n");
     goto unlock;
   }
 
   if( copy_from_user(ids,(void *)irq_array,sizeof(ulong_t)*irqs) ) {
     id=-EFAULT;
+    kprintf("copy from user!\n");
     goto out;
   }
 
@@ -215,6 +222,7 @@ long sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   for(i=0;i<irqs;i++) {
     if( !valid_irq_number(ids[i]) ) {
       id=-EINVAL;
+      kprintf("!valid_irq_number\n");
       goto out;
     }
   }
@@ -222,6 +230,7 @@ long sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   id=-ENOMEM;
   array=__allocate_irq_counter_array(caller,irqs);
   if( !array ) {
+    kprintf("!array\n");
     goto out;
   }
 

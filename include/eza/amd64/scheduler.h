@@ -72,10 +72,6 @@ static inline void arch_activate_task(task_t *to)
 
   /* Setup LDT for new task. */
   if( to_ctx->ldt ) {
-    kprintf("man, i'm here!\n");
-    kprintf("to->cpu = %p\n", to->cpu);
-    kprintf("to_ctx->ldt = %p\n", to_ctx->ldt);
-    kprintf("to_ctx->ldt_limit = %d\n", to_ctx->ldt_limit);
     load_ldt(to->cpu,to_ctx->ldt,to_ctx->ldt_limit);
   }
 
@@ -86,9 +82,7 @@ static inline void arch_activate_task(task_t *to)
 #endif
   
   /* Let's jump ! */
-  kprintf("=> raz\n");
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
-  kprintf("=> dva\n");
 }
 
 #endif

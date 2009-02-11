@@ -107,7 +107,7 @@ static void register_mandatory_mappings(void)
   ident_mandmap.virt_addr = 0x1000;
   ident_mandmap.phys_addr = 0x1000;
   ident_mandmap.num_pages = IDENT_MAP_PAGES - 1;
-  ident_mandmap.flags = KMAP_READ | KMAP_WRITE | KMAP_KERN;
+  ident_mandmap.flags = KMAP_READ | KMAP_WRITE;
   vm_mandmap_register(&ident_mandmap, "Identity mapping");
 
   memset(&utramp_mandmap, 0, sizeof(utramp_mandmap));
@@ -120,7 +120,7 @@ static void register_mandatory_mappings(void)
 
   memset(&swks_mandmap, 0, sizeof(swks_mandmap));  
   swks_mandmap.virt_addr = __reserve_uspace_vregion(SWKS_PAGES);
-  swks_mandmap.phys_addr = p2k(&swks);
+  swks_mandmap.phys_addr = k2p(&swks);
   swks_mandmap.num_pages = SWKS_PAGES;
   swks_mandmap.flags = KMAP_READ;
   vm_mandmap_register(&swks_mandmap, "SWKS mapping");
@@ -212,7 +212,6 @@ void arch_mm_init(void)
   page_frames_array = addr ?
     (page_frame_t *)PAGE_ALIGN(p2k_code(addr)) : (page_frame_t *)KERNEL_END_PHYS;
   __kernel_first_free_addr = (uintptr_t)page_frames_array + sizeof(page_frame_t) * num_phys_pages;
-  kprintf(" Pages start: %p\nServers end: %p\n", page_frames_array, PAGE_ALIGN(p2k_code(addr)));
   kprintf(" Scanned: %ldM, %ld pages\n", (long)_b2mb(num_phys_pages << PAGE_WIDTH), num_phys_pages);
 }
 

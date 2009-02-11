@@ -41,7 +41,7 @@
 #endif /* CONFIG_DEBUG_MM */
 
 #define VMR_PROTO_MASK (VMR_NONE | VMR_READ | VMR_WRITE | VMR_EXEC | VMR_NOCACHE)
-#define VMR_FLAGS_OFFS 4
+#define VMR_FLAGS_OFFS 5
 
 typedef enum __vmrange_flags {
   VMR_NONE     = 0x0001,
@@ -195,7 +195,7 @@ static inline void munmap_core(rpd_t *rpd, uintptr_t va, ulong_t npages)
 
 static inline off_t addr2memobj_offs(vmrange_t *vmr, uintptr_t addr)
 {
-  return (vmr->offset + (addr - vmr->bounds.space_start));
+  return (vmr->offset + (PAGE_ALIGN_DOWN(addr) - vmr->bounds.space_start));
 }
 
 #ifdef CONFIG_DEBUG_MM
