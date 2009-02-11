@@ -195,7 +195,7 @@ static inline void munmap_core(rpd_t *rpd, uintptr_t va, ulong_t npages)
 
 static inline off_t addr2memobj_offs(vmrange_t *vmr, uintptr_t addr)
 {
-  return (vmr->offset + (addr - vmr->bounds.space_start));
+  return (vmr->offset + (PAGE_ALIGN_DOWN(addr) - vmr->bounds.space_start));
 }
 
 #ifdef CONFIG_DEBUG_MM
