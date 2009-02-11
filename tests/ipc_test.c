@@ -1000,22 +1000,39 @@ static void __message_read_test(void *ctx)
     ulong_t size;
     int j;
 
-    size=MESSAGE_SIZE(parts);
+    memset(__zbuffer_rcv,0,sizeof(__zbuffer_rcv));
+    size=sizeof(message_header_t);
+    watchline=(ulong_t*)((char *)__zbuffer_rcv+size);
+    *watchline=WL_PATTERN;
+
     tf->printf(SERVER_THREAD"RCV a message that has %d parts. SIZE=%d, NULL RCV buffer\n",
                parts,size);
-    r=sys_port_receive(port,IPC_BLOCKED_ACCESS,(ulong_t)0,
-                       0,&msg_info);
+    r=sys_port_receive(port,IPC_BLOCKED_ACCESS,(uintptr_t)__zbuffer_rcv,
+                       sizeof(message_header_t),&msg_info);
     if( r ) {
       tf->printf(SERVER_THREAD"Error during receive ! %d.\n",r);
       tf->failed();
     }
 
-    if( msg_info.msg_len != size ) {
+    if( msg_info.msg_len != MESSAGE_SIZE(parts) ) {
       tf->printf(SERVER_THREAD"Bad message size ! %d instead of %d bytes.\n",
                  msg_info.msg_len,size);
       tf->failed();
     }
 
+    if( *watchline != WL_PATTERN ) {
+      tf->printf("[MSG READ] [abc] Watchline mismatch: 0x%X instead of 0x%X !\n",
+                 *watchline,WL_PATTERN);
+      tf->abort();
+    }
+
+    hdr=(message_header_t*)__zbuffer_rcv;
+    r=__validate_message_data(hdr->data,hdr->data_base,MSG_HEADER_DATA_SIZE);
+    if( r < 0 ) {
+      tf->printf("First message part mismatch at %d\n",-r);
+      tf->failed();
+    }
+    
     /* Now read the message partially. */
     memset(__zbuffer_rcv,0,sizeof(__zbuffer_rcv));
     size=sizeof(message_header_t);
