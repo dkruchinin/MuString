@@ -99,7 +99,7 @@ static vmrange_t *create_vmrange(vmm_t *parent_vmm, uintptr_t va_start,
   vmr->bounds.space_start = va_start;
   vmr->bounds.space_end = va_start + (npages << PAGE_WIDTH);
   vmr->memobj = NULL;
-  vmr->hole_size = 0;
+  vmr->hole_size = vmr->offset = 0;
   parent_vmm->num_vmrs++;
 
   return vmr;
@@ -193,11 +193,6 @@ static int __map_phys_pages(vmm_t *vmm, uintptr_t va, uintptr_t phys,
 
   pfi_index_init(&pfi, &index_ctx, phys >> PAGE_WIDTH,
                  (phys >> PAGE_WIDTH) + npages - 1);  
-  kprintf("PAGE: %d\n", (phys >> PAGE_WIDTH) + npages - 1);
-  panic("=???=> %p [%p]\n", va, phys);
-  if (((phys >> PAGE_WIDTH)) == 0) {
-      panic("==> %p\n", va);
-  }
   iter_first(&pfi);
   return __mmap_core(&vmm->rpd, va, npages, &pfi, flags);
 }

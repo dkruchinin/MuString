@@ -58,7 +58,6 @@ static int generic_handle_page_fault(memobj_t *memobj, vmrange_t *vmr, off_t off
     if (!pf)
       return -ENOMEM;
 
-    kprintf("mmap_core: %p\n", addr);
     ret = mmap_core(&vmr->parent_vmm->rpd, addr,
                     pframe_number(pf), 1, vmr->flags & VMR_PROTO_MASK);
     if (ret)
