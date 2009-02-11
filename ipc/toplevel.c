@@ -300,7 +300,7 @@ long sys_port_msg_read(ulong_t port,ulong_t msg_id,uintptr_t recv_buf,
     return -EINVAL;
   }
 
-  iovec.iov_base=(void *)recv_len;
+  iovec.iov_base=(void *)recv_buf;
   iovec.iov_len=recv_len;
 
   r=ipc_port_msg_read(p,msg_id,&iovec,1,offset);

@@ -73,6 +73,7 @@
 #define SC_TIMER_CONTROL       35
 #define SC_MUNMAP              36
 #define SC_THREAD_WAIT         37
+#define SC_PORT_MSG_READ       38
 
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */
@@ -470,6 +471,9 @@ long sys_thread_kill(pid_t prcess,tid_t tid,int sig);
 long sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset);
 
 long sys_thread_wait(tid_t tid,void **value_ptr);
+
+long sys_port_msg_read(ulong_t port,ulong_t msg_id,uintptr_t recv_buf,
+                       ulong_t recv_len,ulong_t offset);
 
 #endif
 

@@ -580,9 +580,9 @@ static void __process_events_test(void *ctx)
 
 #define VECTORER_ID "[VECTORER] "
 
-#define MSG_HEADER_DATA_SIZE  210    //  715
-#define MSG_PART_DATA_SIZE    912    // 3419
-#define MSG_TAIL_DATA_SIZE    300    //17918
+#define MSG_HEADER_DATA_SIZE  715      //  715
+#define MSG_PART_DATA_SIZE    3419     // 3419
+#define MSG_TAIL_DATA_SIZE    17918    //17918
 
 typedef struct __message_header {
   uint16_t data_base;
@@ -980,6 +980,8 @@ static void __message_read_test(void *ctx)
   int port=sys_create_port(IPC_BLOCKED_ACCESS,0);
   int r,i;
   port_msg_info_t msg_info;
+  message_header_t *hdr;
+  message_tail_t *tail;
 
   if( port < 0 ) {
     tf->printf( "Can't create a port !\n" );
@@ -996,16 +998,11 @@ static void __message_read_test(void *ctx)
     ulong_t parts=(i%6)+1;
     ulong_t *watchline;
     ulong_t size;
+    int j;
 
-    CLEAR_SERVER_BUFFERS;
-
-    /* Setup memory watchline. */
     size=MESSAGE_SIZE(parts);
-    watchline=(ulong_t*)(__vectored_msg_server_rcv_buf+size);
-    *watchline=WL_PATTERN;
-
     tf->printf(SERVER_THREAD"RCV a message that has %d parts. SIZE=%d, NULL RCV buffer\n",
-               parts,MESSAGE_SIZE(parts));
+               parts,size);
     r=sys_port_receive(port,IPC_BLOCKED_ACCESS,(ulong_t)0,
                        0,&msg_info);
     if( r ) {
@@ -1013,16 +1010,108 @@ static void __message_read_test(void *ctx)
       tf->failed();
     }
 
-    if( msg_info.msg_len == size ) {
-      tf->printf(SERVER_THREAD"Got a good message message of %d bytes.\n",size);
-    } else {
-      tf->printf(SERVER_THREAD"Bad message message size ! %d instead of %d bytes.\n",
+    if( msg_info.msg_len != size ) {
+      tf->printf(SERVER_THREAD"Bad message size ! %d instead of %d bytes.\n",
                  msg_info.msg_len,size);
       tf->failed();
     }
-    for(;;);
+
+    /* Now read the message partially. */
+    memset(__zbuffer_rcv,0,sizeof(__zbuffer_rcv));
+    size=sizeof(message_header_t);
+    watchline=(ulong_t*)((char *)__zbuffer_rcv+size);
+    *watchline=WL_PATTERN;
+
+    r=sys_port_msg_read(port,msg_info.msg_id,(uintptr_t)__zbuffer_rcv,
+                        size,0);
+    if( r ) {
+      tf->printf(SERVER_THREAD"Error during reading the message ! %d.\n",r);
+      tf->failed();
+    }
+
+    if( *watchline != WL_PATTERN ) {
+      tf->printf("[MSG READ] Watchline mismatch: 0x%X instead of 0x%X !\n",
+                 *watchline,WL_PATTERN);
+      tf->abort();
+    }
+
+    hdr=(message_header_t*)__zbuffer_rcv;
+    r=__validate_message_data(hdr->data,hdr->data_base,MSG_HEADER_DATA_SIZE);
+    if( r < 0 ) {
+      tf->printf("First message part mismatch at %d\n",-r);
+      tf->failed();
+    }
+
+    for(j=0;j<parts;j++) {
+      memset(__zbuffer_rcv,0,sizeof(__zbuffer_rcv));
+      message_part_t *part;
+      size=sizeof(message_part_t);
+      watchline=(ulong_t*)((char *)__zbuffer_rcv+size);
+      *watchline=WL_PATTERN;
+
+      r=sys_port_msg_read(port,msg_info.msg_id,(uintptr_t)__zbuffer_rcv,
+                          size,sizeof(message_header_t)+j*sizeof(message_part_t));
+      if( r ) {
+        tf->printf(SERVER_THREAD"[xx] Error during reading the message ! %d.\n",r);
+        tf->failed();
+      }
+
+      if( *watchline != WL_PATTERN ) {
+        tf->printf("[MSG READ] Watchline mismatch: 0x%X instead of 0x%X !\n",
+                   *watchline,WL_PATTERN);
+        tf->abort();
+      }
+
+      part=(message_part_t*)__zbuffer_rcv;
+      r=__validate_message_data(part->data,part->data_base,MSG_PART_DATA_SIZE);
+      if( r < 0 ) {
+        tf->printf("%d-th message part mismatch at %d\n",j+1,-r);
+        tf->failed();
+      }
+    }
+
+    memset(__zbuffer_rcv,0,sizeof(__zbuffer_rcv));
+    size=sizeof(message_tail_t);
+    watchline=(ulong_t*)((char *)__zbuffer_rcv+size);
+    *watchline=WL_PATTERN;
+
+    r=sys_port_msg_read(port,msg_info.msg_id,(uintptr_t)__zbuffer_rcv,
+                        size,sizeof(message_header_t)+parts*sizeof(message_part_t));
+    if( r ) {
+      tf->printf(SERVER_THREAD"Error during reading message's tail ! %d.\n",r);
+      tf->failed();
+    }
+
+    if( *watchline != WL_PATTERN ) {
+      tf->printf("[MSG READ] Watchline mismatch: 0x%X instead of 0x%X !\n",
+                 *watchline,WL_PATTERN);
+      tf->abort();
+    }
+
+    tail=(message_tail_t*)__zbuffer_rcv;
+    r=__validate_message_data(tail->data,tail->data_base,MSG_TAIL_DATA_SIZE);
+    if( r < 0 ) {
+      tf->printf("%message tail mismatch at %d\n",-r);
+      tf->failed();
+    }
+
+    /* Now read message as one part. */
+    r=sys_port_msg_read(port,msg_info.msg_id,(uintptr_t)__zbuffer_rcv,
+                        MESSAGE_SIZE(parts),0);
+    if( r ) {
+      tf->printf(SERVER_THREAD"Error during whole 'READ' message ! %d.\n",r);
+      tf->failed();
+    }
+    FAIL_ON(!__validate_vectored_message((uint8_t *)__zbuffer_rcv,parts,tf),tf);
+    r=sys_port_reply(port,msg_info.msg_id,(uintptr_t)__zbuffer_rcv,MESSAGE_SIZE(parts));
+    if( r ) {
+      tf->printf(SERVER_THREAD"[READ MSG] Error during reply to message %d ! r=%d\n",
+                 msg_info.msg_id,r);
+      tf->abort();
+    }
+    tf->printf("Message header, tail and %d its parts validated.\n",parts);
   }
-  for(;;);
+  sys_close_port(port);
 }
 
 static void __vectored_messages_test(void *ctx)
@@ -1535,6 +1624,7 @@ static void __server_thread(void *ctx)
 
   __server_pid=current_task()->pid;
 
+  __message_read_test(ctx);
   __stack_overflow_test(ctx);
   __process_events_test(ctx);
   __prioritized_port_test(ctx);

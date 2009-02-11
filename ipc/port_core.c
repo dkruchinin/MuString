@@ -380,13 +380,17 @@ static int __transfer_message_data_to_receiver(ipc_port_message_t *msg,
   int r,recv_len;
 
   if( iovec ) {
-    recv_len=MIN(iovec->iov_len,msg->data_size);
+    if( offset >= msg->data_size ) {
+      return -EINVAL;
+    }
+
+    recv_len=MIN(iovec->iov_len,msg->data_size-offset);
     if( msg->data_size <= IPC_BUFFERED_PORT_LENGTH ) {
       /* Short message - copy it from the send buffer.
        */
-      if( !offset ) {
-        r=copy_to_user((void *)iovec->iov_base,msg->send_buffer,recv_len);
-      } else {
+      r=copy_to_user((void *)iovec->iov_base,msg->send_buffer+offset,recv_len);
+      if( r > 0 ) {
+        r=-EFAULT;
       }
     } else {
       /* Long message - process it via IPC buffers.
@@ -398,22 +402,18 @@ static int __transfer_message_data_to_receiver(ipc_port_message_t *msg,
     r=0;
   }
 
-  if( !r ) {
-    if( stats ) {
-      port_msg_info_t info;
+  if( !r && stats ) {
+    port_msg_info_t info;
 
-      info.sender_pid=msg->sender->pid;
-      info.msg_id=msg->id;
-      info.msg_len=msg->data_size;
-      info.sender_tid=msg->sender->tid;
-      info.sender_uid=msg->sender->uid;
+    info.sender_pid=msg->sender->pid;
+    info.msg_id=msg->id;
+    info.msg_len=msg->data_size;
+    info.sender_tid=msg->sender->tid;
+    info.sender_uid=msg->sender->uid;
 
-      if( copy_to_user(stats,&info,sizeof(info)) ) {
-        r=-EFAULT;
-      }
+    if( copy_to_user(stats,&info,sizeof(info)) ) {
+      r=-EFAULT;
     }
-  } else {
-    r=-EFAULT;
   }
 
   return r;
