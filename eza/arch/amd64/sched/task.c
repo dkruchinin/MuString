@@ -269,12 +269,11 @@ static void __apply_task_exec_attrs(regs_t *regs,exec_attrs_t *exec_attrs,
   if( exec_attrs->stack ) {
     regs->int_frame.old_rsp=exec_attrs->stack;
   }
-  if( exec_attrs->entrypoint ) {
-    regs->int_frame.rip=exec_attrs->entrypoint;
-  }
-  if( exec_attrs->arg ) {
-    regs->gpr_regs.rdi=exec_attrs->arg;
-  }
+
+  regs->int_frame.rip=exec_attrs->entrypoint;
+  regs->gpr_regs.rdi=exec_attrs->arg1;
+  regs->gpr_regs.rsi=exec_attrs->arg2;
+
   task_ctx->per_task_data=exec_attrs->per_task_data;
 }
 

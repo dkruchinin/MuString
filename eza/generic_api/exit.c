@@ -48,7 +48,7 @@
 
 static void __exit_ipc(task_t *exiter) {
   task_ipc_t *ipc;
-  task_ipc_priv_t *p;  
+  task_ipc_priv_t *p;
 
   if( exiter->ipc ) {
     close_ipc_resources(exiter->ipc);
