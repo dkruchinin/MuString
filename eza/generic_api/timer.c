@@ -186,7 +186,6 @@ long add_timer(ktimer_t *t)
   }
 
   mtickv=t->time_x-(t->time_x % CONFIG_TIMER_GRANULARITY);
-  t->da.__lock=&sw_timers_list_lock;
 
   /* First try to locate an existing major tick or create a new one.
    */
@@ -295,8 +294,7 @@ static bool __timer_deffered_sched_handler(void *data)
 {
   ktimer_t *timer=(ktimer_t *)data;
 
-  return ( !(timer->da.flags & __DEF_ACT_FIRED_MASK) &&
-           timer->time_x > system_ticks);
+  return (timer->time_x > system_ticks);
 }
 
 long sleep(ulong_t ticks)

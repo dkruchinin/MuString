@@ -56,13 +56,12 @@ typedef enum {
 } def_action_masks_t;
 
 typedef struct __deffered_irq_action {
-  ulong_t flags;
   def_action_type_t type;
   list_head_t head;
   list_node_t node;
   ulong_t priority;
-  spinlock_t *__lock;
   void *kern_priv;
+  percpu_def_actions_t *__host;
 
   union {
     event_t _event;         /* DEF_ACTION_EVENT */
@@ -75,8 +74,7 @@ typedef struct __deffered_irq_action {
   list_init_head(&(da)->head);                   \
   list_init_node(&(da)->node);                   \
   (da)->type=(t);                                \
-  (da)->flags=(f);                               \
-  (da)->__lock=NULL;                             \
+  (da)->__host=NULL;                             \
   (da)->kern_priv=NULL;                          \
   } while(0)
 

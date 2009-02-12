@@ -34,6 +34,7 @@
 #include <config.h>
 
 static percpu_def_actions_t cpu_actions[CONFIG_NRCPUS];
+static SPINLOCK_DEFINE(big_action_lock);
 
 void initialize_deffered_actions(void)
 {
@@ -66,7 +67,7 @@ void schedule_deffered_actions(list_head_t *actions)
   } else {
   repeat:
     while( !list_is_empty(actions) ) {
-      list_node_t *ln,*sln;
+      list_node_t *ln;
       a=container_of(list_node_first(actions),deffered_irq_action_t,node);
 
       list_del(&a->node);
@@ -75,7 +76,7 @@ void schedule_deffered_actions(list_head_t *actions)
         arch_sched_set_def_works_pending();
       }
 
-      list_for_each_safe(&acts->pending_actions,ln,sln) {
+      list_for_each(&acts->pending_actions,ln) {
         deffered_irq_action_t *da=container_of(ln,deffered_irq_action_t,node);
 
         if( da->priority > a->priority ) {
@@ -102,44 +103,45 @@ void schedule_deffered_action(deffered_irq_action_t *a) {
   long is;
 
   spinlock_lock_irqsave(&acts->lock,is);
+  spinlock_lock(&big_action_lock);
+
+  if( a->__host ) {
+    goto out_unlock; /* Action is already on the list. */
+  }
+
+  a->__host=acts;
 
   if( list_is_empty(&acts->pending_actions) ) {
     list_add2tail(&acts->pending_actions,&a->node);
   } else {
-    list_node_t *next=acts->pending_actions.head.next,*prev=NULL;
     deffered_irq_action_t *da;
-    bool inserted=false;
+    list_node_t *ln;
 
-    do {
-      da=container_of(next,deffered_irq_action_t,node);
+    list_for_each(&acts->pending_actions,ln) {
+      da=container_of(ln,deffered_irq_action_t,node);
+
       if( da->priority > a->priority ) {
-        break;
+        list_insert_before(&a->node,ln);
+        goto out;
       } else if( da->priority == a->priority ) {
         list_add2tail(&da->head,&a->node);
 
-        inserted=true;
-        break;
-      }
-      prev=next;
-      next=next->next;
-    } while( next != list_head(&acts->pending_actions) );
-
-    if( !inserted ) {
-      if( prev != NULL ) {
-        a->node.next=prev->next;
-        prev->next->prev=&a->node;
-        prev->next=&a->node;
-        a->node.prev=prev;
-      } else {
-        list_add2head(&acts->pending_actions,&a->node);
+        if( !list_is_empty(&a->head) ) {
+          list_move2tail(&da->head,&a->head);
+        }
+        goto out;
       }
     }
+    list_add2tail(&acts->pending_actions,&a->node);
   }
 
+  out:
   /* Current task needs to be rescheduled as soon as possible. */
   if( a->priority <= current_task()->priority ) {
     arch_sched_set_def_works_pending();
   }
+out_unlock:
+  spinlock_unlock(&big_action_lock);
   spinlock_unlock_irqrestore(&acts->lock,is);
 }
 
@@ -158,8 +160,6 @@ void execute_deffered_action(deffered_irq_action_t *a)
       activate_task(a->d.target);
       break;
   }
-
-  arch_bit_set(&a->flags,__DEF_ACT_FIRED_BIT_IDX);
 }
 
 void fire_deffered_actions(void)
@@ -192,10 +192,10 @@ void fire_deffered_actions(void)
         list_node_t *prev=action->node.prev;
 
         /* Remove action under protection of the lock. */
-        if( action->__lock ) {
-          spinlock_lock(action->__lock);
-        }
+        spinlock_lock(&big_action_lock);
         list_del(&action->node);
+        action->__host=NULL;
+        spinlock_unlock(&big_action_lock);
 
         if( !list_is_empty(&action->head) ) {
           deffered_irq_action_t *a=container_of(list_node_first(&action->head),
@@ -211,11 +211,6 @@ void fire_deffered_actions(void)
           prev->next->prev=&a->node;
           prev->next=&a->node;
         }
-
-        if( action->__lock ) {
-          spinlock_unlock(action->__lock);
-        }
-
         arch_sched_set_def_works_pending();
       } else {
         /* Bad luck - current thread has higher priority than any of pending
