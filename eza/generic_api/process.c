@@ -371,8 +371,61 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
     case SYS_PR_CTL_REINCARNATE_TASK:
       return __reincarnate_task(target,arg);
     case SYS_PR_CTL_SET_CANCEL_STATE:
-      
-      break;  
+      if( target != current_task() ||
+          (arg != PTHREAD_CANCEL_ENABLE && arg != PTHREAD_CANCEL_DISABLE) ) {
+        return -EINVAL;
+      }
+
+      LOCK_TASK_STRUCT(target);
+      target->uworks_data.cancel_state=arg;
+      if( arg == PTHREAD_CANCEL_ENABLE ) {
+        if( target->uworks_data.cancellation_pending &&
+            target->uworks_data.cancel_type == PTHREAD_CANCEL_ASYNCHRONOUS) {
+          set_task_cancellation_request(current_task());
+        }
+      }
+      UNLOCK_TASK_STRUCT(target);
+      return 0;
+    case SYS_PR_CTL_SET_CANCEL_TYPE:
+      if( target != current_task() ||
+          (arg != PTHREAD_CANCEL_DEFERRED && arg != PTHREAD_CANCEL_ASYNCHRONOUS) ) {
+        return -EINVAL;
+      }
+
+      LOCK_TASK_STRUCT(target);
+      target->uworks_data.cancel_type=arg;
+      if( arg == PTHREAD_CANCEL_ASYNCHRONOUS ) {
+        if( target->uworks_data.cancellation_pending &&
+            target->uworks_data.cancel_state == PTHREAD_CANCEL_ENABLE ) {
+          set_task_cancellation_request(current_task());
+        }
+      }
+      UNLOCK_TASK_STRUCT(target);
+      return 0;
+    case SYS_PR_CTL_CANCEL_TASK:
+      if( target->pid != current_task()->pid ) {
+        return -ESRCH;
+      }
+      LOCK_TASK_STRUCT(target);
+      if( !target->uworks_data.cancellation_pending ) {
+        target->uworks_data.cancellation_pending=true;
+
+        if( target->uworks_data.cancel_state == PTHREAD_CANCEL_ENABLE ) {
+          ulong_t mask;
+
+          if( target->uworks_data.cancel_type == PTHREAD_CANCEL_ASYNCHRONOUS ) {
+            mask=TASK_STATE_RUNNABLE | TASK_STATE_RUNNING | TASK_STATE_SLEEPING;
+          } else {
+            mask=TASK_STATE_SLEEPING;
+          }
+
+          if( !sched_change_task_state_mask(target,TASK_STATE_RUNNABLE,mask) ) {
+            set_task_cancellation_request(target);
+          }
+        }
+      }
+      UNLOCK_TASK_STRUCT(target);
+      return 0;
   }
   return -EINVAL;
 }

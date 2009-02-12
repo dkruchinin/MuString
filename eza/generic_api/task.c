@@ -26,13 +26,9 @@
 #include <eza/smp.h>
 #include <eza/kstack.h>
 #include <eza/errno.h>
-#include <mm/pfalloc.h>
-#include <mm/vmm.h>
 #include <mm/slab.h>
-#include <eza/kernel.h>
 #include <eza/arch/task.h>
 #include <eza/spinlock.h>
-#include <eza/arch/preempt.h>
 #include <eza/limits.h>
 #include <ipc/ipc.h>
 #include <eza/uinterrupt.h>
@@ -40,10 +36,9 @@
 #include <eza/signal.h>
 #include <eza/sigqueue.h>
 #include <eza/posix.h>
-#include <eza/arch/ptable.h>
-#include <eza/arch/context.h>
 #include <eza/arch/scheduler.h>
 #include <mlibc/types.h>
+#include <eza/process.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
@@ -247,6 +242,9 @@ static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
     task->flags = 0;
     task->group_leader=task;
     task->cpu_affinity_mask=ONLINE_CPUS_MASK;
+
+    task->uworks_data.cancel_state=PTHREAD_CANCEL_ENABLE;
+    task->uworks_data.cancel_type=PTHREAD_CANCEL_DEFERRED;
   }
   return task;
 }

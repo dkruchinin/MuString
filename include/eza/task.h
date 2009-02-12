@@ -157,6 +157,10 @@ typedef enum __task_flags {
 struct __disintegration_descr_t;
 typedef struct __uwork_data {
   struct __disintegration_descr_t *disintegration_descr;
+
+  /* Thread cancellation-related stuff. */
+  uint8_t cancel_state,cancel_type;
+  bool cancellation_pending;
 } uworks_data_t;
 
 /* Task that waits another task to exit. */
@@ -391,9 +395,11 @@ void exit_task_events(struct __task_struct *target);
 #define ARCH_CTX_UWORS_SIGNALS_BIT_IDX      0
 #define ARCH_CTX_UWORS_DISINT_REQ_BIT_IDX   1
 #define ARCH_CTX_UWORS_DEF_ACTIONS_BIT_IDX  2
+#define ARCH_CTX_UWORS_CANCEL_REQ_BIT_IDX   3
 
 #define ARCH_CTX_UWORKS_SIGNALS_MASK  (1<<ARCH_CTX_UWORS_SIGNALS_BIT_IDX)
 #define ARCH_CTX_UWORKS_DISINT_REQ_MASK  (1<<ARCH_CTX_UWORS_DISINT_REQ_BIT_IDX)
+#define ARCH_CTX_UWORKS_CANCEL_REQ_MASK  (1<<ARCH_CTX_UWORS_CANCEL_REQ_BIT_IDX)
 
 #define set_task_signals_pending(t)                                    \
   arch_set_uworks_bit( &(((task_t*)(t))->arch_context[0]),ARCH_CTX_UWORS_SIGNALS_BIT_IDX )
@@ -406,6 +412,12 @@ void exit_task_events(struct __task_struct *target);
 
 #define clear_task_disintegration_request(t)      \
   arch_clear_uworks_bit( &(((task_t*)(t))->arch_context[0]),ARCH_CTX_UWORS_DISINT_REQ_BIT_IDX )
+
+#define set_task_cancellation_request(t)      \
+  arch_set_uworks_bit( &(((task_t*)(t))->arch_context[0]),ARCH_CTX_UWORS_CANCEL_REQ_BIT_IDX )
+
+#define clear_task_cancellation_request(t)     \
+  arch_clear_uworks_bit( &(((task_t*)(t))->arch_context[0]),ARCH_CTX_UWORS_CANCEL_REQ_BIT_IDX )
 
 #define read_task_pending_uworks(t)             \
   arch_read_pending_uworks( &(((task_t*)(t))->arch_context[0]) )
