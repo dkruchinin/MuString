@@ -64,7 +64,7 @@ static int generic_handle_page_fault(memobj_t *memobj, vmrange_t *vmr, off_t off
       free_page(pf);
   }
   else {
-    page_idx_t idx = mm_vaddr2page_idx(&vmm->rpd, addr);
+    page_idx_t idx = ptable_ops.vaddr2page_idx(&vmm->rpd, addr);
 
     ASSERT(idx != PAGE_IDX_INVAL);
     ret = mmap_core(&vmm->rpd, addr, idx, 1, vmr->flags & VMR_PROTO_MASK);

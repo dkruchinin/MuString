@@ -68,7 +68,7 @@ extern idalloc_meminfo_t idalloc_meminfo;      /**< Global structure containing 
  * @param pool - Memory pool idalloc may cut pages from.
  * @see mm_pool_t
  */
-void idalloc_enable(mm_pool_t *pool);
+void idalloc_enable(mm_pool_t *pool, page_idx_t num_pages);
 void idalloc_disable(void); /* TODO DK: redisign */
 
 /**

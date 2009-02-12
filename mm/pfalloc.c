@@ -45,14 +45,14 @@ page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
   if (atomic_get(&pool->free_pages) < n)
     goto out;
   
-  pages = __pool_alloc_pages(pool, n);
+  pages = __pool_alloc_pages(pool, n);  
   if (!pages)
     goto out;
+
   if (flags & AF_ZERO) /* fill page block with zeros */
     pframe_memnull(pages, n);
   if (flags & AF_CLEAR_RC) { /* zero all refcounts of pages in a block */
     register page_idx_t i;
-
     for (i = 0; i < n; i++)
       atomic_set(&pages[i].refcount, 0);
   }

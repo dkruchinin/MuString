@@ -345,9 +345,8 @@ static int initialize_task_mm(task_t *orig, task_t *target,
   int ret = 0;
   
   if (!orig || priv == TPL_KERNEL)
-    ptable_rpd_clone(&target->rpd, &kernel_rpd);
+    ptable_ops.clone_rpd(task_get_rpd(target), &kernel_rpd);
   else if (flags & CLONE_MM) {
-    kprintf("Clone mm\n");
     target->task_mm = orig->task_mm;
     atomic_inc(&orig->task_mm->vmm_users);
   }

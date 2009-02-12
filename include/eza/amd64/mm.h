@@ -85,6 +85,7 @@ void arch_mm_init(void);
 void arch_mm_remap_pages(void);
 void arch_smp_mm_init(cpu_id_t cpu);
 void arch_mm_stage0_init(cpu_id_t cpu);
+page_idx_t arch_num_pages_to_reserve(void);
 extern void __userspace_trampoline_codepage(void);
 /* FIXME DK: remove after debugging */
 struct __vmm;

@@ -131,7 +131,7 @@ void initialize_idle_tasks(void)
 
 
     /* Initialize page tables to default kernel page directory. */
-    ptable_rpd_clone(&task->rpd, &kernel_rpd);
+    ptable_ops.clone_rpd(&task->rpd, &kernel_rpd);
 
     /* Initialize kernel stack.
      * Since kernel stacks aren't properly initialized, we can't use standard
@@ -152,8 +152,8 @@ void initialize_idle_tasks(void)
 
         pfi_index_init(&pfi, &pfi_index_ctx, pframe_number(pf), pframe_number(pf) + KERNEL_STACK_PAGES - 1);
         iter_first(&pfi);
-        r = ptable_map(&task->rpd, task->kernel_stack.low_address, KERNEL_STACK_PAGES,
-                       &pfi, PDE_RW | PDE_NX);
+        r = ptable_ops.mmap(&task->rpd, task->kernel_stack.low_address, KERNEL_STACK_PAGES,
+                            &pfi, PDE_RW | PDE_NX);
         if( r != 0 ) {
             panic("Can't map kernel stack for idle task !");
         }

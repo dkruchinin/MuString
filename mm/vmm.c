@@ -30,6 +30,7 @@
 #include <mm/pfi.h>
 #include <mm/vmm.h>
 #include <mm/memobj.h>
+#include <mm/ptable.h>
 #include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
 #include <mlibc/types.h>
@@ -78,7 +79,7 @@ void mm_initialize(void)
    */
   pool = mmpools_get_pool(POOL_GENERAL);
   ASSERT(pool->free_pages);
-  idalloc_enable(pool);
+  idalloc_enable(pool, CONFIG_IDALLOC_PAGES + arch_num_pages_to_reserve());
   kprintf("[MM] Init-data memory allocator was initialized.\n");
   kprintf(" idalloc available pages: %ld\n", idalloc_meminfo.npages);  
   for_each_active_mm_pool(pool) {
@@ -90,11 +91,11 @@ void mm_initialize(void)
             atomic_get(&pool->free_pages), pool->reserved_pages);
     mmpools_init_pool_allocator(pool);
   }
-  if (ptable_rpd_initialize(&kernel_rpd))
+  if (ptable_ops.initialize_rpd(&kernel_rpd))
     panic("mm_init: Can't initialize kernel root page directory!");
-  
+
   /* Now we can remap available memory */
-  arch_mm_remap_pages();  
+  arch_mm_remap_pages();
   kprintf("[MM] All pages were successfully remapped.\n");
 }
 
@@ -334,3 +335,63 @@ void pfi_pblock_init(page_frame_iterator_t *pfi,
   pfi->error = 0;
   iter_set_ctx(pfi, ctx);
 }
+
+static void __pfi_first(page_frame_iterator_t *pfi);
+static void __pfi_next(page_frame_iterator_t *pfi);
+
+void pfi_ptable_init(page_frame_iterator_t *pfi,
+                     ITERATOR_CTX(page_frame, PF_ITER_PTABLE) *ctx,
+                     rpd_t *rpd, uintptr_t va_from, page_idx_t npages)
+{
+  pfi->first = __pfi_first;
+  pfi->next = __pfi_next;
+  pfi->last = pfi->prev = NULL;
+  iter_init(pfi, PF_ITER_PTABLE);
+  memset(ctx, 0, sizeof(*ctx));
+  ctx->va_from = va_from;
+  ctx->va_to = va_from + (npages << PAGE_WIDTH);
+  ctx->rpd = rpd;
+  pfi->pf_idx = PAGE_IDX_INVAL;
+  pfi->error = 0;
+  iter_set_ctx(pfi, ctx);
+}
+
+static void __pfi_first(page_frame_iterator_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_PTABLE) *ctx;
+
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_PTABLE);
+  ctx = iter_fetch_ctx(pfi);
+  ctx->va_cur = ctx->va_from;
+  pfi->pf_idx = ptable_ops.vaddr2page_idx(ctx->rpd, ctx->va_cur);
+  if (pfi->pf_idx == PAGE_IDX_INVAL) {
+    pfi->error = -EFAULT;
+    pfi->state = ITER_STOP;
+  }
+  else {
+    pfi->error = 0;
+    pfi->state = ITER_RUN;
+  }
+}
+
+static void __pfi_next(page_frame_iterator_t *pfi)
+{
+  ITERATOR_CTX(page_frame, PF_ITER_PTABLE) *ctx;
+
+  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_PTABLE);
+  ctx = iter_fetch_ctx(pfi);
+  if (ctx->va_cur >= ctx->va_to) {
+    pfi->error = 0;
+    pfi->state = ITER_STOP;
+    pfi->pf_idx = PAGE_IDX_INVAL;
+  }
+  else {
+    ctx->va_cur += PAGE_SIZE;
+    pfi->pf_idx = ptable_ops.vaddr2page_idx(ctx->rpd, ctx->va_cur);
+    if (pfi->pf_idx == PAGE_IDX_INVAL) {
+      pfi->error = -EFAULT;
+      pfi->state = ITER_STOP;
+    }
+  }
+}
+

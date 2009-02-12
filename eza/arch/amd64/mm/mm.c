@@ -126,6 +126,28 @@ static void register_mandatory_mappings(void)
   vm_mandmap_register(&swks_mandmap, "SWKS mapping");
 }
 
+page_idx_t __count_pages_to_reserve(page_idx_t mapped_pages)
+{
+  uintptr_t va, range, va_to = mapped_pages << PAGE_WIDTH;
+  int level = PTABLE_LEVEL_LAST;
+  page_idx_t num_pages = 0;
+
+  while (level != PTABLE_LEVEL_FIRST) {
+    range = pde_get_addrs_range(level);
+    for (va = 0; va < va_to; va += range) {
+      if (likely((va_to - va) >= range))
+        num_pages += PTABLE_DIR_ENTRIES;
+      else
+        num_pages += pde_offset2idx(va_to - va, level) - pde_offset2idx(va, level);
+    }
+
+    level--;
+  }
+
+  return num_pages;
+}
+
+
 static void scan_phys_mem(void)
 {
   int idx;
@@ -196,7 +218,7 @@ static int prepare_page(page_idx_t idx, ITERATOR_CTX(page_frame, PF_ITER_ARCH) *
 void map_kernel_area(vmm_t *vmm)
 {
   pde_t *src_pml4, *dst_pml4;
-  page_idx_t eidx = vaddr2pde_idx(KERNEL_BASE, PTABLE_LEVEL_LAST);
+  page_idx_t eidx = pde_offset2idx(KERNEL_BASE, PTABLE_LEVEL_LAST);
 
   src_pml4 = pde_fetch(kernel_rpd.pml4, eidx);
   dst_pml4 = pde_fetch(vmm->rpd.pml4, eidx);
@@ -251,9 +273,20 @@ void arch_mm_remap_pages(void)
   arch_smp_mm_init(0);
 }
 
+
 void arch_smp_mm_init(cpu_id_t cpu)
 {  
   load_cr3(pde_fetch(kernel_rpd.pml4, 0));
+}
+
+page_idx_t arch_num_pages_to_reserve(void)
+{
+  page_idx_t num_pages ;
+
+  num_pages = __count_pages_to_reserve(IDENT_MAP_PAGES - 1);
+  num_pages += __count_pages_to_reserve(num_phys_pages);
+
+  return num_pages;
 }
 
 static void __pfiter_first(page_frame_iterator_t *pfi)

@@ -44,8 +44,8 @@ ifneq ($(NOCOLOR), y)
 NOCOLOR :=
 endif
 
+CFLAGS = -Wall -nostdlib -nostdinc -fno-builtin -fomit-frame-pointer -g $(USER_CFLAGS)
 
-CFLAGS += -Wall -nostdlib -nostdinc -fno-builtin -fomit-frame-pointer -g 
 LDFLAGS += -M
 INCLUDE += -Iinclude
 

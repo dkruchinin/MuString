@@ -24,7 +24,6 @@
 #ifndef __ARCH_PTABLE_H__
 #define __ARCH_PTABLE_H__
 
-#include <ds/iterator.h>
 #include <mm/page.h>
 #include <eza/arch/types.h>
 
@@ -49,6 +48,9 @@ typedef enum __ptable_flags {
 
 typedef uint32_t pde_idx_t;
 
+/* default flags for all page table directories */
+#define PTABLE_DEF_PDIR_FLAGS (PDE_RW | PDE_US)
+
 /**
  * @struct rpd_t
  * @brief Root page directory structures (AMD64-specific)
@@ -56,6 +58,8 @@ typedef uint32_t pde_idx_t;
 typedef struct __rpd {
   page_frame_t *pml4;
 } rpd_t;
+
+#define RPD_PAGEDIR(rpd) ((rpd)->pml4)
 
 /**
  * @struct pde_t
@@ -74,36 +78,45 @@ typedef struct __pde {
   unsigned nx          :1;
 } __attribute__((packed)) pde_t;
 
-DEFINE_ITERATOR_CTX(page_frame, PF_ITER_PTABLE,
-                    rpd_t *rpd;
-                    uintptr_t va_cur;
-                    uintptr_t va_from;                    
-                    uintptr_t va_to;
-                    );
-
 #define PTABLE_DIR_ENTRIES 0x200 /**< Number of entries per page table directory */
 #define PTABLE_LEVEL_FIRST 0     /**< Level of the lowest pde */
 #define PTABLE_LEVEL_LAST  3     /**< Level of the highest pde */
+
+#define pde_is_present(pde) (!!((pde)->flags & PDE_PRESENT))
+#define pde_is_kmapped(pde) (!((pde)->flags & PDE_US))
+
+/**
+ * @brief Translate virtual address to PDE index.
+ * @param offset    - Virtual address
+ * @param pde_level - A level of pde.
+ * @return An index of PDE according to @a pde_level
+ */
+static inline pde_idx_t pde_offset2idx(uintptr_t offset, int pde_level)
+{
+  return (pde_idx_t)((offset >> (PAGE_WIDTH + 9 * pde_level)) & 0x1FF);
+}
+
+/**
+ * @brief Translate PDE index to corresponding virtual address
+ * @param pde_idx   - An index of PDE.
+ * @param pde_level - A level of PDE.
+ * @return Virtual address of PDE according to @a pde_level.
+ * @see vaddr2pde_idx
+ */
+static inline uintptr_t pde_idx2offset(pde_idx_t pde_idx, int pde_level)
+{
+  return (((uintptr_t)pde_idx & 0x1FF) << (PAGE_WIDTH + 9 * pde_level));
+}
 
 /**
  * @brief Set PDE flags
  * @param pde   - A pointer to pde
  * @param flags - Flags that will be set
  */
-static inline void pde_set_flags(pde_t *pde, uint_t flags)
+static inline void pde_set_flags(pde_t *pde, ptable_flags_t flags)
 {
   pde->flags = flags & 0x1FF;
   pde->nx = flags >> 13;
-}
-
-/**
- * @brief Get PDE flags
- * @param pde - A pointer to pde flags will be readed from
- * @return PDE flags
- */
-static inline uint_t pde_get_flags(pde_t *pde)
-{
-  return (pde->flags | (pde->nx << 13));
 }
 
 /**
@@ -115,6 +128,24 @@ static inline void pde_set_page_idx(pde_t *pde, page_idx_t idx)
 {
   pde->base_0_19 = idx;
   pde->base_20_39 = idx >> 20;
+}
+
+static inline void pde_save(pde_t *pde, page_idx_t page_idx, ptable_flags_t flags)
+{
+  pde_set_page_idx(pde, page_idx);
+  pde_set_flags(pde, flags | PDE_PRESENT);
+}
+
+#define pde_set_not_present(pde) ((pde)->flags &= ~PDE_PRESENT)
+
+/**
+ * @brief Get PDE flags
+ * @param pde - A pointer to pde flags will be readed from
+ * @return PDE flags
+ */
+static inline ptable_flags_t pde_get_flags(pde_t *pde)
+{
+  return (pde->flags | (pde->nx << 13));
 }
 
 /**
@@ -143,41 +174,18 @@ static inline page_frame_t *pde_fetch_subdir(pde_t *pde)
  * @param eidx - Child PDE index in the page directory @a dir
  * @return A pointer to child pde
  */
-static inline pde_t *pde_fetch(page_frame_t *dir, int eidx)
+static inline pde_t *pde_fetch(page_frame_t *dir, pde_idx_t eidx)
 {
   return ((pde_t *)pframe_to_virt(dir) + eidx);
 }
 
-/**
- * @brief Translate virtual address to PDE index.
- * @param vaddr     - Virtual address
- * @param pde_level - A level of pde.
- * @return An index of PDE according to @a pde_level
- * @see pde_idx2vaddr
- */
-static inline pde_idx_t vaddr2pde_idx(uintptr_t vaddr, int pde_level)
-{
-  return (pde_idx_t)((vaddr >> (PAGE_WIDTH + 9 * pde_level)) & 0x1FF);
-}
-
-/**
- * @brief Translate PDE index to corresponding virtual address
- * @param pde_idx   - An index of PDE.
- * @param pde_level - A level of PDE.
- * @return Virtual address of PDE according to @a pde_level.
- * @see vaddr2pde_idx
- */
-static inline uintptr_t pde_idx2vaddr(int pde_idx, int pde_level)
-{
-  return (((uintptr_t)pde_idx & 0x1FF) << (PAGE_WIDTH + 9 * pde_level));
-}
 
 /**
  * @brief Get a virtual addresses range given PDE level can hold.
  * @param pde_level - A level of PDE.
  * @return A range PDE at level @a pde_level can hold.
  */
-static inline uintptr_t pde_get_va_range(int pde_level)
+static inline uintptr_t pde_get_addrs_range(int pde_level)
 {
   return (((uintptr_t)PTABLE_DIR_ENTRIES << PAGE_WIDTH) << (9 * pde_level));
 }
@@ -187,100 +195,7 @@ static inline uintptr_t pde_get_va_range(int pde_level)
  * @param kmap_flags - Kerenel map flags
  * @return Page table flags
  */
-ptable_flags_t kmap_to_ptable_flags(ulong_t kmap_flags);
-
-/**
- * @brief Initialize root page table directory (PML4)
- * @param rpd - A pointer to rpd_t
- * @return 0 on success, -ENOMEM if page allocation failed.
- * @see rpd_t
- */
-int ptable_rpd_initialize(rpd_t *rpd);
-
-/**
- * @brief Deinitialize root page table directory (PML4)
- *
- * Actually this function will free pml4's pages if
- * it is not linked from any other places.
- *
- * @param rpd - A pointer to rpd_t
- * @see rpd_t
- */
-void ptable_rpd_deinitialize(rpd_t *rpd);
-
-/**
- * @brief Clone some existing PML4
- * @param clone - A pointer to root page directory that will become a clone
- * @param src  -  A pointer to root page directory that will be cloned
- */
-void ptable_rpd_clone(rpd_t *clone, rpd_t *src);
-
-/**
- * @brief Map pages to the lowest level page direatory(PT)
- * @param pde_start   - A pointer to pde mapping starts from
- * @param num_entries - A number of entries to map
- * @param pfi         - A pointer to page frame iterator containing at least @a num_entries items
- * @param flags       - Page table flag
- * @see page_frame_iterator_t
- * @see pde_t
- */
-void ptable_map_entries(pde_t *start_pde, int num_entries, page_frame_iterator_t *pfi, uint_t flags);
-
-/**
- * @brief Unmap pages from the lowest level page directory(PT)
- * @param pde_start   - A pointer to pde unmapping starts from
- * @param num_entries - A number of entries to unmap
- * @param do_recovery - If true, doesn't free pages if their refcount(after decrement) equals to 0
- * @see pde_t
- */
-void ptable_unmap_entries(pde_t *start_pde, int num_entries, bool do_recovery);
-
-/**
- * @brief Populate page directory
- *
- * The following flags can not be used with page directories:
- * PDE_GLOBAL, PDE_PAT and PDE_PHYS
- *
- * @param parent_pde - A pointer to parent pde
- * @param pde_level  - Actual page directory level.
- * @param flags      - Page direcotory flags
- * @return 0 on success, -ENOMEM if page allocation failed.
- * @see pde_t
- */
-int ptable_populate_pagedir(pde_t *pde, ptable_flags_t flags);
-
-/**
- * @brief Depopulate page direcotry
- * @param dir - A pointer to pde_t of directory to depopulate
- * @see pde_t
- */
-void ptable_depopulate_pagedir(pde_t *pde);
-
-/**
- * @brief Map pages into the given root page directory.
- * @param rpd     - A pointer to root page directory pages will be mapped to
- * @param va_from - Virtual address showing where mapping must start.
- * @param npages  - Number of pages to map.
- * @param pfi     - Page frame iterator containing @a npages items.
- * @param flags   - Page table flags
- *
- * @return 0 on succes, -ENOMEM if there is not enough memory.
- * @see rpd_t
- * @see page_table_flags
- */
-int ptable_map(rpd_t *prd, uintptr_t va_from, page_idx_t npages,
-               page_frame_iterator_t *pfi, ptable_flags_t flags);
-
-/**
- * @brief Unmap pages from the given root page directory
- * @param rpd     - A pointer to root page direcotory
- * @param va_from - Virtual address pages will be unmapped from
- * @param npages  - Number of pages to unmap.
- * @return 0 on success, -EINVAL on error.
- * @see rpd_t
- */
-void ptable_unmap(rpd_t *rpd, uintptr_t va_from, page_idx_t npages);
-
-page_idx_t mm_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr);
+ptable_flags_t kmap_to_ptable_flags(uint32_t kmap_flags);
+uint32_t ptable_to_kmap_flags(ptable_flags_t flags);
 
 #endif /* __ARCH_PTABLE_H__ */

@@ -259,7 +259,7 @@ vmm_t *vmm_create(void)
   ttree_init(&vmm->vmranges_tree, __vmranges_cmp, vmrange_t, bounds);
   atomic_set(&vmm->vmm_users, 1);
   rwsem_initialize(&vmm->rwsem);
-  if (ptable_rpd_initialize(&vmm->rpd) < 0) {
+  if (ptable_ops.initialize_rpd(&vmm->rpd) < 0) {
     memfree(vmm);
     vmm = NULL;
   }
@@ -596,8 +596,8 @@ long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, int memobj_id, o
   }
   
   rwsem_down_write(&vmm->rwsem);
-  ret = vmrange_map(memobj, vmm, addr, size >> PAGE_WIDTH,
-                    vmrflags, offset >> PAGE_WIDTH);
+  ret = vmrange_map(memobj, vmm, addr, PAGE_ALIGN(size) >> PAGE_WIDTH,
+                    vmrflags, PAGE_ALIGN(offset) >> PAGE_WIDTH);
   rwsem_up_write(&vmm->rwsem);
   return ret;
 }
