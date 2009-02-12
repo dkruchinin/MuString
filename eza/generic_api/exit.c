@@ -225,7 +225,6 @@ void do_exit(int code,ulong_t flags,ulong_t exitval)
       if( j->exiter == exiter ) {
         j->exit_ptr=exitval;
         event_raise(&j->e);
-        kprintf("do_exit(): woke up waiter: 0x%X\n",waiter->tid);
       }
       list_del(ln);
       UNLOCK_TASK_STRUCT(waiter);
@@ -379,6 +378,5 @@ long sys_thread_wait(tid_t tid,void **value_ptr)
       r=-EFAULT;
     }
   }
-
   return r;
 }
