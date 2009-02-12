@@ -370,6 +370,9 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       return __disintegrate_task(target,arg);
     case SYS_PR_CTL_REINCARNATE_TASK:
       return __reincarnate_task(target,arg);
+    case SYS_PR_CTL_SET_CANCEL_STATE:
+      
+      break;  
   }
   return -EINVAL;
 }

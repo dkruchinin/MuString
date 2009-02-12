@@ -259,7 +259,7 @@ int sys_free_ioports(ulong_t first_port,ulong_t num_ports)
   end_port=first_port+num_ports-1;
 
   caller=current_task();
-  r=__check_ioports(caller,first_port,num_ports);
+  r=__check_ioports(caller,first_port,end_port);
   if( r ) {
     return r;
   }
