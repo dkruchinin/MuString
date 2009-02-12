@@ -27,12 +27,15 @@
 #include <eza/vga.h>
 #include <eza/spinlock.h>
 #include <eza/kconsole.h>
+#include <config.h>
 
 /* VGA console */
 static void vga_cons_enable(void);
 static void vga_cons_disable(void);
 static void vga_cons_display_string(const char *);
 static void vga_cons_display_char(const char);
+
+extern kconsole_t serial_console;
 
 static kconsole_t __vga_cons = {
   .enable = vga_cons_enable,
@@ -97,7 +100,24 @@ static void vga_cons_display_char(const char c)
   }
 }
 
-kconsole_t *default_console()
+static kconsole_t *__default_console=&__vga_cons;
+
+kconsole_t *default_console(void)
 {
-  return &__vga_cons;
+  return __default_console;
 }
+
+void set_default_console(kconsole_t *cons)
+{
+  __default_console=cons;
+}
+
+kconsole_t *get_fault_console(void)
+{
+#ifdef CONFIG_DEBUG_ERR_MESSAGES_TO_SERIAL_CONSOLE
+  return &serial_console;
+#else
+  return default_console();
+#endif
+}
+

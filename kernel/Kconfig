@@ -25,8 +25,22 @@ config MAX_DEFERRED_ACTIONS_PER_TICK
        If more than such amount of deferred actions are ready for firing at the same time,
        the rest of these actions will be processed during the next suitable suituation.
 
+endmenu
+
+menu   "Debug options"
+
 config DEBUG
-       bool "Enable general debugging"
+       bool "Enable general debugging."
+       default n
+
+config DEBUG_SERIAL_CONSOLE
+       bool "Serial console (good for debug purposes)."
+       default n
+
+config DEBUG_ERR_MESSAGES_TO_SERIAL_CONSOLE
+       bool "Print all kernel error messages (including faults) to serial console."
+       depends on DEBUG_SERIAL_CONSOLE
        default n
 
 endmenu
+

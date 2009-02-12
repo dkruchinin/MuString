@@ -8,4 +8,6 @@ else
 	obj-y += actbl.o
 endif
 
+obj-$(CONFIG_DEBUG_SERIAL_CONSOLE) += serial.o
+
 obj-y += schedulers resources

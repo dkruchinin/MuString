@@ -68,5 +68,13 @@ typedef struct __kconsole_type {
 } kconsole_t;
 
 kconsole_t *default_console(void);
+kconsole_t *get_fault_console(void);
+void set_default_console(kconsole_t *cons);
+
+#define PREPARE_FAULT_CONSOLE()  do {           \
+  set_default_console(get_fault_console());     \
+  if (!default_console()->is_enabled)           \
+    default_console()->enable();                \
+  } while(0)
 
 #endif /* __EZA_KCONSOLE_H__ */

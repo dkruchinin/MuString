@@ -171,18 +171,16 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
       ret = vmm_handle_page_fault(vmr, invalid_address, errmask);
     
     rwsem_up_read(&vmm->rwsem);
-    if (ret < 0)
-      goto kernel_fault;
-    
-    return;
+    if (ret >= 0) {
+      return;
+    }
+
+    PREPARE_FAULT_CONSOLE();
+    kprintf("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
+            cpu_id(), stack_frame->error_code);
   }
   if( __send_sigsegv_on_faults )
     goto send_sigsegv;
-  if (!default_console()->is_enabled)
-      default_console()->enable();
-  
-  kprintf("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
-          cpu_id(), stack_frame->error_code);
   goto stop_cpu;
 
 kernel_fault:
@@ -193,9 +191,7 @@ kernel_fault:
     return;
   }
 
-  if (!default_console()->is_enabled)
-    default_console()->enable();
-  
+  PREPARE_FAULT_CONSOLE();
   kprintf("[CPU %d] Unhandled kernel-mode PF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
 stop_cpu:
