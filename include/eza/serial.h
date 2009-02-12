@@ -12,6 +12,10 @@ static inline int serial_is_transmit_empty() {
 static inline void serial_write_char(char a) {
   while (serial_is_transmit_empty() == 0);
 
+  if( a == '\n' ) {
+    outb(SERIAL_PORT,'\r');
+    while (serial_is_transmit_empty() == 0);
+  }
   outb(SERIAL_PORT,a);
 }
 
