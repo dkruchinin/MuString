@@ -334,6 +334,7 @@ static int __reincarnate_task(task_t *target,ulong_t arg)
 long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
 {
   task_event_ctl_arg te_ctl;
+  long r;
 
   switch( cmd ) {
     case SYS_PR_CTL_SET_ENTRYPOINT:
@@ -377,6 +378,7 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       }
 
       LOCK_TASK_STRUCT(target);
+      r=target->uworks_data.cancel_state;
       target->uworks_data.cancel_state=arg;
       if( arg == PTHREAD_CANCEL_ENABLE ) {
         if( target->uworks_data.cancellation_pending &&
@@ -385,7 +387,7 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
         }
       }
       UNLOCK_TASK_STRUCT(target);
-      return 0;
+      return r;
     case SYS_PR_CTL_SET_CANCEL_TYPE:
       if( target != current_task() ||
           (arg != PTHREAD_CANCEL_DEFERRED && arg != PTHREAD_CANCEL_ASYNCHRONOUS) ) {
@@ -393,6 +395,7 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       }
 
       LOCK_TASK_STRUCT(target);
+      r=target->uworks_data.cancel_type;
       target->uworks_data.cancel_type=arg;
       if( arg == PTHREAD_CANCEL_ASYNCHRONOUS ) {
         if( target->uworks_data.cancellation_pending &&
@@ -401,7 +404,7 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
         }
       }
       UNLOCK_TASK_STRUCT(target);
-      return 0;
+      return r;
     case SYS_PR_CTL_CANCEL_TASK:
       if( target->pid != current_task()->pid ) {
         return -ESRCH;
