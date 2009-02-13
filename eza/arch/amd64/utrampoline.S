@@ -25,9 +25,8 @@
 #include <eza/arch/page.h>
 
 .global __userspace_trampoline_codepage
-.global trampoline_sighandler_invoker_sys
+.global trampoline_cancellation_invoker
 .global trampoline_sighandler_invoker_int
-.global trampoline_sighandler_invoker_int_bottom
 .align PAGE_SIZE
 
 __userspace_trampoline_codepage:
@@ -47,6 +46,15 @@ trampoline_sighandler_invoker_int:
 	 * So insert some preventive logic which means termination
 	 * of the calling thread.
 	 */
+	movq $SC_THREAD_EXIT,%rax
+	movq $-1,%rdi
+	syscall
+
+trampoline_cancellation_invoker:
+	/* Invoke userspace cancellation handler. */
+	callq %rdi
+
+	/* Force thread termination with 'PTHREAD_CANCELLED' exit code. */
 	movq $SC_THREAD_EXIT,%rax
 	movq $-1,%rdi
 	syscall

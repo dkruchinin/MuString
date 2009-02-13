@@ -161,6 +161,11 @@ found_something:
   return task;
 }
 
+static void __setup_common_task_attributes(task_t *target,exec_attrs_t *attrs)
+{
+  target->uworks_data.destructor=attrs->destructor;
+}
+
 int create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
                      task_t **newtask,task_creation_attrs_t *attrs)
 {
@@ -169,6 +174,11 @@ int create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
 
   r = create_new_task(parent,flags,priv,&new_task,attrs);
   if(r == 0) {
+
+    if( attrs ) {
+      __setup_common_task_attributes(new_task,&attrs->exec_attrs);
+    }
+
     r = arch_setup_task_context(new_task,flags,priv,parent,attrs);
     if(r == 0) {
       /* Tell the scheduler layer to take care of this task. */
@@ -208,6 +218,7 @@ static bool __check_task_exec_attrs(exec_attrs_t *ea)
 
   valid=valid_user_address(ea->stack);
   valid *=valid_user_address(ea->entrypoint);
+  valid *=valid_user_address(ea->destructor);
 
   if( ea->per_task_data ) {
     valid *=valid_user_address(ea->per_task_data);
@@ -302,6 +313,8 @@ static int __reincarnate_task(task_t *target,ulong_t arg)
       if( !__check_task_exec_attrs(&attrs) ) {
         r=-EINVAL;
       } else {
+        __setup_common_task_attributes(target,&attrs);
+
         r=arch_process_context_control(target,SYS_PR_CTL_REINCARNATE_TASK,
                                        (ulong_t)&attrs);
         if( !r ) {
@@ -383,7 +396,7 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       if( arg == PTHREAD_CANCEL_ENABLE ) {
         if( target->uworks_data.cancellation_pending &&
             target->uworks_data.cancel_type == PTHREAD_CANCEL_ASYNCHRONOUS) {
-          set_task_cancellation_request(current_task());
+          set_task_disintegration_request(current_task());
         }
       }
       UNLOCK_TASK_STRUCT(target);
@@ -400,7 +413,7 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       if( arg == PTHREAD_CANCEL_ASYNCHRONOUS ) {
         if( target->uworks_data.cancellation_pending &&
             target->uworks_data.cancel_state == PTHREAD_CANCEL_ENABLE ) {
-          set_task_cancellation_request(current_task());
+          set_task_disintegration_request(current_task());
         }
       }
       UNLOCK_TASK_STRUCT(target);
@@ -423,7 +436,7 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
           }
 
           if( !sched_change_task_state_mask(target,TASK_STATE_RUNNABLE,mask) ) {
-            set_task_cancellation_request(target);
+            set_task_disintegration_request(target);
           }
         }
       }

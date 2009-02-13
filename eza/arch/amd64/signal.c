@@ -60,7 +60,7 @@ struct __signal_context {
 
 /* Userspace trampolines */
 extern void trampoline_sighandler_invoker_int(void);
-extern void trampoline_sighandler_invoker_int_bottom(void);
+extern void trampoline_cancellation_invoker(void);
 
 static int __setup_trampoline_ctx(struct __signal_context *__user ctx,
                                        siginfo_t *siginfo,sa_sigaction_t act)
@@ -101,17 +101,51 @@ static void __perform_default_action(int sig)
   for(;;);
 }
 
+static void __handle_cancellation_request(int reason,uintptr_t kstack)
+{
+  uintptr_t extra_bytes;
+  struct __int_stackframe *int_frame;
+  struct __gpr_regs *kpregs;
+  uint8_t *xmm;
+
+  switch( reason ) {
+    case __SYCALL_UWORK:
+      extra_bytes=0;
+      break;
+    case __INT_UWORK:
+    case __XCPT_NOERR_UWORK:
+      extra_bytes=8;
+      break;
+    case __XCPT_ERR_UWORK:
+      extra_bytes=16;
+      break;
+  }
+
+  /* See '__handle_pending_signals()' for detailed descriptions of
+   * the following stack manipulations.
+   */
+  xmm=(uint8_t *)kstack+8;
+  kpregs=(struct __gpr_regs *)(*(uintptr_t *)kstack);
+  kstack=(uintptr_t)kpregs + sizeof(*kpregs);
+  kstack += extra_bytes;
+  int_frame=(struct __int_stackframe *)kstack;
+
+  /* Prepare cancellation context. */
+  kpregs->rdi=current_task()->uworks_data.destructor;
+  int_frame->rip=USPACE_TRMPL(trampoline_cancellation_invoker);
+}
+
 static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
-                                    siginfo_t *info,sa_sigaction_t act,
-                                    ulong_t extra_bytes,
-                                    struct __signal_context **pctx)
+                               siginfo_t *info,sa_sigaction_t act,
+                               ulong_t extra_bytes,
+                               struct __signal_context **pctx)
 {
   uintptr_t ustack,t;
   struct __int_stackframe *int_frame;
   struct __gpr_regs *kpregs;
   struct __signal_context *ctx;
   uint8_t *xmm;
-  
+
   /* Save XMM and GPR context. */
   xmm=(uint8_t *)kstack+8;  /* Skip pointer to saved GPRs. */
 
@@ -268,29 +302,37 @@ bad_memory:
 void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
 {
   ulong_t uworks=read_task_pending_uworks(current_task());
+  task_t *current=current_task();
 
   kprintf_dbg("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
               reason,retcode,
-              current_task()->pid,current_task()->tid,
+              current->pid,current->tid,
               kstack);
   kprintf_dbg("[UWORKS]: UWORKS=0x%X\n",
               uworks);
 
   /* First, check for pending disintegration requests. */
   if( uworks & ARCH_CTX_UWORKS_DISINT_REQ_MASK ) {
-    perform_disintegration_work();
-
-    /* Only main threads will return to finalize their reborn.
-     * There can be some signals waiting for delivery, so take it
-     * into account.
-     */
-    uworks=read_task_pending_uworks(current_task());
+    if( current->uworks_data.cancellation_pending ) {
+      /* Cancellation request.
+       */
+      __handle_cancellation_request(reason,kstack);
+      clear_task_disintegration_request(current);
+    } else {
+      /* Disintegration request.
+       * Only main threads will return to finalize their reborn.
+       * There can be some signals waiting for delivery, so take it
+       * into account.
+       */
+      perform_disintegration_work();
+      uworks=read_task_pending_uworks(current);
+    }
   }
 
   /* Next, check for pending signals. */
   if( uworks & ARCH_CTX_UWORKS_SIGNALS_MASK ) {
     kprintf_dbg("[UWORKS]: Pending signals: 0x%X\n",
-                current_task()->siginfo.pending);
+                current->siginfo.pending);
     __handle_pending_signals(reason,retcode,kstack);
   }
 }

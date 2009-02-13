@@ -159,6 +159,7 @@ typedef struct __uwork_data {
   struct __disintegration_descr_t *disintegration_descr;
 
   /* Thread cancellation-related stuff. */
+  uintptr_t destructor;
   uint8_t cancel_state,cancel_type;
   bool cancellation_pending;
 } uworks_data_t;
@@ -263,7 +264,7 @@ typedef struct __task_attrs {
 } task_attrs_t;
 
 typedef struct __exec_attrs {
-  uintptr_t stack,entrypoint,arg1,arg2;
+  uintptr_t stack,entrypoint,destructor,arg1,arg2;
   uintptr_t per_task_data;
 } exec_attrs_t;
 
@@ -412,12 +413,6 @@ void exit_task_events(struct __task_struct *target);
 
 #define clear_task_disintegration_request(t)      \
   arch_clear_uworks_bit( &(((task_t*)(t))->arch_context[0]),ARCH_CTX_UWORS_DISINT_REQ_BIT_IDX )
-
-#define set_task_cancellation_request(t)      \
-  arch_set_uworks_bit( &(((task_t*)(t))->arch_context[0]),ARCH_CTX_UWORS_CANCEL_REQ_BIT_IDX )
-
-#define clear_task_cancellation_request(t)     \
-  arch_clear_uworks_bit( &(((task_t*)(t))->arch_context[0]),ARCH_CTX_UWORS_CANCEL_REQ_BIT_IDX )
 
 #define read_task_pending_uworks(t)             \
   arch_read_pending_uworks( &(((task_t*)(t))->arch_context[0]) )
