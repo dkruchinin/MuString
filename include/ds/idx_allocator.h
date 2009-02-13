@@ -56,6 +56,11 @@ typedef struct __idx_allocator {
   ulong_t max_id;      /**< Maximum index value(exclusive) */
   ulong_t *main_bmap;  /**< First-level(main) bitmap that splits second-level bitmap on several parts */
   ulong_t *ids_bmap;   /**< Second-level bitmap whose each bit corresponds to particular unique identifier */
+  struct {
+    ulong_t (*alloc_id)(struct __idx_allocator *ida);
+    void (*reserve_id)(struct __idx_allocator *ida);
+    void (*free_id)(struct __idx_allocator *ida);
+  } ops;
 } idx_allocator_t;
 
 /**
@@ -83,7 +88,7 @@ void idx_allocator_destroy(idx_allocator_t *ida);
  * @see idx_reserve
  * @see idx_free
  */
-ulong_t idx_allocate(idx_allocator_t *ida);
+#define idx_allocate(ida) ((ida)->ops.alloc_id(ida))
 
 /**
  * @brief Reserves particular index number.
@@ -97,7 +102,7 @@ ulong_t idx_allocate(idx_allocator_t *ida);
  * @see idx_free
  * @see idx_allocate
  */
-void idx_reserve(idx_allocator_t *ida, ulong_t idx);
+#define idx_reserve(ida, idx) ((ida)->ops.reserve_id(ida, idx))
 
 /**
  * @brief Free back index @a idx to named allocator @a ida.
@@ -106,6 +111,6 @@ void idx_reserve(idx_allocator_t *ida, ulong_t idx);
  * @see idx_allocate
  * @see idx_reserve
  */
-void idx_free(idx_allocator_t *ida, ulong_t idx);
+#define idx_free(ida, idx) ((ida)->ops.free_id(ida, idx))
 
 #endif /* __IDX_ALLOCATOR_H__ */

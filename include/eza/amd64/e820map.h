@@ -40,11 +40,11 @@
 #include <eza/arch/types.h>
 
 typedef enum __e820_memory_types {
-  E820_USABLE = 1,
+  E820_USABLE   = 1,
   E820_RESERVED = 2,
-  E820_ACPI_RECLAIMABLE = 3,
-  E820_ACPI_NON_VOLATILE = 4,
-  E820_BAD = 5,
+  E820_ACPI     = 3,
+  E820_NVS      = 4,
+  E820_BAD      = 5,
 } e820_memory_types_t;
 
 typedef struct {

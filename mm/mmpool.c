@@ -26,23 +26,109 @@
 #include <mlibc/string.h>
 #include <mm/mmpool.h>
 #include <mm/page.h>
+#include <mm/slab.h>
 #include <mm/tlsf.h>
 #include <eza/kernel.h>
+#include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 
-mm_pool_t mm_pools[NOF_MM_POOLS];
+mm_pool_t *mm_pools[CONFIG_NOF_MMPOOLS];
+static LIST_DEFINE(__pools_list);
+static SPINLOCK_INITIALIZE(__pools_lock);
+static mm_pool_t __general_pool;
+static ulong_t __idx_allocator_space;
+static idx_allocator_t pools_ida;
 
-void mmpools_init(void)
+#ifdef CONFIG_DMA_POOL
+static mm_pool_t __dma_pool;
+#endif /* CONFIG_DMA_POOL */
+
+int mmpool_register(mm_pool_t *pool, const char *name, uint8_t type, uint8_t flags)
 {
-  mm_pool_type_t t;
+  memset(pool, 0, sizeof(*pool));
+  if ((strlen(name) >= MMPOOL_NAME_LEN) || (type >= CONFIG_NOF_MMPOOLS))
+    return -E2BIG;
+  if (flags & MMP_ACTIVE)
+    return -EINVAL;
+
+  strcpy(pool->name, name);
+  spinlock_initialize(&pool->lock);
+  pool->type = type;
+  pool->flags = (flags & MMPOOL_FLAGS_MASK);
+  atomic_set(&pool->stat.free_pages, 0);
+  spinlock_lock(&__pools_lock);
+  ASSERT(mm_pools[type] == NULL);
+  mm_pools[pool->type] = pool;
+  list_add2tail(&__pools_list, &pool->pool_node);
+  spinlock_unlock(&__pools_lock);
   
-  memset(mm_pools, 0, sizeof(*mm_pools) * NOF_MM_POOLS);
-  for (t = __POOL_FIRST; t < NOF_MM_POOLS; t++) {
-    mm_pools[t].type = t;
-    list_init_head(&mm_pools[t].reserved);
-    atomic_set(&mm_pools[t].free_pages, 0);
+  return 0;
+}
+
+mm_pool_t *mmpool_create(const char *name, uint8_t type, uint8_t flags)
+{
+  int ret;
+  uint8_t type;
+  mm_pool_t *pool;
+
+  pool = memalloc(sizeof(*pool));
+  if (!pool) {
+    ret = -ENOMEM;
+    goto out;
   }
+  
+  spinlock_lock(&__pools_lock);
+  type = idx_allocate(&pools_ida);
+  if (type == (uint8_t)IDX_INVAL) {
+    ret = -EBUSY;
+    spinlock_unlock(&__pools_lock);
+    goto out;
+  }
+
+  spinlock_unlock(&__pools_lock);
+  ret = mmpool_register(pool, name, type, flags);
+  
+  out:
+  if (ret && pool) {
+    memfree(pool);
+    if (type != (uint8_t)IDX_INVAL) {
+      spinlock_lock(&__pools_lock);
+      idx_free(&pools_ida, type);
+      spinlock_unlock(&__pools_lock);
+    }
+  }
+  
+  return ret;
+}
+
+void mmpools_initialize(void)
+{
+  int ret;
+  
+  kprintf("[MM] Initializing memory pools.\n");
+  memset(mm_pools, 0, sizeof(*mm_pools) * CONFIG_NOF_MMPOOLS);
+  CT_ASSERT((sizeof(__idx_allocator_space) << 3) >= CONFIG_NOF_MMPOOLS);  
+  memset(&__idx_allocator_space, 0, sizeof(__idx_allocator_space));
+  memset(&pools_ida, 0, sizeof(pools_ida));
+  CT_ASSERT(!(sizeof(__idx_allocator_space) & (sizeof(ulong_t) - 1)));
+  pools_ida.size = sizeof(__idx_allocator_space);
+  pools_ida.max_id = CONFIG_NOF_MMPOOLS;
+  pools_ida.main_bmap = &__idx_allocator_space;
+  idx_allocator_init_core(&pools_ida);  
+  kprintf(" Creating Generic memory pool.\n");
+  idx_reserve(&pools_ida, GENERAL_POOL_TYPE);
+  ret = mmpool_register(&__general_pool, "General", GENERAL_POOL_TYPE, MMP_IMMORTAL);
+  if (ret)
+    panic("Can not register \"General\" memory pool! [err = %d]", ret);
+
+#ifdef CONFIG_DMA_POOL
+  kprintf(" Creating DMA memory pool.\n");
+  idx_reserve(&pools_ida, DMA_POOL_TYPE);
+  ret = mmpool_register(&__dma_pool, "DMA", DMA_POOL_TYPE, MMP_IMMORTAL);
+  if (ret)
+    panic("Can not register \"DMA\" memory pool! [err = %d]", ret);
+#endif /* CONFIG_DMA_POOL */  
 }
 
 void mmpools_init_pool_allocator(mm_pool_t *pool)

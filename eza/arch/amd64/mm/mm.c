@@ -54,17 +54,29 @@ static page_idx_t dma_pages = 0;
 
 static inline void __determine_page_pool(page_frame_t *pframe)
 {
-  mm_pool_type_t pool_type ;
+  mm_pool_t *pool;
+  int ret;
 
   if (pframe_number(pframe) < dma_pages)
-    pool_type = POOL_DMA;
+    pool = POOL_DMA();
   else
-    pool_type = POOL_GENERAL;
+    pool = POOL_GENERAL();
   
-  mmpool_add_page(pool_type, pframe);
+  ret = mmpool_add_page(pool, pframe);
+  if (ret) {
+    panic("Can not add page frame %#x into \"%s\" memory pool! [err = %d]",
+          pool->name, pframe_number(pframe), ret);
+  }
 }
 #else
-#define __determine_page_pool(pframe) ((pframe)->flags = PF_PGEN)
+static inline void __determine_page_pool(page_frame_t *pframe)
+{
+  int ret = mmpool_add_page(POOL_GENERAL(), pframe);
+  if (ret) {
+    panic("Can not add page frame %#x into \"%s\" memory pool! [err = %d]",
+          pool->name, pframe_number(pframe), ret);
+  }
+}
 #endif /* CONFIG_IOMMU */
 
 #ifdef CONFIG_DEBUG_MM
@@ -153,8 +165,9 @@ page_idx_t __count_pages_to_reserve(page_idx_t mapped_pages)
 
 
 static void scan_phys_mem(void)
-{
-  int idx;
+{  
+  page_idx_t idx;
+  page_frame_t *page = page_frames_array;
   bool found;
   char *types[] = { "(unknown)", "(usable)", "(reserved)", "(ACPI reclaimable)",
                     "(ACPI non-volatile)", "(BAD)" };  
@@ -163,16 +176,21 @@ static void scan_phys_mem(void)
   kprintf("E820 memory map:\n"); 
   for(idx = 0, found = false; idx < e820count; idx++) {
     e820memmap_t *mmap = &e820table[idx];
-    uint64_t length = ((uintptr_t)mmap->length_high << 32) | mmap->length_low;
-    char *type;
+    uintptr_t length = ((uintptr_t)mmap->length_high << 32) | mmap->length_low;
 
-    if( mmap->type <= 5 )
+    memset(page, 0, sizeof(*page));
+    atomic_set(&page->refcount, 0);
+    list_init_head(&page->head);
+    if(mmap->type <= 5) {
       type = types[mmap->type];
+      if (mmap->type == E820_USABLE)
+        
+    }
     else
       type = types[0];
 
-    kprintf(" BIOS-e820: %#.8x - %#.8x %s\n",
-            mmap->base_address, mmap->base_address + length, type);
+    kprintf("BIOS-e820: %#.8x - %#.8x %s\n",
+            mmap->base_address, mmap->base_address + length, types[mmap->type]);
     if(!found && mmap->base_address == BIOS_END_ADDR && mmap->type == 1) {      
       num_phys_pages = (mmap->base_address + length) >> PAGE_WIDTH;
       found = true;
@@ -188,6 +206,11 @@ static void scan_phys_mem(void)
   /* Setup DMA zone. */
   dma_pages = _mb2b(16) >> PAGE_WIDTH;
 #endif /* CONFIG_IOMMU */
+}
+
+static void determine_phys_pages(void)
+{
+  e820memmap_t *mmap = 
 }
 
 static int prepare_page(page_idx_t idx, ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx)

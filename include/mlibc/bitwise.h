@@ -117,14 +117,24 @@ static inline int bit_test(void *bitmap, int bitno)
 #ifndef ARCH_BIT_TEST_AND_SET
 static inline int bit_test_and_set(void *bitmap, int bitno)
 {
-  int val = (*(unsigned long *)bitmap & (1 << bitno));
-  *(unsigned long *)bitmap |= (1 << bitno);
-
+  int val = bit_test(bitmap, bitno);
+  bit_set(bitmap, bitno);
   return val;
 }
 #else
 #define bit_test_and_set(bitmap, bitno) arch_bit_test_and_set(bitmap, bitno)
 #endif /* ARCH_BIT_TEST_AND_SET */
+
+#ifndef ARCH_BIT_TEST_AND_CLEAR
+static inline int bit_test_and_clear(void *bitmap, int bitno)
+{
+  int val = bit_test(bitmap, bitno);
+  bit_clear(bitmap, bitno);
+  return val;
+}
+#else
+#define bit_test_and_clear(bitmap, bitno) arch_bit_test_and_clear(bitmap, bitno)
+#endif /* ARCH_BIT_TEST_AND_CLEAR */
 
 /**
  * @fn static inline long bit_find_lsf(unsigned long word)

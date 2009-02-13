@@ -34,12 +34,22 @@
 #include <eza/arch/types.h>
 
 #define GENERAL_POOL_TYPE 0
+#ifdef CONFIG_DMA_POOL
 #define DMA_POOL_TYPE     1
+#else
+#define DMA_POOL_TYPE GENERAL_POOL_TYPE
+#endif /* CONFIG_DMA_POOL */
 
-#define POOL_DMA()     (&mm_pools[DMA_POOL_TYPE])
 #define POOL_GENERAL() (&mm_pools[GENERAL_POOL_TYPE])
+#define POOL_DMA()     (&mm_pools[DMA_POOL_TYPE])
 
 #define MMPOOLS_NAME_LEN 32
+
+#define MMP_IMMORTAL   0x01
+#define MMP_ACTIVE     0x02
+#define MMP_REGISTERED 0x04
+#define MMPOOL_FLAGS_MASK (MMP_IMMORTAL | MMP_ACTIVE)
+
 /**
  * @struct mm_pool_t
  * @brief Memory pool structure
@@ -54,13 +64,17 @@
  * @see mm_pool_type_t
  */
 typedef struct __mm_pool {
-  char name[MMPOOL_NAME_LEN]; /**< Memory pool name */
-  page_idx_t total_pages;     /**< Total number of pages in pool */
-  page_idx_t reserved_pages;  /**< Number of reserved pages */
-  atomic_t free_pages;        /**< Number of free pages (atomic) */
-  pf_allocator_t allocator;   /**< Pool's pages allocator */  
-  bool is_active;             /**< Determines if pool is active */
-  uint8_t type;               /**< Pool type */
+  char name[MMPOOL_NAME_LEN];   /**< Memory pool name */
+  pf_allocator_t allocator;     /**< Pool's pages allocator */
+  list_node_t pool_node;
+  struct {
+    page_idx_t total_pages;     /**< Total number of pages in pool */  
+    page_idx_t reserved_pages;  /**< Number of reserved pages */
+    atomic_t free_pages;        /**< Number of free pages (atomic) */
+  } stat;
+  rw_spinlock_t rwlock;
+  uint8_t flags;
+  uint8_t type;                 /**< Pool type */
 } mm_pool_t;
 
 extern mm_pool_t *mm_pools[CONFIG_NOF_MMPOOLS]; /**< An array of all pools */
@@ -84,7 +98,7 @@ extern mm_pool_t *mm_pools[CONFIG_NOF_MMPOOLS]; /**< An array of all pools */
  */
 #define for_each_active_mm_pool(p)              \
   for_each_mm_pool(p)                           \
-    if((p)->is_active)
+    if(((p)->flags & MMP_ACTIVE))
 
 #define mmpool_alloc_pages(pool, n)                                 \
   ((pool)->allocator.alloc_pages(n, (pool)->allocator.alloc_ctx))
@@ -104,33 +118,16 @@ extern mm_pool_t *mm_pools[CONFIG_NOF_MMPOOLS]; /**< An array of all pools */
  *
  * @see mm_pool_type_t
  */
-static inline mm_pool_t *mmpools_get_pool(mm_pool_type_t type)
+static inline mm_pool_t *mmpools_get_pool(uint8_t type)
 {
-  ASSERT((type >= 0) && (type < NOF_MM_POOLS));
-  return (mm_pools + type);
+  if (unlikely(type >= CONFIG_NOF_MMPOOLS))
+    return NULL;
+  
+  return mm_pools[type];
 }
 
-/**
- * @brief Get pool name by its type
- * @param type - pool type
- * @return A name of pool with type @a type
- *
- * @see mm_pool_type_t
- */
-static inline char *mmpools_get_pool_name(mm_pool_type_t type)
-{
-  switch (type) {
-      case POOL_DMA:
-        return "DMA";
-      case POOL_GENERAL:
-        return "GENERAL";
-      default:
-        break;
-  }
-
-  return "UNKNOWN";
-}
-
-void mmpool_add_page(mm_pool_type pool_type, page_frame_t *pframe);
+mm_pool_t *mmpool_create(const char *name, uint8_t type, uint8_t flags);
+int mmpool_register(mm_pool_t *pool, const char *name, uint8_t type, uint8_t flags);
+int mmpool_add_page(mm_pool_t *pool, page_frame_t *page);
 
 #endif /* __MMPOOL_H__ */

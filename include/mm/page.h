@@ -88,8 +88,6 @@ typedef struct __page_frame {
 extern page_frame_t *page_frames_array; /**< An array of all available physical pages */
 extern page_idx_t num_phys_pages;       /**< Number of physical pages in system */
 
-#define pframe_pool_type(page) (__pool_type((page)->flags & PAGE_POOLS_MASK))
-
 /**
  * @struct page_frame_iterator_t
  * Page frame iterator

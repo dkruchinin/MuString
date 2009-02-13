@@ -39,7 +39,7 @@
 static always_inline void arch_bit_set(volatile void *bitmap, int bit)
 {
   __asm__ volatile (__LOCK_PREFIX "bts %1, %0\n\t"
-                    :: "m" (*(volatile long *)bitmap), "Ir" (bit));
+                    :: "=m" (*(volatile long *)bitmap), "Ir" (bit));
 }
 
 #define ARCH_BIT_CLEAR
@@ -82,6 +82,18 @@ static always_inline int arch_bit_test_and_set(volatile void *bitmap, int bit)
 {
   int val;  
   __asm__ volatile ( __LOCK_PREFIX "bts %2, %0\n\t"
+                     "sbb %1, %1"
+                     : "=m" (*(volatile long *)bitmap), "=r" (val)
+                     : "Ir" (bit)
+                     : "memory");
+  return val;
+}
+
+#define ARCH_BIT_TEST_AND_CLEAR
+static always_inline int arch_bit_test_and_clear(volatile void *bitmap, int bit)
+{
+  int val;  
+  __asm__ volatile ( __LOCK_PREFIX "btc %2, %0\n\t"
                      "sbb %1, %1"
                      : "=m" (*(volatile long *)bitmap), "=r" (val)
                      : "Ir" (bit)
