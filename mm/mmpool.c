@@ -45,24 +45,6 @@ void mmpools_init(void)
   }
 }
 
-void mmpools_add_page(page_frame_t *page)
-{
-  mm_pool_t *pool = mmpools_get_pool(pframe_pool_type(page));
-
-  if (!pool->pages) {
-    pool->pages = page;
-    pool->is_active = true;
-  }
-  if (page->flags & PF_RESERVED) {
-    pool->reserved_pages++;
-    list_add2tail(&pool->reserved, &page->node);
-  }
-  else
-    atomic_inc(&pool->free_pages);
-
-  pool->total_pages++;
-}
-
 void mmpools_init_pool_allocator(mm_pool_t *pool)
 {
   ASSERT(pool->is_active);

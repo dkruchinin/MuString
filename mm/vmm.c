@@ -26,6 +26,7 @@
 #include <mm/page.h>
 #include <mm/mmpool.h>
 #include <mm/pfalloc.h>
+#include <mm/vmm.h>
 #include <mm/idalloc.h>
 #include <mm/pfi.h>
 #include <mm/vmm.h>
@@ -34,6 +35,8 @@
 #include <eza/arch/mm.h>
 #include <eza/arch/ptable.h>
 #include <mlibc/types.h>
+
+mm_pool_t mm_pools[NOF_MM_POOLS];
 
 /* initialize opne page */
 static void __init_page(page_frame_t *page)
@@ -44,6 +47,24 @@ static void __init_page(page_frame_t *page)
   page->_private = 0;
 }
 
+void mmpools_add_page(page_frame_t *page)
+{
+  mm_pool_t *pool = mmpools_get_pool(pool_type);
+
+  page->flags |= ;
+  if (!pool->is_activate)
+    pool->is_active = true;
+  if (page->flags & PF_RESERVED) {
+    page->flags |= 
+    pool->reserved_pages++;
+    list_add2tail(&pool->reserved, &page->node);
+  }
+  else
+    atomic_inc(&pool->free_pages);
+
+  pool->total_pages++;
+}
+
 void mm_initialize(void)
 {
   mm_pool_t *pool;
@@ -51,7 +72,7 @@ void mm_initialize(void)
   ITERATOR_CTX(page_frame, PF_ITER_ARCH) pfi_arch_ctx;
 
   arch_mm_init();
-  mmpools_init();
+  memset(mm_pools, 0, sizeof(*mm_pools) * NOF_MM_POOLS);
 
   /*
    * PF_ITER_ARCH page frame iterator iterates through page_frame_t 

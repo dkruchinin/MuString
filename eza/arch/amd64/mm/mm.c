@@ -54,10 +54,14 @@ static page_idx_t dma_pages = 0;
 
 static inline void __determine_page_pool(page_frame_t *pframe)
 {
+  mm_pool_type_t pool_type ;
+
   if (pframe_number(pframe) < dma_pages)
-    pframe->flags = PF_PDMA;
+    pool_type = POOL_DMA;
   else
-    pframe->flags = PF_PGEN;
+    pool_type = POOL_GENERAL;
+  
+  mmpool_add_page(pool_type, pframe);
 }
 #else
 #define __determine_page_pool(pframe) ((pframe)->flags = PF_PGEN)

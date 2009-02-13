@@ -41,8 +41,6 @@
 #define PAGE_ALIGN(addr) (((addr) + PAGE_MASK) & ~PAGE_MASK)
 #define PAGE_ALIGN_DOWN(addr) ((addr) & ~PAGE_MASK)
 
-#define NOF_MM_POOLS 2 /**< Number of MM pools in system */
-
 /**
  * @typedef int page_idx_t
  * Page index.
@@ -55,23 +53,16 @@ typedef ulong_t page_idx_t;
  * @typedef uint16_t page_flags_t;
  * Page flags.
  */
-typedef uint16_t page_flags_t;
+typedef uint8_t page_flags_t;
 
-/* page frame flags */
-#define PF_PDMA       0x01 /**< DMA pool is page owner */
-#define PF_PGEN       0x02 /**< GENERAL pool is page owner */
-#define PF_RESERVED   0x04 /**< Page is reserved */
-#define PF_SLAB_LOCK  0x08 /**< Page lock (used by slab allocator) */
+#define PF_RESERVED   0x01 /**< Page is reserved */
+#define PF_SLAB_LOCK  0x02 /**< Page lock (used by slab allocator) */
 
 /* page fault flags */
 #define PFLT_NOT_PRESENT 0x01
 #define PFLT_PROTECT     0x02
 #define PFLT_READ        0x04
 #define PFLT_WRITE       0x08
-
-#define __pool_type(flags) ((flags) >> 1)
-#define PAGE_POOLS_MASK (PF_PGEN | PF_PDMA)
-#define PAGE_PRESENT_MASK (PAGE_POOL_MASK | PF_RESERVED)
 
 #define __page_aligned__ __attribute__((__aligned__(PAGE_SIZE)))
 
@@ -88,9 +79,10 @@ typedef struct __page_frame {
   list_head_t head;    /**< Obvious */
   list_node_t node;    /**< Obvious */
   page_idx_t idx;      /**< Page frame index in the pframe_pages_array */
-  atomic_t refcount;   /**< Number of references to the physical page */
+  atomic_t refcount;   /**< Number of references to the physical page */  
+  uint32_t _private;   /**< Private data that may be used by internal page frame allocator */
   page_flags_t flags;  /**< Page flags */
-  uint32_t _private;   /**< Private data that may be used by internal page frame allocator */  
+  uint8_t pool_type;   /**< Memory pool page belongs to */
 } page_frame_t;
 
 extern page_frame_t *page_frames_array; /**< An array of all available physical pages */
