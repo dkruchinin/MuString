@@ -175,7 +175,7 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
       return;
     }
 
-    PREPARE_FAULT_CONSOLE();
+    PREPARE_DEBUG_CONSOLE();
     kprintf("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
             cpu_id(), stack_frame->error_code);
   }
@@ -191,7 +191,7 @@ kernel_fault:
     return;
   }
 
-  PREPARE_FAULT_CONSOLE();
+  PREPARE_DEBUG_CONSOLE();
   kprintf("[CPU %d] Unhandled kernel-mode PF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
 stop_cpu:

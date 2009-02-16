@@ -37,6 +37,11 @@
 #include <eza/arch/interrupt.h>
 #include <eza/errno.h>
 #include <eza/signal.h>
+#include <config.h>
+
+#ifdef CONFIG_DEBUG_IRQ_ACTIVITY
+#include <eza/serial.h>
+#endif
 
 void initialize_timer(void)
 {
@@ -88,6 +93,11 @@ int sys_nanosleep(timeval_t *in,timeval_t *out)
 /* SMP-specific stuff. */
 void smp_local_timer_interrupt_tick(void)
 {
+#ifdef CONFIG_DEBUG_IRQ_ACTIVITY
+  if( !(system_ticks & HZ) ) {
+    serial_write_char('a'+cpu_id());
+  }
+#endif
     if(cpu_id() == 0) {
       timer_tick();
     }

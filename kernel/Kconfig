@@ -42,5 +42,10 @@ config DEBUG_ERR_MESSAGES_TO_SERIAL_CONSOLE
        depends on DEBUG_SERIAL_CONSOLE
        default n
 
+config DEBUG_IRQ_ACTIVITY
+       bool "Debug incoming hardware IRQs (also local timer and IPI) to debug console."
+       depends on DEBUG_SERIAL_CONSOLE
+       default n
+
 endmenu
 

@@ -71,10 +71,14 @@ kconsole_t *default_console(void);
 kconsole_t *get_fault_console(void);
 void set_default_console(kconsole_t *cons);
 
-#define PREPARE_FAULT_CONSOLE()  do {           \
+#define get_debug_console  get_fault_console()
+
+#define PREPARE_DEBUG_CONSOLE()  do {           \
   set_default_console(get_fault_console());     \
   if (!default_console()->is_enabled)           \
     default_console()->enable();                \
   } while(0)
+
+#define DEACTIVATE_DEBUG_CONSOLE()  get_fault_console()->disable()
 
 #endif /* __EZA_KCONSOLE_H__ */

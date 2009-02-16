@@ -19,5 +19,6 @@ static inline void serial_write_char(char a) {
   outb(SERIAL_PORT,a);
 }
 
+void serial_init(void);
 
 #endif

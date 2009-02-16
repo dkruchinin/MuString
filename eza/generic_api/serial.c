@@ -9,7 +9,7 @@ static SPINLOCK_DEFINE(serial_console_lock);
 #define LOCK_SERIAL_CONSOLE(is)    spinlock_lock_irqsave(&serial_console_lock,is)
 #define UNLOCK_SERIAL_CONSOLE(is)  spinlock_unlock_irqrestore(&serial_console_lock,is)
 
-static void __init_serial(void) {
+void serial_init(void) {
   outb(SERIAL_PORT + 1, 0x00);    // Disable all interrupts
   outb(SERIAL_PORT + 3, 0x80);    // Enable DLAB (set baud rate divisor)
   outb(SERIAL_PORT + 0, 0x03);    // Set divisor to 3 (lo byte) 38400 baud
@@ -36,7 +36,7 @@ static void serial_cons_enable(void)
   long is;
 
   LOCK_SERIAL_CONSOLE(is);
-  __init_serial();
+  serial_init();
   UNLOCK_SERIAL_CONSOLE(is);
   serial_console.is_enabled=true;
 }

@@ -37,6 +37,11 @@
 #include <eza/swks.h>
 #include <eza/arch/preempt.h>
 #include <eza/idt.h>
+#include <config.h>
+
+#ifdef CONFIG_DEBUG_IRQ_ACTIVITY
+#include <eza/serial.h>
+#endif
 
 static spinlock_t irq_lock;
 
@@ -183,6 +188,10 @@ void initialize_irqs( void )
   }
 
   spinlock_initialize( &irq_lock );
+
+#ifdef CONFIG_DEBUG_IRQ_ACTIVITY
+  serial_init();
+#endif
 }
 
 void disable_all_irqs(void)
@@ -207,15 +216,22 @@ void enable_all_irqs(void)
   RELEASE_IRQ_LOCK();
 }
 
-
 void do_irq(irq_t irq)
 {
   if( irq < NUM_IRQS ) {
     int handlers = 0;
     irq_action_t *action;
 
+#ifdef CONFIG_DEBUG_IRQ_ACTIVITY
+    serial_write_char('<');
+    serial_write_char('0'+irq);
+#endif
+
     /* Call all handlers. */
     list_for_each_entry(&irqs[irq].actions, action, l) {
+#ifdef CONFIG_DEBUG_IRQ_ACTIVITY
+    serial_write_char('.');
+#endif
       action->handler( action->private_data );
       handlers++;
     }
@@ -224,10 +240,16 @@ void do_irq(irq_t irq)
     irqs[irq].controller->ack_irq(irq);
 
     if( handlers > 0) {
+#ifdef CONFIG_DEBUG_IRQ_ACTIVITY
+      serial_write_char('>');
+#endif
       return;
     }
   }
   interrupts_enable();
   //kprintf( "** Spurious interrupt detected: %d\n", irq );
+#ifdef CONFIG_DEBUG_IRQ_ACTIVITY
+  serial_write_char('Z');
+#endif
 }
 
