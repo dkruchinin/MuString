@@ -74,6 +74,7 @@ syscall_table:
 	.quad   sys_munmap
 	.quad   sys_thread_wait
 	.quad   sys_port_msg_read
+	.quad   sys_kernel_control
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

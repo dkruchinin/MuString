@@ -31,6 +31,7 @@
 #include <ipc/gen_port.h>
 #include <eza/sync.h>
 #include <eza/signal.h>
+#include <eza/kcontrol.h>
 
 #endif
 
@@ -74,6 +75,7 @@
 #define SC_MUNMAP              36
 #define SC_THREAD_WAIT         37
 #define SC_PORT_MSG_READ       38
+#define SC_KERNEL_CONTROL      39
 
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */
@@ -474,6 +476,8 @@ long sys_thread_wait(tid_t tid,void **value_ptr);
 
 long sys_port_msg_read(ulong_t port,ulong_t msg_id,uintptr_t recv_buf,
                        ulong_t recv_len,ulong_t offset);
+
+long sys_kernel_control(kcontrol_args_t *arg);
 
 #endif
 

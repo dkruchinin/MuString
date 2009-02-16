@@ -42,11 +42,13 @@ long initrd_start_page,initrd_num_pages;
 
 #ifndef CONFIG_TEST
 
-static int __create_task_mm(task_t *task, int num, ulong_t code)
+static int __create_task_mm(task_t *task, int num)
 {
   vmm_t *vmm = task->task_mm;
   memobj_t *memobj = &null_memobj;
-  size_t data_size,text_size,bss_size;
+  uintptr_t code;
+  size_t code_size,data_size,text_size,bss_size;
+  ulong_t *pp;
   elf_head_t ehead;
   elf_pr_t epr;
   elf_sh_t esh;
@@ -58,6 +60,12 @@ static int __create_task_mm(task_t *task, int num, ulong_t code)
   int i;
   per_task_data_t *ptd;
 
+  code_size=init.server[num].size>>PAGE_WIDTH; /*it's a code size in pages */
+  code_size++;
+
+  code=init.server[num].addr; /* we're have a physical address of code here */
+  code>>=PAGE_WIDTH; /* get page number */
+  pp=pframe_id_to_virt(code);
     /**
      * ELF header   
      * unsigned char e_ident[EI_NIDENT];  ELF64 magic number 
@@ -76,20 +84,20 @@ static int __create_task_mm(task_t *task, int num, ulong_t code)
      * uint16_t e_shstrndx;  section header string table index 
      */
   /* read elf headers */
-  memcpy(&ehead,(void *)code,sizeof(elf_head_t));
+  memcpy(&ehead,pframe_id_to_virt(code),sizeof(elf_head_t));
   /* printf elf header info */
   /*kprintf("ELF header(%s): %d type, %d mach, %d version\n",ehead.e_ident,ehead.e_type,ehead.e_machine,ehead.e_version);
   kprintf("Entry: %p,Image off: %p,sect off:%p\n",ehead.e_entry,ehead.e_phoff,ehead.e_shoff);*/
 
   for(i=0;i<ehead.e_phnum;i++) {
     /* read program size */
-    memcpy(&epr,(char *)code+sizeof(ehead)+i*(ehead.e_phentsize),sizeof(epr));
+    memcpy(&epr,pframe_id_to_virt(code)+sizeof(ehead)+i*(ehead.e_phentsize),sizeof(epr));
     /*kprintf("PHeader(%d): offset: %p\nvirt: %p\nphy: %p\n",
 	    i,epr.p_offset,epr.p_vaddr,epr.p_paddr);*/
 
   }
   for(i=0;i<ehead.e_shnum;i++) {
-    memcpy(&esh,(char *)(code)+ehead.e_shoff+i*(ehead.e_shentsize),sizeof(esh));
+    memcpy(&esh,pframe_id_to_virt(code)+ehead.e_shoff+i*(ehead.e_shentsize),sizeof(esh));
     if(esh.sh_size!=0) {
 /*      kprintf("SHeader(%d): shaddr: %p\nshoffset:%p\n",i,esh.sh_addr,esh.sh_offset);*/
       if(esh.sh_flags & ESH_ALLOC && esh.sh_type==SHT_PROGBITS) {
@@ -196,8 +204,6 @@ static int __create_task_mm(task_t *task, int num, ulong_t code)
   return 0;
 }
 
-
-
 void server_run_tasks(void)
 {
   int i=server_get_num(),a;
@@ -207,7 +213,7 @@ void server_run_tasks(void)
 
   if( i > 0 ) {
     kprintf("[SRV] Starting servers: %d ... \n",i);
-    //kconsole->disable();
+    kconsole->disable();
   }
 
   for(sn=0,a=0;a<i;a++) {
@@ -215,7 +221,7 @@ void server_run_tasks(void)
 
     modvbase=pframe_id_to_virt(init.server[a].addr>>PAGE_WIDTH);
 
-    if( *(uint32_t *)modvbase == ELF_MAGIC ) {
+    if( *(uint32_t *)modvbase == ELF_MAGIC ) { /* ELF module ? */
       ulong_t flags=0;
 
       if( !sn ) { /* First module is always NS. */
@@ -235,7 +241,7 @@ void server_run_tasks(void)
         }
       }
 
-      r=__create_task_mm(server,a,modvbase);
+      r=__create_task_mm(server,a);
       if( r ) {
         panic( "server_run_tasks(): Can't create memory space for core task N %d\n",
                a+1);
@@ -246,13 +252,19 @@ void server_run_tasks(void)
         panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);
       }
       sn++;
-    } else if( !strncmp(&modvbase[257],"ustar",5 ) ) {
+    } else if( !strncmp(&modvbase[257],"ustar",5 ) ) { /* TAR-based ramdisk ? */
+      long size;
+
       if( initrd_start_page ) {
         panic("Only one instance of initial RAM disk is allowed !");
       }
 
       initrd_start_page=init.server[a].addr>>PAGE_WIDTH;
-      initrd_num_pages=init.server[a].size>>PAGE_WIDTH;
+      size=init.server[a].size>>PAGE_WIDTH;
+      if( size & PAGE_MASK ) {
+        size++;
+      }
+      initrd_num_pages=size;
     } else {
       panic("Unrecognized kernel module N %d !\n",a+1);
     }
