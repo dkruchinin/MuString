@@ -38,43 +38,15 @@
 #include <eza/process.h>
 #include <eza/ptd.h>
 
-#define USER_PAGES_CHUNK  64
-
-static int __create_empty_user_area(task_t *task,ulong_t virt,
-                                         ulong_t pages,ulong_t flags)
-{
-  int r;
-
-  while( pages ) {
-    ulong_t to_map=(pages <= USER_PAGES_CHUNK) ? pages : USER_PAGES_CHUNK;
-    page_frame_t *pf;
-
-    pf=alloc_pages(to_map,AF_ZERO | AF_PGEN);
-    if( !pf ) {
-      return -ENOMEM;
-    }
-
-    r=mmap_core(task_get_rpd(task),virt,pframe_number(pf),to_map,flags);
-    if( r ) {
-      return -ENOMEM;
-    }
-
-    virt += (to_map << PAGE_WIDTH);
-    pages-=to_map;
-  }
-
-  return 0;
-}
+long initrd_start_page,initrd_num_pages;
 
 #ifndef CONFIG_TEST
 
-static int __create_task_mm(task_t *task, int num)
+static int __create_task_mm(task_t *task, int num, ulong_t code)
 {
   vmm_t *vmm = task->task_mm;
   memobj_t *memobj = &null_memobj;
-  uintptr_t code;
-  size_t code_size,data_size,text_size,bss_size;
-  ulong_t *pp;
+  size_t data_size,text_size,bss_size;
   elf_head_t ehead;
   elf_pr_t epr;
   elf_sh_t esh;
@@ -86,12 +58,6 @@ static int __create_task_mm(task_t *task, int num)
   int i;
   per_task_data_t *ptd;
 
-  code_size=init.server[num].size>>PAGE_WIDTH; /*it's a code size in pages */
-  code_size++;
-
-  code=init.server[num].addr; /* we're have a physical address of code here */
-  code>>=PAGE_WIDTH; /* get page number */
-  pp=pframe_id_to_virt(code);
     /**
      * ELF header   
      * unsigned char e_ident[EI_NIDENT];  ELF64 magic number 
@@ -110,20 +76,20 @@ static int __create_task_mm(task_t *task, int num)
      * uint16_t e_shstrndx;  section header string table index 
      */
   /* read elf headers */
-  memcpy(&ehead,pframe_id_to_virt(code),sizeof(elf_head_t));
+  memcpy(&ehead,(void *)code,sizeof(elf_head_t));
   /* printf elf header info */
   /*kprintf("ELF header(%s): %d type, %d mach, %d version\n",ehead.e_ident,ehead.e_type,ehead.e_machine,ehead.e_version);
   kprintf("Entry: %p,Image off: %p,sect off:%p\n",ehead.e_entry,ehead.e_phoff,ehead.e_shoff);*/
 
   for(i=0;i<ehead.e_phnum;i++) {
     /* read program size */
-    memcpy(&epr,pframe_id_to_virt(code)+sizeof(ehead)+i*(ehead.e_phentsize),sizeof(epr));
+    memcpy(&epr,(char *)code+sizeof(ehead)+i*(ehead.e_phentsize),sizeof(epr));
     /*kprintf("PHeader(%d): offset: %p\nvirt: %p\nphy: %p\n",
 	    i,epr.p_offset,epr.p_vaddr,epr.p_paddr);*/
 
   }
   for(i=0;i<ehead.e_shnum;i++) {
-    memcpy(&esh,pframe_id_to_virt(code)+ehead.e_shoff+i*(ehead.e_shentsize),sizeof(esh));
+    memcpy(&esh,(char *)(code)+ehead.e_shoff+i*(ehead.e_shentsize),sizeof(esh));
     if(esh.sh_size!=0) {
 /*      kprintf("SHeader(%d): shaddr: %p\nshoffset:%p\n",i,esh.sh_addr,esh.sh_offset);*/
       if(esh.sh_flags & ESH_ALLOC && esh.sh_type==SHT_PROGBITS) {
@@ -236,44 +202,59 @@ void server_run_tasks(void)
 {
   int i=server_get_num(),a;
   task_t *server;
-  int r;
+  int r,sn;
   kconsole_t *kconsole=default_console();
 
   if( i > 0 ) {
     kprintf("[SRV] Starting servers: %d ... \n",i);
-    kconsole->disable();
+    //kconsole->disable();
   }
 
-  for(a=0;a<i;a++) {
-    ulong_t flags=0;
+  for(sn=0,a=0;a<i;a++) {
+    char *modvbase;
 
-    if( !a ) { /* Init */
-      flags |= TASK_INIT;
-    }
+    modvbase=pframe_id_to_virt(init.server[a].addr>>PAGE_WIDTH);
 
-    r=create_task(current_task(),flags,TPL_USER,&server,NULL);
-    if( r ) {
-      panic( "server_run_tasks(): Can't create task N %d !\n",
-             a+1);
-    }
+    if( *(uint32_t *)modvbase == ELF_MAGIC ) {
+      ulong_t flags=0;
 
-    /* Sanity check for NameServer's PID. */
-    if( !a ) {
-      if( server->pid != 1 ) {
-        panic( "server_run_tasks(): NameServer has improper PID: %d !\n",
-               server->pid );
+      if( !sn ) { /* First module is always NS. */
+        flags |= TASK_INIT;
       }
-    }
 
-    r=__create_task_mm(server,a);
-    if( r ) {
-      panic( "server_run_tasks(): Can't create memory space for core task N %d\n",
+      r=create_task(current_task(),flags,TPL_USER,&server,NULL);
+      if( r ) {
+        panic( "server_run_tasks(): Can't create task N %d !\n",
              a+1);
-    }
+      }
 
-    r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
-    if( r ) {
-      panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);
+      if( !a ) {
+        if( server->pid != 1 ) {
+          panic( "server_run_tasks(): NameServer has improper PID: %d !\n",
+                 server->pid );
+        }
+      }
+
+      r=__create_task_mm(server,a,modvbase);
+      if( r ) {
+        panic( "server_run_tasks(): Can't create memory space for core task N %d\n",
+               a+1);
+      }
+
+      r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
+      if( r ) {
+        panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);
+      }
+      sn++;
+    } else if( !strncmp(&modvbase[257],"ustar",5 ) ) {
+      if( initrd_start_page ) {
+        panic("Only one instance of initial RAM disk is allowed !");
+      }
+
+      initrd_start_page=init.server[a].addr>>PAGE_WIDTH;
+      initrd_num_pages=init.server[a].size>>PAGE_WIDTH;
+    } else {
+      panic("Unrecognized kernel module N %d !\n",a+1);
     }
   }
 }

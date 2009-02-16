@@ -52,6 +52,7 @@
 #define SHT_GROUP          17 /* Section contains a section group */
 #define SHT_SYMTAB_SHNDX   18 /* Indicies for SHN_XINDEX entries */
 
+#define ELF_MAGIC  0x464C457F
 
 /* elf image header */
 typedef struct __elf64_t 
