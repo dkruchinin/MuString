@@ -56,9 +56,9 @@ typedef enum {
 } def_action_masks_t;
 
 typedef struct __deffered_irq_action {
+  list_node_t node; /* Must be first since it eliminites extra 'container_of'*/
   def_action_type_t type;
   list_head_t head;
-  list_node_t node;
   ulong_t priority;
   void *kern_priv;
   percpu_def_actions_t *__host;
@@ -84,5 +84,6 @@ void schedule_deffered_action(deffered_irq_action_t *a);
 void fire_deffered_actions(void);
 void execute_deffered_action(deffered_irq_action_t *a);
 void schedule_deffered_actions(list_head_t *actions);
+void deschedule_deffered_action(deffered_irq_action_t *a);
 
 #endif

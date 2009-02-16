@@ -236,3 +236,8 @@ void fire_deffered_actions(void)
   preempt_enable();   /* Trigger preemption. */
   spinlock_unlock_irqrestore(&acts->lock,is);
 }
+
+void deschedule_deffered_action(deffered_irq_action_t *a)
+{
+}
+

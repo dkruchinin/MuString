@@ -169,8 +169,9 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
 
         ktimer=&ptimer->ktimer;
         if( !(tspec.it_value.tv_sec | tspec.it_value.tv_nsec) ) {
-          if( ktimer->time_x ) {
-            /* Disarm real timer  */
+          if( ktimer->time_x ) { /* Disarm real timer */
+            delete_timer(ktimer);
+            r=0;
           }
         } else if( valid_timeval ) {
           if( !(arg1 & TIMER_ABSTIME) ) {

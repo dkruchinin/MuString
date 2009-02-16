@@ -48,6 +48,7 @@ static SPINLOCK_DEFINE(sw_timers_list_lock);
 static LIST_DEFINE(known_hw_timers);
 
 static struct rb_root timers_rb_root;
+static ulong_t __last_processed_timer_tick;
 
 #define GRAB_HW_TIMER_LOCK() spinlock_lock(&timer_lock)
 #define RELEASE_HW_TIMER_LOCK() spinlock_unlock(&timer_lock)
@@ -119,18 +120,13 @@ void process_timers(void)
       if( tt->time_x == system_ticks ) { /* Got something for this tick. */
         ASSERT(tt->major_tick == major_tick);
 
+        __last_processed_timer_tick=system_ticks;
         list_del(&tt->node);
-        goto out;
+        schedule_deffered_actions(&tt->actions);
+        break;
       }
     }
-    tt=NULL;
-  out:
     UNLOCK_MAJOR_TIMER_TICK(major_tick,is);
-
-    if( tt ) { /* Let's handle all the timers we have found. */
-      kprintf_dbg("process_timers(): Scheduling timers for %d.\n",tt->time_x);
-      schedule_deffered_actions(&tt->actions);
-    }
   }
 }
 
@@ -145,29 +141,28 @@ void delete_timer(ktimer_t *timer)
   }
 
   LOCK_MAJOR_TIMER_TICK(tt->major_tick,is);
-  if( list_node_is_bound(&tt->node) ) {
-    /* Active root tick node, reorganize all timers associated with it. */
-    if( tt->actions.head.next == &timer->da.node &&
-        tt->actions.head.prev == &timer->da.node ) {
+  if( tt->time_x > __last_processed_timer_tick ) {
+    /* Timer hasn't triggered yet. So remove it only from timer list. */
+    if( !list_node_is_bound(&tt->node) ) {
       /* The simpliest case - only one timer in this tick, no rebalance. */
-      list_del(&tt->node);
-      kprintf("delete_timer() [1]\n");
-    } else {
-      /* Need some rebalance. */
-      kprintf("delete_timer() [2]\n");
-      for(;;);
-    }
-    UNLOCK_MAJOR_TIMER_TICK(tt->major_tick,is);
-  } else {
-    /* In case of child timer, just remove it's deferred action from the list.*/
-    spinlock_lock(&sw_timers_list_lock);
-    if( list_node_is_bound(&timer->da.node) ) {
-      kprintf("delete_timer() [3]\n");
       skiplist_del(&timer->da,deffered_irq_action_t,head,node);
+    } else {
+      /* Need to rebalance the whole list associated with this timer. */
+      ktimer_t *nt;
+      list_node_t *ln;
+
+      skiplist_del(&timer->da,deffered_irq_action_t,head,node);
+      nt=container_of(list_node_first(&tt->actions),ktimer_t,da);
+      list_move2head(&nt->minor_tick.actions,&tt->actions);
+      list_replace(&tt->node,&nt->minor_tick.node);
     }
-    spinlock_unlock(&sw_timers_list_lock);
-    UNLOCK_MAJOR_TIMER_TICK(timer->minor_tick.major_tick,is);
+  } else {
+    /* Bad luck - timer's action has properly been scheduled. So try
+     * to remove it from the list of deferred actions.
+     */
+    deschedule_deffered_action(&timer->da);
   }
+  UNLOCK_MAJOR_TIMER_TICK(tt->major_tick,is);
 }
 
 long add_timer(ktimer_t *t)
@@ -269,7 +264,7 @@ long add_timer(ktimer_t *t)
         list_insert_before(&t->minor_tick.node,ln);
         goto out_insert;
       }
-      /* Fallthrough in case of the highest tick value - it will be added to
+      /* Fallthrough in case of the lowest tick value - it will be added to
        * the end of the list.
        */
     }
