@@ -69,8 +69,8 @@ typedef struct __scheduler {
   int (*move_task_to_cpu)(struct __task_struct *task,cpu_id_t cpu);
   void (*schedule)(void);
   void (*reset)(void);
-  int (*change_task_state)(struct __task_struct *task,ulong_t state,ulong_t mask);
-  int (*change_task_state_deferred)(struct __task_struct *task,ulong_t state,
+  int (*change_task_state)(struct __task_struct *task,task_state_t  state,ulong_t mask);
+  int (*change_task_state_deferred)(struct __task_struct *task,task_state_t state,
                                          deferred_sched_handler_t handler,
                                          void *data,ulong_t mask);
   int (*setup_idle_task)(struct __task_struct *task);

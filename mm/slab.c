@@ -65,7 +65,7 @@ static void free_slab_object(slab_t *slab, void *obj);
 
 /* translate page frame to slab it belongs to */
 #define __page2slab(pf)                         \
-  container_of((page_frame_t *)list_head(&(pf)->head)->prev, slab_t, pages)
+  container_of((page_frame_t *)pf->slab_pages_start, slab_t, pages)
 
 /* get slab by virtual address of its object */
 #define __get_slab_by_addr(addr)                \
@@ -420,7 +420,7 @@ static void prepare_slab_pages(slab_t *slab)
    */
   for (i = 0; i < slab->memcache->pages_per_slab; i++) {
     page_frame_t *p = slab->pages + i;
-    list_head(&p->head)->prev = (list_node_t *)&slab->pages;
+    p->slab_pages_start = &slab->pages;
   }
 }
 
@@ -724,7 +724,8 @@ static void __create_generic_caches(void)
 void slab_allocator_init(void)
 {
   kprintf("[MM] Initializing slab allocator\n");
-  
+
+  CT_ASSERT(sizeof(atomic_t) >= sizeof(uintptr_t));
   /* create default cache for slab_t structures */
   __create_heart_cache(&slabs_memcache, sizeof(slab_t), "slab_t");
   /* create default cache for memcache_t structures */

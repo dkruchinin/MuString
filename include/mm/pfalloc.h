@@ -34,17 +34,21 @@
 #include <mlibc/types.h>
 
 /* Allocation flags */
-#define __AF_PLAST  PF_PGEN
-#define AF_PDMA     PF_PDMA           /**< Allocate page from DMA pool */
-#define AF_PGEN     PF_PGEN           /**< Allocate page from GENERAL pool */
-#define AF_ZERO     (__AF_PLAST << 1) /**< Allocate clean page block(fill block with zeros) */
-#define AF_CLEAR_RC (__AF_PLAST << 2) /**< Allocate pages with refcounts set to 0 */
+#define AF_MMP_BMEM  mmpool_type2flags()
+#define AF_MMP_GEN   0x02
+#define AF_MMP_DMA   0x04
+#define AF_MMP_HMEM  0x08
+#define AF_ZERO      0x10  /**< Allocate clean page block(fill block with zeros) */
+#define AF_CLEAR_RC  0x20  /**< Allocate pages with refcounts set to 0 */
+#define AF_USER      0x40
+
+#define PAGES_POOL_MASK (AF_MMP_BMEM | AF_MMP_GEN | AF_MMP_DMA | AF_MMP_HMEM)
 
 /**
  * @typedef uint8_t pfalloc_flags_t
  * Page frame allocation flags
  */
-typedef uint8_t pfalloc_flags_t;
+typedef uint32_t pfalloc_flags_t;
 
 /**
  * @struct pfalloc_type_t
@@ -52,7 +56,8 @@ typedef uint8_t pfalloc_flags_t;
  * Each allocator has its own unique type.
  */
 typedef enum __pfalloc_type {
-    PFA_TLSF = 1, /**< TLSF O(1) allocator */
+    PFA_IDALLOC = 1, /**< Init-data(bootmem) allocator */
+    PFA_TLSF,        /**< TLSF O(1) allocator */
 } pfalloc_type_t;
 
 /**
@@ -60,15 +65,12 @@ typedef enum __pfalloc_type {
  * Page frame allocator abstract type
  */
 typedef struct __pf_allocator {
-  /**< A pointer to function that can alloc n pages */
   page_frame_t *(*alloc_pages)(page_idx_t n, void *data);
-  /**< A pointer to function that can free pages */
+  page_frame_t *(*alloc_pages_max_avail)(void *data);
   void (*free_pages)(page_frame_t *pframe, page_idx_t num_pages, void *data);
-  /**< Get size of pages block starting from pages_block_start */ 
-  page_idx_t (*pages_block_size)(page_frame_t *pages_block_start, void *data);
+  void (*dump)(void *data);
+  void (*deactivate)(void *data);
   void *alloc_ctx;         /**< Internal allocator private data */
-  page_idx_t block_sz_min; /**< Minimum number of pages in an allocatable block */
-  page_idx_t block_sz_max; /**< Maximum number of pages in an allocatable block */
   pfalloc_type_t type;     /**< Allocator type */
 } pf_allocator_t;
 

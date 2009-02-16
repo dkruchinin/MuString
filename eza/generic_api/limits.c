@@ -7,7 +7,7 @@
 
 task_limits_t *allocate_task_limits(void)
 {
-  page_frame_t *p = alloc_page(AF_PGEN | AF_ZERO);
+  page_frame_t *p = alloc_page(AF_MMP_GEN | AF_ZERO);
   if( p!= NULL ) {
     task_limits_t *tl = (task_limits_t*)pframe_to_virt(p);
 

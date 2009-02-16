@@ -26,121 +26,77 @@
 #include <mlibc/string.h>
 #include <mm/mmpool.h>
 #include <mm/page.h>
-#include <mm/slab.h>
 #include <mm/tlsf.h>
+#include <mm/idalloc.h>
 #include <eza/kernel.h>
-#include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 
-mm_pool_t *mm_pools[CONFIG_NOF_MMPOOLS];
-static LIST_DEFINE(__pools_list);
-static SPINLOCK_INITIALIZE(__pools_lock);
-static mm_pool_t __general_pool;
-static ulong_t __idx_allocator_space;
-static idx_allocator_t pools_ida;
+#if (CONFIG_NOF_MMPOOLS > MMPOOLS_MAX)
+#error "CONFIG_NOF_MMPOOLS can not be greater than MMPOOLS_MAX!"
+#endif /* (CONFIG_NOF_MMPOOLS > MMPOOLS_MAX) */
 
-#ifdef CONFIG_DMA_POOL
-static mm_pool_t __dma_pool;
-#endif /* CONFIG_DMA_POOL */
-
-int mmpool_register(mm_pool_t *pool, const char *name, uint8_t type, uint8_t flags)
-{
-  memset(pool, 0, sizeof(*pool));
-  if ((strlen(name) >= MMPOOL_NAME_LEN) || (type >= CONFIG_NOF_MMPOOLS))
-    return -E2BIG;
-  if (flags & MMP_ACTIVE)
-    return -EINVAL;
-
-  strcpy(pool->name, name);
-  spinlock_initialize(&pool->lock);
-  pool->type = type;
-  pool->flags = (flags & MMPOOL_FLAGS_MASK);
-  atomic_set(&pool->stat.free_pages, 0);
-  spinlock_lock(&__pools_lock);
-  ASSERT(mm_pools[type] == NULL);
-  mm_pools[pool->type] = pool;
-  list_add2tail(&__pools_list, &pool->pool_node);
-  spinlock_unlock(&__pools_lock);
-  
-  return 0;
-}
-
-mm_pool_t *mmpool_create(const char *name, uint8_t type, uint8_t flags)
-{
-  int ret;
-  uint8_t type;
-  mm_pool_t *pool;
-
-  pool = memalloc(sizeof(*pool));
-  if (!pool) {
-    ret = -ENOMEM;
-    goto out;
-  }
-  
-  spinlock_lock(&__pools_lock);
-  type = idx_allocate(&pools_ida);
-  if (type == (uint8_t)IDX_INVAL) {
-    ret = -EBUSY;
-    spinlock_unlock(&__pools_lock);
-    goto out;
-  }
-
-  spinlock_unlock(&__pools_lock);
-  ret = mmpool_register(pool, name, type, flags);
-  
-  out:
-  if (ret && pool) {
-    memfree(pool);
-    if (type != (uint8_t)IDX_INVAL) {
-      spinlock_lock(&__pools_lock);
-      idx_free(&pools_ida, type);
-      spinlock_unlock(&__pools_lock);
-    }
-  }
-  
-  return ret;
-}
+mm_pool_t mm_pools[CONFIG_NOF_MMPOOLS];
 
 void mmpools_initialize(void)
 {
-  int ret;
+  uint8_t i;
   
-  kprintf("[MM] Initializing memory pools.\n");
+  kprintf("[MM] Initialize memory pools.\n");
   memset(mm_pools, 0, sizeof(*mm_pools) * CONFIG_NOF_MMPOOLS);
-  CT_ASSERT((sizeof(__idx_allocator_space) << 3) >= CONFIG_NOF_MMPOOLS);  
-  memset(&__idx_allocator_space, 0, sizeof(__idx_allocator_space));
-  memset(&pools_ida, 0, sizeof(pools_ida));
-  CT_ASSERT(!(sizeof(__idx_allocator_space) & (sizeof(ulong_t) - 1)));
-  pools_ida.size = sizeof(__idx_allocator_space);
-  pools_ida.max_id = CONFIG_NOF_MMPOOLS;
-  pools_ida.main_bmap = &__idx_allocator_space;
-  idx_allocator_init_core(&pools_ida);  
-  kprintf(" Creating Generic memory pool.\n");
-  idx_reserve(&pools_ida, GENERAL_POOL_TYPE);
-  ret = mmpool_register(&__general_pool, "General", GENERAL_POOL_TYPE, MMP_IMMORTAL);
-  if (ret)
-    panic("Can not register \"General\" memory pool! [err = %d]", ret);
+  for (i = 0; i < CONFIG_NOF_MMPOOLS; i++) {
+    switch (i) {
+        case BOOTMEM_POOL_TYPE:
+          mm_pools[i].name = "Bootmem";
+          break;
+        case GENERAL_POOL_TYPE:
+          mm_pools[i].name = "General";
+          break;
+        case DMA_POOL_TYPE:
+          mm_pools[i].name = "DMA";
+          break;
+        case HIGHMEM_POOL_TYPE:
+          mm_pools[i].name = "Highmem";
+          break;
+        default:
+          panic("Unknown memory pool type: %d\n", i);
+    }
 
-#ifdef CONFIG_DMA_POOL
-  kprintf(" Creating DMA memory pool.\n");
-  idx_reserve(&pools_ida, DMA_POOL_TYPE);
-  ret = mmpool_register(&__dma_pool, "DMA", DMA_POOL_TYPE, MMP_IMMORTAL);
-  if (ret)
-    panic("Can not register \"DMA\" memory pool! [err = %d]", ret);
-#endif /* CONFIG_DMA_POOL */  
-}
-
-void mmpools_init_pool_allocator(mm_pool_t *pool)
-{
-  ASSERT(pool->is_active);
-  switch (pool->type) {
-      case POOL_GENERAL: case POOL_DMA:
-        ASSERT(atomic_get(&pool->free_pages) > 0);
-        tlsf_alloc_init(pool);
-        break;
-      default:
-        panic("Unlnown memory pool type: %d", pool->type);
+    mm_pools[i].type = i;
+    mm_pools[i].is_active = false;
+    mm_pools[i].first_page_idx = PAGE_IDX_INVAL;
   }
 }
 
+void mmpool_add_page(mm_pool_t *pool, page_frame_t *pframe)
+{
+  if (pframe_number(pframe) < pool->first_page_idx)
+    pool->first_page_idx = pframe_number(pframe);
+
+  pool->total_pages++;
+  if (pframe->flags & PF_RESERVED)
+    pool->reserved_pages++;
+  else
+    atomic_inc(&pool->free_pages);
+
+  page->pool_type = pool->type;
+}
+
+void mmpool_activate(mm_pool_t *pool)
+{
+  ASSERT(pool->type < CONFIG_NOF_MMPOOLS);
+  ASSERT(!pool->is_active);
+  ASSERT(atomic_get(&pool->free_pages) > 0);
+  switch (pool->type) {
+      case GENERAL_POOL_TYPE: case DMA_POOL_TYPE:
+        tlsf_allocator_init(pool);
+        break;
+      case BOOTMEM_POOL_TYPE:
+        idalloc_init(pool);
+        break;
+      default:
+        panic("Unknown memory pool type: %d!", pool->type);
+  }
+
+  pool->is_active = true;
+}

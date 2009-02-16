@@ -1,3 +1,26 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
+ *
+ * eza/genarch/mm/ptable.c: General page table API implementation. Common for some
+ * architectures.
+ */
+
 #include <config.h>
 #include <ds/iterator.h>
 #include <mm/page.h>
@@ -30,8 +53,8 @@ static pde_idx_t __count_num_entries(pde_idx_t pde_idx, uintptr_t va_from, uintp
 }
 
 /*
- * FIXME DK: I really don't like a "do_recovery" param and conditions it
- * invents. I'm sure that more clear way may be invented in near future.
+ * FIXME DK: I really don't like a "do_recovery" argument and conditions it
+ * invents. I'm sure there is a more clear way to do all recovery-related stuff.
  */
 static void unmap_entries(pde_t *start_pde, pde_idx_t num_entries, bool do_recovery)
 {
@@ -250,7 +273,7 @@ static int do_ptable_map(page_frame_t *dir, struct pt_mmap_info *minfo, int pde_
 
 page_frame_t *generic_create_pagedir(void)
 {
-  page_frame_t *pf = ptable_ops.alloc_pages(1, AF_ZERO | AF_PGEN);
+  page_frame_t *pf = ptable_ops.alloc_pages(1, AF_ZERO | AF_MMP_GEN);
 
   if (!pf)
     return NULL;

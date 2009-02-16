@@ -57,83 +57,77 @@ static inline size_t __get_main_bmap_size(idx_allocator_t *ida)
   return ida->size;
 }
 
-static ulong_t alloc_id_large_ida(idx_allocator_t *ida)
+ ulong_t idx_allocate(idx_allocator_t *ida)
 {
   ulong_t id = IDX_INVAL;
   long fnfi;
   size_t i, main_offs, main_sz;
 
   main_sz = __get_main_bmap_size(ida) / sizeof(ulong_t);
-  i = 0;  
-  for (;;) {
-    while (i < main_sz) {
-      fnfi = zero_bit_find_lsf(ida->main_bmap[i]);
-      if (fnfi >= 0) {
-        fnfi = (fnfi * WORDS_PER_ITEM) + i * WORDS_PER_ITEM * BITS_PER_LONG;
-        main_offs = i;
-        break;
+  i = 0;
+  if (likely(ida->ids_bmap)) {
+    for (;;) {
+      while (i < main_sz) {
+        fnfi = zero_bit_find_lsf(ida->main_bmap[i]);
+        if (fnfi >= 0) {
+          fnfi = (fnfi * WORDS_PER_ITEM) + i * WORDS_PER_ITEM * BITS_PER_LONG;
+          main_offs = i;
+          break;
+        }
+
+        i++;
       }
-
-      i++;
-    }
-    if ((fnfi >= 0) && (fnfi < ida->size)) {
-      int res_id, j, total_sz;
-
-      total_sz = fnfi + WORDS_PER_ITEM;      
-      for (j = fnfi; j < total_sz; j++) {
-        res_id = zero_bit_find_lsf(ida->ids_bmap[j]);
-        if (res_id < 0)
-          continue;
-
-        bit_set(ida->ids_bmap + j, res_id);    
-        id = res_id + j * BITS_PER_LONG;
-        if (id >= ida->max_id) {
-          bit_clear(ida->ids_bmap + j, res_id);
-          id = IDX_INVAL;
+      if ((fnfi >= 0) && (fnfi < ida->size)) {
+        int res_id, j, total_sz;
+        
+        total_sz = fnfi + WORDS_PER_ITEM;      
+        for (j = fnfi; j < total_sz; j++) {
+          res_id = zero_bit_find_lsf(ida->ids_bmap[j]);
+          if (res_id < 0)
+            continue;
+          
+          bit_set(ida->ids_bmap + j, res_id);    
+          id = res_id + j * BITS_PER_LONG;
+          if (id >= ida->max_id) {
+            bit_clear(ida->ids_bmap + j, res_id);
+            id = IDX_INVAL;
+          }
+          
+          goto out;
         }
         
-        goto out;
+        bit_set(ida->main_bmap + main_offs,
+                (fnfi - (main_offs * WORDS_PER_ITEM * BITS_PER_LONG)) / WORDS_PER_ITEM);
+        if ((ida->main_bmap[i] & ~0UL) == ~0UL)
+          i++;
       }
-
-      bit_set(ida->main_bmap + main_offs,
-              (fnfi - (main_offs * WORDS_PER_ITEM * BITS_PER_LONG)) / WORDS_PER_ITEM);
-      if ((ida->main_bmap[i] & ~0UL) == ~0UL)
-        i++;
+      else
+        break;
     }
-    else
-      break;
+  }
+  else {
+    while (i < sz)  {
+      bit = zero_bit_find_lsf(ida->main_bmap[i]);
+      if (bit >= 0) {
+        bit_set(ida->main_bmap + i, bit);
+        id = bit + i * BITS_PER_LONG;
+        if (id >= ida->max_id) {
+          bit_clear(ida->main_bmap + i, bit);
+          id = IDX_INVAL;
+        }
+
+        break;
+      }
+      
+      i++;
+    }
   }
 
   out:
   return id;
 }
 
-static ulong_t alloc_id_small_ida(idx_allocator_t *ida)
-{
-  ulong_t id = IDX_INVAL;
-  long bit;
-  size_t i, sz;
-
-  sz = __get_main_bmap_size(ida) / sizeof(ulong_t);
-  i = 0;
-  while (i < sz)  {
-    bit = zero_bit_find_lsf(ida->main_bmap[i]);
-    if (bit >= 0) {
-      bit_set(ida->main_bmap + i, bit);
-      id = bit + i * BITS_PER_LONG;
-      if (id >= ida->max_id) {
-        bit_clear(ida->main_bmap + i, bit);
-        id = IDX_INVAL;
-      }
-    }
-
-    i++;
-  }
-
-  return id;
-}
-
-static void reserve_id(idx_allocator_t *ida, ulong_t idx)
+void idx_reserve(idx_allocator_t *ida, ulong_t idx)
 {
   int start_id, bitno;
   ulong_t *ptr;
@@ -151,7 +145,7 @@ static void reserve_id(idx_allocator_t *ida, ulong_t idx)
   }
 }
 
-static void free_id(idx_allocator_t *ida, ulong_t idx)
+void idx_free(idx_allocator_t *ida, ulong_t idx)
 {
   int start_id, bitno, main_id, main_bitno;
   ulong_t *ptr;
@@ -171,17 +165,6 @@ static void free_id(idx_allocator_t *ida, ulong_t idx)
     kprintf(KO_WARNING "Detected an attempt to free already fried index %d "
             "[function: %s]!\n", idx, __FUNCTION__);
   }  
-}
-
-void idx_allocator_init_core(idx_allocator_t *ida)
-{
-  if (likely(ida->ids_bmap))
-    ida->ops.alloc_id = alloc_id_large_ida;        
-  else
-    ida->ops.alloc_id = alloc_id_small_ida;
-
-  ida->ops.reserve_id = reserve_id;
-  ida->ops.free_id = free_id;
 }
 
 int idx_allocator_init(idx_allocator_t *ida, ulong_t idx_max)
@@ -224,7 +207,6 @@ int idx_allocator_init(idx_allocator_t *ida, ulong_t idx_max)
  
   memset(ida->main_bmap, 0, __get_main_bmap_size(ida));
   ida->max_id = idx_max;
-  ida_allocator_init_core(ida);
   return 0;
 
   error:

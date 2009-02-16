@@ -39,7 +39,7 @@
 static always_inline void arch_bit_set(volatile void *bitmap, int bit)
 {
   __asm__ volatile (__LOCK_PREFIX "bts %1, %0\n\t"
-                    :: "=m" (*(volatile long *)bitmap), "Ir" (bit));
+                    :: "m" (*(volatile long *)bitmap), "Ir" (bit));
 }
 
 #define ARCH_BIT_CLEAR

@@ -36,87 +36,43 @@
 #include <eza/arch/ptable.h>
 #include <mlibc/types.h>
 
-mm_pool_t mm_pools[NOF_MM_POOLS];
-
-/* initialize opne page */
-static void __init_page(page_frame_t *page)
-{
-  list_init_head(&page->head);
-  list_init_node(&page->node);
-  atomic_set(&page->refcount, 0);
-  page->_private = 0;
-}
-
-void mmpools_add_page(page_frame_t *page)
-{
-  mm_pool_t *pool = mmpools_get_pool(pool_type);
-
-  page->flags |= ;
-  if (!pool->is_activate)
-    pool->is_active = true;
-  if (page->flags & PF_RESERVED) {
-    page->flags |= 
-    pool->reserved_pages++;
-    list_add2tail(&pool->reserved, &page->node);
-  }
-  else
-    atomic_inc(&pool->free_pages);
-
-  pool->total_pages++;
-}
-
 void mm_initialize(void)
 {
   mm_pool_t *pool;
-  page_frame_iterator_t pfi;
-  ITERATOR_CTX(page_frame, PF_ITER_ARCH) pfi_arch_ctx;
+  int activated_pools = 0;
 
+  mmpools_initialize();
   arch_mm_init();
-  memset(mm_pools, 0, sizeof(*mm_pools) * NOF_MM_POOLS);
+  for_each_mm_pool(pool) {
+    if (!atomic_get(&pool->free_pages))
+      continue;
 
-  /*
-   * PF_ITER_ARCH page frame iterator iterates through page_frame_t 
-   * structures located in the page_frames_array. It starts from the
-   * very first page and iterates forward until the last page available
-   * in the system is handled. On each iteration it returns an
-   * index of initialized by arhitecture-dependent level page frame.
-   */
-  pfi_arch_init(&pfi, &pfi_arch_ctx);
-  
-  /* initialize page and add it to the related pool */
-  iterate_forward(&pfi) {
-    page_frame_t *page = pframe_by_number(pfi.pf_idx);
-    __init_page(page);
-    mmpools_add_page(page);
+    mmpool_activate(pool);
+    activated_pools++;
   }
-
-  kprintf("[MM] Memory pools were initialized\n");
+  if (!activated_pools)
+    panic("No one memory pool was activated!");
   
-  /*
-   * Now we may initialize "init data allocator"
-   * Note: idalloc allocator will cut from general pool's
-   * pages no more than CONFIG_IDALLOC_PAGES. After initialization
-   * is done, idalloc must be explicitely disabled.
-   */
   pool = mmpools_get_pool(POOL_GENERAL);
   ASSERT(pool->free_pages);
   idalloc_enable(pool, CONFIG_IDALLOC_PAGES + arch_num_pages_to_reserve());
   kprintf("[MM] Init-data memory allocator was initialized.\n");
   kprintf(" idalloc available pages: %ld\n", idalloc_meminfo.npages);  
   for_each_active_mm_pool(pool) {
-    char *name = mmpools_get_pool_name(pool->type);
-    
-    kprintf("[MM] Pages statistics of pool \"%s\":\n", name);
+    kprintf("[MM] Pages statistics of pool \"%s\":\n", pool->name);
     kprintf(" | %-8s %-8s %-8s |\n", "Total", "Free", "Reserved");
     kprintf(" | %-8d %-8d %-8d |\n", pool->total_pages,
             atomic_get(&pool->free_pages), pool->reserved_pages);
-    mmpools_init_pool_allocator(pool);
   }
   if (ptable_ops.initialize_rpd(&kernel_rpd))
     panic("mm_init: Can't initialize kernel root page directory!");
 
   /* Now we can remap available memory */
   arch_mm_remap_pages();
+  pool = POOL_BOOTMEM();
+  if (pool->is_active)
+    mmpool_deactivate(pool);
+  
   kprintf("[MM] All pages were successfully remapped.\n");
 }
 

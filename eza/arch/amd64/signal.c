@@ -228,7 +228,6 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
     /* Have to perform some signal-related kernel work (for example,
      * rearm the timer related to this signal).
      */
-    posix_stuff_t *stuff=caller->posix_stuff;
     posix_timer_t *ptimer=(posix_timer_t *)sigitem->kern_priv;
 
     LOCK_POSIX_STUFF_W(stuff);

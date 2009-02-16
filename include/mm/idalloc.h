@@ -46,6 +46,9 @@
 #include <eza/spinlock.h>
 #include <eza/arch/types.h>
 
+#define IDALLOC_CAN_ALLOC_PAGES   0x01
+#define IDALLOC_CAN_ALLOC_CHUNKS  0x02
+
 /**
  * @struct idalloc_memingo_t
  * Contains idalloc internal information.
@@ -55,20 +58,12 @@ typedef struct __idalloc_meminfo {
   list_head_t avail_pages;  /**< A list of available pages */
   list_head_t used_pages;   /**< A list of already used(full) pages */
   spinlock_t lock;          /**< Obvious */
-  int npages;               /**< Total number of pages idalloc owns */
-  bool is_enabled;          /**< True if idalloc is enabled and false otherwise */
+  uint8_t flags;
 } idalloc_meminfo_t;
 
 extern idalloc_meminfo_t idalloc_meminfo;      /**< Global structure containing all idalloc informaion */
 
-/**
- * @brief Enable init-data allocator
- * CONFIG_IDALLOC_PAGES will be cutted from @a pool. (if available)
- *
- * @param pool - Memory pool idalloc may cut pages from.
- * @see mm_pool_t
- */
-void idalloc_enable(mm_pool_t *pool, page_idx_t num_pages);
+void idalloc_init(mm_pool_t *pool);
 void idalloc_disable(void); /* TODO DK: redisign */
 
 /**

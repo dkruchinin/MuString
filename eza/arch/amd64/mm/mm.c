@@ -31,6 +31,7 @@
 #include <mlibc/kprintf.h>
 #include <mlibc/string.h>
 #include <mm/page.h>
+#include <mm/mmpool.h>
 #include <mm/vmm.h>
 #include <mm/pfi.h>
 #include <eza/swks.h>
@@ -48,34 +49,33 @@ uintptr_t __kernel_va_base = KERNEL_BASE;
 uintptr_t __utrampoline_virt = 0;
 
 static vm_mandmap_t ident_mandmap, utramp_mandmap, swks_mandmap;
+static page_idx_t bootmem_pages = CONFIG_IDALLOC_PAGES;
 
 #ifndef CONFIG_IOMMU
 static page_idx_t dma_pages = 0;
 
-static inline void __determine_page_pool(page_frame_t *pframe)
+static inline void __determine_page_mempool(page_frame_t *pframe)
 {
   mm_pool_t *pool;
-  int ret;
 
-  if (pframe_number(pframe) < dma_pages)
-    pool = POOL_DMA();
+  if (pframe_number(pframe) < dma_pages) {
+    pool = POOL_BOOTMEM();
+    if (atomic_get(&pool->free_pages) >= bootmem_pages)
+      pool = POOL_DMA();
+  }
   else
     pool = POOL_GENERAL();
   
-  ret = mmpool_add_page(pool, pframe);
-  if (ret) {
-    panic("Can not add page frame %#x into \"%s\" memory pool! [err = %d]",
-          pool->name, pframe_number(pframe), ret);
-  }
+  mmpool_add_page(pool, pframe);
 }
 #else
-static inline void __determine_page_pool(page_frame_t *pframe)
+static inline void __determine_page_mempool(page_frame_t *pframe)
 {
-  int ret = mmpool_add_page(POOL_GENERAL(), pframe);
-  if (ret) {
-    panic("Can not add page frame %#x into \"%s\" memory pool! [err = %d]",
-          pool->name, pframe_number(pframe), ret);
-  }
+  mm_pool_t *pool = POOL_BOOTMEM();  
+  if (atomic_get(&pool->free_pages) >= bootmem_pages)
+    pool = POOL_GENERAL();
+  
+  mmpool_add_page(pool, pframe);
 }
 #endif /* CONFIG_IOMMU */
 
@@ -114,11 +114,6 @@ static void verify_mapping(const char *descr, uintptr_t start_addr,
 
 static void register_mandatory_mappings(void)
 {
-  /* FIXME DK:
-   * Also it's not very clear why *each* task needs in identity mapping.
-   * Only because of VGA? But why doesn't the task map VGA page explicitely in
-   * a place it wants? And why does identity mapping have RW rights? WTF???
-   */
   memset(&ident_mandmap, 0, sizeof(ident_mandmap));
   ident_mandmap.virt_addr = 0x1000;
   ident_mandmap.phys_addr = 0x1000;
@@ -142,7 +137,7 @@ static void register_mandatory_mappings(void)
   vm_mandmap_register(&swks_mandmap, "SWKS mapping");
 }
 
-page_idx_t __count_pages_to_reserve(page_idx_t mapped_pages)
+static page_idx_t __count_pages_to_reserve(page_idx_t mapped_pages)
 {
   uintptr_t va, range, va_to = mapped_pages << PAGE_WIDTH;
   int level = PTABLE_LEVEL_LAST;
@@ -166,11 +161,11 @@ page_idx_t __count_pages_to_reserve(page_idx_t mapped_pages)
 
 static void scan_phys_mem(void)
 {  
-  page_idx_t idx;
-  page_frame_t *page = page_frames_array;
+  int idx;
   bool found;
   char *types[] = { "(unknown)", "(usable)", "(reserved)", "(ACPI reclaimable)",
-                    "(ACPI non-volatile)", "(BAD)" };  
+                    "(ACPI NVS)", "(BAD)" };
+  uintptr_t last_addr = 0;
 
   kprintf("[MM] Scanning physical memory...\n");  
   kprintf("E820 memory map:\n"); 
@@ -178,25 +173,20 @@ static void scan_phys_mem(void)
     e820memmap_t *mmap = &e820table[idx];
     uintptr_t length = ((uintptr_t)mmap->length_high << 32) | mmap->length_low;
 
-    memset(page, 0, sizeof(*page));
-    atomic_set(&page->refcount, 0);
-    list_init_head(&page->head);
-    if(mmap->type <= 5) {
-      type = types[mmap->type];
-      if (mmap->type == E820_USABLE)
-        
+    if ((mmap->type > 5) || (mmap->type <= 0)) {
+      panic("Unknown e820 memory type [%#.8x - %#.8x]: %d",
+            mmap->base_address, mmap->base_address + length, mmap->type);
     }
-    else
-      type = types[0];
 
     kprintf("BIOS-e820: %#.8x - %#.8x %s\n",
             mmap->base_address, mmap->base_address + length, types[mmap->type]);
-    if(!found && mmap->base_address == BIOS_END_ADDR && mmap->type == 1) {      
-      num_phys_pages = (mmap->base_address + length) >> PAGE_WIDTH;
+    if(!found && mmap->base_address == BIOS_END_ADDR && mmap->type == E820_USABLE) {
+      last_addr = PAGE_ALIGN(mmap->base_address + length);
       found = true;
     }
   }
-  
+
+  num_phys_pages = last_addr >> PAGE_WIDTH;
   if(!found)
     panic("No valid E820 memory maps found for main physical memory area!");
   if(!num_phys_pages || (num_phys_pages < MIN_PAGES_REQUIRED))
@@ -208,37 +198,39 @@ static void scan_phys_mem(void)
 #endif /* CONFIG_IOMMU */
 }
 
-static void determine_phys_pages(void)
+static void build_page_frames_array(void)
 {
-  e820memmap_t *mmap = 
-}
+  page_idx_t idx;
+  int e820id = 0;
+  e820memmap_t *mmap = e820table;
+  uintptr_t mmap_end;
+  page_frame_t *page;
 
-static int prepare_page(page_idx_t idx, ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx)
-{
-  e820memmap_t *mmap = ctx->mmap;
-  uintptr_t mmap_end = mmap->base_address +
-    (((uintptr_t)(mmap->length_high) << 32) | mmap->length_low);
-  uint32_t mmap_type = mmap->type;
-  page_frame_t *page = page_frames_array + idx;
-
-  memset(page, 0, sizeof(*page));
-  page->idx = idx;
-  __determine_page_pool(page);
-  if ((uintptr_t)pframe_phys_addr(page) > mmap_end) { /* switching to the next e820 map */
-    if (ctx->e820id < e820count) {
-      ctx->mmap = mmap = &e820table[++ctx->e820id];
-      mmap_end = mmap->base_address + (((uintptr_t)mmap->length_high << 32) | mmap->length_low);
-      mmap_type = mmap->type;
+  bootmem_pages = __count_pages_to_reserve(IDENT_MAP_PAGES - 1);
+  bootmem_pages += __count_pages_to_reserve(num_phys_pages);
+  mmap_end = mmap->base_address + (((uintptr_t)(mmap->length_high) << 32) | mmap->length_low);
+  for (idx = 0; idx < num_phys_pages; idx++) {
+    page = &page_frames_array[idx];
+    memset(page, 0, sizeof(*page));
+    list_init_node(&page->node);
+    page->idx = idx;
+    if ((uintptr_t)pframe_phys_addr(page) > mmap_end) {
+      if (e820id < e820count) {
+        mmap = &e820table[++e820id];
+        mmap_end = mmap->base_address + (((uintptr_t)mmap->length_high << 32) | mmap->length_low);
+      }
+      else {
+        panic("Unexpected e820id(%d). It must me less than e820count(%d), but it's not!",
+              e820id, e820count);
+      }
     }
-    else /* it seems that we've received a page with invalid idx... */
-      return -1;
+    if ((mmap->type != E820_USABLE) || is_kernel_addr(pframe_to_virt(page)) ||
+        (page->idx < LAST_BIOS_PAGE)) {
+      page->flags |= PF_RESERVED;
+    }
+
+    __determine_page_mempool(page);
   }
-  if ((mmap_type != E820_USABLE) || is_kernel_addr(pframe_to_virt(page)) ||
-      (page->idx < LAST_BIOS_PAGE)) {
-    page->flags |= PF_RESERVED;
-  }
-  
-  return 0;
 }
 
 /* FIXME DK: remove after debugging */
@@ -255,13 +247,15 @@ void map_kernel_area(vmm_t *vmm)
 void arch_mm_init(void)
 {
   uintptr_t addr;
-  
+
+  kprintf("[MM] Scanning physical memory...\n");
   scan_phys_mem();
   addr = server_get_end_phy_addr();
   page_frames_array = addr ?
     (page_frame_t *)PAGE_ALIGN(p2k_code(addr)) : (page_frame_t *)KERNEL_END_PHYS;
   __kernel_first_free_addr = (uintptr_t)page_frames_array + sizeof(page_frame_t) * num_phys_pages;
   kprintf(" Scanned: %ldM, %ld pages\n", (long)_b2mb(num_phys_pages << PAGE_WIDTH), num_phys_pages);
+  build_page_frames_array();
 }
 
 void arch_mm_remap_pages(void)
@@ -304,68 +298,4 @@ void arch_mm_remap_pages(void)
 void arch_smp_mm_init(cpu_id_t cpu)
 {  
   load_cr3(pde_fetch(kernel_rpd.pml4, 0));
-}
-
-page_idx_t arch_num_pages_to_reserve(void)
-{
-  page_idx_t num_pages ;
-
-  num_pages = __count_pages_to_reserve(IDENT_MAP_PAGES - 1);
-  num_pages += __count_pages_to_reserve(num_phys_pages);
-
-  return num_pages;
-}
-
-static void __pfiter_first(page_frame_iterator_t *pfi)
-{
-  ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx;
-
-  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_ARCH);
-  pfi->pf_idx = 0;
-  pfi->state = ITER_RUN;
-  ctx = iter_fetch_ctx(pfi);
-  ctx->mmap = &e820table[0];
-  ctx->e820id = 0;
-  if (prepare_page(pfi->pf_idx, ctx) < 0) {
-    panic("e820 error: Can't recognize a page with index %d and physical address %p\n",
-          pfi->pf_idx, pframe_phys_addr(page_frames_array + pfi->pf_idx));
-  }
-}
-
-static void __pfiter_next(page_frame_iterator_t *pfi)
-{
-  ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx;
-
-  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_ARCH);
-  ctx = iter_fetch_ctx(pfi);
-  pfi->pf_idx++;
-  if (pfi->pf_idx >= num_phys_pages) {
-    pfi->state = ITER_STOP;
-    pfi->pf_idx = PAGE_IDX_INVAL;
-  }
-  else {    
-    if (prepare_page(pfi->pf_idx, ctx) < 0) {
-      panic("e820 error: Can't recognize a page with index %d and physical address %p\n",
-          pfi->pf_idx, pframe_phys_addr(page_frames_array + pfi->pf_idx));
-    }
-  }
-}
-
-void pfi_arch_init(page_frame_iterator_t *pfi,
-                   ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx)
-{
-  static bool __arch_iterator_init = false;
-
-  if (__arch_iterator_init)
-    panic("pfi_arch_init: Platform-specific page frame iterator may be initialized only one time!");
-  
-  pfi->first = __pfiter_first;
-  pfi->next = __pfiter_next;
-  pfi->last = pfi->prev = NULL;
-  pfi->pf_idx = PAGE_IDX_INVAL;
-  pfi->error = 0;
-  iter_init(pfi, PF_ITER_ARCH);
-  memset(ctx, 0, sizeof(*ctx));
-  iter_set_ctx(pfi, ctx);
-  __arch_iterator_init = true;
 }

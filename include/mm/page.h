@@ -58,6 +58,8 @@ typedef uint8_t page_flags_t;
 #define PF_RESERVED   0x01 /**< Page is reserved */
 #define PF_SLAB_LOCK  0x02 /**< Page lock (used by slab allocator) */
 
+#define PF_MMPOOL_MASK (PF_MMP_BMEM | PF_MMP_GEN | PF_MMP_DMA)
+
 /* page fault flags */
 #define PFLT_NOT_PRESENT 0x01
 #define PFLT_PROTECT     0x02
@@ -76,13 +78,15 @@ typedef uint8_t page_flags_t;
  * @see pframe_pages_array
  */
 typedef struct __page_frame {
-  list_head_t head;    /**< Obvious */
   list_node_t node;    /**< Obvious */
   page_idx_t idx;      /**< Page frame index in the pframe_pages_array */
-  atomic_t refcount;   /**< Number of references to the physical page */  
+  union {
+    atomic_t refcount;   /**< Number of references to the physical page */
+    void *slab_pages_start;
+  };
   uint32_t _private;   /**< Private data that may be used by internal page frame allocator */
   page_flags_t flags;  /**< Page flags */
-  uint8_t pool_type;   /**< Memory pool page belongs to */
+  uint8_t pool_type;   /**< Type of memory pool page belongs to */
 } page_frame_t;
 
 extern page_frame_t *page_frames_array; /**< An array of all available physical pages */
