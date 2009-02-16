@@ -31,10 +31,10 @@
 #include <eza/arch/current.h>
 #include <eza/event.h>
 #include <eza/arch/bits.h>
+#include <ds/skiplist.h>
 #include <config.h>
 
 static percpu_def_actions_t cpu_actions[CONFIG_NRCPUS];
-static SPINLOCK_DEFINE(big_action_lock);
 
 void initialize_deffered_actions(void)
 {
@@ -103,7 +103,6 @@ void schedule_deffered_action(deffered_irq_action_t *a) {
   long is;
 
   spinlock_lock_irqsave(&acts->lock,is);
-  spinlock_lock(&big_action_lock);
 
   if( a->__host ) {
     goto out_unlock; /* Action is already on the list. */
@@ -141,7 +140,6 @@ void schedule_deffered_action(deffered_irq_action_t *a) {
     arch_sched_set_def_works_pending();
   }
 out_unlock:
-  spinlock_unlock(&big_action_lock);
   spinlock_unlock_irqrestore(&acts->lock,is);
 }
 
@@ -189,28 +187,7 @@ void fire_deffered_actions(void)
                           deffered_irq_action_t,node);
 
       if( current_task()->priority >= action->priority ) {
-        list_node_t *prev=action->node.prev;
-
-        /* Remove action under protection of the lock. */
-        spinlock_lock(&big_action_lock);
-        list_del(&action->node);
-        action->__host=NULL;
-        spinlock_unlock(&big_action_lock);
-
-        if( !list_is_empty(&action->head) ) {
-          deffered_irq_action_t *a=container_of(list_node_first(&action->head),
-                                                deffered_irq_action_t,node);
-          list_del(&a->node);
-
-          if( !list_is_empty(&action->head) ) {
-            list_move2head(&a->head,&action->head);
-          }
-
-          a->node.prev=prev;
-          a->node.next=prev->next;
-          prev->next->prev=&a->node;
-          prev->next=&a->node;
-        }
+        skiplist_del(action,deffered_irq_action_t,head,node);
         arch_sched_set_def_works_pending();
       } else {
         /* Bad luck - current thread has higher priority than any of pending
@@ -239,5 +216,17 @@ void fire_deffered_actions(void)
 
 void deschedule_deffered_action(deffered_irq_action_t *a)
 {
+  percpu_def_actions_t *acts=a->__host;
+  int is;
+
+  if( !acts ) {
+    acts=&cpu_actions[cpu_id()];
+  }
+
+  spinlock_lock_irqsave(&acts->lock,is);
+  if( list_node_is_bound(&a->node) ) {
+    skiplist_del(a,deffered_irq_action_t,head,node);
+  }
+  spinlock_unlock_irqrestore(&acts->lock,is);
 }
 

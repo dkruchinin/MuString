@@ -142,7 +142,8 @@ void delete_timer(ktimer_t *timer)
 
   LOCK_MAJOR_TIMER_TICK(tt->major_tick,is);
   if( tt->time_x > __last_processed_timer_tick ) {
-    /* Timer hasn't triggered yet. So remove it only from timer list. */
+    /* Timer hasn't triggered yet. So remove it only from timer list.
+     */
     if( !list_node_is_bound(&tt->node) ) {
       /* The simpliest case - only one timer in this tick, no rebalance. */
       skiplist_del(&timer->da,deffered_irq_action_t,head,node);
