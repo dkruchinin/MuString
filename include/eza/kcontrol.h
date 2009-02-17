@@ -11,6 +11,10 @@
      #define KCTRL_INITRD_START_PAGE  0
      /* Size of initial RAM disk in pages. */
      #define KCTRL_INITRD_SIZE        1
+  /* Generic system data. */
+  #define KCTRL_SYSTEM_INFO      1
+    /* Address of the SWKS area. */
+    #define KCTRL_SWKS_ADDR           0
 
 #define KCTRL_MAX_NAME_LEN  8
 
@@ -30,6 +34,7 @@ typedef long (*kcontrol_logic_t)(struct __kcontrol_node *node,
 typedef enum {
   KCTRL_DATA_LONG=0,
   KCTRL_DATA_CHAR=1,
+  KCTRL_DATA_CUSTOM=2,
 } kcontrol_data_type_t;
 
 typedef struct __kcontrol_node {
@@ -40,6 +45,7 @@ typedef struct __kcontrol_node {
   kcontrol_logic_t logic;
   struct __kcontrol_node *subdirs;
   unsigned int num_subdirs;
+  long private;
 } kcontrol_node_t;
 
 #endif

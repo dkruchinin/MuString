@@ -28,7 +28,7 @@
 #include <eza/swks.h>
 #include <mlibc/types.h>
 
-#define system_ticks  (swks.system_ticks_64)
+#define system_ticks  (swks.system_clock_ticks)
 
 typedef long clock_t;
 
@@ -69,5 +69,8 @@ typedef enum __posix_timer_command {
     (_t)->tv_sec=(_ticks)/HZ;                                   \
     (_t)->tv_nsec=((_ticks) % HZ)*(NANOSLEEP_MAX_NSECS/HZ);     \
   } while(0)
+
+void setup_time(void);
+void arch_setup_time(void);
 
 #endif

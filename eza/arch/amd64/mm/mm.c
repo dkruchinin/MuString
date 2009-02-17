@@ -309,3 +309,8 @@ void pfi_arch_init(page_frame_iterator_t *pfi,
   iter_set_ctx(pfi, ctx);
   __arch_iterator_init = true;
 }
+
+long get_swks_virtual_address(void)
+{
+  return swks_mandmap.virt_addr;
+}

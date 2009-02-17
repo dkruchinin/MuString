@@ -38,33 +38,21 @@ enum __swks_constants {
 
 /* Per-CPU global statistics */
 typedef struct __cpu_stats {
-  uint64_t irq_stat[NUM_IRQS];
   scheduler_cpu_stats_t sched_stats;
+  uint64_t irq_stat[NUM_IRQS];
 } cpu_stats_t;
 
 /* System-Wide Kernel Statistics. */
 typedef struct __swks {
   /* Time-related statistics. */
-  uint64_t system_ticks_64; /* Number of timer clocks occured. */
-  uint64_t seconds_since_epoch;
-  uint32_t timer_frequency;
+  ulong_t  system_clock_ticks; /* Number of timer clocks occured since uptime */
+  ulong_t  hz,secs_since_epoch;
+  ulong_t  num_irqs;
+  ulong_t  ioports_available;
 
   /* CPU-related statistics. */
-  uint8_t nr_cpus;
+  ulong_t  nr_cpus;
   cpu_stats_t cpu_stat[CONFIG_NRCPUS];
-  /* IO ports stuff. */
-  ulong_t ioports_available;
-#if 0
-  /* Memory-related statistics. */
-  page_idx_t mem_total_pages, mem_pages_in_use;
-
-  /* Processes-related information. */
-  pid_t total_processes, runnable_processes;
-  /* version info */
-  uint16_t version;
-  uint16_t sub_version;
-  uint16_t release;
-#endif
 } swks_t;
 
 
@@ -73,6 +61,7 @@ extern swks_t swks;
 
 void initialize_swks(void);
 void arch_initialize_swks(void);
+long get_swks_virtual_address(void);
 
 #define SWKS_PAGES  ((sizeof(swks)>>PAGE_WIDTH)+1)
 
