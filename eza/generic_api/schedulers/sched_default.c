@@ -46,6 +46,7 @@
 #include <eza/gc.h>
 #include <eza/arch/apic.h>
 #include <eza/arch/current.h>
+#include <eza/signal.h>
 
 /* Our own scheduler. */
 static struct __scheduler eza_default_scheduler;
@@ -379,7 +380,7 @@ static int def_del_task(task_t *task)
   }
 
   /* Prepare a deferred action. */
-  gc_init_action(&action,cleanup_thread_data,task,0);
+  gc_init_action(&action,cleanup_thread_data,task);
   action.type=GC_TASK_RESOURCE;
   action.dtor=NULL;
 
@@ -455,6 +456,11 @@ static int __change_task_state(task_t *task,task_state_t new_state,
   }
 
   prev_state=task->state;
+
+  if( task->pid == 5 ) {
+    kprintf("%d is affecting target. prev=%d, new=%d, mask: 0x%X\n",
+            current_task()->pid,prev_state,new_state,mask);
+  }
 
   if( (prev_state != new_state) && (prev_state & mask) ) {
     r=-EINVAL;
@@ -645,63 +651,6 @@ static int def_change_task_state_deferred(task_t *task, task_state_t state,
   return __change_task_state(task,state,handler,data,mask);
 }
 
-static void __self_move_gc_actor(void *data,ulong_t arg)
-{
-  task_t *task=(task_t *)data;
-  migration_action_t *t=(migration_action_t *)arg;
-
-  suspend_task(task);
-  schedule_task_migration(t,t->target_cpu);
-}
-
-static int def_move_task_to_cpu(task_t *task,cpu_id_t cpu)
-{
-  migration_action_t t;
-  int r=0;
-
-  if(cpu >= EZA_SCHED_CPUS || !sched_cpu_data[cpu]) {
-    return -EINVAL;
-  }
-
-  /* Prevent target task from double migration. */
-  if( atomic_test_and_set_bit(&task->flags,__TF_UNDER_MIGRATION_BIT) ) {
-    return -EBUSY;
-  }
-
-  if( task->cpu != cpu ) {
-    t.task=task;
-    t.status=-EINTR;
-    t.target_cpu=cpu;
-
-    event_initialize(&t.e);
-    list_init_node(&t.l);
-    event_set_task(&t.e,current_task());
-
-    if( task != current_task() ) {
-      suspend_task(task);
-      schedule_task_migration(&t,cpu);
-    } else {
-      gc_action_t a;
-
-      /* Since we can't put ourself into sleep and than schedule our migration,
-       * we should ask the GC thread to migrate us.
-       */
-      gc_init_action(&a,__self_move_gc_actor,task,(long)&t);
-      gc_schedule_action(&a);
-    }
-
-    /* We don't reset __TF_UNDER_MIGRATION_BIT here since it will be cleared
-     * by the migration thread just before raising the event.
-     */
-    event_yield(&t.e);
-    r=t.status;
-  } else {
-    atomic_test_and_reset_bit(&task->flags,__TF_UNDER_MIGRATION_BIT);
-  }
-
-  return r;
-}
-
 static struct __scheduler eza_default_scheduler = {
   .id = "Eza default scheduler",
   .cpus_supported = def_cpus_supported,
@@ -709,7 +658,6 @@ static struct __scheduler eza_default_scheduler = {
   .scheduler_tick = def_scheduler_tick,
   .add_task = def_add_task,
   .del_task = def_del_task,
-  .move_task_to_cpu = def_move_task_to_cpu,
   .schedule = def_schedule,
   .reset = def_reset,
   .change_task_state = def_change_task_state,

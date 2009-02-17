@@ -215,14 +215,6 @@ int sched_del_task(task_t *task)
   return -ENOTTY;
 }
 
-int sched_move_task_to_cpu(task_t *task,cpu_id_t cpu)
-{
-  if( active_scheduler != NULL && active_scheduler->move_task_to_cpu ) {
-      return active_scheduler->move_task_to_cpu(task,cpu);
-  }
-  return -ENOTTY;
-}
-
 void schedule(void)
 {
   if(active_scheduler != NULL) {
@@ -328,17 +320,53 @@ extern int sched_verbose1;
 #ifdef CONFIG_SMP
 #include <eza/arch/apic.h>
 
-int schedule_task_migration(migration_action_t *a,cpu_id_t cpu)
+static void __self_move_trampoline(gc_action_t *action)
 {
-  if( cpu < CONFIG_NRCPUS ) {
-    spinlock_lock(&migration_locks[cpu]);
-    list_add2tail(&migration_actions[cpu], &a->l);
-    spinlock_unlock(&migration_locks[cpu]);
-    activate_task(gc_threads[cpu][MIGRATION_THREAD_IDX]);
-    return 0;
-  } else {
+  migration_action_t *a=(migration_action_t *)(action->data);
+  cpu_id_t cpu=a->cpu;
+
+  suspend_task(a->task);
+  spinlock_lock(&migration_locks[cpu]);
+  list_add2tail(&migration_actions[cpu], &a->l);
+  spinlock_unlock(&migration_locks[cpu]);
+  activate_task(gc_threads[cpu][MIGRATION_THREAD_IDX]);
+}
+
+static void __self_move_gc_actor(gc_action_t *action)
+{
+  migration_action_t a;
+
+  ASSERT(arg < CONFIG_NRCPUS && cpu_is_online(arg));
+  INIT_MIGRATION_ACTION(&a,current_task(),(long)action->data);
+
+  action->data=&a;
+  action->action=__self_move_trampoline;
+
+  gc_schedule_action(action);
+  event_yield(&a.e);
+  kprintf("**** TASK %d MIGRATED TO CPU %d.\n",a.task->pid,cpu_id());
+}
+
+int sched_move_task_to_cpu(task_t *task,cpu_id_t cpu)
+{
+  gc_action_t *a;
+
+  if(cpu >= EZA_SCHED_CPUS || !is_cpu_online(cpu)) {
     return -EINVAL;
   }
+
+  if( task->cpu == cpu ) {
+    return 0;
+  }
+
+  /* Prevent target task from double migration. */
+  if( atomic_test_and_set_bit(&task->flags,__TF_UNDER_MIGRATION_BIT) ) {
+    return -EBUSY;
+  }
+
+  a=gc_allocate_action(__self_move_gc_actor,(void *)cpu);
+  schedule_user_deferred_action(task,a,false);
+  return 0;
 }
 
 void do_smp_scheduler_interrupt_handler(void)
@@ -458,7 +486,7 @@ void migration_thread(void *data)
         migration_action_t *action=container_of(n,migration_action_t,l);
 
         list_del(n);
-        action->status=__move_task_to_this_cpu(action->task);
+        __move_task_to_this_cpu(action->task);
         event_raise(&action->e);
       }
     } else {
@@ -466,6 +494,12 @@ void migration_thread(void *data)
     }
     sched_change_task_state(current_task(),TASK_STATE_SLEEPING);
   }
+}
+
+#else
+
+int sched_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
+  return 0;
 }
 
 #endif

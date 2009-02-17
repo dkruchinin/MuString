@@ -37,6 +37,7 @@
 #include <mlibc/unistd.h>
 #include <eza/process.h>
 #include <eza/ptd.h>
+#include <eza/gc.h>
 
 long initrd_start_page,initrd_num_pages;
 
@@ -154,7 +155,7 @@ static int __create_task_mm(task_t *task, int num)
   if (r)
     return r;
 
-  kprintf("TEXT: %p -> %p\n", USPACE_VA_BOTTOM, USPACE_VA_BOTTOM + (text_size << PAGE_WIDTH));
+  //kprintf("TEXT: %p -> %p\n", USPACE_VA_BOTTOM, USPACE_VA_BOTTOM + (text_size << PAGE_WIDTH));
   r = vmrange_map(memobj, vmm, real_data_offset, data_size, VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED, 0);
   if (!PAGE_ALIGN(r))
     return r;
@@ -162,7 +163,7 @@ static int __create_task_mm(task_t *task, int num)
   if (r)
     return r;
 
-  kprintf("DATA: %p -> %p\n", real_data_offset, real_data_offset + (data_size << PAGE_WIDTH));
+  //kprintf("DATA: %p -> %p\n", real_data_offset, real_data_offset + (data_size << PAGE_WIDTH));
   /* Create a BSS area. */
   r = vmrange_map(memobj, vmm, bss_virt, bss_size,
                   VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED | VMR_POPULATE, 0);
@@ -204,7 +205,7 @@ static int __create_task_mm(task_t *task, int num)
   return 0;
 }
 
-void server_run_tasks(void)
+static void __server_task_runner(gc_action_t *action)
 {
   int i=server_get_num(),a;
   task_t *server;
@@ -213,16 +214,18 @@ void server_run_tasks(void)
 
   if( i > 0 ) {
     kprintf("[SRV] Starting servers: %d ... \n",i);
-    kconsole->disable();
+    //kconsole->disable();
   }
 
   for(sn=0,a=0;a<i;a++) {
     char *modvbase;
 
+    kprintf("[LAUNCHER]: Launching server %d.\n",sn+1);
     modvbase=pframe_id_to_virt(init.server[a].addr>>PAGE_WIDTH);
 
     if( *(uint32_t *)modvbase == ELF_MAGIC ) { /* ELF module ? */
       ulong_t flags=0;
+      int cpu;
 
       if( !sn ) { /* First module is always NS. */
         flags |= TASK_INIT;
@@ -230,8 +233,7 @@ void server_run_tasks(void)
 
       r=create_task(current_task(),flags,TPL_USER,&server,NULL);
       if( r ) {
-        panic( "server_run_tasks(): Can't create task N %d !\n",
-             a+1);
+        panic("server_run_tasks(): Can't create task N %d !\n",a+1);
       }
 
       if( !a ) {
@@ -247,11 +249,20 @@ void server_run_tasks(void)
                a+1);
       }
 
+      /* Perform initial CPU deployment and activate the server. */
+      cpu=sn % CONFIG_NRCPUS;
+
+      //if( cpu != cpu_id() ) {
+      //  sched_move_task_to_cpu(server,cpu);
+      //}
+
       r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
       if( r ) {
         panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);
       }
       sn++;
+      kprintf("> Sleeping till %d...\n",system_ticks+HZ);
+      sleep(HZ);
     } else if( !strncmp(&modvbase[257],"ustar",5 ) ) { /* TAR-based ramdisk ? */
       long size;
 
@@ -269,6 +280,18 @@ void server_run_tasks(void)
       panic("Unrecognized kernel module N %d !\n",a+1);
     }
   }
+  kprintf("[LAUNCHER]: All servers started.\n");
+}
+
+void server_run_tasks(void)
+{
+  gc_action_t *a=gc_allocate_action(__server_task_runner,NULL);
+
+  if( !a ) {
+    panic("Can't allocate action for launching core servers !");
+  }
+
+  gc_schedule_action(a);
 }
 
 #else

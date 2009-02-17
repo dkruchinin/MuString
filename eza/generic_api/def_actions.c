@@ -36,6 +36,9 @@
 
 static percpu_def_actions_t cpu_actions[CONFIG_NRCPUS];
 
+//#define cpu_actions_host()  &cpu_actions[cpu_id()]
+#define cpu_actions_host()  &cpu_actions[0]
+
 void initialize_deffered_actions(void)
 {
   ulong_t i;
@@ -50,7 +53,7 @@ void initialize_deffered_actions(void)
 
 void schedule_deffered_actions(list_head_t *actions)
 {
-  percpu_def_actions_t *acts=&cpu_actions[cpu_id()];
+  percpu_def_actions_t *acts=cpu_actions_host();
   long is;
   deffered_irq_action_t *a;
 
@@ -99,7 +102,7 @@ void schedule_deffered_actions(list_head_t *actions)
 }
 
 void schedule_deffered_action(deffered_irq_action_t *a) {
-  percpu_def_actions_t *acts=&cpu_actions[cpu_id()];
+  percpu_def_actions_t *acts=cpu_actions_host();
   long is;
 
   spinlock_lock_irqsave(&acts->lock,is);
@@ -162,7 +165,7 @@ void execute_deffered_action(deffered_irq_action_t *a)
 
 void fire_deffered_actions(void)
 {
-  percpu_def_actions_t *acts=&cpu_actions[cpu_id()];
+  percpu_def_actions_t *acts=cpu_actions_host();
   long is,fired;
   deffered_irq_action_t *action;
 

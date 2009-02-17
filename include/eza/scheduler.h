@@ -66,7 +66,6 @@ typedef struct __scheduler {
   void (*scheduler_tick)(void);
   int (*add_task)(struct __task_struct *task);
   int (*del_task)(struct __task_struct *task);
-  int (*move_task_to_cpu)(struct __task_struct *task,cpu_id_t cpu);
   void (*schedule)(void);
   void (*reset)(void);
   int (*change_task_state)(struct __task_struct *task,ulong_t state,ulong_t mask);

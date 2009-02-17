@@ -329,7 +329,6 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
 
   if( priv == TPL_USER ) {
       /* Allocate LDT for this task. */
-      kprintf("CREATE TASK LDT!\n");
     task_ctx->ldt_limit=LDT_ITEMS*sizeof(descriptor_t);
     task_ctx->ldt=(uintptr_t)memalloc(task_ctx->ldt_limit);
 

@@ -195,9 +195,9 @@ static void __free_task_struct(task_t *task)
 }
 #endif 
 
-void cleanup_thread_data(void *t,ulong_t arg)
+void cleanup_thread_data(gc_action_t *action)
 {
-  task_t *task=(task_t*)t;
+  task_t *task=(task_t*)action->data;
 
   /* NOTE: Don't free task structure directly since it will
    * be probably processed via 'waitpid()' functionality
