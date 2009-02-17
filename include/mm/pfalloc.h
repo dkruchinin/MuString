@@ -65,7 +65,6 @@ typedef struct __pf_allocator {
   page_frame_t *(*alloc_pages)(page_idx_t n, void *data);
   void (*free_pages)(page_frame_t *pframe, page_idx_t num_pages, void *data);
   void (*dump)(void *data);
-  void (*deactivate)(void *data);
   void *alloc_ctx;         /**< Internal allocator private data */
   page_idx_t max_block_size;
   pfalloc_type_t type;     /**< Allocator type */

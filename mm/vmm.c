@@ -74,7 +74,6 @@ void mm_initialize(void)
             atomic_get(&pool->free_pages), pool->reserved_pages);
   }
   
-  kprintf("IDALLOC: %d\n", idalloc_meminfo.num_avail_pages);
   kprintf("[MM] All pages were successfully remapped.\n");
 }
 

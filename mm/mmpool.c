@@ -85,6 +85,7 @@ void mmpool_activate(mm_pool_t *pool)
   switch (pool->type) {
       case GENERAL_POOL_TYPE: case DMA_POOL_TYPE:
         tlsf_allocator_init(pool);
+        tlsf_validate_dbg(pool->allocator.alloc_ctx);
         break;
       case BOOTMEM_POOL_TYPE:
         idalloc_init(pool);

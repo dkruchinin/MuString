@@ -57,7 +57,6 @@ typedef struct __idalloc_meminfo {
   char *mem;                /**< Address starting from which data may be allocated */
   list_head_t avail_pages;  /**< A list of available pages */
   list_head_t used_pages;   /**< A list of already used(full) pages */
-  int num_avail_pages;
   mm_pool_t *pool;
   mm_pool_t *leeched_pool;
   spinlock_t lock;          /**< Obvious */

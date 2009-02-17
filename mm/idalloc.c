@@ -41,7 +41,7 @@ idalloc_meminfo_t idalloc_meminfo;
 
 static page_frame_t *idalloc_pages(page_idx_t npages, void *unused)
 {
-  page_frame_t *pages = NULL;
+  page_frame_t *page = NULL;
   page_idx_t i;
   mm_pool_t *lp = idalloc_meminfo.leeched_pool;
 
@@ -55,7 +55,7 @@ static page_frame_t *idalloc_pages(page_idx_t npages, void *unused)
     goto out;
 
   for (i = lp->first_page_id; i < lp->total_pages; i++) {
-    pages = pframe_by_number(i);
+    page = pframe_by_number(i);
     lp->total_pages--;
     idalloc_meminfo.pool->total_pages++;
     if (pages->flags & PF_RESERVED) {
@@ -65,6 +65,8 @@ static page_frame_t *idalloc_pages(page_idx_t npages, void *unused)
       continue;
     }
 
+    page->pool_type = 
+    atomic_inc(&idalloc_meminfo.pool->free_pages);
     atomic_dec(&lp->free_pages);
     break;
   }
@@ -116,7 +118,6 @@ void idalloc_init(mm_pool_t *pool)
     }
 
     list_add2tail(&idalloc_meminfo.avail_pages, &page->node);
-    idalloc_meminfo.num_avail_pages++;
     atomic_inc(&pool->free_pages);
     atomic_dec(&leeched_pool->free_pages);
     if (atomic_get(&pool->free_pages) == CONFIG_IDALLOC_PAGES)
@@ -129,7 +130,7 @@ void idalloc_init(mm_pool_t *pool)
   
   leeched_pool->first_page_id += i + 1;
   kprintf("[MM] Init-data(bootmem) allocator was activated. (%d pages reserved)\n",
-          idalloc_meminfo.num_avail_pages);
+          atomic_get(&pool->free_pages));
 
   idalloc_meminfo.pool = pool;
   idalloc_meminfo.leeched_pool = leeched_pool;
@@ -137,7 +138,7 @@ void idalloc_init(mm_pool_t *pool)
   page = list_entry(list_node_first(&idalloc_meminfo.avail_pages), page_frame_t, node);
   list_del(&page->node);
   list_add2tail(&idalloc_meminfo.used_pages, &page->node);
-  idalloc_meminfo.num_avail_pages--;
+  atomic_dec(&idalloc_meminfo.pool->free_pages);
   page->_private |= IDALLOC_PAGE_INUSE;
   idalloc_meminfo.mem = pframe_to_virt(page);
   idalloc_meminfo.flags |= (IDALLOC_CAN_ALLOC_CHUNKS | IDALLOC_CAN_ALLOC_PAGES);  
@@ -166,7 +167,7 @@ void *idalloc(size_t size)
       idalloc_meminfo.mem += size;
       goto out;
     }
-    if (!idalloc_meminfo.num_avail_pages)
+    if (!atomic_get(&idalloc_meminfo.pool->free_pages))
       goto out;
     
     /*
@@ -177,7 +178,7 @@ void *idalloc(size_t size)
     cur_page->_private &= ~IDALLOC_PAGE_INUSE;
     cur_page->_private |= IDALLOC_PAGE_FULL;    
 
-    idalloc_meminfo.num_avail_pages--;
+    atomic_dec(&idalloc_meminfo.pool->free_pages);
     cur_page = list_entry(list_node_first(&idalloc_meminfo.avail_pages), page_frame_t, node);
     cur_page->_private |= IDALLOC_PAGE_INUSE;
     list_del(&cur_page->node);

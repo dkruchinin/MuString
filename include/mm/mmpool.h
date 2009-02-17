@@ -111,6 +111,31 @@ static inline mm_pool_t *get_mmpool_by_type(uint8_t type)
   return &mm_pools[type];
 }
 
+static inline page_frame_t *mmpool_alloc_pages(mm_pool_t *pool, page_idx_t num_pages)
+{
+  if (likely(pool->allocator.alloc_pages != NULL))
+    return pool->allocator.alloc_pages(num_pages, pool->allocator.alloc_ctx);
+
+  kprintf(KO_WARNING "Memory pool \"%s\" doesn't support alloc_pages function!\n", pool->name);
+  return NULL;  
+}
+
+static inline void mmpool_free_pages(mm_pool_t *pool, page_frame_t *pages, page_idx_t num_pages)
+{
+  if (likely(pool->allocator.free_pages != NULL))
+    return pool->allocator.free_pages(pages, num_pages, pool->allocator.alloc_ctx);
+
+  kprintf(KO_WARNING "Memory pool \"%s\" doesn't support free_pages function!\n", pool->name);
+}
+
+static inline void mmpool_allocator_dump(mm_pool_t *pool)
+{
+  if (likely(pool->allocator.dump != NULL))
+    pool->allocator.dump(pool->allocator.alloc_ctx);
+
+  kprintf(KO_WARNING "Memory pool \"%s\" doesn't support dump function!\n", pool->name);
+}
+
 void mmpools_initialize(void);
 void mmpool_activate(mm_pool_t *pool);
 void mmpool_add_page(mm_pool_t *pool, page_frame_t *pframe);

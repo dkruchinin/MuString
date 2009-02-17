@@ -46,7 +46,7 @@ static page_frame_t *__alloc_pages_ncont(mm_pool_t *pool, page_idx_t n, pfalloc_
     if (granularity > n)
       granularity = n;
     
-    p = pool->allocator.alloc_pages(granularity, pool->allocator.alloc_ctx);
+    p = mmpool_alloc_pages(pool, n);
     if (!p) {
       if (atomic_get(&pool->free_pages)) {
         if ((granularity /= 2) != 0)
@@ -115,19 +115,13 @@ page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
     kprintf(KO_WARNING "alloc_pages: Can't allocate from pool \"%s\" (pool is no active)\n", pool->name);
     return NULL;
   }
-  if (!pool->allocator.alloc_pages) {
-    kprintf(KO_WARNING "Memory allocator of pool \"%s\" doesn't support alloc_pages function!\n", pool->name);
-    return NULL;
-  }
-
   if (!(flags & AF_USER)) {
-    pages = pool->allocator.alloc_pages(n, pool->allocator.alloc_ctx);
+    pages = mmpool_alloc_pages(pool, n);
     if (!pages) {
-      kprintf("what the fucking fuck?! ==> %s\n", pool->name);
       if ((pool->type == GENERAL_POOL_TYPE) && POOL_DMA()->is_active) {
         /* try to allocate pages from DMA pool if it's possible */
         pool = POOL_DMA();
-        pages = pool->allocator.alloc_pages(n, pool->allocator.alloc_ctx);
+        pages = mmpool_alloc_pages(pool, n);
         if (!pages)
           goto out;
       }
@@ -137,12 +131,14 @@ page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
     if (flags & AF_ZERO)
       pframes_memnull(pages, n);
 
+    kprintf("WAS: %d\n", atomic_get(&pool->free_pages));
     atomic_sub(&pool->free_pages, n);
+    kprintf("BECOME: %d\n", atomic_get(&pool->free_pages));
   }
   else {
     /* Allocate non-contious chain of pages... */
     if (pool->type == HIGHMEM_POOL_TYPE) {
-      pages = pool->allocator.alloc_pages(n, pool->allocator.alloc_ctx);
+      pages = mmpool_alloc_pages(pool, n);
       if (pages)
         goto out;
     }
@@ -165,12 +161,8 @@ void free_pages(page_frame_t *pages, page_idx_t num_pages)
     kprintf(KO_ERROR "free_pages: trying to free pages from dead pool %s\n", pool->name);
     return;
   }
-  if (!pool->allocator.free_pages) {
-    kprintf(KO_WARNING "Memory pool %s doesn't support free_pages function!\n", pool->name);
-    return;
-  }
-  
-  pool->allocator.free_pages(pages, num_pages, pool->allocator.alloc_ctx);
+
+  mmpool_free_pages(pool, pages, num_pages);
   atomic_add(&pool->free_pages, num_pages);
 }
 
