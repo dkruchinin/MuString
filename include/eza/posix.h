@@ -59,7 +59,10 @@ static inline int posix_allocate_obj_id(posix_stuff_t *stuff)
   return idx_allocate(&stuff->posix_ids);
 }
 
-void posix_free_obj_id(posix_stuff_t *stuff,long id);
+static inline void posix_free_obj_id(posix_stuff_t *stuff,ulong_t id)
+{
+  return idx_free(&stuff->posix_ids,id);
+}
 
 posix_stuff_t *get_task_posix_stuff(task_t *task);
 void release_task_posix_stuff(posix_stuff_t *stuff);

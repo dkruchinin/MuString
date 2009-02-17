@@ -14,8 +14,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
- * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2006,2007,2008,2009 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2008,2009 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *
  * posix/toplevel.c: implementation of IRQ deferred actions.
  */
@@ -115,6 +115,37 @@ out:
   return r;
 }
 
+long sys_timer_delete(long id)
+{
+  task_t *caller=current_task();
+  posix_stuff_t *stuff=caller->posix_stuff;
+  long r;
+  posix_timer_t *ptimer;
+  ktimer_t *ktimer;
+
+  LOCK_POSIX_STUFF_W(stuff);
+  ptimer=(posix_timer_t*)__posix_locate_object(stuff,id,POSIX_OBJ_TIMER);
+  if( !ptimer ) {
+    r=-EINVAL;
+    goto out_unlock;
+  }
+
+  ktimer=&ptimer->ktimer;
+  if( ktimer->time_x ) { /* Disarm active timer */
+    delete_timer(ktimer);
+  }
+  posix_free_obj_id(stuff,id);
+  r=0;
+out_unlock:
+  UNLOCK_POSIX_STUFF_W(stuff);
+
+  if( ptimer ) {
+    release_posix_object(&ptimer->kpo);
+  }
+
+  return r;      
+}
+
 static void __get_timer_status(posix_timer_t *ptimer,itimerspec_t *kspec)
 {
   ktimer_t *timer=&ptimer->ktimer;
@@ -154,13 +185,11 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
         bool valid_timeval=timeval_is_valid(&tspec.it_value) && timeval_is_valid(&tspec.it_interval);
         ulong_t tx=time_to_ticks(&tspec.it_value);
         ulong_t itx=time_to_ticks(&tspec.it_interval);
-        ulong_t t1,t2;
 
         /* We need to hold the lock during the whole process, so lookup
          * target timer explicitely.
          */
         LOCK_POSIX_STUFF_W(stuff);
-        __READ_TIMESTAMP_COUNTER(t1);
         ptimer=(posix_timer_t*)__posix_locate_object(stuff,id,POSIX_OBJ_TIMER);
         if( !ptimer ) {
           UNLOCK_POSIX_STUFF_W(stuff);
@@ -169,7 +198,7 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
 
         ktimer=&ptimer->ktimer;
         if( !(tspec.it_value.tv_sec | tspec.it_value.tv_nsec) ) {
-          if( ktimer->time_x ) { /* Disarm real timer */
+          if( ktimer->time_x ) { /* Disarm active timer */
             delete_timer(ktimer);
             r=0;
           }
@@ -182,7 +211,6 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
           TIMER_RESET_TIME(ktimer,tx);
           r=add_timer(ktimer);
         }
-        __READ_TIMESTAMP_COUNTER(t2);
         UNLOCK_POSIX_STUFF_W(stuff);
 
         if( !r && arg3 ) {

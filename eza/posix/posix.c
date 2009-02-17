@@ -14,10 +14,6 @@ void release_task_posix_stuff(posix_stuff_t *stuff)
 {
 }
 
-void posix_free_obj_id(posix_stuff_t *stuff,long id)
-{
-}
-
 posix_stuff_t *allocate_task_posix_stuff(void)
 {
   posix_stuff_t *stuff=memalloc(sizeof(*stuff));
