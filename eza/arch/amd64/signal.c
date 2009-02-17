@@ -33,6 +33,8 @@
 #include <eza/posix.h>
 #include <mlibc/kprintf.h>
 #include <eza/usercopy.h>
+#include <config.h>
+#include <eza/gc.h>
 
 #define XMM_CTX_SIZE  512
 
@@ -331,9 +333,29 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
 
   /* Next, check for pending signals. */
   if( uworks & ARCH_CTX_UWORKS_SIGNALS_MASK ) {
-    kprintf_dbg("[UWORKS]: Pending signals: 0x%X\n",
-                current->siginfo.pending);
-    __handle_pending_signals(reason,retcode,kstack);
+    int i=0;
+
+  repeat:
+    if( i < CONFIG_MAX_DEFFERED_USERSPACE_ACTIONS ) {
+      gc_action_t *a;
+
+      LOCK_TASK_STRUCT(current);
+      if( !list_is_empty(&current->uworks_data.def_uactions) ) {
+        a=container_of();
+      }
+      UNLOCK_TASK_STRUCT(current);
+
+      if( def_uworks ) {
+        /* Have some deferred userspace works. */
+      }
+    }
+    
+    if( only_signals ) {
+      /* Signals, dot deffered   */
+      kprintf_dbg("[UWORKS]: Pending signals: 0x%X\n",
+                  current->siginfo.pending);
+      __handle_pending_signals(reason,retcode,kstack);
+    }
   }
 }
 

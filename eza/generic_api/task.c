@@ -245,6 +245,7 @@ static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
 
     task->uworks_data.cancel_state=PTHREAD_CANCEL_ENABLE;
     task->uworks_data.cancel_type=PTHREAD_CANCEL_DEFERRED;
+    list_init_head(&task->uworks_data.def_uactions);
   }
   return task;
 }

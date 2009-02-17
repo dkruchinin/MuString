@@ -206,7 +206,7 @@ void fire_deffered_actions(void)
       execute_deffered_action(action);
       fired++;
     }
-  } while(action != NULL && fired < CONFIG_MAX_DEFERRED_ACTIONS_PER_TICK);
+  } while(action != NULL && fired < CONFIG_MAX_DEFERRED_IRQ_ACTIONS_PER_TICK);
 
   spinlock_lock_irqsave(&acts->lock,is);
   acts->executers--;

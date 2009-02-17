@@ -156,6 +156,7 @@ typedef enum __task_flags {
 
 struct __disintegration_descr_t;
 typedef struct __uwork_data {
+  list_head_t def_uactions;
   struct __disintegration_descr_t *disintegration_descr;
 
   /* Thread cancellation-related stuff. */
