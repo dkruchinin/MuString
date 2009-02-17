@@ -122,10 +122,8 @@ typedef struct __tlsf {
 void tlsf_allocator_init(mm_pool_t *pool);
 
 #ifdef CONFIG_DEBUG_MM
-void tlsf_memdump_dbg(void *_tlsf);
 void tlsf_validate_dbg(void *_tlsf);
 #else
-#define tlsf_memdump_dbg(_tlsf)
 #define tlsf_validate_dbg(_tlsf)
 #endif /* CONFIG_MM_DEBUG */
 

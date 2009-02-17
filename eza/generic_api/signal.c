@@ -475,7 +475,7 @@ int sys_sigaction(int signum,sigaction_t *act,
 
 sighandlers_t *allocate_signal_handlers(void)
 {
-  sighandlers_t *sh=alloc_pages_addr(1,AF_MMP_GEN);
+  sighandlers_t *sh=alloc_pages_addr(1, 0);
 
   if( sh ) {
     int i;

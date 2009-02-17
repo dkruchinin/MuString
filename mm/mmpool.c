@@ -32,19 +32,15 @@
 #include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 
-#if (CONFIG_NOF_MMPOOLS > MMPOOLS_MAX)
-#error "CONFIG_NOF_MMPOOLS can not be greater than MMPOOLS_MAX!"
-#endif /* (CONFIG_NOF_MMPOOLS > MMPOOLS_MAX) */
-
-mm_pool_t mm_pools[CONFIG_NOF_MMPOOLS];
+mm_pool_t mm_pools[MMPOOLS_MAX];
 
 void mmpools_initialize(void)
 {
   uint8_t i;
   
   kprintf("[MM] Initialize memory pools.\n");
-  memset(mm_pools, 0, sizeof(*mm_pools) * CONFIG_NOF_MMPOOLS);
-  for (i = 0; i < CONFIG_NOF_MMPOOLS; i++) {
+  memset(mm_pools, 0, sizeof(*mm_pools) * MMPOOLS_MAX);
+  for (i = 0; i < MMPOOLS_MAX; i++) {
     switch (i) {
         case BOOTMEM_POOL_TYPE:
           mm_pools[i].name = "Bootmem";
@@ -64,14 +60,14 @@ void mmpools_initialize(void)
 
     mm_pools[i].type = i;
     mm_pools[i].is_active = false;
-    mm_pools[i].first_page_idx = PAGE_IDX_INVAL;
+    mm_pools[i].first_page_id = PAGE_IDX_INVAL;
   }
 }
 
 void mmpool_add_page(mm_pool_t *pool, page_frame_t *pframe)
 {
-  if (pframe_number(pframe) < pool->first_page_idx)
-    pool->first_page_idx = pframe_number(pframe);
+  if (pframe_number(pframe) < pool->first_page_id)
+    pool->first_page_id = pframe_number(pframe);
 
   pool->total_pages++;
   if (pframe->flags & PF_RESERVED)
@@ -79,14 +75,13 @@ void mmpool_add_page(mm_pool_t *pool, page_frame_t *pframe)
   else
     atomic_inc(&pool->free_pages);
 
-  page->pool_type = pool->type;
+  pframe->pool_type = pool->type;
 }
 
 void mmpool_activate(mm_pool_t *pool)
 {
-  ASSERT(pool->type < CONFIG_NOF_MMPOOLS);
+  ASSERT(pool->type < MMPOOLS_MAX);
   ASSERT(!pool->is_active);
-  ASSERT(atomic_get(&pool->free_pages) > 0);
   switch (pool->type) {
       case GENERAL_POOL_TYPE: case DMA_POOL_TYPE:
         tlsf_allocator_init(pool);

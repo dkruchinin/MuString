@@ -34,15 +34,12 @@
 #include <mlibc/types.h>
 
 /* Allocation flags */
-#define AF_MMP_BMEM  mmpool_type2flags()
-#define AF_MMP_GEN   0x02
-#define AF_MMP_DMA   0x04
-#define AF_MMP_HMEM  0x08
-#define AF_ZERO      0x10  /**< Allocate clean page block(fill block with zeros) */
-#define AF_CLEAR_RC  0x20  /**< Allocate pages with refcounts set to 0 */
-#define AF_USER      0x40
+#define AF_BMEM      0x01
+#define AF_DMA       0x02
+#define AF_ZERO      0x04
+#define AF_USER      0x08
 
-#define PAGES_POOL_MASK (AF_MMP_BMEM | AF_MMP_GEN | AF_MMP_DMA | AF_MMP_HMEM)
+#define PAGES_POOL_MASK (AF_BMEM | AF_DMA | AF_USER)
 
 /**
  * @typedef uint8_t pfalloc_flags_t
@@ -66,11 +63,11 @@ typedef enum __pfalloc_type {
  */
 typedef struct __pf_allocator {
   page_frame_t *(*alloc_pages)(page_idx_t n, void *data);
-  page_frame_t *(*alloc_pages_max_avail)(void *data);
   void (*free_pages)(page_frame_t *pframe, page_idx_t num_pages, void *data);
   void (*dump)(void *data);
   void (*deactivate)(void *data);
   void *alloc_ctx;         /**< Internal allocator private data */
+  page_idx_t max_block_size;
   pfalloc_type_t type;     /**< Allocator type */
 } pf_allocator_t;
 
@@ -121,10 +118,10 @@ static inline void *alloc_pages_addr(int n, pfalloc_flags_t flags)
   return NULL;
 }
 
-static inline void free_pages_addr(void *addr)
+static inline void free_pages_addr(void *addr, page_idx_t npages)
 {
   page_frame_t *pf = virt_to_pframe(addr);
-  free_pages(pf, pages_block_size(pf));
+  free_pages(pf, npages);
 }
 
 #endif /* __PFALLOC_H__ */

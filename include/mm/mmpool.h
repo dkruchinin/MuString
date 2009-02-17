@@ -35,24 +35,13 @@
 
 #define MMPOOLS_MAX 4
 
-#define BOOTMEM_POOL_TYPE 0
-#define GENERAL_POOL_TYPE 1
-
-#ifdef _LP64
-#define HIGHMEM_POOL_TYPE 2
-#else
-#define HIGHMEM_POOL_TYPE GENERAL_POOL_TYPE
-#endif /* _LP64 */
-
-#ifdef CONFIG_DMA_POOL
-#define DMA_POOL_TYPE 3
-#else
-#define DMA_POOL_TYPE GENERAL_POOL_TYPE
-#endif /* CONFIG_DMA_POOL */
-
-#define mmpool_type2flags(type) (1 << (type))
-#define mmpool_flags2type(flags) (((flags & PAGES_POOL_MASK) >> 1))
-
+enum {
+  BOOTMEM_POOL_TYPE = 0,
+  GENERAL_POOL_TYPE,
+  HIGHMEM_POOL_TYPE,
+  DMA_POOL_TYPE,
+};
+  
 #define POOL_BOOTMEM() (&mm_pools[BOOTMEM_POOL_TYPE])
 #define POOL_GENERAL() (&mm_pools[GENERAL_POOL_TYPE])
 #define POOL_DMA()     (&mm_pools[DMA_POOL_TYPE])
@@ -123,6 +112,7 @@ static inline mm_pool_t *get_mmpool_by_type(uint8_t type)
 }
 
 void mmpools_initialize(void);
+void mmpool_activate(mm_pool_t *pool);
 void mmpool_add_page(mm_pool_t *pool, page_frame_t *pframe);
 
 #endif /* __MMPOOL_H__ */

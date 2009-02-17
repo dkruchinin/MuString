@@ -106,7 +106,7 @@ static page_frame_t *alloc_stack_pages(void)
 {
   page_frame_t *p;
 
-  p = alloc_pages(KERNEL_STACK_PAGES, AF_MMP_GEN);
+  p = alloc_pages(KERNEL_STACK_PAGES, 0);
   return p;
 }
 
@@ -212,14 +212,14 @@ void cleanup_thread_data(void *t,ulong_t arg)
 
 static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
 {
-  task_t *task=alloc_pages_addr(1, AF_MMP_GEN | AF_ZERO);
+  task_t *task=alloc_pages_addr(1, AF_ZERO);
 
   if( task ) {
     if( !(flags & CLONE_MM) || priv == TPL_KERNEL ) {
       task->tg_priv=memalloc(sizeof(tg_leader_private_t));
 
       if( !task->tg_priv ) {
-        free_pages_addr(task);
+        free_pages_addr(task, 1);
         return NULL;
       }
 

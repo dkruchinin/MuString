@@ -38,8 +38,8 @@
 #include <eza/arch/page.h>
 #include <eza/arch/atomic.h>
 
-#define PAGE_ALIGN(addr) (((addr) + PAGE_MASK) & ~PAGE_MASK)
-#define PAGE_ALIGN_DOWN(addr) ((addr) & ~PAGE_MASK)
+#define PAGE_ALIGN(addr) (((uintptr_t)(addr) + PAGE_MASK) & ~PAGE_MASK)
+#define PAGE_ALIGN_DOWN(addr) ((uintptr_t)(addr) & ~PAGE_MASK)
 
 /**
  * @typedef int page_idx_t
@@ -78,15 +78,16 @@ typedef uint8_t page_flags_t;
  * @see pframe_pages_array
  */
 typedef struct __page_frame {
-  list_node_t node;    /**< Obvious */
-  page_idx_t idx;      /**< Page frame index in the pframe_pages_array */
+  list_node_t node;
+  list_node_t chain_node;
+  page_idx_t idx;
   union {
-    atomic_t refcount;   /**< Number of references to the physical page */
+    atomic_t refcount;
     void *slab_pages_start;
   };
-  uint32_t _private;   /**< Private data that may be used by internal page frame allocator */
-  page_flags_t flags;  /**< Page flags */
-  uint8_t pool_type;   /**< Type of memory pool page belongs to */
+  ulong_t _private;
+  page_flags_t flags;
+  uint8_t pool_type;
 } page_frame_t;
 
 extern page_frame_t *page_frames_array; /**< An array of all available physical pages */
@@ -153,6 +154,8 @@ static inline page_frame_t *virt_to_pframe( void *addr )
   return pframe_by_number(virt_to_pframe_id(addr));
 }
 
+#define pframe_memnull(page) pframes_memnull(page, 1)
+
 /**
  * @fn static inline void pframe_memnull(page_frame_t *start, int block_size)
  * @brief Fill block of @a block_size continuos pages with zero's
@@ -160,11 +163,11 @@ static inline page_frame_t *virt_to_pframe( void *addr )
  * @param block_size - Number of pages in block
  */
 #ifndef ARCH_PAGE_MEMNULL
-static inline void pframe_memnull(page_frame_t *start, int block_size)
+static inline void pframes_memnull(page_frame_t *start, int block_size)
 {
   memset(pframe_to_virt(start), 0, PAGE_SIZE * block_size);
 }
 #else
-#define pframe_memnull(start, block_size) arch_page_memnull(start, block_size)
+#define pframes_memnull(start, block_size) arch_pages_memnull(start, block_size)
 #endif /* ARCH_PAGE_MEMNULL */
 #endif /* __PAGE_H__ */

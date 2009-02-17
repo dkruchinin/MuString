@@ -57,8 +57,11 @@ typedef struct __idalloc_meminfo {
   char *mem;                /**< Address starting from which data may be allocated */
   list_head_t avail_pages;  /**< A list of available pages */
   list_head_t used_pages;   /**< A list of already used(full) pages */
+  int num_avail_pages;
+  mm_pool_t *pool;
+  mm_pool_t *leeched_pool;
   spinlock_t lock;          /**< Obvious */
-  uint8_t flags;
+  uint8_t flags;    
 } idalloc_meminfo_t;
 
 extern idalloc_meminfo_t idalloc_meminfo;      /**< Global structure containing all idalloc informaion */
@@ -80,7 +83,7 @@ void *idalloc(size_t size);
  */
 static inline bool idalloc_is_enabled(void)
 {
-  return idalloc_meminfo.is_enabled;
+  return !!(idalloc_meminfo.flags & IDALLOC_CAN_ALLOC_CHUNKS);
 }
 
 #endif /* __IDALLOC_H__ */

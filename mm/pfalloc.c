@@ -29,32 +29,125 @@
 #include <mlibc/types.h>
 #include <mm/tlsf.h>
 
+#define DEFAULT_GRANULARITY 64
+
+static page_frame_t *__alloc_pages_ncont(mm_pool_t *pool, page_idx_t n, pfalloc_flags_t flags)
+{
+  page_idx_t granularity;
+  page_frame_t *pages = NULL, *p;
+
+  config_granularity:
+  if (pool->allocator.max_block_size >= DEFAULT_GRANULARITY)
+    granularity = DEFAULT_GRANULARITY;
+  else
+    granularity = pool->allocator.max_block_size;
+  
+  while (n) {
+    if (granularity > n)
+      granularity = n;
+    
+    p = pool->allocator.alloc_pages(granularity, pool->allocator.alloc_ctx);
+    if (!p) {
+      if (atomic_get(&pool->free_pages)) {
+        if ((granularity /= 2) != 0)
+          continue;
+      }
+      switch (pool->type) {
+          case HIGHMEM_POOL_TYPE:
+            pool = POOL_GENERAL();
+            goto config_granularity;
+          case GENERAL_POOL_TYPE:
+            if (!POOL_DMA()->is_active)
+              goto failed;
+
+            pool = POOL_DMA();
+            goto config_granularity;
+          default:
+            goto failed;
+      }
+    }
+    if ((flags & AF_ZERO) && (pool->type != HIGHMEM_POOL_TYPE))
+      pframes_memnull(p, granularity);
+    if (unlikely(pages == NULL))
+      pages = p;
+    else {
+      list_add_range(&p->chain_node, p->chain_node.prev,
+                     pages->chain_node.prev, &pages->chain_node);
+    }
+
+    atomic_sub(&pool->free_pages, granularity);
+    n -= granularity;
+  }
+
+  return pages;
+
+  failed:
+  if (pages) {
+    list_node_t *n, *save;
+    list_for_each_safe(list_node2head(pages), n, save) {
+      free_page(list_entry(n, page_frame_t, chain_node));
+    }
+
+    free_page(pages);
+  }
+
+  return NULL;
+}
+
 page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
 {
   page_frame_t *pages = NULL;
   mm_pool_t *pool;
 
-  if (!(flags & PAGE_POOLS_MASK))
-    flags |= AF_PGEN;
-
-  pool = mmpools_get_pool(__pool_type(flags & PAGE_POOLS_MASK));
-  if (!pool->is_active) {
-    kprintf(KO_WARNING "alloc_pages: Can't allocate from pool \"%s\" (pool is no active)\n",
-            mmpools_get_pool_name(pool->type));
+  if (!(flags & PAGES_POOL_MASK))
+    pool = POOL_GENERAL();
+  else if (flags & (AF_USER | AF_DMA)) {
+    if (flags & AF_USER)
+      pool = POOL_HIGHMEM();
+    else
+      pool = POOL_DMA();
+    if (!pool->is_active)
+      pool = POOL_GENERAL();
   }
-  if (atomic_get(&pool->free_pages) < n)
-    goto out;
-  
-  pages = __pool_alloc_pages(pool, n);  
-  if (!pages)
-    goto out;
+  else
+    pool = POOL_BOOTMEM();    
+  if (!pool->is_active) {
+    kprintf(KO_WARNING "alloc_pages: Can't allocate from pool \"%s\" (pool is no active)\n", pool->name);
+    return NULL;
+  }
+  if (!pool->allocator.alloc_pages) {
+    kprintf(KO_WARNING "Memory allocator of pool \"%s\" doesn't support alloc_pages function!\n", pool->name);
+    return NULL;
+  }
 
-  if (flags & AF_ZERO) /* fill page block with zeros */
-    pframe_memnull(pages, n);
-  if (flags & AF_CLEAR_RC) { /* zero all refcounts of pages in a block */
-    register page_idx_t i;
-    for (i = 0; i < n; i++)
-      atomic_set(&pages[i].refcount, 0);
+  if (!(flags & AF_USER)) {
+    pages = pool->allocator.alloc_pages(n, pool->allocator.alloc_ctx);
+    if (!pages) {
+      kprintf("what the fucking fuck?! ==> %s\n", pool->name);
+      if ((pool->type == GENERAL_POOL_TYPE) && POOL_DMA()->is_active) {
+        /* try to allocate pages from DMA pool if it's possible */
+        pool = POOL_DMA();
+        pages = pool->allocator.alloc_pages(n, pool->allocator.alloc_ctx);
+        if (!pages)
+          goto out;
+      }
+      else
+        goto out;
+    }
+    if (flags & AF_ZERO)
+      pframes_memnull(pages, n);
+
+    atomic_sub(&pool->free_pages, n);
+  }
+  else {
+    /* Allocate non-contious chain of pages... */
+    if (pool->type == HIGHMEM_POOL_TYPE) {
+      pages = pool->allocator.alloc_pages(n, pool->allocator.alloc_ctx);
+      if (pages)
+        goto out;
+    }
+    
+    pages = __alloc_pages_ncont(pool, n, flags);
   }
 
   /* done */
@@ -64,89 +157,20 @@ page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
 
 void free_pages(page_frame_t *pages, page_idx_t num_pages)
 {
-  mm_pool_t *pool = mmpools_get_pool(pframe_pool_type(pages));
+  mm_pool_t *pool = get_mmpool_by_type(pages->pool_type);
 
+  if (!pool)
+    panic("Page frame #%#x has invalid pool type %d!", pframe_number(pages), pages->pool_type);
   if (!pool->is_active) {
-    kprintf(KO_ERROR "free_pages: trying to free pages from dead pool %s\n",
-            mmpools_get_pool_name(pool->type));
+    kprintf(KO_ERROR "free_pages: trying to free pages from dead pool %s\n", pool->name);
+    return;
+  }
+  if (!pool->allocator.free_pages) {
+    kprintf(KO_WARNING "Memory pool %s doesn't support free_pages function!\n", pool->name);
     return;
   }
   
-  __pool_free_pages(pool, pages, num_pages);
+  pool->allocator.free_pages(pages, num_pages, pool->allocator.alloc_ctx);
+  atomic_add(&pool->free_pages, num_pages);
 }
 
-page_idx_t pages_block_size(page_frame_t *first_page)
-{
-  mm_pool_t *pool = mmpools_get_pool(pframe_pool_type(first_page));
-
-  if (!pool->is_active) {
-    kprintf(KO_ERROR "pages_block_get_size: Trying to get size of pages "
-            "block owned by inactive memory pool %s\n", mmpools_get_pool_name(pool->type));
-    return -EINVAL;
-  }
-
-  return __pool_pblock_size(pool, first_page);
-}
-
-/*
- * FIXME DK: for now alloc_pages_ncont can allocate more pages than
- * target allocator's max pages limit, but it assumes that there are
- * enough free blocks of max size. This is not good behaviour, because
- * actually allocator may not have any free blocks of max size, but
- * its memory may be highly fragmented, so there may be enough pages
- * in blocks less than max ones. That *must* be attended.
- */
-page_frame_t *alloc_pages_ncont(page_idx_t npages, pfalloc_flags_t flags)
-{
-  page_frame_t *pages = NULL;  
-  page_idx_t block_sz, max_sz;
-  page_frame_t *ap;
-
-  if (!(flags & PAGE_POOLS_MASK))
-    flags |= AF_PGEN;
-
-  max_sz = __pool_block_size_max(mmpools_get_pool(POOL_GENERAL)) - 1;
-  while (npages) {
-    block_sz = (npages > max_sz) ? max_sz : npages;
-    ap = alloc_pages(block_sz, flags);
-    if (!ap)
-      goto free_pages;
-    if (unlikely(!pages)) {
-      pages = ap;
-      list_init_head(&pages->head);
-      list_add2tail(&pages->head, &pages->node);
-    }
-    else
-      list_add2tail(&pages->head, &ap->node);
-    
-    npages -= block_sz;
-  }
-
-  goto out;
-  free_pages:
-  if (pages) {
-    list_node_t *iter, *safe;
-    page_frame_t *pf;  
-
-    list_for_each_safe(&pages->head, iter, safe) {
-      pf = list_entry(iter, page_frame_t, node);
-      free_pages(pf, pages_block_size(pf));
-    }
-
-    pages = NULL;
-  }
-  
-  out:
-  return pages;
-}
-
-void free_pages_ncont(page_frame_t *pages)
-{
-  list_node_t *n, *safe;
-  page_frame_t *pf;
-
-  list_for_each_safe(&pages->head, n, safe) {
-    pf = list_entry(n, page_frame_t, node);
-    free_pages(pf, pages_block_size(pf));
-  }
-}

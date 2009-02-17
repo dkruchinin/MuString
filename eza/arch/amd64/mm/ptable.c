@@ -66,7 +66,7 @@ ptable_ops_t ptable_ops = {
   .mmap = generic_ptable_map,
   .munmap = generic_ptable_unmap,
   .vaddr2page_idx = generic_vaddr2page_idx,
-  .alloc_pages = alloc_pages,
+  .alloc_flags = AF_ZERO,
 };
 
 ptable_flags_t kmap_to_ptable_flags(uint32_t kmap_flags)

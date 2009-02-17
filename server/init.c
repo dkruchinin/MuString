@@ -41,7 +41,7 @@
 #define USER_PAGES_CHUNK  64
 
 static int __create_empty_user_area(task_t *task,ulong_t virt,
-                                         ulong_t pages,ulong_t flags)
+                                    ulong_t pages,ulong_t flags)
 {
   int r;
 
@@ -49,7 +49,7 @@ static int __create_empty_user_area(task_t *task,ulong_t virt,
     ulong_t to_map=(pages <= USER_PAGES_CHUNK) ? pages : USER_PAGES_CHUNK;
     page_frame_t *pf;
 
-    pf=alloc_pages(to_map,AF_ZERO | AF_PGEN);
+    pf=alloc_pages(to_map,AF_ZERO);
     if( !pf ) {
       return -ENOMEM;
     }

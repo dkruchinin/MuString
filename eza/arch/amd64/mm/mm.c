@@ -58,11 +58,8 @@ static inline void __determine_page_mempool(page_frame_t *pframe)
 {
   mm_pool_t *pool;
 
-  if (pframe_number(pframe) < dma_pages) {
-    pool = POOL_BOOTMEM();
-    if (atomic_get(&pool->free_pages) >= bootmem_pages)
-      pool = POOL_DMA();
-  }
+  if (pframe_number(pframe) < dma_pages)
+    pool = POOL_DMA();
   else
     pool = POOL_GENERAL();
   
@@ -71,11 +68,7 @@ static inline void __determine_page_mempool(page_frame_t *pframe)
 #else
 static inline void __determine_page_mempool(page_frame_t *pframe)
 {
-  mm_pool_t *pool = POOL_BOOTMEM();  
-  if (atomic_get(&pool->free_pages) >= bootmem_pages)
-    pool = POOL_GENERAL();
-  
-  mmpool_add_page(pool, pframe);
+  mmpool_add_page(POOL_GENERAL(), pframe);
 }
 #endif /* CONFIG_IOMMU */
 
@@ -167,7 +160,6 @@ static void scan_phys_mem(void)
                     "(ACPI NVS)", "(BAD)" };
   uintptr_t last_addr = 0;
 
-  kprintf("[MM] Scanning physical memory...\n");  
   kprintf("E820 memory map:\n"); 
   for(idx = 0, found = false; idx < e820count; idx++) {
     e820memmap_t *mmap = &e820table[idx];
@@ -207,7 +199,7 @@ static void build_page_frames_array(void)
   page_frame_t *page;
 
   bootmem_pages = __count_pages_to_reserve(IDENT_MAP_PAGES - 1);
-  bootmem_pages += __count_pages_to_reserve(num_phys_pages);
+  bootmem_pages += __count_pages_to_reserve(num_phys_pages) + 1;
   mmap_end = mmap->base_address + (((uintptr_t)(mmap->length_high) << 32) | mmap->length_low);
   for (idx = 0; idx < num_phys_pages; idx++) {
     page = &page_frames_array[idx];
@@ -263,16 +255,20 @@ void arch_mm_remap_pages(void)
   int ret;
 
   /* Create identity mapping */
+  kprintf(".1\n");
   ret = mmap_kern(0x1000, 1, IDENT_MAP_PAGES - 1,
                   KMAP_READ | KMAP_WRITE | KMAP_KERN);
+  kprintf(".2\n");
   if (ret) {
     panic("Can't create identity mapping (%p -> %p)! [errcode=%d]",
           0x1000, IDENT_MAP_PAGES << PAGE_WIDTH, ret);
   }
 
-  verify_mapping("identity mapping", 0x1000, IDENT_MAP_PAGES - 1, 1);  
+  verify_mapping("identity mapping", 0x1000, IDENT_MAP_PAGES - 1, 1);
+  kprintf(".3\n");
   ret = mmap_kern(KERNEL_BASE, 0, num_phys_pages,
                   KMAP_READ | KMAP_WRITE | KMAP_EXEC | KMAP_KERN);
+  kprintf(".4\n");
   if (ret) {
     panic("Can't create kernel mapping (%p -> %p)! [errcode=%d]",
           KERNEL_BASE, num_phys_pages << PAGE_WIDTH, ret);
@@ -285,12 +281,6 @@ void arch_mm_remap_pages(void)
    * to allow them be mapped as mandatory areas in user memory space.
    */
   register_mandatory_mappings();
-
-  /* FIXME DK:
-   * actually this is a buggy way of mapping kernel area.
-   * Kernel area mapping *must* be done *explicitely* in order to increment
-   * refcouns of all kernel pages.
-   */
   arch_smp_mm_init(0);
 }
 

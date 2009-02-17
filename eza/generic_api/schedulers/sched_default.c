@@ -84,7 +84,7 @@ static void __initialize_cpu_sched_data(eza_sched_cpudata_t *queue, cpu_id_t cpu
 static eza_sched_taskdata_t *__allocate_task_sched_data(void)
 {
   /* TODO: [mt] Allocate memory via slabs !!!  */
-  page_frame_t *page = alloc_page(AF_MMP_GEN);
+  page_frame_t *page = alloc_page(0);
   return (eza_sched_taskdata_t *)pframe_to_virt(page);
 }
 
@@ -92,7 +92,7 @@ int sched_verbose=0;
  
 static eza_sched_cpudata_t *__allocate_cpu_sched_data(cpu_id_t cpu) {
   /* TODO: [mt] Allocate memory via slabs !!!  */
-  page_frame_t *page = alloc_pages(16, AF_MMP_GEN);
+  page_frame_t *page = alloc_pages(16, 0);
   eza_sched_cpudata_t *cpudata = (eza_sched_cpudata_t *)pframe_to_virt(page);
 
   if( cpudata != NULL ) {

@@ -273,12 +273,10 @@ static int do_ptable_map(page_frame_t *dir, struct pt_mmap_info *minfo, int pde_
 
 page_frame_t *generic_create_pagedir(void)
 {
-  page_frame_t *pf = ptable_ops.alloc_pages(1, AF_ZERO | AF_MMP_GEN);
-
+  page_frame_t *pf = alloc_page(ptable_ops.alloc_flags);
   if (!pf)
     return NULL;
 
-  atomic_set(&pf->refcount, 0);
   return pf;
 }
 

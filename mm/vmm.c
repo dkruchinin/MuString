@@ -40,39 +40,41 @@ void mm_initialize(void)
 {
   mm_pool_t *pool;
   int activated_pools = 0;
+  pfalloc_flags_t old_flags;
 
   mmpools_initialize();
   arch_mm_init();
+
+  mmpool_activate(POOL_BOOTMEM());
+  old_flags = ptable_ops.alloc_flags;
+  ptable_ops.alloc_flags = AF_BMEM | AF_ZERO;
+  kprintf("1\n");
+  if (ptable_ops.initialize_rpd(&kernel_rpd))
+    panic("mm_init: Can't initialize kernel root page directory!");
+
+  kprintf("2\n");
+  /* Now we can remap available memory */
+  arch_mm_remap_pages();
+  ptable_ops.alloc_flags = old_flags;
   for_each_mm_pool(pool) {
-    if (!atomic_get(&pool->free_pages))
+    if (!atomic_get(&pool->free_pages) || (pool->type == BOOTMEM_POOL_TYPE))
       continue;
 
+    kprintf("activate pool %d %s\n", pool->type, pool->name);
     mmpool_activate(pool);
     activated_pools++;
   }
   if (!activated_pools)
     panic("No one memory pool was activated!");
   
-  pool = mmpools_get_pool(POOL_GENERAL);
-  ASSERT(pool->free_pages);
-  idalloc_enable(pool, CONFIG_IDALLOC_PAGES + arch_num_pages_to_reserve());
-  kprintf("[MM] Init-data memory allocator was initialized.\n");
-  kprintf(" idalloc available pages: %ld\n", idalloc_meminfo.npages);  
   for_each_active_mm_pool(pool) {
     kprintf("[MM] Pages statistics of pool \"%s\":\n", pool->name);
     kprintf(" | %-8s %-8s %-8s |\n", "Total", "Free", "Reserved");
     kprintf(" | %-8d %-8d %-8d |\n", pool->total_pages,
             atomic_get(&pool->free_pages), pool->reserved_pages);
   }
-  if (ptable_ops.initialize_rpd(&kernel_rpd))
-    panic("mm_init: Can't initialize kernel root page directory!");
-
-  /* Now we can remap available memory */
-  arch_mm_remap_pages();
-  pool = POOL_BOOTMEM();
-  if (pool->is_active)
-    mmpool_deactivate(pool);
   
+  kprintf("IDALLOC: %d\n", idalloc_meminfo.num_avail_pages);
   kprintf("[MM] All pages were successfully remapped.\n");
 }
 
@@ -218,96 +220,6 @@ void pfi_list_init(page_frame_iterator_t *pfi,
   memset(ctx, 0, sizeof(*ctx));
   ctx->first_node = first_node;
   ctx->last_node = last_node;
-  pfi->pf_idx = PAGE_IDX_INVAL;
-  pfi->error = 0;
-  iter_set_ctx(pfi, ctx);
-}
-
-static void __pfiter_pblock_first(page_frame_iterator_t *pfi)
-{
-  ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx;
-
-  ASSERT(pfi->type == PF_ITER_PBLOCK);
-  ctx = iter_fetch_ctx(pfi);
-  ctx->cur_node = ctx->first_node;
-  ctx->cur_idx = ctx->first_idx;
-  pfi->pf_idx =
-    pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->cur_idx);
-  pfi->state = ITER_RUN;
-}
-
-static void __pfiter_pblock_last(page_frame_iterator_t *pfi)
-{
-  ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx;
-
-  ASSERT(pfi->type == PF_ITER_PBLOCK);
-  ctx->cur_node = ctx->last_node;
-  ctx->cur_idx = ctx->last_idx;
-  pfi->pf_idx =
-    pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->cur_idx);
-  pfi->state = ITER_RUN;
-}
-
-static void __pfiter_pblock_next(page_frame_iterator_t *pfi)
-{
-  ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx;
-
-  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_PBLOCK);
-  ctx = iter_fetch_ctx(pfi);
-  ctx->cur_idx++;
-  if (unlikely((ctx->cur_node == ctx->last_node) &&
-               (ctx->cur_idx >= ctx->last_idx))) {
-    pfi->pf_idx = PAGE_IDX_INVAL;
-    pfi->state = ITER_STOP;
-  }
-  else {    
-    if (ctx->cur_idx >= pages_block_size(list_entry(ctx->cur_node, page_frame_t, node))) {
-      ctx->cur_node = ctx->cur_node->next;
-      ctx->cur_idx = 0;
-    }
-
-    pfi->pf_idx =
-      pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->cur_idx);
-  }
-}
-
-static void __pfiter_pblock_prev(page_frame_iterator_t *pfi)
-{
-  ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx;
-
-  ITER_DBG_CHECK_TYPE(pfi, PF_ITER_PBLOCK);
-  ctx = iter_fetch_ctx(pfi);
-  if (unlikely((ctx->cur_node == ctx->first_node) &&
-               (ctx->cur_idx <= ctx->first_idx))) {
-    pfi->pf_idx = PAGE_IDX_INVAL;
-    pfi->state = ITER_STOP;
-  }
-  else {
-    if (!ctx->cur_idx)
-      ctx->cur_node = ctx->cur_node->prev;
-    else
-      ctx->cur_idx--;
-
-    pfi->pf_idx =
-      pframe_number(list_entry(ctx->cur_node, page_frame_t, node) + ctx->cur_idx);
-  }
-}
-
-void pfi_pblock_init(page_frame_iterator_t *pfi,
-                     ITERATOR_CTX(page_frame, PF_ITER_PBLOCK) *ctx,
-                     list_node_t *fnode, page_idx_t fidx,
-                     list_node_t *lnode, page_idx_t lidx)
-{
-  pfi->first = __pfiter_pblock_first;
-  pfi->last = __pfiter_pblock_last;
-  pfi->next = __pfiter_pblock_next;
-  pfi->prev = __pfiter_pblock_prev;
-  iter_init(pfi, PF_ITER_PBLOCK);
-  memset(ctx, 0, sizeof(*ctx));
-  ctx->first_node = fnode;
-  ctx->first_idx = fidx;
-  ctx->last_node = lnode;
-  ctx->last_idx = lidx;
   pfi->pf_idx = PAGE_IDX_INVAL;
   pfi->error = 0;
   iter_set_ctx(pfi, ctx);

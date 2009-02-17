@@ -51,7 +51,7 @@
 
 static inline size_t __get_main_bmap_size(idx_allocator_t *ida)
 {
-  if (likely(ida->ids_bmap))
+  if (likely(ida->ids_bmap != NULL))
     return (round_up_pow2((ida->size * sizeof(ulong_t)) / BYTES_PER_ITEM));
 
   return ida->size;
@@ -65,7 +65,7 @@ static inline size_t __get_main_bmap_size(idx_allocator_t *ida)
 
   main_sz = __get_main_bmap_size(ida) / sizeof(ulong_t);
   i = 0;
-  if (likely(ida->ids_bmap)) {
+  if (likely(ida->ids_bmap != NULL)) {
     for (;;) {
       while (i < main_sz) {
         fnfi = zero_bit_find_lsf(ida->main_bmap[i]);
@@ -106,13 +106,13 @@ static inline size_t __get_main_bmap_size(idx_allocator_t *ida)
     }
   }
   else {
-    while (i < sz)  {
-      bit = zero_bit_find_lsf(ida->main_bmap[i]);
-      if (bit >= 0) {
-        bit_set(ida->main_bmap + i, bit);
-        id = bit + i * BITS_PER_LONG;
+    while (i < main_sz)  {
+      fnfi = zero_bit_find_lsf(ida->main_bmap[i]);
+      if (fnfi >= 0) {
+        bit_set(ida->main_bmap + i, fnfi);
+        id = fnfi + i * BITS_PER_LONG;
         if (id >= ida->max_id) {
-          bit_clear(ida->main_bmap + i, bit);
+          bit_clear(ida->main_bmap + i, fnfi);
           id = IDX_INVAL;
         }
 
@@ -135,7 +135,7 @@ void idx_reserve(idx_allocator_t *ida, ulong_t idx)
   ASSERT(idx < ida->max_id);
   start_id = idx / BITS_PER_LONG;
   bitno = idx - start_id * BITS_PER_LONG;
-  if (likely(ida->ids_bmap))
+  if (likely(ida->ids_bmap != NULL))
     ptr = ida->ids_bmap + start_id;    
   else
     ptr = ida->main_bmap + start_id;
@@ -153,7 +153,7 @@ void idx_free(idx_allocator_t *ida, ulong_t idx)
   ASSERT(idx < ida->max_id);
   start_id = idx / BITS_PER_LONG;
   bitno = idx - start_id * BITS_PER_LONG;
-  if (likely(ida->ids_bmap)) {
+  if (likely(ida->ids_bmap != NULL)) {
     ptr = ida->ids_bmap + start_id;
     main_id = start_id / WORDS_PER_ITEM;
     main_bitno = start_id - main_id * WORDS_PER_ITEM;
@@ -177,7 +177,7 @@ int idx_allocator_init(idx_allocator_t *ida, ulong_t idx_max)
   memset(ida, 0, sizeof(*ida));
   if (likely(ida->size >= MIN_IDA_SIZE)) {
     if ((bmap_sz >= PAGE_SIZE) || (bmap_sz > SLAB_OBJECT_MAX_SIZE)) {
-      page_frame_t *pf = alloc_pages(bmap_sz >> PAGE_WIDTH, AF_PGEN | AF_ZERO);
+      page_frame_t *pf = alloc_pages(bmap_sz >> PAGE_WIDTH, AF_ZERO);
       if (!pf) {
         kprintf(KO_ERROR, "Can not allocate %d pages for bitmap. ENOMEM.\n", bmap_sz >> PAGE_WIDTH);
         goto error;
@@ -222,12 +222,12 @@ int idx_allocator_init(idx_allocator_t *ida, ulong_t idx_max)
 
 void idx_allocator_destroy(idx_allocator_t *ida)
 {  
-  if (likely(ida->ids_bmap)) {
+  if (likely(ida->ids_bmap != NULL)) {
     size_t bmap_sz = ida->size * sizeof(ulong_t);
     
     if ((bmap_sz >= PAGE_SIZE) || (bmap_sz > SLAB_OBJECT_MAX_SIZE)) {
-      page_frame_t *pf = virt_to_pframe(ida->ids_bmap);    
-      free_pages(pf, pages_block_size(pf));
+      page_frame_t *pf = virt_to_pframe(ida->ids_bmap);
+      free_pages(pf, bmap_sz >> PAGE_WIDTH);
     }
     else
       memfree(ida->ids_bmap);

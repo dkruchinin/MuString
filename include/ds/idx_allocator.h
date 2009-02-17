@@ -68,7 +68,7 @@ typedef struct __idx_allocator {
  * @param ida     - A pointer to particular index allocator
  * @param idx_max - Maximum index value.
  */
-void idx_allocator_init(idx_allocator_t *ida, ulong_t idx_max);
+int idx_allocator_init(idx_allocator_t *ida, ulong_t idx_max);
 
 /**
  * @brief Destroy index allocator.
@@ -88,7 +88,7 @@ void idx_allocator_destroy(idx_allocator_t *ida);
  * @see idx_reserve
  * @see idx_free
  */
-#define idx_allocate(ida) ((ida)->ops.alloc_id(ida))
+ulong_t idx_allocate(idx_allocator_t *ida);
 
 /**
  * @brief Reserves particular index number.
@@ -102,7 +102,7 @@ void idx_allocator_destroy(idx_allocator_t *ida);
  * @see idx_free
  * @see idx_allocate
  */
-#define idx_reserve(ida, idx) ((ida)->ops.reserve_id(ida, idx))
+void idx_reserve(idx_allocator_t *ida, ulong_t idx);
 
 /**
  * @brief Free back index @a idx to named allocator @a ida.
@@ -111,6 +111,6 @@ void idx_allocator_destroy(idx_allocator_t *ida);
  * @see idx_allocate
  * @see idx_reserve
  */
-#define idx_free(ida, idx) ((ida)->ops.free_id(ida, idx))
+void idx_free(idx_allocator_t *ida, ulong_t idx);
 
 #endif /* __IDX_ALLOCATOR_H__ */
