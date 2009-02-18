@@ -34,6 +34,7 @@
 #include <eza/bits.h>
 #include <ds/list.h>
 #include <eza/sigqueue.h>
+#include <eza/gc.h>
 
 #define NUM_POSIX_SIGNALS  32
 #define NUM_RT_SIGNALS     32
@@ -201,6 +202,8 @@ int send_process_siginfo(pid_t pid,siginfo_t *siginfo,void *kern_priv);
 bool update_pending_signals(task_t *task);
 int send_task_siginfo_forced(task_t *task,siginfo_t *info);
 sighandlers_t * allocate_signal_handlers(void);
+
+void schedule_user_deferred_action(task_t *target,gc_action_t *a,bool force);
 
 #define task_was_interrupted(t)  ( read_task_pending_uworks((t)) != 0 || pending_signals_present((t)) )
 

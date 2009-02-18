@@ -356,7 +356,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   int err = 0;
   bool was_merged = false;
 
-  kprintf("%p, %ld, %p\n", addr, npages, offs_pages);
+  //kprintf("%p, %ld, %p\n", addr, npages, offs_pages);
   vmr = NULL;
   ttree_cursor_init(&vmm->vmranges_tree, &cursor);
   if (!(flags & VMR_PROTO_MASK)
@@ -649,11 +649,11 @@ static void __print_tnode(ttree_node_t *tnode)
 
   tnode_for_each_index(tnode, i) {
     vmr = container_of(tnode_key(tnode, i), vmrange_t, bounds);
-    kprintf("[%p<->%p FP: %zd), ", vmr->bounds.space_start,
-            vmr->bounds.space_end, (vmr->hole_size >> PAGE_WIDTH));
+    //kprintf("[%p<->%p FP: %zd), ", vmr->bounds.space_start,
+    //        vmr->bounds.space_end, (vmr->hole_size >> PAGE_WIDTH));
   }
 
-  kprintf("\n");
+  // kprintf("\n");
 }
 
 void vmranges_print_tree_dbg(vmm_t *vmm)

@@ -156,6 +156,7 @@ typedef enum __task_flags {
 
 struct __disintegration_descr_t;
 typedef struct __uwork_data {
+  list_head_t def_uactions;
   struct __disintegration_descr_t *disintegration_descr;
 
   /* Thread cancellation-related stuff. */
@@ -374,8 +375,6 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv,
 void free_task_struct(task_t *task);
 
 #define is_thread(task)  ((task)->group_leader && (task)->group_leader != (task))
-
-void cleanup_thread_data(void *t,ulong_t arg);
 
 void task_event_notify(ulong_t events);
 int task_event_attach(struct __task_struct *target,

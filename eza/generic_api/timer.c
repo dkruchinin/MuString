@@ -150,12 +150,22 @@ void delete_timer(ktimer_t *timer)
     } else {
       /* Need to rebalance the whole list associated with this timer. */
       ktimer_t *nt;
-      list_node_t *ln;
+      list_node_t *lhn=&tt->actions.head;
 
-      skiplist_del(&timer->da,deffered_irq_action_t,head,node);
-      nt=container_of(list_node_first(&tt->actions),ktimer_t,da);
-      list_move2head(&nt->minor_tick.actions,&tt->actions);
-      list_replace(&tt->node,&nt->minor_tick.node);
+      if( lhn->next != &timer->da.node || lhn->prev != &timer->da.node
+          || !list_is_empty(&timer->da.head) ) {
+        skiplist_del(&timer->da,deffered_irq_action_t,head,node);
+        nt=container_of(list_node_first(&tt->actions),ktimer_t,da);
+
+        nt->minor_tick.actions.head.next=&nt->da.node;
+        nt->da.node.prev=&nt->minor_tick.actions.head;
+        nt->minor_tick.actions.head.prev=tt->actions.head.prev;
+        tt->actions.head.prev->next=&nt->minor_tick.actions.head;
+
+        list_replace(&tt->node,&nt->minor_tick.node);
+      } else {
+        list_del(&tt->node);
+      }
     }
   } else {
     /* Bad luck - timer's action has properly been scheduled. So try
@@ -289,8 +299,52 @@ out:
 static bool __timer_deffered_sched_handler(void *data)
 {
   ktimer_t *timer=(ktimer_t *)data;
-
   return (timer->time_x > system_ticks);
+}
+
+void __dump_timers(long tick)
+{
+  major_timer_tick_t *mt,*major_tick=NULL;
+  long is;
+  struct rb_node *n;
+  ulong_t mtickv=tick-(tick % CONFIG_TIMER_GRANULARITY);
+
+  LOCK_SW_TIMERS_R(is);
+  n=timers_rb_root.rb_node;
+
+  while( n ) {
+    mt=rb_entry(n,major_timer_tick_t,rbnode);
+
+    if( mtickv < mt->time_x ) {
+      n=n->rb_left;
+    } else if( mtickv > mt->time_x )  {
+      n=n->rb_right;
+    } else {
+      major_tick=mt;
+      break;
+    }
+  }
+
+  if( major_tick ) {
+    int i;
+
+    spinlock_lock(&major_tick->lock);
+    kprintf("[%d] <%d>: ",cpu_id(),major_tick->time_x);
+    for(i=0;i<MINOR_TICK_GROUPS;i++) {
+      list_head_t *lh=&major_tick->minor_ticks[i];
+      list_node_t *ln;
+      timer_tick_t *tt;
+
+      list_for_each(lh,ln) {
+        tt=container_of(ln,timer_tick_t,node);
+        ASSERT(tt->major_tick == major_tick);
+        kprintf(" (%d) ",tt->time_x);
+      }
+      kprintf("\n");
+    }
+    spinlock_unlock(&major_tick->lock);
+  }
+  UNLOCK_SW_TIMERS_R(is);
 }
 
 long sleep(ulong_t ticks)
@@ -307,9 +361,8 @@ long sleep(ulong_t ticks)
 
   r=add_timer(&timer);
   if( !r ) {
-    sched_change_task_state_deferred(current_task(),TASK_STATE_SLEEPING,
-                                     __timer_deffered_sched_handler,&timer);
-    
+    r=sched_change_task_state_deferred(current_task(),TASK_STATE_SLEEPING,
+                                       __timer_deffered_sched_handler,&timer);
     if( task_was_interrupted(current_task()) ) {
       r=-EINTR;
     }
@@ -317,5 +370,6 @@ long sleep(ulong_t ticks)
     r=0;
   }
 
+  delete_timer(&timer);
   return r;
 }
