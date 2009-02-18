@@ -58,29 +58,29 @@ static page_frame_t *idalloc_pages(page_idx_t npages, void *unused)
     page = pframe_by_number(i);
     lp->total_pages--;
     idalloc_meminfo.pool->total_pages++;
-    if (pages->flags & PF_RESERVED) {
+    if (page->flags & PF_RESERVED) {
       lp->reserved_pages--;
       idalloc_meminfo.pool->reserved_pages++;
-      pages = NULL;
+      page = NULL;
       continue;
     }
 
-    page->pool_type = 
+    page->pool_type = idalloc_meminfo.pool->type;
     atomic_inc(&idalloc_meminfo.pool->free_pages);
     atomic_dec(&lp->free_pages);
     break;
   }
 
   lp->first_page_id = i + 1;
-  if (!pages)
+  if (!page)
     goto out;
 
-  pages[i]._private |= IDALLOC_PAGE_FULL;
-  list_add2tail(&idalloc_meminfo.used_pages, &pages[i].node);
+  page->_private |= IDALLOC_PAGE_FULL;
+  list_add2tail(&idalloc_meminfo.used_pages, &page->node);
   
   out:
   spinlock_unlock(&idalloc_meminfo.lock);
-  return pages;
+  return page;
 }
 
 void idalloc_init(mm_pool_t *pool)
@@ -111,12 +111,13 @@ void idalloc_init(mm_pool_t *pool)
     page = pframe_by_number(pool->first_page_id + i);
     pool->total_pages++;
     leeched_pool->total_pages--;
+    page->pool_type = pool->type;
     if (page->flags & PF_RESERVED) {
       leeched_pool->reserved_pages--;
       pool->reserved_pages++;
       continue;
     }
-
+    
     list_add2tail(&idalloc_meminfo.avail_pages, &page->node);
     atomic_inc(&pool->free_pages);
     atomic_dec(&leeched_pool->free_pages);

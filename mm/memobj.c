@@ -90,13 +90,8 @@ static int generic_populate_pages(memobj_t *memobj, vmrange_t *vmr, uintptr_t ad
   pfi_list_init(&pfi, &list_ctx, &pages->chain_node, pages->chain_node.prev);
   iter_first(&pfi);
   ret = __mmap_core(&vmr->parent_vmm->rpd, addr, npages, &pfi, vmr->flags & KMAP_FLAGS_MASK);
-  if (ret) {
-    list_node_t *iter, *save;
-    list_for_each_safe(list_node2head(&pages->chain_node), iter, save)
-      free_page(list_entry(iter, page_frame_t, chain_node));
-
-    free_page(pages);
-  }
+  if (ret)
+    free_pages_chain(pages);
 
   return ret;
 }

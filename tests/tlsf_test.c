@@ -55,7 +55,7 @@ static inline int __simple_random(void)
 static void tc_alloc_dealloc(void *ctx)
 {
   test_framework_t *tf = ctx;  
-  list_node_t *iter, *safe;
+  list_node_t *iter;
   list_head_t head;
   page_idx_t allocated, saved_ap;
   page_frame_t *pages;
@@ -63,6 +63,7 @@ static void tc_alloc_dealloc(void *ctx)
   tf->printf("Target MM pool: %s\n", tlsf_ctx.pool->name);
   tf->printf("Number of allocatable pages: %d\n", tlsf_ctx.pool->free_pages);
   saved_ap = atomic_get(&tlsf_ctx.pool->free_pages);
+
   tf->printf("Allocate all possible pages one-by-one...\n");
   list_init_head(&head);
   allocated = 0;
@@ -87,16 +88,40 @@ static void tc_alloc_dealloc(void *ctx)
   
   mmpool_allocator_dump(tlsf_ctx.pool);
   tf->printf("Free allocated %d pages.\n", allocated);
-  list_for_each_safe(&head, iter, safe) {
-    free_page(list_entry(iter, page_frame_t, chain_node));
-    allocated--;
-    tlsf_validate_dbg(tlsf_ctx.tlsf);
-  }
-  if (allocated != 0) {
-    tf->printf("Not all pages were fried: %d rest (%d total)\n", allocated, saved_ap);
+  pages = list_entry(list_node_first(&head), page_frame_t, chain_node);
+  list_cut_head(&head);
+  free_pages_chain(pages);
+  if (atomic_get(&tlsf_ctx.pool->free_pages) != saved_ap) {
+    tf->printf("Not all pages were fried: %d rest (%d total)\n",
+               saved_ap - atomic_get(&tlsf_ctx.pool->free_pages), saved_ap);
     tf->failed();
   }
-  
+
+  mmpool_allocator_dump(tlsf_ctx.pool);
+  tf->printf("Allocate all possible pages usign non-continous allocation\n");
+  pages = alloc_pages(saved_ap, AF_ZERO | AF_USER);
+  if (!pages) {
+    tf->printf("Failed to allocate non-continous %d pages!\n", saved_ap);
+    tf->failed();
+  }
+
+  tlsf_validate_dbg(tlsf_ctx.tlsf);
+  mmpool_allocator_dump(tlsf_ctx.pool);
+  allocated = 1;
+  for (iter = &pages->chain_node; iter != pages->chain_node.prev; iter = iter->next, allocated++);
+  if (allocated != saved_ap) {
+    tf->printf("Invalid number of pages allocated: %d (%d was expected)\n", allocated, saved_ap);
+    tf->failed();
+  }
+
+  free_pages_chain(pages);
+  if (atomic_get(&tlsf_ctx.pool->free_pages) != saved_ap) {
+    tf->printf("Not all pages were fried: %d rest (%d total)\n",
+               saved_ap - atomic_get(&tlsf_ctx.pool->free_pages), saved_ap);
+    tf->failed();
+  }
+
+  mmpool_allocator_dump(tlsf_ctx.pool);
   tlsf_ctx.completed = true;
   sys_exit(0);
 }

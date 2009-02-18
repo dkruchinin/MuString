@@ -69,7 +69,7 @@ struct tlsf_idxs {
 };
 
 enum {
-  TLSF_PB_PERCPU = 1,
+  TLSF_PB_PERCPU = 0,
   TLSF_PB_HEAD,  /* Determines that a page is a block head */
   TLSF_PB_TAIL,  /* Determines that a page is a block tail */
   TLSF_PB_BUSY,
@@ -123,9 +123,7 @@ static inline tlsf_uint_t size_from_tlsf_ids(struct tlsf_idxs *ids);
 /* get block size. */
 static inline tlsf_uint_t pages_block_size_get(page_frame_t *block)
 {
-  union tlsf_priv *priv = (union tlsf_priv *)&block->_private;
-  
-  ASSERT(bit_test(&block->_private, TLSF_PB_HEAD));
+  union tlsf_priv *priv = (union tlsf_priv *)&block->_private;  
   return priv->size;
 }
 
@@ -208,7 +206,8 @@ static void pages_block_destroy(page_frame_t *block_head)
   bit_clear(&block_head->_private, TLSF_PB_HEAD);
   bit_clear(&block_tail->_private, TLSF_PB_TAIL);
   pages_block_size_set(block_head, 0);
-  pages_block_size_set(block_tail, 0);
+  if (block_head != block_tail)
+    pages_block_size_set(block_tail, 0);
 }
 
 static void pages_block_insert(tlsf_t *tlsf, page_frame_t *block_head)
@@ -311,13 +310,13 @@ static inline page_frame_t *__right_neighbour(page_frame_t *block_head)
  */
 static page_frame_t *pages_block_split(tlsf_t *tlsf, page_frame_t *block_head, tlsf_uint_t split_size)
 {
-  int offset = pages_block_size_get(block_head) - split_size;
+  tlsf_uint_t offset = pages_block_size_get(block_head) - split_size;
   page_frame_t *new_block;
 
+  pages_block_destroy(block_head);
   new_block = pframe_by_number(pframe_number(block_head) + offset);
   pages_block_create(block_head, offset - 1);
-  pages_block_create(new_block, split_size);
-  
+  pages_block_create(new_block, split_size - 1);  
   return new_block;
 }
 
@@ -361,6 +360,7 @@ static page_frame_t *try_merge_blocks(tlsf_t *tlsf, page_frame_t *block_head, in
    */
   pages_block_remove(tlsf, neighbour);
   pages_block_destroy(neighbour);
+  pages_block_destroy(block_head);
   if (pframe_number(block_head) > pframe_number(neighbour)) {
     /*
      * neighbour is on the left of root_block, so neigbour's head page
@@ -461,8 +461,8 @@ static void tlsf_free_pages(page_frame_t *pages, page_idx_t num_pages, void *dat
             pframe_number(&pages[i]), page_pool->name, tlsf->owner->name);
     }
     if ((flags & TLSF_PB_MASK) || !(flags & (1 << TLSF_PB_BUSY))) {
-      panic("Attemption to free *already* free page #%#x to the pool %s!",
-            pframe_number(&pages[i]), tlsf->owner->name);
+      panic("Attemption to free *already* free page #%#x to the pool %s! (%#x)",
+            pframe_number(&pages[i]), tlsf->owner->name, pages[i]._private);
     }
 #endif /* CONFIG_DEBUG_MM */
 
@@ -501,15 +501,15 @@ static page_frame_t *tlsf_alloc_pages(page_idx_t n, void *data)
   if (size > n) /* split block if necessary */
     pages_block_insert(tlsf, pages_block_split(tlsf, block_head, size - n));
 
-  pages_block_destroy(block_head);
+  pages_block_destroy(block_head);  
   spinlock_unlock(&tlsf->lock);  
   
   /* Now we free to build pages chain and set TLSF_PB_BUSY bit for each allocated page */
   list_init_head(list_node2head(&block_head->chain_node));
   for (i = 0; i < n; i++) {
-    bit_set(&block_head[i]._private, TLSF_PB_BUSY);
+    bit_set(&block_head[i]._private, TLSF_PB_BUSY);    
     if (likely(i > 0))
-      list_add_before(&block_head->chain_node, &block_head [i].chain_node);
+      list_add_before(&block_head->chain_node, &block_head[i].chain_node);
   }
   
   out:

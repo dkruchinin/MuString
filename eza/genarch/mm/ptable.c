@@ -67,7 +67,7 @@ static void unmap_entries(pde_t *start_pde, pde_idx_t num_entries, bool do_recov
       continue;
 
     pde_set_not_present(pde);
-    if (pde_is_kmapped(pde) && page_idx_is_present(pde_fetch_page_idx(pde))) {
+    if (!pde_is_kmapped(pde) && page_idx_is_present(pde_fetch_page_idx(pde))) {
       if (likely(!do_recovery))
         unpin_page_frame(pframe_by_number(pde_fetch_page_idx(pde)));
       else {
@@ -115,7 +115,7 @@ static void map_entries(pde_t *start_pde, pde_idx_t num_entries, page_frame_iter
      * Increment page refcount *only* if we're not mapping some kernel-only area
      * or if a mapped page is a valid visible from kernel physical frame.
      */
-    if (pde_is_kmapped(pde) && page_idx_is_present(pfi->pf_idx))
+    if (!pde_is_kmapped(pde) && page_idx_is_present(pfi->pf_idx))
       pin_page_frame(pframe_by_number(pfi->pf_idx));
 
     pde++;    

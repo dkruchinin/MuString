@@ -42,11 +42,11 @@ static page_frame_t *__alloc_pages_ncont(mm_pool_t *pool, page_idx_t n, pfalloc_
   else
     granularity = pool->allocator.max_block_size;
   
-  while (n) {
+  while (n) {    
     if (granularity > n)
       granularity = n;
-    
-    p = mmpool_alloc_pages(pool, n);
+
+    p = mmpool_alloc_pages(pool, granularity);
     if (!p) {
       if (atomic_get(&pool->free_pages)) {
         if ((granularity /= 2) != 0)
@@ -131,9 +131,7 @@ page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
     if (flags & AF_ZERO)
       pframes_memnull(pages, n);
 
-    kprintf("WAS: %d\n", atomic_get(&pool->free_pages));
     atomic_sub(&pool->free_pages, n);
-    kprintf("BECOME: %d\n", atomic_get(&pool->free_pages));
   }
   else {
     /* Allocate non-contious chain of pages... */
@@ -142,7 +140,7 @@ page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
       if (pages)
         goto out;
     }
-    
+
     pages = __alloc_pages_ncont(pool, n, flags);
   }
 
@@ -164,5 +162,15 @@ void free_pages(page_frame_t *pages, page_idx_t num_pages)
 
   mmpool_free_pages(pool, pages, num_pages);
   atomic_add(&pool->free_pages, num_pages);
+}
+
+void free_pages_chain(page_frame_t *pages)
+{
+  list_node_t *n, *safe;
+
+  list_for_each_safe(list_node2head(&pages->chain_node), n, safe)
+    free_page(list_entry(n, page_frame_t, chain_node));
+
+  free_page(pages);
 }
 

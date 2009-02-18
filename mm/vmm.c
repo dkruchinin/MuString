@@ -36,6 +36,85 @@
 #include <eza/arch/ptable.h>
 #include <mlibc/types.h>
 
+#ifdef CONFIG_DEBUG_MM
+static inline void __check_one_frame(mm_pool_t *p, page_frame_t *pf)
+{
+  if (pf->pool_type == p->type) {
+    kprintf("[FAILED]\n");    
+    panic("Page frame #%#x doesn't included into memory pool \"%s\", but indeed that frame belongs to it!",
+          pframe_number(pf), p->name);
+  }
+}
+
+static void __validate_mmpools_dbg(void)
+{
+  mm_pool_t *p;
+  page_idx_t total_pages = 0, pool_total, pool_reserved, i;
+  page_frame_t *pf;
+
+  kprintf("[DBG] Validating memory pools... ");
+  for_each_mm_pool(p) {
+    pool_total = pool_reserved = 0;
+    /* check all pages belonging to given memory pool */
+    for (i = 0; i < p->total_pages; i++, pool_total++) {
+      pf = pframe_by_number(i + p->first_page_id);
+      if (pf->flags & PF_RESERVED)
+        pool_reserved++;
+      if (pf->pool_type != p->type) {
+        mm_pool_t *page_pool = get_mmpool_by_type(pf->pool_type);
+        
+        kprintf("[FAILED]\n");
+        kprintf("aga! 1\n");
+        if (!page_pool) {
+          panic("Page frame #%#x belongs to memory pool \"%s\", but in a \"pool_type\" field it has "
+                "unexistent pool type: %d!", i + p->first_page_id, p->name, pf->pool_type);
+        }
+        
+        panic("Memory pool \"%s\" says that page frame #%#x belongs to it, but "
+              "its owner is memory pool \"%s\" indeed!", p->name, i + p->first_page_id, page_pool->name);
+      }
+    }
+    if (pool_total != p->total_pages) {
+      kprintf("[FAILED]\n");
+      kprintf("aga! 2\n");
+      panic("Memory pool \"%s\" has inadequate total number of pages it owns(%d): %d was expected!",
+            p->name, p->total_pages, pool_total);
+    }
+    if (pool_reserved != p->reserved_pages) {
+      kprintf("[FAILED]\n");
+      kprintf("aga! 3\n");
+      panic("Memory pool \"%s\" has inadequate number of reserved pages (%d): %d was expected!",
+            p->name, p->reserved_pages, pool_reserved);
+    }
+    if ((atomic_get(&p->free_pages) != (pool_total - pool_reserved)) &&
+        (p->type != BOOTMEM_POOL_TYPE)) {
+      kprintf("[FAILED]\n");
+      kprintf("aga! 4\n");
+      panic("Memory pool \"%s\" has inadequate number of free pages (%d): %d was expected!",
+            p->name, atomic_get(&p->free_pages), pool_total - pool_reserved);
+    }
+    if (p->first_page_id != PAGE_IDX_INVAL) {
+      if (p->first_page_id != 0)
+        __check_one_frame(p, pframe_by_number(p->first_page_id - 1));
+      if ((p->first_page_id + p->total_pages) < num_phys_pages)
+        __check_one_frame(p, pframe_by_number(p->first_page_id + p->total_pages));
+    }
+
+    total_pages += pool_total;
+  }
+  if (total_pages != num_phys_pages) {
+    kprintf("aga! 5\n");
+    kprintf("[FAILED]\n");
+    panic("Unexpected total number of pages owned by different memory pools: %d, "
+          "but %d was expected!", total_pages, num_phys_pages);
+  }
+
+  kprintf("[OK]\n");
+}
+#else
+#define __validate_mmpools_dbg()
+#endif /* CONFIG_DEBUG_MM */
+
 void mm_initialize(void)
 {
   mm_pool_t *pool;
@@ -48,11 +127,9 @@ void mm_initialize(void)
   mmpool_activate(POOL_BOOTMEM());
   old_flags = ptable_ops.alloc_flags;
   ptable_ops.alloc_flags = AF_BMEM | AF_ZERO;
-  kprintf("1\n");
   if (ptable_ops.initialize_rpd(&kernel_rpd))
     panic("mm_init: Can't initialize kernel root page directory!");
 
-  kprintf("2\n");
   /* Now we can remap available memory */
   arch_mm_remap_pages();
   ptable_ops.alloc_flags = old_flags;
@@ -75,6 +152,7 @@ void mm_initialize(void)
   }
   
   kprintf("[MM] All pages were successfully remapped.\n");
+  __validate_mmpools_dbg();
 }
 
 void vmm_initialize(void)

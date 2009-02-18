@@ -130,8 +130,10 @@ static inline void mmpool_free_pages(mm_pool_t *pool, page_frame_t *pages, page_
 
 static inline void mmpool_allocator_dump(mm_pool_t *pool)
 {
-  if (likely(pool->allocator.dump != NULL))
+  if (likely(pool->allocator.dump != NULL)) {
     pool->allocator.dump(pool->allocator.alloc_ctx);
+    return;
+  }
 
   kprintf(KO_WARNING "Memory pool \"%s\" doesn't support dump function!\n", pool->name);
 }

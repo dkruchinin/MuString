@@ -101,12 +101,7 @@ page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags);
  *       the very first page frame in block.
  */
 void free_pages(page_frame_t *pages, page_idx_t num_pages);
-page_idx_t pages_block_size(page_frame_t *first_page);
-
-struct __vmm;
-
-page_frame_t *alloc_pages_ncont(page_idx_t npages, pfalloc_flags_t flags);
-void free_pages_ncont(page_frame_t *pages);
+void free_pages_chain(page_frame_t *pages);
 
 static inline void *alloc_pages_addr(int n, pfalloc_flags_t flags)
 {

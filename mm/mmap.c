@@ -356,8 +356,8 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   int err = 0;
   bool was_merged = false;
 
-  kprintf("%p, %ld, %p\n", addr, npages, offs_pages);
   vmr = NULL;
+  ASSERT(memobj != NULL);
   ttree_cursor_init(&vmm->vmranges_tree, &cursor);
   if (!(flags & VMR_PROTO_MASK)
       || !(flags & (VMR_PRIVATE | VMR_SHARED))
