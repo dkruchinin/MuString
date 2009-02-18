@@ -190,17 +190,13 @@ void fire_deffered_actions(void)
                           deffered_irq_action_t,node);
 
       if( current_task()->priority >= action->priority ) {
+        action->__host=NULL;
         skiplist_del(action,deffered_irq_action_t,head,node);
-        arch_sched_set_def_works_pending();
       } else {
-        /* Bad luck - current thread has higher priority than any of pending
-         * deffered actions.
-         */
         action=NULL;
       }
     }
-
-    if( !action ) { /* No valid actions found. */
+    if( !action ) {
       arch_sched_reset_def_works_pending();
     }
     spinlock_unlock_irqrestore(&acts->lock,is);
