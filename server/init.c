@@ -38,6 +38,7 @@
 #include <eza/process.h>
 #include <eza/ptd.h>
 #include <eza/gc.h>
+#include <config.h>
 
 long initrd_start_page,initrd_num_pages;
 
@@ -219,7 +220,6 @@ static void __server_task_runner(void *data)
   for(sn=0,a=0;a<i;a++) {
     char *modvbase;
 
-//    kprintf("[LAUNCHER]: Launching server %d.\n",sn+1);
     modvbase=pframe_id_to_virt(init.server[a].addr>>PAGE_WIDTH);
 
     if( *(uint32_t *)modvbase == ELF_MAGIC ) { /* ELF module ? */
@@ -249,23 +249,23 @@ static void __server_task_runner(void *data)
                a+1);
       }
 
+#ifdef CONFIG_CORESERVERS_PERCPU_LAUNCH
       /* Perform initial CPU deployment and activate the server. */
       t=sn % CONFIG_NRCPUS;
 
-//      kprintf("[LAUNCHER]: PID %d, sn: %d, t: %d, cpu_id=%d\n",server->pid,sn,t,cpu_id());
       if( t != cpu_id() ) {
-//        kprintf("[LAUNCHER] Moving server N %d (PID=%d) to CPU %d.\n",
-//                sn,server->pid,t);
         sched_move_task_to_cpu(server,t);
-        }
-
+      }
+#endif
       r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
       if( r ) {
         panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);
       }
       sn++;
-//      kprintf("[LAUNCHER] Sleeping till %d...\n",system_ticks+HZ);
-      sleep(HZ/2);
+
+      if( CONFIG_CORESERVERS_LAUNCH_DELAY >= 100 ) {
+        sleep(CONFIG_CORESERVERS_LAUNCH_DELAY);
+      }
     } else if( !strncmp(&modvbase[257],"ustar",5 ) ) { /* TAR-based ramdisk ? */
       long size;
 
