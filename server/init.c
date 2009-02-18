@@ -167,7 +167,6 @@ static int __create_task_mm(task_t *task, int num)
   /* Create a BSS area. */
   r = vmrange_map(memobj, vmm, bss_virt, bss_size,
                   VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED | VMR_POPULATE, 0);
-  /*r=__create_empty_user_area(task,bss_virt,bss_size, KMAP_READ | KMAP_WRITE);*/
   if(!PAGE_ALIGN(r)) {
     return r;
   }
@@ -205,7 +204,7 @@ static int __create_task_mm(task_t *task, int num)
   return 0;
 }
 
-static void __server_task_runner(gc_action_t *action)
+static void __server_task_runner(void *data)
 {
   int i=server_get_num(),a;
   task_t *server;
@@ -213,7 +212,7 @@ static void __server_task_runner(gc_action_t *action)
   kconsole_t *kconsole=default_console();
 
   if( i > 0 ) {
-    kprintf("[SRV] Starting servers: %d ... \n",i);
+    kprintf("[LAUNCHER] Starting servers: %d ... \n",i);
     //kconsole->disable();
   }
 
@@ -224,19 +223,20 @@ static void __server_task_runner(gc_action_t *action)
     modvbase=pframe_id_to_virt(init.server[a].addr>>PAGE_WIDTH);
 
     if( *(uint32_t *)modvbase == ELF_MAGIC ) { /* ELF module ? */
-      ulong_t flags=0;
-      int cpu;
+      ulong_t t;
 
       if( !sn ) { /* First module is always NS. */
-        flags |= TASK_INIT;
+        t = TASK_INIT;
+      } else {
+        t=0;
       }
 
-      r=create_task(current_task(),flags,TPL_USER,&server,NULL);
+      r=create_task(current_task(),t,TPL_USER,&server,NULL);
       if( r ) {
         panic("server_run_tasks(): Can't create task N %d !\n",a+1);
       }
 
-      if( !a ) {
+      if( !sn ) {
         if( server->pid != 1 ) {
           panic( "server_run_tasks(): NameServer has improper PID: %d !\n",
                  server->pid );
@@ -250,18 +250,20 @@ static void __server_task_runner(gc_action_t *action)
       }
 
       /* Perform initial CPU deployment and activate the server. */
-      cpu=sn % CONFIG_NRCPUS;
+      t=sn % CONFIG_NRCPUS;
 
-      //if( cpu != cpu_id() ) {
-      //  sched_move_task_to_cpu(server,cpu);
-      //}
+      if( t != cpu_id() ) {
+        kprintf("[LAUNCHER] Moving task (PID=%d) to CPU %d.\n",
+                server->pid,t);
+        sched_move_task_to_cpu(server,t);
+      }
 
       r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
       if( r ) {
         panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);
       }
       sn++;
-      kprintf("> Sleeping till %d...\n",system_ticks+HZ);
+      kprintf("[LAUNCHER] Sleeping till %d...\n",system_ticks+HZ);
       sleep(HZ);
     } else if( !strncmp(&modvbase[257],"ustar",5 ) ) { /* TAR-based ramdisk ? */
       long size;
@@ -280,18 +282,15 @@ static void __server_task_runner(gc_action_t *action)
       panic("Unrecognized kernel module N %d !\n",a+1);
     }
   }
-  kprintf("[LAUNCHER]: All servers started.\n");
+  kprintf("[LAUNCHER]: All servers started. Exiting ...\n");
+  sys_exit(0);
 }
 
 void server_run_tasks(void)
 {
-  gc_action_t *a=gc_allocate_action(__server_task_runner,NULL);
-
-  if( !a ) {
-    panic("Can't allocate action for launching core servers !");
+  if( kernel_thread(__server_task_runner,NULL,NULL) ) {
+    panic("Can't launch a Core Servers runner !");
   }
-
-  gc_schedule_action(a);
 }
 
 #else

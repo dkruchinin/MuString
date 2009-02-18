@@ -433,11 +433,15 @@ static inline void __reschedule_task(task_t *t)
 
 int __big_verbose=0;
 
+static void __show_calltrace(ulong_t *rsp)
+{
+}
+
 static int __change_task_state(task_t *task,task_state_t new_state,
                                     deferred_sched_handler_t h,void *data,
                                     ulong_t mask)
 {
-  ulong_t is;
+  long is;
   int r=0;
   eza_sched_cpudata_t *sched_data;
   task_state_t prev_state;
@@ -456,11 +460,6 @@ static int __change_task_state(task_t *task,task_state_t new_state,
   }
 
   prev_state=task->state;
-
-  if( task->pid == 5 ) {
-    kprintf("%d is affecting target. prev=%d, new=%d, mask: 0x%X\n",
-            current_task()->pid,prev_state,new_state,mask);
-  }
 
   if( (prev_state != new_state) && (prev_state & mask) ) {
     r=-EINVAL;

@@ -120,7 +120,6 @@ void process_timers(void)
       if( tt->time_x == system_ticks ) { /* Got something for this tick. */
         ASSERT(tt->major_tick == major_tick);
 
-        kprintf("** Firing timers for %d\n",tt->time_x );
         __last_processed_timer_tick=system_ticks;
         list_del(&tt->node);
         schedule_deffered_actions(&tt->actions);
@@ -351,50 +350,26 @@ void __dump_timers(long tick)
 long sleep(ulong_t ticks)
 {
   ktimer_t timer;
-  long r,tt;
+  long r;
 
   if( !ticks ) {
     return 0;
   }
 
-  tt=system_ticks+ticks;
   init_timer(&timer,system_ticks+ticks,DEF_ACTION_UNBLOCK);
   timer.da.d.target=current_task();
 
   r=add_timer(&timer);
-
-  if( cpu_id() ) {
-//    kprintf(" ===== TICK %d : TIME X %d, ATOM: %d\n",
-//            system_ticks,system_ticks+ticks,
-//            in_atomic());
-//    __dump_timers(tt);
-  }
-
   if( !r ) {
-
-//    kprintf("    --------: ATOM: %d\n",in_atomic());
     r=sched_change_task_state_deferred(current_task(),TASK_STATE_SLEEPING,
                                        __timer_deffered_sched_handler,&timer);
-
-    if( current_task()->pid == 5 ) {
-      kprintf("xxxxxxxx: TICK: %d, STATE=%d, ATOM: %d\n",
-              system_ticks,current_task()->state,in_atomic());
-    }
-//    kprintf("    ++++++++ %d, STATE: %d, ATOM: %d\n",
-//            r,current_task()->state,in_atomic());
     if( task_was_interrupted(current_task()) ) {
       r=-EINTR;
     }
   } else if( r > 0 ) { /* Expired. */
-    kprintf("[%d] EXPIRED !!!\n",
-            cpu_id());
     r=0;
   }
 
   delete_timer(&timer);
-
-  if( cpu_id() ) {
-//    __dump_timers(tt);
-  }
   return r;
 }

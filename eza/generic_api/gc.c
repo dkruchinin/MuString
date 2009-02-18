@@ -72,15 +72,6 @@ void initialize_gc(void)
 
 static void __gc_thread_logic(void *arg)
 {
-  /*
-  while( 1 ) {
-    kprintf("[%d] >> Sleeping till %d ...\n", cpu_id(),
-            system_ticks+HZ/(3+cpu_id()));
-    sleep(HZ/(3+cpu_id()));
-    kprintf("[%d] >> Got woken up !\n",cpu_id() );
-  }
-  */
-
   while(1) {
     list_head_t *alist=get_gc_tasklist();
     list_head_t private;
@@ -98,14 +89,10 @@ static void __gc_thread_logic(void *arg)
       struct __gc_action *action=container_of(n,struct __gc_action,l);
 
       action->action(action);
-      kprintf("%d: }} ACTION %p invoked. DTOR: %p\n",
-              current_task()->pid,action,action->dtor);
       if( action->dtor ) {
         action->dtor(action);
       }
     }
-
-    kprintf("}} Sleeping ...\n");
     sched_change_task_state(current_task(),TASK_STATE_SLEEPING);
   }
 }
