@@ -47,8 +47,6 @@ static inline cpu_id_t cpu_id(void)
   return c;  
 }
 
-extern int ___big_verbose,___target_pid;
-
 void arch_hw_activate_task(arch_context_t *new_ctx, task_t *new_task,
                            arch_context_t *old_ctx, uintptr_t kstack);
 
@@ -78,39 +76,12 @@ static inline void arch_activate_task(task_t *to)
   }
 
 #ifdef CONFIG_TEST
-//  kprintf( "** ACTIVATING TASK: %d:0x%X (CPU: %d)\n",
-//           to->pid,to->tid,to->cpu);
+  kprintf( "** ACTIVATING TASK: %d:0x%X (CPU: %d) **\n",
+           to->pid,to->tid,to->cpu);
 #endif
   
   /* Let's jump ! */
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
-/*
-  switch( to->pid ) {
-    case 1:
-    case 8:
-    case 10:
-    case 12:
-    case 14:
-    case 16:
-      if( cpu_id() != 0 ) {
-        kprintf("[CPU %d] Insufficient CPU for TID 0x%X: %d instead of 0.\n",
-                cpu_id(),to->tid,to->cpu);
-        for(;;);
-      }
-      break;
-    case 7:
-    case 9:
-    case 11:
-    case 13:
-    case 15:
-      if( cpu_id() != 1 ) {
-        kprintf("[CPU %d] Insufficient CPU for TID 0x%X: %d instead of 1.\n",
-                cpu_id(),to->tid,to->cpu);
-        for(;;);
-      }
-      break;
-      }
-*/
 }
 
 #endif
