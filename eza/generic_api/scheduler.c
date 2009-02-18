@@ -460,10 +460,14 @@ void migration_thread(void *data)
         migration_action_t *action=container_of(n,migration_action_t,l);
 
         list_del(n);
+        kprintf("*** Moving TID 0x%X to cpu %d.\n",
+                        action->task->tid,cpu_id());
         if( __move_task_to_cpu(action->task,cpu_id(),true) ) {
           panic("[CPU %d] migration_thread(): Can't move TID 0x%X to my CPU !\n",
                 cpu_id(),action->task->tid);
         }
+        kprintf("*** TID 0x%X was moved to cpu %d.\n",
+                action->task->tid,cpu_id());
         event_raise(&action->e);
       }
     } else {

@@ -213,7 +213,7 @@ static void __server_task_runner(void *data)
 
   if( i > 0 ) {
     kprintf("[LAUNCHER] Starting servers: %d ... \n",i);
-    //kconsole->disable();
+    kconsole->disable();
   }
 
   for(sn=0,a=0;a<i;a++) {
@@ -252,11 +252,13 @@ static void __server_task_runner(void *data)
       /* Perform initial CPU deployment and activate the server. */
       t=sn % CONFIG_NRCPUS;
 
+      /*
       if( t != cpu_id() ) {
         kprintf("[LAUNCHER] Moving task (PID=%d) to CPU %d.\n",
                 server->pid,t);
         sched_move_task_to_cpu(server,t);
-      }
+        }
+      */
 
       r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
       if( r ) {
@@ -264,7 +266,7 @@ static void __server_task_runner(void *data)
       }
       sn++;
       kprintf("[LAUNCHER] Sleeping till %d...\n",system_ticks+HZ);
-      sleep(HZ);
+      sleep(HZ/2);
     } else if( !strncmp(&modvbase[257],"ustar",5 ) ) { /* TAR-based ramdisk ? */
       long size;
 
