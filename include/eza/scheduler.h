@@ -192,5 +192,10 @@ static inline bool is_cpu_online(cpu_id_t cpu)
 #define stop_task(t) sched_change_task_state((t),TASK_STATE_STOPPED)
 #define suspend_task(t) sched_change_task_state((t),TASK_STATE_SUSPENDED)
 
+#ifdef CONFIG_TEST
+extern bool kthread_cpu_autodeploy;
+#endif
+
+
 #endif
 

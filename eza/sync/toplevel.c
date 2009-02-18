@@ -163,6 +163,11 @@ int sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg)
     return -EINVAL;
   }
 
+  if( current_task()->pid == 0xB ) {
+    kprintf(" > [CPU %d] > 0x%X Controlling SYNC %d with CMD=0x%X.\n",
+            cpu_id(),current_task()->tid,id,cmd);
+  }
+
   r=kobj->ops->control(kobj,cmd,arg);
   sync_put_object(kobj);
   return r;

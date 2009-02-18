@@ -42,6 +42,7 @@
 #include <eza/arch/context.h>
 #include <eza/arch/profile.h>
 #include <eza/arch/ptable.h>
+#include <config.h>
 
 /* Located on 'amd64/asm.S' */
 extern void kthread_fork_path(void);
@@ -174,6 +175,10 @@ void initialize_idle_tasks(void)
   }
 }
 
+#ifdef CONFIG_TEST
+bool kthread_cpu_autodeploy=false;
+#endif
+
 int kernel_thread(void (*fn)(void *), void *data, task_t **out_task)
 {
   task_t *newtask;
@@ -191,6 +196,16 @@ int kernel_thread(void (*fn)(void *), void *data, task_t **out_task)
      regs->gpr_regs.rdi = (uint64_t)fn;
      regs->gpr_regs.rsi = (uint64_t)data;
 
+#ifdef CONFIG_TEST
+     if( kthread_cpu_autodeploy ) {
+       int cpu=newtask->pid % CONFIG_NRCPUS;
+
+       if( cpu != cpu_id() && sched_move_task_to_cpu(newtask,cpu) ) {
+         kprintf("[!!!] kernel_thread(): Can't move kernel thread %d to CPU %d !\n",
+                 newtask->pid,cpu);
+       }
+     }
+#endif
      /* Start this task. */
      sched_change_task_state(newtask,TASK_STATE_RUNNABLE);
   }

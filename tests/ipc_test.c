@@ -25,6 +25,7 @@
 #include <eza/process.h>
 #include <ds/linked_array.h>
 #include <eza/usercopy.h>
+#include <config.h>
 
 #define TEST_ID  "IPC subsystem test"
 #define SERVER_THREAD  "[SERVER THREAD] "
@@ -505,11 +506,11 @@ static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
 static void __notifier_thread(void *ctx)
 {
   DECLARE_TEST_CONTEXT;
-  uint64_t target_tick=swks.system_ticks_64 + 200;
+  uint64_t target_tick=system_ticks + 200;
 
   tf->printf( "[Notifier] Starting.\n" );
 
-  while(swks.system_ticks_64 < target_tick) {
+  while(system_ticks < target_tick) {
   }
 
   tf->printf( "[Notifier] Exiting.\n" );
@@ -606,10 +607,13 @@ typedef struct __message_tail {
 #define MAX_MSG_PARTS  6
 #define MAX_MSG_SIZE (sizeof(message_header_t) + MAX_MSG_PARTS*sizeof(message_part_t) + sizeof(message_tail_t))
 
-static uint8_t __vectored_msg_client_snd_buf[MAX_MSG_SIZE];
-static uint8_t __vectored_msg_client_rcv_buf[MAX_MSG_SIZE];
+static uint8_t __vmsg_client_snd_buf[CONFIG_NRCPUS][MAX_MSG_SIZE];
+static uint8_t __vmsg_client_rcv_buf[CONFIG_NRCPUS][MAX_MSG_SIZE];
 static uint8_t __vectored_msg_server_snd_buf[MAX_MSG_SIZE];
 static uint8_t __vectored_msg_server_rcv_buf[MAX_MSG_SIZE];
+
+#define __vectored_msg_client_snd_buf  &__vmsg_client_snd_buf[cpu_id()][0]
+#define __vectored_msg_client_rcv_buf  &__vmsg_client_rcv_buf[cpu_id()][0]
 
 static int __validate_message_data(uint16_t *data,uint16_t base,ulong_t size)
 {
@@ -680,6 +684,7 @@ static void __prepare_vectored_message(uint8_t *buf,int parts)
 
   __prepare_message_data(hdr->data,__data_base,MSG_HEADER_DATA_SIZE);
   hdr->data_base=__data_base;
+  kprintf("[<%d> ",hdr->data_base);
   __data_base += DATA_BASE_STEP;
 
   hdr++;
@@ -687,11 +692,13 @@ static void __prepare_vectored_message(uint8_t *buf,int parts)
   for(i=0;i<parts;i++,part++) {
     __prepare_message_data(part->data,__data_base,MSG_PART_DATA_SIZE);
     part->data_base=__data_base;
+    kprintf("(%d) ",part->data_base);
     __data_base += DATA_BASE_STEP;
   }
 
   tail=(message_tail_t *)part;
   __prepare_message_data(tail->data,__data_base,MSG_TAIL_DATA_SIZE);
+  kprintf("<%d>]\n",tail->data_base);
   tail->data_base=__data_base;
   __data_base += DATA_BASE_STEP;
 }
@@ -717,8 +724,8 @@ static void __setup_message_iovecs(uint8_t *msg,int parts,iovec_t *iovecs)
 }
 
 #define CLEAR_CLIENT_BUFFERS                    \
-  memset(__vectored_msg_client_snd_buf,0,sizeof(__vectored_msg_client_snd_buf)); \
-  memset(__vectored_msg_client_rcv_buf,0,sizeof(__vectored_msg_client_rcv_buf))
+  memset(__vectored_msg_client_snd_buf,0,MAX_MSG_SIZE); \
+  memset(__vectored_msg_client_rcv_buf,0,MAX_MSG_SIZE)
 
 #define CLEAR_SERVER_BUFFERS                                            \
   memset(__vectored_msg_server_snd_buf,0,sizeof(__vectored_msg_server_snd_buf)); \
@@ -737,7 +744,7 @@ static void __vectored_messages_thread(void *ctx)
   ulong_t channel;
   ulong_t size;
 
-  tf->printf(VECTORER_ID "Starting.\n");
+  tf->printf(VECTORER_ID "Starting on CPU %d.\n",cpu_id());
 
   channel=sys_open_channel(__server_pid,__vectored_port,IPC_BLOCKED_ACCESS);
   if( channel < 0 ) {
@@ -764,7 +771,7 @@ static void __vectored_messages_thread(void *ctx)
     if( i & 0x1 ) {
       r=sys_port_send_iov(channel,snd_iovecs,parts+2,
                           (uintptr_t)__vectored_msg_client_rcv_buf,
-                          sizeof(__vectored_msg_client_rcv_buf) );
+                          MAX_MSG_SIZE);
       tf->printf(VECTORER_ID"Message was sent: r=%d. RCV BUFSIZE=%d\n",r,
                  sizeof(__vectored_msg_client_rcv_buf));
       if( r < 0 ) {
@@ -1197,8 +1204,8 @@ static void __vectored_messages_test(void *ctx)
   }
 }
 
-#define __NGROUPS 3
-#define __NGROUP_TASKS  3
+#define __NGROUPS 2
+#define __NGROUP_TASKS  1
 #define __NUM_PRIO_THREADS (__NGROUPS*__NGROUP_TASKS)
 
 int __prio_port;
@@ -1246,7 +1253,7 @@ static void __prio_thread(void *data)
     watchline=(ulong_t*)(__vectored_msg_client_rcv_buf+size);
     *watchline=WL_PATTERN;
 
-    tf->printf(PRIORER_ID "Sending a message consisting of %d parts via %s. SIZE=%d\n",
+    tf->printf(PRIORER_ID "Sending a message of %d parts via %s. SIZE=%d\n",
                parts, (i & 0x1) ? "'sys_port_send_iov()'" : "'sys_port_send_iov_v()'",
                MESSAGE_SIZE(parts));
     if( i & 0x1 ) {
@@ -1522,7 +1529,7 @@ static void __prioritized_port_test(void *ctx)
   }
 
   tf->printf(SERVER_THREAD"[PRIO PORT] Sleeping for a while ...\n");
-  sleep(1);
+  sleep(HZ/3);
   tf->printf(SERVER_THREAD"[PRIO PORT] Got woken up ! Testing ! (start priority=%d)\n",
              prio);
 
@@ -1627,7 +1634,7 @@ static void __prioritized_port_test(void *ctx)
 
   tf->printf(SERVER_THREAD"All priority-related tests finished.\n");
   sys_close_port(__prio_port);
-  sleep(1);
+  sleep(HZ);
 }
 
 static void __server_thread(void *ctx)
@@ -1641,7 +1648,12 @@ static void __server_thread(void *ctx)
 
   __server_pid=current_task()->pid;
 
+  //kthread_cpu_autodeploy=true;
+
   __message_read_test(ctx);
+
+  for(;;);
+
   __stack_overflow_test(ctx);
   __process_events_test(ctx);
   __prioritized_port_test(ctx);

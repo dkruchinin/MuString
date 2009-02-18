@@ -8,6 +8,7 @@
 #include <test.h>
 #include <eza/swks.h>
 #include <eza/arch/interrupt.h>
+#include <eza/time.h>
 
 #define LOOP_STEP 300
 
@@ -49,10 +50,10 @@ static void __def_set_first_fault_hit(bool v)
 
 static void __def_test_completion_loop(const char *id,bool *flag)
 {
-  uint64_t target_tick = swks.system_ticks_64+LOOP_STEP;
+  uint64_t target_tick = system_ticks+LOOP_STEP;
 
   while( !*flag ) {
-    if( swks.system_ticks_64 >= target_tick ) {
+    if( system_ticks >= target_tick ) {
       kprintf("* [TEST COMPLETION LOOP] %d timer ticks elapsed.\n",
               LOOP_STEP);
       target_tick += LOOP_STEP;
