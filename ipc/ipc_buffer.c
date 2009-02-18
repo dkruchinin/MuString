@@ -57,7 +57,7 @@ int ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
     buf->chunks=addr_array;
 
     /* Process the first chunk. */
-    idx=mm_vaddr2page_idx(rpd,start_addr);
+    idx=ptable_ops.vaddr2page_idx(rpd,start_addr);
     if( idx == PAGE_IDX_INVAL ) {
       goto out;
     }
@@ -79,7 +79,7 @@ int ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
 
     /* Process the rest of chunks. */
     while( size ) {
-      idx=mm_vaddr2page_idx(rpd, start_addr);
+      idx=ptable_ops.vaddr2page_idx(rpd, start_addr);
       if(idx == PAGE_IDX_INVAL) {
         goto out;
       }

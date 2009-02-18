@@ -397,6 +397,8 @@ device_not_available_fault_handler:
   jmp common_exception_path
 
 doublefault_fault_handler:
+1:
+        jmp 1b
   cli
   push %rax
   movl $0x8,%eax

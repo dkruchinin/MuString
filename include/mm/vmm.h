@@ -31,6 +31,7 @@
 #include <mm/page.h>
 #include <mm/pfalloc.h>
 #include <mm/memobj.h>
+#include <mm/ptable.h>
 #include <mlibc/types.h>
 #include <eza/rwsem.h>
 #include <eza/arch/mm.h>
@@ -132,7 +133,12 @@ static inline bool valid_user_address_range(uintptr_t va_start, uintptr_t length
 
 static inline void *user_to_kernel_vaddr(rpd_t *rpd, uintptr_t addr)
 {
-  return pframe_to_virt(pframe_by_number(mm_vaddr2page_idx(rpd, addr)));
+  page_idx_t idx = ptable_ops.vaddr2page_idx(rpd, addr);
+
+  if (idx == PAGE_IDX_INVAL)
+    return NULL;
+
+  return ((char *)pframe_to_virt(pframe_by_number(idx)) + (addr - PAGE_ALIGN_DOWN(addr)));
 }
 
 static inline void unpin_page_frame(page_frame_t *pf)
@@ -151,11 +157,11 @@ static inline void pin_page_frame(page_frame_t *pf)
 #define munmap_kern(va, npages)                 \
   munmap_core(&kernel_rpd, va, npages)
 #define __mmap_core(rpd, va, npages, pfi, __flags)    \
-  ptable_map(rpd, va, npages, pfi, kmap_to_ptable_flags((__flags) & KMAP_FLAGS_MASK))
+  ptable_ops.mmap(rpd, va, npages, pfi, kmap_to_ptable_flags((__flags) & KMAP_FLAGS_MASK))
 
 static inline bool mm_vaddr_is_mapped(rpd_t *rpd, uintptr_t va)
 {
-  return (mm_vaddr2page_idx(rpd, va) != PAGE_IDX_INVAL);
+  return (ptable_ops.vaddr2page_idx(rpd, va) != PAGE_IDX_INVAL);
 }
 
 /**
@@ -190,7 +196,7 @@ static inline void vmrange_set_next(vmrange_set_t *vmrs)
 
 static inline void munmap_core(rpd_t *rpd, uintptr_t va, ulong_t npages)
 {
-  ptable_unmap(rpd, va, npages);
+  ptable_ops.munmap(rpd, va, npages);
 }
 
 static inline off_t addr2memobj_offs(vmrange_t *vmr, uintptr_t addr)

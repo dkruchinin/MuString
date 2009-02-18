@@ -123,12 +123,6 @@ void pfi_list_init(page_frame_iterator_t *pfi,
 void pfi_arch_init(page_frame_iterator_t *pfi,
                    ITERATOR_CTX(page_frame, PF_ITER_ARCH) *ctx;);
 
-struct __rpd;
-
-void pfi_ptable_init(page_frame_iterator_t *pfi,
-                     ITERATOR_CTX(page_frame, PF_ITER_PTABLE) *ctx,
-                     struct __rpd *rpd, uintptr_t va_from, ulong_t npages);
-
 DEFINE_ITERATOR_CTX(page_frame, PF_ITER_PBLOCK,
                     list_node_t *first_node;
                     list_node_t *cur_node;
@@ -143,4 +137,15 @@ void pfi_pblock_init(page_frame_iterator_t *pfi,
                      list_node_t *fnode, page_idx_t fidx,
                      list_node_t *lnode, page_idx_t lidx);
 
+struct __rpd;
+DEFINE_ITERATOR_CTX(page_frame, PF_ITER_PTABLE,
+                    struct __rpd *rpd;
+                    uintptr_t va_cur;
+                    uintptr_t va_from;                    
+                    uintptr_t va_to;
+                    );
+
+void pfi_ptable_init(page_frame_iterator_t *pfi,
+                     ITERATOR_CTX(page_frame, PF_ITER_PTABLE) *ctx,
+                     struct __rpd *rpd, uintptr_t va_from, ulong_t npages);
 #endif /* __PFI_H__ */

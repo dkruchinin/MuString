@@ -112,7 +112,7 @@ void initialize_idle_tasks(void)
   cpu_sched_stat_t *sched_stat;
 
   for( cpu = 0; cpu < CONFIG_NRCPUS; cpu++ ) {
-    ts_page = alloc_page(AF_PGEN | AF_ZERO);
+    ts_page = alloc_page(AF_ZERO);
     if( ts_page == NULL ) {
       panic( "initialize_idle_tasks(): Can't allocate main structure for idle task !" );  
     }
@@ -131,7 +131,7 @@ void initialize_idle_tasks(void)
 
 
     /* Initialize page tables to default kernel page directory. */
-    ptable_rpd_clone(&task->rpd, &kernel_rpd);
+    ptable_ops.clone_rpd(&task->rpd, &kernel_rpd);
 
     /* Initialize kernel stack.
      * Since kernel stacks aren't properly initialized, we can't use standard
@@ -143,7 +143,7 @@ void initialize_idle_tasks(void)
 
     /* FIXME DK: redisign! */
     {
-        page_frame_t *pf = alloc_pages(KERNEL_STACK_PAGES, AF_PGEN);
+        page_frame_t *pf = alloc_pages(KERNEL_STACK_PAGES, 0);
         page_frame_iterator_t pfi;
         ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
         
@@ -152,8 +152,8 @@ void initialize_idle_tasks(void)
 
         pfi_index_init(&pfi, &pfi_index_ctx, pframe_number(pf), pframe_number(pf) + KERNEL_STACK_PAGES - 1);
         iter_first(&pfi);
-        r = ptable_map(&task->rpd, task->kernel_stack.low_address, KERNEL_STACK_PAGES,
-                       &pfi, PDE_RW | PDE_NX);
+        r = ptable_ops.mmap(&task->rpd, task->kernel_stack.low_address, KERNEL_STACK_PAGES,
+                            &pfi, PDE_RW | PDE_NX);
         if( r != 0 ) {
             panic("Can't map kernel stack for idle task !");
         }

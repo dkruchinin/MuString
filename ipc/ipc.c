@@ -22,7 +22,7 @@ void initialize_ipc(void)
 
 static task_ipc_t *__allocate_task_ipc(void)
 {
-  page_frame_t *p = alloc_page(AF_PGEN | AF_ZERO);
+  page_frame_t *p = alloc_page(AF_ZERO);
   if( p!= NULL ) {
     task_ipc_t *ipc = (task_ipc_t*)pframe_to_virt(p);
 
@@ -59,10 +59,10 @@ static task_ipc_priv_t *__allocate_ipc_private_data(void)
 static void __free_ipc_private_data(task_ipc_priv_t *p)
 {
   if( p->cached_data.cached_page1 ) {
-    free_pages_addr(p->cached_data.cached_page1);
+    free_pages_addr(p->cached_data.cached_page1, 1);
   }
   if( p->cached_data.cached_page2 ) {
-    free_pages_addr(p->cached_data.cached_page2);
+    free_pages_addr(p->cached_data.cached_page2, 1);
   }
   memfree(p);
 }
@@ -87,12 +87,12 @@ int setup_task_ipc(task_t *task)
     goto free_ipc;
   }
 
-  p1=alloc_pages_addr(1, AF_PGEN | AF_ZERO);
+  p1=alloc_pages_addr(1, AF_ZERO);
   if( !p1 ) {
     goto free_ipc_priv;
   }
 
-  p2=alloc_pages_addr(1, AF_PGEN | AF_ZERO);
+  p2=alloc_pages_addr(1, AF_ZERO);
   if( !p2 ) {
     goto free_page1;
   }
@@ -106,7 +106,7 @@ int setup_task_ipc(task_t *task)
   task->ipc_priv=ipc_priv;
   return 0;
 free_page1:
-  free_pages_addr(p1);
+  free_pages_addr(p1, 1);
 free_ipc_priv:
   __free_ipc_private_data(ipc_priv);
 free_ipc:

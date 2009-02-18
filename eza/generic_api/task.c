@@ -101,7 +101,7 @@ static page_frame_t *alloc_stack_pages(void)
 {
   page_frame_t *p;
 
-  p = alloc_pages(KERNEL_STACK_PAGES, AF_PGEN);
+  p = alloc_pages(KERNEL_STACK_PAGES, 0);
   return p;
 }
 
@@ -207,14 +207,14 @@ void cleanup_thread_data(void *t,ulong_t arg)
 
 static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
 {
-  task_t *task=alloc_pages_addr(1,AF_PGEN | AF_ZERO);
+  task_t *task=alloc_pages_addr(1, AF_ZERO);
 
   if( task ) {
     if( !(flags & CLONE_MM) || priv == TPL_KERNEL ) {
       task->tg_priv=memalloc(sizeof(tg_leader_private_t));
 
       if( !task->tg_priv ) {
-        free_pages_addr(task);
+        free_pages_addr(task, 1);
         return NULL;
       }
 
@@ -343,9 +343,8 @@ static int initialize_task_mm(task_t *orig, task_t *target,
   int ret = 0;
   
   if (!orig || priv == TPL_KERNEL)
-    ptable_rpd_clone(&target->rpd, &kernel_rpd);
+    ptable_ops.clone_rpd(task_get_rpd(target), &kernel_rpd);
   else if (flags & CLONE_MM) {
-    kprintf("Clone mm\n");
     target->task_mm = orig->task_mm;
     atomic_inc(&orig->task_mm->vmm_users);
   }

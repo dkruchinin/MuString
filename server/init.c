@@ -180,7 +180,6 @@ static int __create_task_mm(task_t *task, int num)
   ustack_top=USPACE_VA_TOP-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH);
   ustack_top-=PER_TASK_DATA_SIZE;
   ptd=user_to_kernel_vaddr(task_get_rpd(task),ustack_top);
-  ptd = (per_task_data_t *)((char *)ptd + (ustack_top - PAGE_ALIGN_DOWN(ustack_top)));
   if( !ptd ) {
     return -1;
   }

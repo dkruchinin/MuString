@@ -48,44 +48,6 @@ static inline int __simple_random(void)
   return __pr;
 }
 
-static page_idx_t __allocate_all(test_framework_t *tf, page_frame_t **plst)
-{
-  page_frame_t *pages_start = NULL, *pages;
-  page_idx_t max_block_size = tlsf_ctx.pool->allocator.block_sz_max;
-  page_idx_t allocated = 0;
-
-  tf->printf("Allocating all possible pages (max block size = %d pages)\n", max_block_size);
-  for (;;) {
-    pages = alloc_pages(max_block_size - 1, AF_PGEN);
-    if (!pages)
-      break;
-
-    allocated += max_block_size - 1;
-    if (!pages_start) {
-      list_init_head(&pages->head);      
-      pages_start = pages;
-    }
-
-    list_add2tail(&pages_start->head, &pages->node);
-  }
-  if (!allocated) {
-    kprintf("Something wrong with TLSF...\n");
-    tf->failed();
-  }
-  if (tlsf_ctx.pool->free_pages) {
-    allocated += tlsf_ctx.pool->free_pages;
-    pages = alloc_pages(tlsf_ctx.pool->free_pages, AF_PGEN);
-    if (!pages) {
-      kprintf("Failed to allocated %d last available pages.\n", tlsf_ctx.pool->free_pages);
-      tf->failed();
-    }
-    
-    list_add2tail(&pages_start->head, &pages->node);
-  }
-  
-  *plst = pages_start;
-  return allocated;
-}
 
 #define MAX_PGS_NCONT 128
 
@@ -93,104 +55,73 @@ static page_idx_t __allocate_all(test_framework_t *tf, page_frame_t **plst)
 static void tc_alloc_dealloc(void *ctx)
 {
   test_framework_t *tf = ctx;  
-  list_node_t *iter, *safe;
-  page_idx_t allocated, num, i, saved_ap;
-  page_frame_t *pages, *pages_start = NULL;
-  page_frame_t *pages_ncont[MAX_PGS_NCONT];
+  list_node_t *iter;
+  list_head_t head;
+  page_idx_t allocated, saved_ap;
+  page_frame_t *pages;
   
-  tf->printf("Target MM pool: %s\n", mmpools_get_pool_name(tlsf_ctx.pool->type));
+  tf->printf("Target MM pool: %s\n", tlsf_ctx.pool->name);
   tf->printf("Number of allocatable pages: %d\n", tlsf_ctx.pool->free_pages);
-  saved_ap = tlsf_ctx.pool->free_pages;
-  tf->printf("TLSF dump:\n");
-  tlsf_memdump_dbg(tlsf_ctx.tlsf);
-  allocated = __allocate_all(tf, &pages_start);
-  tf->printf("Allocated: %d; Available %d\n", allocated, tlsf_ctx.pool->free_pages);
-  tf->printf("Now try to free all pages.\n");
-  list_for_each_safe(&pages_start->head, iter, safe) {
-    page_idx_t sz;
+  saved_ap = atomic_get(&tlsf_ctx.pool->free_pages);
 
-    pages = list_entry(iter, page_frame_t, node);    
-    sz = pages_block_size(pages);
-    free_pages(pages, sz);
-    allocated -= sz;
-  }
-
-  tf->printf("Allocated: %d; Available %d\n", allocated, tlsf_ctx.pool->free_pages);
-  if (allocated) {
-    tf->printf("Something going wrong. After deallocation of all frames %d are rest.\n", allocated);
-    tf->failed();
-  }
-  
-  tlsf_memdump_dbg(tlsf_ctx.tlsf);
-  tf->printf("Allocate all available pages again, but free them one by one.\n");
-  allocated = __allocate_all(tf, &pages_start);
-  tf->printf("Allocated: %d, Free: %d\n", allocated, tlsf_ctx.pool->free_pages);
-  list_for_each_safe(&pages_start->head, iter, safe) {
-    page_idx_t i, sz;    
-
-    pages = list_entry(iter, page_frame_t, node);
-    sz = pages_block_size(pages);
-    for (i = 0; i < sz; i++, allocated--)
-      free_page(pages + i);
-  }
-
-  tlsf_memdump_dbg(tlsf_ctx.tlsf);
-  tf->printf("Allocated: %d, Free: %d\n", allocated, tlsf_ctx.pool->free_pages);
-  num = tlsf_ctx.pool->free_pages;
-  tf->printf("Allocate %d non-continous pages...\n", num);
-  pages_start = alloc_pages_ncont(num, AF_CLEAR_RC);
-  if (!pages_start) {
-    tf->printf("Can not allocate %d non-continous pages!\n", num);
-    tf->failed();
-  }
-
-  tf->printf("Validating allocated non-continous pages...\n");
+  tf->printf("Allocate all possible pages one-by-one...\n");
+  list_init_head(&head);
   allocated = 0;
-  list_for_each_entry(&pages_start->head, pages, node) {
-    int sz = pages_block_size(pages);
-    for (i = 0; i < sz; i++);
-    allocated += i;
-  }
-  if (allocated != num) {
-    tf->printf("FAILED! Requested(%d) != allocated(%d)\n", num, allocated);
-    tf->failed();
-  }
-
-  tf->printf("Ok, now free allocated earlier non-continous pages block.\n");
-  free_pages_ncont(pages_start);
-  tlsf_memdump_dbg(tlsf_ctx.tlsf);
-  
-  tf->printf("Try to allocate all memory by non-continous memory blocks untill we get -ENOMEM\n");
-  pages_start = pages = NULL;
-  i = 0;
-  do {
-    num = __simple_random() % 1023;    
-    tf->printf("Allocating: %d pages... ", num);
-    pages = alloc_pages_ncont(num, AF_PGEN);
-    if (!pages) {
-      tf->printf("[FAILED]\n");
-      break;
-    }
-
-    ASSERT(i < MAX_PGS_NCONT);
-    pages_ncont[i++] = pages;
-    tf->printf("[DONE]\n");
+  for (;;) {
+    pages = alloc_page(AF_ZERO);
     tlsf_validate_dbg(tlsf_ctx.tlsf);
-  } while (pages_start);
-  
-  tlsf_memdump_dbg(tlsf_ctx.tlsf);
-  tf->printf("Ok, new free them all\n");
-  while (i--)
-    free_pages_ncont(pages_ncont[i]);
-  
-  tlsf_validate_dbg(tlsf_ctx.tlsf);
-  tlsf_memdump_dbg(tlsf_ctx.tlsf);
-  if (saved_ap != atomic_get(&tlsf_ctx.pool->free_pages)) {
-    tf->printf("After all %d pages expected to be free, but only %d are actually free\n",
+    if (!pages)
+      break;
+
+    list_add2tail(&head, &pages->chain_node);
+    allocated++;    
+  }
+  if (atomic_get(&tlsf_ctx.pool->free_pages)) {
+    tf->printf("Failed to allocate %d pages. %d pages rest\n",
                saved_ap, atomic_get(&tlsf_ctx.pool->free_pages));
     tf->failed();
   }
+  if (allocated != saved_ap) {
+    tf->printf("Not all pages was allocated from TLSF.\n");
+    tf->printf("Total: %d. Allocated: %d\n", saved_ap, allocated);
+  }
+  
+  mmpool_allocator_dump(tlsf_ctx.pool);
+  tf->printf("Free allocated %d pages.\n", allocated);
+  pages = list_entry(list_node_first(&head), page_frame_t, chain_node);
+  list_cut_head(&head);
+  free_pages_chain(pages);
+  if (atomic_get(&tlsf_ctx.pool->free_pages) != saved_ap) {
+    tf->printf("Not all pages were fried: %d rest (%d total)\n",
+               saved_ap - atomic_get(&tlsf_ctx.pool->free_pages), saved_ap);
+    tf->failed();
+  }
 
+  mmpool_allocator_dump(tlsf_ctx.pool);
+  tf->printf("Allocate all possible pages usign non-continous allocation\n");
+  pages = alloc_pages(saved_ap, AF_ZERO | AF_USER);
+  if (!pages) {
+    tf->printf("Failed to allocate non-continous %d pages!\n", saved_ap);
+    tf->failed();
+  }
+
+  tlsf_validate_dbg(tlsf_ctx.tlsf);
+  mmpool_allocator_dump(tlsf_ctx.pool);
+  allocated = 1;
+  for (iter = &pages->chain_node; iter != pages->chain_node.prev; iter = iter->next, allocated++);
+  if (allocated != saved_ap) {
+    tf->printf("Invalid number of pages allocated: %d (%d was expected)\n", allocated, saved_ap);
+    tf->failed();
+  }
+
+  free_pages_chain(pages);
+  if (atomic_get(&tlsf_ctx.pool->free_pages) != saved_ap) {
+    tf->printf("Not all pages were fried: %d rest (%d total)\n",
+               saved_ap - atomic_get(&tlsf_ctx.pool->free_pages), saved_ap);
+    tf->failed();
+  }
+
+  mmpool_allocator_dump(tlsf_ctx.pool);
   tlsf_ctx.completed = true;
   sys_exit(0);
 }
@@ -208,7 +139,7 @@ static void tlsf_test_run(test_framework_t *tf, void *unused)
 static bool tlsf_test_init(void **unused)
 {
   memset(&tlsf_ctx, 0, sizeof(tlsf_ctx));
-  tlsf_ctx.pool = mmpools_get_pool(POOL_GENERAL);
+  tlsf_ctx.pool = POOL_GENERAL();
   if (!tlsf_ctx.pool->is_active)
     return false;
   if (tlsf_ctx.pool->allocator.type != PFA_TLSF)

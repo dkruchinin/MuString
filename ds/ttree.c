@@ -172,7 +172,7 @@ static ttree_node_t *allocate_ttree_node(ttree_t *ttree)
 }
 
 /*
- * T*-tree node contains keys in sorted order. Thus binary search
+ * T*-tree node contains keys in a sorted order. Thus binary search
  * is used for internal lookup.
  */
 static void *lookup_inside_tnode(ttree_t *ttree, ttree_node_t *tnode, struct tnode_lookup *tnl, int *out_idx)
@@ -195,8 +195,8 @@ static void *lookup_inside_tnode(ttree_t *ttree, ttree_node_t *tnode, struct tno
   }
 
   /*
-   * If a key position is not found, save an index of position
-   * where given may be placed.
+   * If a key position is not found, save an index of the position
+   * where key may be placed to.
    */
   *out_idx = floor;
   return NULL;
@@ -207,8 +207,8 @@ static inline void increase_tnode_window(ttree_t *ttree, ttree_node_t *tnode, in
   register int i;
 
   /*
-   * If right side of an array has more free rooms then left side,
-   * window will grow to the right. Otherwise it'll grow to the left.
+   * If the right side of an array has more free rooms than the left one,
+   * the window will grow to the right. Otherwise it'll grow to the left.
    */
   if ((ttree->keys_per_tnode - 1 - tnode->max_idx) > tnode->min_idx) {
     for (i = ++tnode->max_idx; i > *idx - 1; i--)
@@ -306,7 +306,7 @@ static void rotate_single(ttree_node_t **target, int side)
    * same side it was but 1 level less.
    * X node scales at 1 level down and possibly it has new child, so
    * its balance should be recalculated too. If it still internal node and
-   * its new parent was not overwaighted to the oppside to X side,
+   * its new parent was not overwaighted to the opposite to X side,
    * X is overweighted to the opposite to its new parent side, otherwise it's balanced.
    * If X is either half-leaf or leaf, balance racalculation is obvious.
    */
@@ -379,10 +379,10 @@ static void rebalance(ttree_t *ttree, ttree_node_t **node, ttree_cursor_t *curso
 
   /*
    * T-tree rotation rules difference from AVL rules in only one aspect.
-   * After double rotation when a leaf becomes new root node of subtree
-   * and both its left and right childs are half-leafs. If the node contains
-   * only one item, N - 1 items should be moved to it from one of its child.
-   * (N here is a number of items in selected child node).
+   * After double rotation is done and a leaf became new root node of subtree
+   * and both its left and right childs are half-leafs. If the new root node
+   * contains only one item, N - 1 items should be moved to it from one of its childs.
+   * (N is a number of items in selected child node).
    */
   if ((tnode_num_keys(*node) == 1) &&
       is_half_leaf((*node)->left) && is_half_leaf((*node)->right)) {
@@ -390,7 +390,7 @@ static void rebalance(ttree_t *ttree, ttree_node_t **node, ttree_cursor_t *curso
     int offs, nkeys;
 
     /*
-     * If right child contains more items then left, items will be moved
+     * If right child contains more items than left, they will be moved
      * from the right child. Otherwise from the left one. 
      */
     if (tnode_num_keys((*node)->right) >= tnode_num_keys((*node)->left)) {
@@ -421,7 +421,7 @@ static void rebalance(ttree_t *ttree, ttree_node_t **node, ttree_cursor_t *curso
     }
     else {
       /*
-       * Left child was selected. So its N - 1 items(started after minimal one)
+       * Left child was selected. So its N - 1 items(starting after the min one)
        * will be copied and inserted before parent's single item.
        */
       n = (*node)->left;
@@ -461,21 +461,20 @@ static void rebalance(ttree_t *ttree, ttree_node_t **node, ttree_cursor_t *curso
 static inline void __add_successor(ttree_node_t *n)
 {
   /*
-   * After new leaf node was added, its successor should
-   * fixed. Also it may become a successor of another higher
-   * node.
-   * There are several possible cases of such situation.
+   * After new leaf node was added, its successor should be
+   * fixed. Also it(successor) could became a successor of the node 
+   * higher than the given one.
+   * There are several possible cases of such situation:
    * 1) If new node is added as a right child, it inherites
-   *    successor of its parent. And it itself becomes a new parent's
-   *    successor.
-   * 2) If it is a left child its parent becomes child's successor.
-   * 2.1) If parent itself is right child, then newly added node becomes
+   *    successor of its parent. And it itself becomes a successor of its parent.
+   * 2) If it is a left child, its parent will be the successor.
+   * 2.1) If parent itself is a right child, then newly added node becomes
    *      the successor of parent's parent.
-   * 2.2) Otherwise it becomes a successor of one of nodes higher.
-   *      In this case, we chould brouse up the tree starting from parent's parent.
-   *      One of nodes on this path *may* have a successor equals to newly added
-   *      node's parent. If such node is found on the path, its successor changed to
-   *      newly added node.
+   * 2.2) Otherwise it becomes a successor of one of nodes located higher.
+   *      In this case, we should browse up the tree starting from parent's parent.
+   *      One of the nodes on the path *may* have a successor equals to parent of a
+   *      newly added node. If such node will be found, its successor should be changed
+   *      to a newly added node.
    */
   if (tnode_get_side(n) == TNODE_RIGHT) {
     n->successor = n->parent->successor;
@@ -501,7 +500,7 @@ static inline void __add_successor(ttree_node_t *n)
 static inline void __remove_successor(ttree_node_t *n)
 {
   /*
-   * Node removing could affect successor of one of nodes higher,
+   * Node removing could affect the successor of one of nodes with higher level,
    * so it should be fixed. Since T*-tree node deletion algorithm
    * assumes that ony leafs are removed, successor fixing
    * is opposite to successor adding algorithm.
@@ -540,7 +539,7 @@ static void fixup_after_insertion(ttree_t *ttree, ttree_node_t *n, ttree_cursor_
     if (subtree_is_unbalanced(node)) {
       /*
        * Because of nature of T-tree rebalancing, just inserted item
-       * may change its position in its node and even its node itself.
+       * may change its position in its node and even the node itself.
        * Thus if T-tree cursor was specified we have to take care of it.
        */
       rebalance(ttree, &node, cursor);
@@ -573,7 +572,7 @@ static void fixup_after_deletion(ttree_t *ttree, ttree_node_t *n, ttree_cursor_t
       
       rebalance(ttree, &tmp, cursor);
       /*
-       * If after rotation subtree heigh is not changed,
+       * If after rotation subtree height is not changed,
        * proccess should be continued.
        */
       if (tmp->bfc)
@@ -625,7 +624,7 @@ void *ttree_lookup(ttree_t *ttree, void *key, ttree_cursor_t *cursor)
    * Classical T-tree search algorithm is O(log(2N/M) + log(M - 2))
    * Where N is total number of items in the tree and M is a number of
    * items per node. In worst case each node on the path requires 2
-   * comparison(with it min and max items) plus binary search in the last
+   * comparison(with its min and max items) plus binary search in the last
    * node(bound node) excluding its first and last items.
    *
    * Here is used another approach that was suggested in
@@ -685,9 +684,9 @@ void *ttree_lookup(ttree_t *ttree, void *key, ttree_cursor_t *cursor)
 
   /*
    * If we're here, item wasn't found. So the only thing
-   * need to be done is determining of position where search key
-   * may be placed. If target node is not empty, key may be placed
-   * on min or max position.
+   * need to be done is to determine the position where search key
+   * may be placed to. If target node is not empty, key may be placed
+   * on its min or max positions.
    */
   if (!tnode_is_full(ttree, target)) {
     side = TNODE_BOUND;
@@ -746,7 +745,7 @@ void ttree_insert_placeful(ttree_cursor_t *cursor, void *item)
     if (tnode_is_full(ttree, n)) {
       /*
        * If node is full its max item should be removed and
-       * new key should be inserted into it. Removed item becomes
+       * new key should be inserted into it. Removed key becomes
        * new insert value that should be put in successor node.
        */
       void *tmp = n->keys[n->max_idx--];
@@ -757,7 +756,7 @@ void ttree_insert_placeful(ttree_cursor_t *cursor, void *item)
       
       /*
        * If current node hasn't successor and right child
-       * New node is created and becomes the right child of current node.
+       * New node have to be created. It'll become the right child of the current node.
        */
       if (!n->successor || !n->right) {
         cursor->side = TNODE_RIGHT;
@@ -767,8 +766,8 @@ void ttree_insert_placeful(ttree_cursor_t *cursor, void *item)
 
       at_node = n->successor;
       /*
-       * If successor hasn't free rooms, new value is inserted
-       * into newly created node that becomes the left child of current
+       * If successor hasn't any free rooms, new value is inserted
+       * into newly created node that becomes left child of the current
        * node's successor.
        */
       if (tnode_is_full(ttree, at_node)) {
@@ -779,7 +778,7 @@ void ttree_insert_placeful(ttree_cursor_t *cursor, void *item)
 
       /*
        * If we're here, then successor has free rooms and key
-       * will be inserted into it.
+       * will be inserted to one of them.
        */
       cursor->idx = at_node->min_idx;
       cursor->tnode = at_node;
@@ -826,8 +825,8 @@ void *ttree_delete_placeful(ttree_cursor_t *cursor)
   decrease_tnode_window(ttree, tnode, &cursor->idx);
 
   /*
-   * If after a key deletion T*-tree node contains more than
-   * minimum allowed number of items, then proccess is completed.
+   * If after a key was removed, T*-tree node contains more than
+   * minimum allowed number of items, the proccess is completed.
    */
   if (tnode_num_keys(tnode) > min_tnode_entries(ttree))
     return ret;
@@ -835,8 +834,8 @@ void *ttree_delete_placeful(ttree_cursor_t *cursor)
     int idx;
 
     /*
-     * If it is an internal node, recovery number of items in
-     * this node by copying one item from its successor.
+     * If it is an internal node, recovery number of items in it
+     * by moving one item from its successor.
      */
     n = tnode->successor;
     idx = tnode->max_idx + 1;
@@ -859,7 +858,7 @@ void *ttree_delete_placeful(ttree_cursor_t *cursor)
     n = tnode->left ? tnode->left : tnode->right;
     items = tnode_num_keys(n);
     
-    /* If half-leaf can not be merged with a leaf, then proccess is completed. */
+    /* If half-leaf can not be merged with a leaf, the proccess is completed. */
     if (items > (ttree->keys_per_tnode - tnode_num_keys(tnode)))
       return ret;
     

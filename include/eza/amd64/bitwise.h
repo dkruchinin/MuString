@@ -89,6 +89,18 @@ static always_inline int arch_bit_test_and_set(volatile void *bitmap, int bit)
   return val;
 }
 
+#define ARCH_BIT_TEST_AND_CLEAR
+static always_inline int arch_bit_test_and_clear(volatile void *bitmap, int bit)
+{
+  int val;  
+  __asm__ volatile ( __LOCK_PREFIX "btc %2, %0\n\t"
+                     "sbb %1, %1"
+                     : "=m" (*(volatile long *)bitmap), "=r" (val)
+                     : "Ir" (bit)
+                     : "memory");
+  return val;
+}
+
 #define ARCH_BIT_FIND_LSF
 static always_inline long arch_bit_find_lsf(unsigned long word)
 {

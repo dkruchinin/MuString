@@ -47,10 +47,7 @@ typedef struct __ioport_range {
 
 static ioport_range_t *__allocate_ioports_range(void)
 {
-  ioport_range_t *r=alloc_pages_addr(1,AF_PGEN|AF_ZERO);
-  if( r != NULL ) {
-    memset(r,0,sizeof(*r));
-  }
+  ioport_range_t *r=alloc_pages_addr(1,AF_ZERO);
   return r;
   /* TODO: [mt] Allocate ioport ranges via slabs. */
 }

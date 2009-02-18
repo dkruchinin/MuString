@@ -44,6 +44,7 @@ config TEST_MAPUNMAP
 config TEST_VMA
        bool "Test general VMA functinality"
        default n
+       select DEBUG_TTREE
 
 config TEST_RWSEM
        bool "Test Read/Write semaphore"

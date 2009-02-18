@@ -155,7 +155,7 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
   /* First channel opened ? */
   if( !ipc->channels ) {
     r = -ENOMEM;
-    ipc->channels=alloc_pages_addr(1,AF_PGEN|AF_ZERO);
+    ipc->channels=alloc_pages_addr(1,AF_ZERO);
     if( !ipc->channels ) {
       goto out_put_port;
     }

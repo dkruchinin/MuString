@@ -5,6 +5,7 @@ config AMD64
        def_bool y
        bool "AMD64 architecture"
        default ARCH = "amd64"
+       select GENARCH_MM
 
 menu "Processor features"
      depends on AMD64
@@ -38,6 +39,10 @@ endmenu
 
 menu "Memory manager"
      depends on AMD64
+
+config GENARCH_MM
+     def_bool y
+     bool "Use generic page table operations"
 
 config KCORE_STACK_PAGES
        int "Kernel core stack pages"

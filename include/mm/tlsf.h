@@ -110,9 +110,7 @@ typedef struct __tlsf {
   } map[TLSF_FLD_SIZE];               /**< TLSF map that contains FLDs */
   list_head_t *percpu_cache;          /* TODO DK: <-- */
   spinlock_t lock;
-  mm_pool_type_t owner;               /**< Type of pool that owns given TLSF allocator */
-  page_idx_t first_page_idx;          /**< Very first page index in TLSF */
-  page_idx_t last_page_idx;           /**< Very last page index in TLSF */
+  mm_pool_t *owner;                   /**< Type of pool that owns given TLSF allocator */
   uint8_t slds_bitmap[TLSF_SLD_BITMAP_SIZE];
   uint8_t fld_bitmap;  
 } tlsf_t;
@@ -121,13 +119,11 @@ typedef struct __tlsf {
  * Initialize tlsf allocator.
  * @param pool - A pointer to pool allocator bins to.
  */
-void tlsf_alloc_init(mm_pool_t *pool);
+void tlsf_allocator_init(mm_pool_t *pool);
 
 #ifdef CONFIG_DEBUG_MM
-void tlsf_memdump_dbg(void *_tlsf);
 void tlsf_validate_dbg(void *_tlsf);
 #else
-#define tlsf_memdump_dbg(_tlsf)
 #define tlsf_validate_dbg(_tlsf)
 #endif /* CONFIG_MM_DEBUG */
 

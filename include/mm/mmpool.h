@@ -33,26 +33,19 @@
 #include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 
-/**
- * @typedef uint8_t mm_pool_type_t
- * @brief Pool type
- * @see POOL_DMA
- * @see POOL_GENERAL
- */
-typedef uint8_t mm_pool_type_t;
+#define MMPOOLS_MAX 4
 
-/**
- * DMA pool (may exists on x86 and x86_64) architectures
- * if IOMMU is not supported
- */
-#define POOL_DMA __pool_type(PF_PDMA)
-
-/**
- * General purpose memory pool.
- * Typically contains most of pages.
- */
-#define POOL_GENERAL __pool_type(PF_PGEN)
-#define __POOL_FIRST POOL_DMA
+enum {
+  BOOTMEM_POOL_TYPE = 0,
+  GENERAL_POOL_TYPE,
+  HIGHMEM_POOL_TYPE,
+  DMA_POOL_TYPE,
+};
+  
+#define POOL_BOOTMEM() (&mm_pools[BOOTMEM_POOL_TYPE])
+#define POOL_GENERAL() (&mm_pools[GENERAL_POOL_TYPE])
+#define POOL_DMA()     (&mm_pools[DMA_POOL_TYPE])
+#define POOL_HIGHMEM() (&mm_pools[HIGHMEM_POOL_TYPE])
 
 /**
  * @struct mm_pool_t
@@ -68,17 +61,17 @@ typedef uint8_t mm_pool_type_t;
  * @see mm_pool_type_t
  */
 typedef struct __mm_pool {
-  page_idx_t total_pages;    /**< Total number of pages in pool */
-  page_idx_t reserved_pages; /**< Number of reserved pages */
-  atomic_t free_pages;       /**< Number of free pages (atomic) */
-  list_head_t reserved;      /**< A list of all reserved pages in pool */
-  page_frame_t *pages;       /**< First page pool owns (last page is pool->pages + pool->total_pages - 1) */
-  pf_allocator_t allocator;  /**< Pool pages allocator */
-  mm_pool_type_t type;       /**< Pool type */
-  bool is_active;            /**< Determines if pool is active */
+  char *name;
+  pf_allocator_t allocator;      /**< Pool's pages allocator */
+  page_idx_t first_page_id;      /**< Number of very first page in a pool */
+  page_idx_t total_pages;        /**< Total number of pages in pool */
+  page_idx_t reserved_pages;     /**< Number of reserved pages */
+  atomic_t free_pages;           /**< Number of free pages (atomic) */
+  bool is_active;
+  uint8_t type;
 } mm_pool_t;
 
-extern mm_pool_t mm_pools[NOF_MM_POOLS]; /**< An array of all pools */
+extern mm_pool_t mm_pools[MMPOOLS_MAX]; /**< An array of all pools */
 
 /**
  * @def for_each_mm_pool(p)
@@ -88,7 +81,7 @@ extern mm_pool_t mm_pools[NOF_MM_POOLS]; /**< An array of all pools */
  * @see mm_pool_t
  */
 #define for_each_mm_pool(p)                                 \
-  for (p = mm_pools; p < (mm_pools + NOF_MM_POOLS); p++)
+  for (p = mm_pools; p < (mm_pools + MMPOOLS_MAX); p++)
 
 /**
  * @def for_each_active_mm_pool(p)
@@ -101,22 +94,6 @@ extern mm_pool_t mm_pools[NOF_MM_POOLS]; /**< An array of all pools */
   for_each_mm_pool(p)                           \
     if((p)->is_active)
 
-/* [internal] allocate n pages from pool */
-#define __pool_alloc_pages(pool, n)               \
-  ((pool)->allocator.alloc_pages(n, (pool)->allocator.alloc_ctx))
-
-/* [internal] free pages to pool */
-#define __pool_free_pages(pool, pages, numpgs)                          \
-  ((pool)->allocator.free_pages(pages, numpgs, (pool)->allocator.alloc_ctx))
-
-#define __pool_pblock_size(pool, pblock)        \
-  ((pool)->allocator.pages_block_size(pblock, (pool)->allocator.alloc_ctx))
-
-#define __pool_block_size_max(pool)             \
-  ((pool)->allocator.block_sz_max)
-#define __pool_block_size_min(pool)             \
-  ((pool)->allocator.block_sz_min)
-
 /**
  * @brief Get pool by its type
  * @param type - pool type
@@ -124,54 +101,45 @@ extern mm_pool_t mm_pools[NOF_MM_POOLS]; /**< An array of all pools */
  *
  * @see mm_pool_type_t
  */
-static inline mm_pool_t *mmpools_get_pool(mm_pool_type_t type)
+static inline mm_pool_t *get_mmpool_by_type(uint8_t type)
 {
-  ASSERT((type >= __POOL_FIRST) && (type < NOF_MM_POOLS));
-  return (mm_pools + type);
+  if (unlikely(type >= MMPOOLS_MAX)) {
+    kprintf(KO_WARNING "Attemption to get memory pool by unknown type %d!\n", type);
+    return NULL;
+  }
+  
+  return &mm_pools[type];
 }
 
-/**
- * @brief Get pool name by its type
- * @param type - pool type
- * @return A name of pool with type @a type
- *
- * @see mm_pool_type_t
- */
-static inline char *mmpools_get_pool_name(mm_pool_type_t type)
+static inline page_frame_t *mmpool_alloc_pages(mm_pool_t *pool, page_idx_t num_pages)
 {
-  switch (type) {
-      case POOL_DMA:
-        return "DMA";
-      case POOL_GENERAL:
-        return "GENERAL";
-      default:
-        break;
+  if (likely(pool->allocator.alloc_pages != NULL))
+    return pool->allocator.alloc_pages(num_pages, pool->allocator.alloc_ctx);
+
+  kprintf(KO_WARNING "Memory pool \"%s\" doesn't support alloc_pages function!\n", pool->name);
+  return NULL;  
+}
+
+static inline void mmpool_free_pages(mm_pool_t *pool, page_frame_t *pages, page_idx_t num_pages)
+{
+  if (likely(pool->allocator.free_pages != NULL))
+    return pool->allocator.free_pages(pages, num_pages, pool->allocator.alloc_ctx);
+
+  kprintf(KO_WARNING "Memory pool \"%s\" doesn't support free_pages function!\n", pool->name);
+}
+
+static inline void mmpool_allocator_dump(mm_pool_t *pool)
+{
+  if (likely(pool->allocator.dump != NULL)) {
+    pool->allocator.dump(pool->allocator.alloc_ctx);
+    return;
   }
 
-  return "UNKNOWN";
+  kprintf(KO_WARNING "Memory pool \"%s\" doesn't support dump function!\n", pool->name);
 }
 
-/**
- * @brief Initialize memory pools
- * @note It's an initcall, so it must be called only once during boot stage.
- */
-void mmpools_init(void);
-
-/**
- * @brief Add page to related pool.
- * @a page should have pool type set in its flags.
- *
- * @param page - A pointer to existent page_frame_t
- * @see page_frame_t
- */
-void mmpools_add_page(page_frame_t *page);
-
-/**
- * @brief Initialize pool's memory allocator
- * @param pool - A pointer to alive memory pool.
- *
- * @see mm_pool_t
- */
-void mmpools_init_pool_allocator(mm_pool_t *pool);
+void mmpools_initialize(void);
+void mmpool_activate(mm_pool_t *pool);
+void mmpool_add_page(mm_pool_t *pool, page_frame_t *pframe);
 
 #endif /* __MMPOOL_H__ */

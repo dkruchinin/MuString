@@ -60,7 +60,7 @@ static int prio_init_data_storage(struct __ipc_gen_port *port,
     return -ENOMEM;
   }
 
-  ds->message_ptrs = alloc_pages_addr(1,AF_PGEN|AF_ZERO);
+  ds->message_ptrs = alloc_pages_addr(1,AF_ZERO);
   if( ds->message_ptrs == NULL ) {
     goto free_ds;
   }
@@ -78,7 +78,7 @@ static int prio_init_data_storage(struct __ipc_gen_port *port,
   port->capacity=queue_size;
   return 0;
 free_messages:
-  free_pages_addr(ds->message_ptrs);
+  free_pages_addr(ds->message_ptrs, 1);
 free_ds:
   memfree(ds);
   return -ENOMEM;

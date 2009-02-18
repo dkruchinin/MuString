@@ -44,8 +44,7 @@ int linked_array_initialize(linked_array_t *arr,ulong_t items)
 
   array_size = items*item_size;
   /* TODO: [mt] allocate memory via slabs ! */
-  arr->array = alloc_pages_addr((array_size >> PAGE_WIDTH)+1,
-                                AF_PGEN );
+  arr->array = alloc_pages_addr((array_size >> PAGE_WIDTH)+1,0 );
   if(arr->array == NULL) {
     return -1;
   }
@@ -164,7 +163,7 @@ void linked_array_deinitialize(linked_array_t *arr)
 {
   arr->head = arr->items;
   arr->item_size = INVALID_ITEM_IDX;
-  free_pages_addr(arr->array);
+  free_pages_addr(arr->array, ((arr->items * arr->item_size) >> PAGE_WIDTH) + 1);
   arr->array=NULL;
 }
 
