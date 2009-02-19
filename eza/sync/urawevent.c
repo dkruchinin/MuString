@@ -32,8 +32,6 @@
 #define __LOCK_EVENT(e) spinlock_lock(&(e)->__lock)
 #define __UNLOCK_EVENT(e) spinlock_unlock(&(e)->__lock)
 
-extern int __big_verbose;
-
 static int __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
 {
   sync_uevent_t *e=__UEVENT_OBJ(obj);

@@ -9,6 +9,18 @@ config ALWAYS_INLINE
        optimisation. Note: disabling of this option is not a very good idea, but in some
        cases(for example for debugging) it may have a sense.
 
+config CORESERVERS_PERCPU_LAUNCH
+       bool "Perform initial per-cpu deployment of coreservers."
+       default n
+       help
+       To test SMP kernel functionality, sometimes it is useful to make core servers
+       occupy all available CPUs in system.
+
+config CORESERVERS_LAUNCH_DELAY
+       int "Delay (in system clock ticks) between launching next core server."
+       range 0 3000
+       default 300
+
 config TIMER_GRANULARITY
        int "Granularity of timer major tick"
        range 32 64 
@@ -16,7 +28,7 @@ config TIMER_GRANULARITY
        help
        Granularity (in timer tick) of major tick.
 
-config MAX_DEFERRED_ACTIONS_PER_TICK
+config MAX_DEFERRED_IRQ_ACTIONS_PER_TICK
        int "Maximum amount of deferred actions fired at one time."
        range 1 512 
        default "32"
@@ -24,6 +36,11 @@ config MAX_DEFERRED_ACTIONS_PER_TICK
        Maximum amount of deferred interrupt actions kernel fires per at one time tick.
        If more than such amount of deferred actions are ready for firing at the same time,
        the rest of these actions will be processed during the next suitable suituation.
+
+config MAX_DEFERRED_USERSPACE_ACTIONS
+       int "Maximum amount of deferred actions performed upon returning to userspace."
+       range 1 32
+       default "2"
 
 endmenu
 

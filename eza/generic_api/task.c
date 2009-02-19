@@ -195,9 +195,9 @@ static void __free_task_struct(task_t *task)
 }
 #endif 
 
-void cleanup_thread_data(void *t,ulong_t arg)
+void cleanup_thread_data(gc_action_t *action)
 {
-  task_t *task=(task_t*)t;
+  task_t *task=(task_t*)action->data;
 
   /* NOTE: Don't free task structure directly since it will
    * be probably processed via 'waitpid()' functionality
@@ -245,6 +245,7 @@ static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
 
     task->uworks_data.cancel_state=PTHREAD_CANCEL_ENABLE;
     task->uworks_data.cancel_type=PTHREAD_CANCEL_DEFERRED;
+    list_init_head(&task->uworks_data.def_uactions);
   }
   return task;
 }

@@ -215,14 +215,6 @@ int sched_del_task(task_t *task)
   return -ENOTTY;
 }
 
-int sched_move_task_to_cpu(task_t *task,cpu_id_t cpu)
-{
-  if( active_scheduler != NULL && active_scheduler->move_task_to_cpu ) {
-      return active_scheduler->move_task_to_cpu(task,cpu);
-  }
-  return -ENOTTY;
-}
-
 void schedule(void)
 {
   if(active_scheduler != NULL) {
@@ -328,110 +320,120 @@ extern int sched_verbose1;
 #ifdef CONFIG_SMP
 #include <eza/arch/apic.h>
 
-int schedule_task_migration(migration_action_t *a,cpu_id_t cpu)
+static void __self_move_trampoline(gc_action_t *action)
 {
-  if( cpu < CONFIG_NRCPUS ) {
-    spinlock_lock(&migration_locks[cpu]);
-    list_add2tail(&migration_actions[cpu], &a->l);
-    spinlock_unlock(&migration_locks[cpu]);
-    activate_task(gc_threads[cpu][MIGRATION_THREAD_IDX]);
-    return 0;
-  } else {
-    return -EINVAL;
-  }
+  migration_action_t *a=(migration_action_t *)(action->data);
+  cpu_id_t cpu=a->cpu;
+
+  suspend_task(a->task);
+  spinlock_lock(&migration_locks[cpu]);
+  list_add2tail(&migration_actions[cpu], &a->l);
+  spinlock_unlock(&migration_locks[cpu]);
+  activate_task(gc_threads[cpu][MIGRATION_THREAD_IDX]);
+}
+
+static void __self_move_gc_actor(gc_action_t *action)
+{
+  migration_action_t a;
+
+  ASSERT(arg < CONFIG_NRCPUS && cpu_is_online(arg));
+  INIT_MIGRATION_ACTION(&a,current_task(),(long)action->data);
+
+  action->data=&a;
+  action->action=__self_move_trampoline;
+
+  gc_schedule_action(action);
+  event_yield(&a.e);
 }
 
 void do_smp_scheduler_interrupt_handler(void)
 {
 }
 
-static int __move_task_to_this_cpu(task_t *t)
+/* NOTE: Task must have flag __TF_UNDER_MIGRATION_BIT set !
+ * If target task is not running, it is moved to target CPU,
+ * flag __TF_UNDER_MIGRATION_BIT is reset and zero is returned.
+ * Otherwise, nothing is changed and -EBUSY is returned.
+ */
+static long __move_task_to_cpu(task_t *task,cpu_id_t dest_cpu,bool cyclic)
 {
-  eza_sched_cpudata_t *src_cpu,*dst_cpu;
-  eza_sched_taskdata_t *tdata = EZA_TASK_SCHED_DATA(t);
-  int r;
-  ulong_t is,is2,my_cpu=cpu_id();
+  eza_sched_cpudata_t *src_data,*dst_data=sched_cpu_data[dest_cpu];
+  long is,r=-EBUSY;
 
-lock_cpus_data:
-  src_cpu=NULL;
-  /* Always lock from from lower CPU numbers to higher. */
-  if( my_cpu <= t->cpu ) {
-    dst_cpu=sched_cpu_data[my_cpu];
-    while(true) {
-      interrupts_save_and_disable(is2);
-      if( try_to_lock_sched_data(dst_cpu) ) {
-        break;
-      }
-      interrupts_restore(is2);
+lock_src_cpu:
+  src_data=get_task_sched_data_locked(task,&is,false);
+  if( !src_data ) {
+    if( cyclic ) {
+      goto lock_src_cpu;
+    } else {
+      goto out;
     }
-  } else {
-    dst_cpu=NULL;
   }
 
-  if( !(t->flags & __TF_UNDER_MIGRATION_BIT) || tdata->array != NULL ) {
-    r=-EBUSY;
-    goto unlock;
-  }
-
-  if( t->cpu == my_cpu ) {
+  if( task->cpu == dest_cpu ) { /* Already on target CPU ? */
     r=0;
-    goto unlock;
+    goto unlock_src_data;
   }
 
-  if( dst_cpu != NULL ) {
-    /* Destination CPU is already ours. */
-    src_cpu=get_task_sched_data_locked(t,&is,false);
-    if( !src_cpu ) {
-      /* No luck - do locking one more time. */
-      __UNLOCK_CPU_SCHED_DATA(dst_cpu);
-      interrupts_enable();
-      goto lock_cpus_data;
-    }
-    /* Ok, go ahead. */
-    goto transfer_task;
-  } else {
-    /* No locks were locked, so lock first task's CPU, than our CPU. */
-    src_cpu=get_task_sched_data_locked(t,&is,true);
-    dst_cpu=sched_cpu_data[my_cpu];    
+  /* At this point local interrupts are already disabled. */
+  if( !try_to_lock_sched_data(dst_data) ) {
+    __UNLOCK_CPU_SCHED_DATA(src_data);
+    interrupts_restore(is);
+    cond_reschedule();
 
-    if( !try_to_lock_sched_data(dst_cpu) ) {
-      /* Someone else holds the lock, so repeat the procedure. */
-      __UNLOCK_CPU_SCHED_DATA(src_cpu);
-      interrupts_enable();
-      goto lock_cpus_data;
+    if( cyclic ) {
+      goto lock_src_cpu;
+    } else {
+      goto out;
     }
   }
 
-transfer_task:
-  /* All CPUs are seem to be locked. So migrate the task. */
-  if(t->state != TASK_STATE_SUSPENDED || tdata->array != NULL ) {
-    r=-EBUSY;
-    goto unlock;
-  }
-  src_cpu->stats->sleeping_tasks--;
-  dst_cpu->stats->sleeping_tasks++;
-  t->cpu=my_cpu;
-  r=0;
-
-unlock:
-  if( src_cpu ) {
-    __UNLOCK_CPU_SCHED_DATA(src_cpu);
+  /* OK, all CPUs are locked, so try to move the task. */
+  if( !(task->state & (TASK_STATE_RUNNING | TASK_STATE_RUNNABLE)) ) {
+    src_data->stats->sleeping_tasks--;
+    dst_data->stats->sleeping_tasks++;
+    task->cpu=dest_cpu;
+    r=0;
   }
 
-  if( dst_cpu ) {
-    __UNLOCK_CPU_SCHED_DATA(dst_cpu);
-  }
-
-  interrupts_enable();
-  cond_reschedule();
-
-  /* Mark task as ready for another migrations. */
-  atomic_test_and_reset_bit((void *)&t->flags,__TF_UNDER_MIGRATION_BIT);
+  __UNLOCK_CPU_SCHED_DATA(dst_data);
+unlock_src_data:
   if( !r ) {
-    activate_task(t);
+    atomic_test_and_reset_bit(&task->flags,__TF_UNDER_MIGRATION_BIT);
   }
 
+  __UNLOCK_CPU_SCHED_DATA(src_data);
+  interrupts_restore(is);
+  cond_reschedule();
+out:
   return r;
+}
+
+int sched_move_task_to_cpu(task_t *task,cpu_id_t cpu)
+{
+  gc_action_t *a;
+
+  if(cpu >= EZA_SCHED_CPUS || !is_cpu_online(cpu)) {
+    return -EINVAL;
+  }
+
+  if( task->cpu == cpu ) {
+    return 0;
+  }
+
+  /* Prevent target task from double migration. */
+  if( atomic_test_and_set_bit(&task->flags,__TF_UNDER_MIGRATION_BIT) ) {
+    return -EBUSY;
+  }
+
+  if( __move_task_to_cpu(task,cpu,false) ) {
+    /* Task can't be moved right now, so schedule a deferred migration.
+     */
+    a=gc_allocate_action(__self_move_gc_actor,(void *)cpu);
+    schedule_user_deferred_action(task,a,false);
+  }
+
+  return 0;
 }
 
 void migration_thread(void *data)
@@ -458,7 +460,14 @@ void migration_thread(void *data)
         migration_action_t *action=container_of(n,migration_action_t,l);
 
         list_del(n);
-        action->status=__move_task_to_this_cpu(action->task);
+        kprintf("*** Moving TID 0x%X to cpu %d.\n",
+                        action->task->tid,cpu_id());
+        if( __move_task_to_cpu(action->task,cpu_id(),true) ) {
+          panic("[CPU %d] migration_thread(): Can't move TID 0x%X to my CPU !\n",
+                cpu_id(),action->task->tid);
+        }
+        kprintf("*** TID 0x%X was moved to cpu %d.\n",
+                action->task->tid,cpu_id());
         event_raise(&action->e);
       }
     } else {
@@ -466,6 +475,12 @@ void migration_thread(void *data)
     }
     sched_change_task_state(current_task(),TASK_STATE_SLEEPING);
   }
+}
+
+#else
+
+int sched_move_task_to_cpu(task_t *task,cpu_id_t cpu) {
+  return 0;
 }
 
 #endif

@@ -25,6 +25,7 @@
 #include <eza/process.h>
 #include <ds/linked_array.h>
 #include <eza/usercopy.h>
+#include <config.h>
 
 #define TEST_ID  "IPC subsystem test"
 #define SERVER_THREAD  "[SERVER THREAD] "
@@ -50,11 +51,17 @@ typedef struct __thread_port {
   ulong_t port_id,server_pid;
   ipc_test_ctx_t *tctx;
   bool finished_tests;
+  long msg_id;
+  long reply_msg_id;
+  int pid;
 } thread_port_t;
 
 #define MAX_TEST_MESSAGE_SIZE 512
+static char __c_rcv_buf[CONFIG_NRCPUS][MAX_TEST_MESSAGE_SIZE];
+
+#define __client_rcv_buf (char *)&__c_rcv_buf[cpu_id()][0]
+
 static char __server_rcv_buf[MAX_TEST_MESSAGE_SIZE];
-static char __client_rcv_buf[MAX_TEST_MESSAGE_SIZE];
 
 #define BIG_MESSAGE_SIZE  (1500*1024)
 static uint8_t __big_message_pattern[BIG_MESSAGE_SIZE+sizeof(int)];
@@ -70,6 +77,10 @@ static char *patterns[TEST_ROUNDS]= {
 };
 
 #define BIG_MSG_ID  TEST_ROUNDS
+static SPINLOCK_DEFINE(__shared_data_lock);
+
+#define LOCK_SHARED_DATA()   spinlock_lock(&__shared_data_lock)
+#define UNLOCK_SHARED_DATA() spinlock_unlock(&__shared_data_lock)
 
 static bool __verify_message(ulong_t id,char *msg)
 {
@@ -212,7 +223,7 @@ static void __client_thread(void *ctx)
   for(i=0;i<TEST_ROUNDS;i++) {
     r=sys_port_send(channels[i],
                     (ulong_t)patterns[i],strlen(patterns[i])+1,
-                    (ulong_t)__client_rcv_buf,sizeof(__client_rcv_buf));
+                    (ulong_t)__client_rcv_buf,MAX_TEST_MESSAGE_SIZE);
     if( r < 0 ) {
       tf->printf(CLIENT_THREAD "Error while sending data over channel N%d : %d\n",
                  channels[i],r);
@@ -379,88 +390,144 @@ static void __poll_client(void *d)
 
 #define NUM_POLL_CLIENTS  SERVER_NUM_BLOCKED_PORTS
 
+thread_port_t poller_ports[NUM_POLL_CLIENTS];
+
 static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
 {
   int i,r,j;
   pollfd_t fds[NUM_POLL_CLIENTS];
-  thread_port_t poller_ports[NUM_POLL_CLIENTS];
   test_framework_t *tf=tctx->tf;
   ulong_t polled_clients;
   port_msg_info_t msg_info;
   char server_rcv_buf[MAX_TEST_MESSAGE_SIZE];
 
   for(i=0;i<NUM_POLL_CLIENTS;i++) {
+    task_t *task;
+
+    memset(&poller_ports[i],0,sizeof(poller_ports[i]));
+
     poller_ports[i].port_id=ports[i];
     poller_ports[i].tctx=tctx;
     poller_ports[i].server_pid=current_task()->pid;
     poller_ports[i].finished_tests=false;
+    poller_ports[i].msg_id=-1;
 
-    if( kernel_thread(__poll_client,&poller_ports[i],NULL ) ) {
+    if( kernel_thread(__poll_client,&poller_ports[i],&task ) ) {
       tf->printf( "Can't create a client thread for testing IPC poll !\n" );
       tf->abort();
     }
+    poller_ports[i].pid=task->pid;
   }
 
   tf->printf(SERVER_THREAD "Client threads created. Ready for polling ports.\n");
   for(j=0;j<TEST_ROUNDS;j++) {
     ulong_t msg_id;
+    thread_port_t *_tt;
 
     polled_clients=NUM_POLL_CLIENTS;
 
-    for(i=0;i<NUM_POLL_CLIENTS;i++) {
-      fds[i].events=POLLIN | POLLRDNORM;
-      fds[i].revents=0;
-      fds[i].fd=ports[i];
-    }
-
     while(polled_clients) {
+      for(i=0;i<NUM_POLL_CLIENTS;i++) {
+        fds[i].events=POLLIN | POLLRDNORM;
+        fds[i].revents=0;
+        fds[i].fd=ports[i];
+      }
+
       tf->printf( SERVER_THREAD "Polling ports (%d clients left) ...\n",polled_clients );
       r=sys_ipc_port_poll(fds,NUM_POLL_CLIENTS,NULL);
       if( r < 0 ) {
         tf->printf( SERVER_THREAD "Error occured while polling ports: %d\n",r );
-        tf->failed();
-      } else {
-        tf->printf( SERVER_THREAD "Events occured: %d\n", r );
-        polled_clients-=r;
+        tf->abort();
+      }
+      int jl,nc=r;
+
+      tf->printf( SERVER_THREAD ">> Events occured: %d\n", r );
+      polled_clients-=r;
+
+      for(jl=0;jl<NUM_POLL_CLIENTS;jl++) {
+        if( fds[jl].revents ) {
+          r=sys_port_receive(fds[jl].fd,0,(ulong_t)server_rcv_buf,
+                             sizeof(server_rcv_buf),&msg_info);
+
+          if( r != 0 ) {
+            tf->printf( SERVER_THREAD "Error during RCV from port N %d. r=%d\n",
+                        fds[jl].fd,r);
+            tf->abort();
+          }
+
+          if( !nc ) {
+            tf->printf(SERVER_THREAD"Extra poll events available !\n");
+            tf->abort();
+          }
+          nc--;
+
+          msg_id=fds[jl].fd % TEST_ROUNDS;
+          if( msg_info.msg_len == strlen(patterns[msg_id])+1 ) {
+            if( !__verify_message(msg_id,server_rcv_buf) ) {
+              tf->printf( SERVER_THREAD "Poll: Message N %d mismatch.\n",
+                          fds[i].fd );
+              tf->abort();
+            }
+          } else {
+            tf->printf(SERVER_THREAD "Message N%d has insufficient length: %d instead of %d\n",
+                       fds[i].fd,msg_info.msg_len,strlen(patterns[msg_id])+1);
+            tf->abort();
+          }
+
+          /* Good message, so store its details for further reply. */
+          _tt=NULL;
+          for(i=0;i<NUM_POLL_CLIENTS;i++) {
+            if( poller_ports[i].pid == msg_info.sender_pid ) {
+              _tt=&poller_ports[i];
+            }
+          }
+
+          if( !_tt ) {
+            tf->printf(SERVER_THREAD"Can't locate poll client: %d\n",
+                       msg_info.sender_pid);
+            tf->abort();
+          }
+
+          if( fds[jl].fd != _tt->port_id ) {
+            tf->printf(SERVER_THREAD"Insufficient poll client's (%d) port: %d instead of %d !\n",
+                       jl,fds[jl].fd,_tt->port_id);
+            tf->abort();
+          }
+
+          if( _tt->msg_id != -1 ) {
+            tf->printf(SERVER_THREAD"Another message for client %d ! (%d)\n",
+                       msg_info.sender_pid,_tt->msg_id);
+            tf->abort();
+          }
+          _tt->msg_id=msg_info.msg_id;
+          _tt->reply_msg_id=msg_id;
+        }
+      }
+
+      if( nc ) {
+        tf->printf(SERVER_THREAD"%d not processed events after current poll round !\n",nc);
+        tf->abort();
       }
     }
-    tf->printf( SERVER_THREAD "All clients sent their messages.\n" );
+    tf->printf( SERVER_THREAD "All clients sent their messages. Replying to them ...\n" );
 
-    /* Process all pending events. */
     for(i=0;i<NUM_POLL_CLIENTS;i++) {
-      if( !fds[i].revents ) {
-        tf->printf( SERVER_THREAD "Port N %d doesn't have any pending events \n",
-                    fds[i].fd);
+      _tt=&poller_ports[i];
+
+      if( _tt->msg_id == -1 ) {
+        tf->printf(SERVER_THREAD"Not processed poll client found! %d\n",
+                   _tt->pid);
         tf->abort();
       }
-      r=sys_port_receive(fds[i].fd,0,(ulong_t)server_rcv_buf,
-                         sizeof(server_rcv_buf),&msg_info);
-      if( r != 0 ) {
-        tf->printf( SERVER_THREAD "Error during processing port N %d. r=%d\n",
-                    fds[i].fd,r);
+      r=sys_port_reply(_tt->port_id,_tt->msg_id,
+                       (ulong_t)patterns[_tt->reply_msg_id],
+                       strlen(patterns[_tt->reply_msg_id])+1);
+      if( r ) {
+        tf->printf(SERVER_THREAD "Error occured during replying message %d via port %d. r=%d\n",
+                   _tt->msg_id,_tt->port_id,r);
         tf->abort();
-      } else {
-        msg_id=fds[i].fd % TEST_ROUNDS;
-        if( msg_info.msg_len == strlen(patterns[msg_id])+1 ) {
-          if( !__verify_message(msg_id,server_rcv_buf) ) {
-            tf->printf( SERVER_THREAD "Message N %d mismatch.\n",
-                        fds[i].fd );
-            tf->failed();
-          }
-        } else {
-          tf->printf(SERVER_THREAD "Message N%d has insufficient length: %d instead of %d\n",
-                     fds[i].fd,msg_info.msg_len,strlen(patterns[msg_id])+1);
-          tf->failed();
-        }
-        /* Reply here. */
-        r=sys_port_reply(fds[i].fd,msg_info.msg_id,
-                         (ulong_t)patterns[msg_id],strlen(patterns[msg_id])+1);
-        if( r ) {
-          tf->printf(SERVER_THREAD "Error occured during replying message %d via port %d. r=%d\n",
-                     msg_info.msg_id,fds[i].fd,r);
-          tf->abort();
-        }
       }
+      _tt->msg_id=-1;
     }
     tf->printf( SERVER_THREAD "All messages were replied. Now let's have some rest (HZ/2) ...\n" );
     sleep(HZ/2);
@@ -505,11 +572,11 @@ static void __ipc_poll_test(ipc_test_ctx_t *tctx,int *ports)
 static void __notifier_thread(void *ctx)
 {
   DECLARE_TEST_CONTEXT;
-  uint64_t target_tick=swks.system_ticks_64 + 200;
+  uint64_t target_tick=system_ticks + 200;
 
   tf->printf( "[Notifier] Starting.\n" );
 
-  while(swks.system_ticks_64 < target_tick) {
+  while(system_ticks < target_tick) {
   }
 
   tf->printf( "[Notifier] Exiting.\n" );
@@ -606,10 +673,13 @@ typedef struct __message_tail {
 #define MAX_MSG_PARTS  6
 #define MAX_MSG_SIZE (sizeof(message_header_t) + MAX_MSG_PARTS*sizeof(message_part_t) + sizeof(message_tail_t))
 
-static uint8_t __vectored_msg_client_snd_buf[MAX_MSG_SIZE];
-static uint8_t __vectored_msg_client_rcv_buf[MAX_MSG_SIZE];
+static uint8_t __vmsg_client_snd_buf[CONFIG_NRCPUS][MAX_MSG_SIZE];
+static uint8_t __vmsg_client_rcv_buf[CONFIG_NRCPUS][MAX_MSG_SIZE];
 static uint8_t __vectored_msg_server_snd_buf[MAX_MSG_SIZE];
 static uint8_t __vectored_msg_server_rcv_buf[MAX_MSG_SIZE];
+
+#define __vectored_msg_client_snd_buf  (uint8_t*)&__vmsg_client_snd_buf[cpu_id()][0]
+#define __vectored_msg_client_rcv_buf  (uint8_t*)&__vmsg_client_rcv_buf[cpu_id()][0]
 
 static int __validate_message_data(uint16_t *data,uint16_t base,ulong_t size)
 {
@@ -678,22 +748,28 @@ static void __prepare_vectored_message(uint8_t *buf,int parts)
   message_tail_t *tail;
   int i;
 
-  __prepare_message_data(hdr->data,__data_base,MSG_HEADER_DATA_SIZE);
+  LOCK_SHARED_DATA();
   hdr->data_base=__data_base;
   __data_base += DATA_BASE_STEP;
+  UNLOCK_SHARED_DATA();
+  __prepare_message_data(hdr->data,hdr->data_base,MSG_HEADER_DATA_SIZE);
 
   hdr++;
   part=(message_part_t *)hdr;
   for(i=0;i<parts;i++,part++) {
-    __prepare_message_data(part->data,__data_base,MSG_PART_DATA_SIZE);
+    LOCK_SHARED_DATA();
     part->data_base=__data_base;
     __data_base += DATA_BASE_STEP;
+    UNLOCK_SHARED_DATA();
+    __prepare_message_data(part->data,part->data_base,MSG_PART_DATA_SIZE);
   }
 
   tail=(message_tail_t *)part;
-  __prepare_message_data(tail->data,__data_base,MSG_TAIL_DATA_SIZE);
-  tail->data_base=__data_base;
-  __data_base += DATA_BASE_STEP;
+    LOCK_SHARED_DATA();
+    tail->data_base=__data_base;
+    __data_base += DATA_BASE_STEP;
+    UNLOCK_SHARED_DATA();
+  __prepare_message_data(tail->data,tail->data_base,MSG_TAIL_DATA_SIZE);
 }
 
 static void __setup_message_iovecs(uint8_t *msg,int parts,iovec_t *iovecs)
@@ -717,8 +793,8 @@ static void __setup_message_iovecs(uint8_t *msg,int parts,iovec_t *iovecs)
 }
 
 #define CLEAR_CLIENT_BUFFERS                    \
-  memset(__vectored_msg_client_snd_buf,0,sizeof(__vectored_msg_client_snd_buf)); \
-  memset(__vectored_msg_client_rcv_buf,0,sizeof(__vectored_msg_client_rcv_buf))
+  memset(__vectored_msg_client_snd_buf,0,MAX_MSG_SIZE); \
+  memset(__vectored_msg_client_rcv_buf,0,MAX_MSG_SIZE)
 
 #define CLEAR_SERVER_BUFFERS                                            \
   memset(__vectored_msg_server_snd_buf,0,sizeof(__vectored_msg_server_snd_buf)); \
@@ -737,7 +813,7 @@ static void __vectored_messages_thread(void *ctx)
   ulong_t channel;
   ulong_t size;
 
-  tf->printf(VECTORER_ID "Starting.\n");
+  tf->printf(VECTORER_ID "Starting on CPU %d.\n",cpu_id());
 
   channel=sys_open_channel(__server_pid,__vectored_port,IPC_BLOCKED_ACCESS);
   if( channel < 0 ) {
@@ -764,7 +840,7 @@ static void __vectored_messages_thread(void *ctx)
     if( i & 0x1 ) {
       r=sys_port_send_iov(channel,snd_iovecs,parts+2,
                           (uintptr_t)__vectored_msg_client_rcv_buf,
-                          sizeof(__vectored_msg_client_rcv_buf) );
+                          MAX_MSG_SIZE);
       tf->printf(VECTORER_ID"Message was sent: r=%d. RCV BUFSIZE=%d\n",r,
                  sizeof(__vectored_msg_client_rcv_buf));
       if( r < 0 ) {
@@ -1210,6 +1286,9 @@ typedef struct __prio_data {
 
 #define PRIORER_ID "[PRIO CLIENT]"
 
+static uint8_t __buf114_snd[MAX_MSG_SIZE];
+static uint8_t __buf114_rcv[MAX_MSG_SIZE];
+
 static void __prio_thread(void *data)
 {
   prio_data_t *pd=(prio_data_t *)data;
@@ -1218,6 +1297,7 @@ static void __prio_thread(void *data)
   iovec_t snd_iovecs[MAX_IOVECS],rcv_iovecs[MAX_IOVECS];
   ulong_t channel;
   ulong_t size,prio,parts;
+  uint8_t *_sbuf,*_rbuf;
 
   channel=sys_open_channel(__server_pid,__prio_port,IPC_BLOCKED_ACCESS);
   if( channel < 0 ) {
@@ -1232,45 +1312,59 @@ static void __prio_thread(void *data)
                prio,r);
     tf->abort();
   }
+  tf->printf(PRIORER_ID "[CPU %d:%d] Successfully changed priority to %d. [%d]\n",
+             cpu_id(),current_task()->pid,prio,
+             current_task()->static_priority);
 
   parts=3;
   for(i=0;i<TEST_ROUNDS;i++) {
     ulong_t *watchline;
 
-    CLEAR_CLIENT_BUFFERS;
-    __prepare_vectored_message(__vectored_msg_client_snd_buf,parts);
-    __setup_message_iovecs(__vectored_msg_client_snd_buf,parts,snd_iovecs);
+    if( !cpu_id() ) {
+      CLEAR_CLIENT_BUFFERS;
+      _sbuf=__vectored_msg_client_snd_buf;
+      _rbuf=__vectored_msg_client_rcv_buf;
+    } else {
+      memset(__buf114_snd,0,sizeof(__buf114_snd));
+      memset(__buf114_snd,0,sizeof(__buf114_snd));
+      _sbuf=__buf114_snd;
+      _rbuf=__buf114_rcv;
+    }
+
+    __prepare_vectored_message(_sbuf,parts);
+    __setup_message_iovecs(_sbuf,parts,snd_iovecs);
 
     /* Setup memory watchline. */
     size=MESSAGE_SIZE(parts);
-    watchline=(ulong_t*)(__vectored_msg_client_rcv_buf+size);
+    watchline=(ulong_t*)(_sbuf+size);
     *watchline=WL_PATTERN;
 
-    tf->printf(PRIORER_ID "Sending a message consisting of %d parts via %s. SIZE=%d\n",
+    tf->printf(PRIORER_ID "[CPU %d:%d] Sending a message of %d parts via %s. SIZE=%d\n",
+               cpu_id(),current_task()->pid,
                parts, (i & 0x1) ? "'sys_port_send_iov()'" : "'sys_port_send_iov_v()'",
                MESSAGE_SIZE(parts));
     if( i & 0x1 ) {
       r=sys_port_send_iov(channel,snd_iovecs,parts+2,
-                          (uintptr_t)__vectored_msg_client_rcv_buf,
-                          sizeof(__vectored_msg_client_rcv_buf) );
+                          (uintptr_t)_rbuf,
+                          MAX_MSG_SIZE);
       tf->printf(PRIORER_ID"Message was sent: r=%d. RCV BUFSIZE=%d\n",r,
-                 sizeof(__vectored_msg_client_rcv_buf));
+                 MAX_MSG_SIZE);
       if( r < 0 ) {
         tf->failed();
       }
     } else {
-      __setup_message_iovecs(__vectored_msg_client_rcv_buf,parts,rcv_iovecs);
+      __setup_message_iovecs(_rbuf,parts,rcv_iovecs);
       r=sys_port_send_iov_v(channel,snd_iovecs,parts+2,
                             rcv_iovecs,parts+2);
       tf->printf(PRIORER_ID"Message was sent: r=%d. RCV BUFSIZE=%d\n",r,
-                 sizeof(__vectored_msg_client_rcv_buf));
+                 MAX_MSG_SIZE);
       if( r < 0 ) {
         tf->failed();
       }
     }
     tf->printf(PRIORER_ID"Verifying server's reply (%d-parts message).\n",
                parts);
-    FAIL_ON(!__validate_vectored_message(__vectored_msg_client_rcv_buf,parts,tf),tf);
+    FAIL_ON(!__validate_vectored_message(_rbuf,parts,tf),tf);
     if( *watchline != WL_PATTERN ) {
       tf->printf(VECTORER_ID"Watchline pattern mismatch ! 0x%X instead of 0x%X\n",
                  *watchline,WL_PATTERN);
@@ -1522,7 +1616,7 @@ static void __prioritized_port_test(void *ctx)
   }
 
   tf->printf(SERVER_THREAD"[PRIO PORT] Sleeping for a while ...\n");
-  sleep(1);
+  sleep(HZ/3);
   tf->printf(SERVER_THREAD"[PRIO PORT] Got woken up ! Testing ! (start priority=%d)\n",
              prio);
 
@@ -1627,7 +1721,7 @@ static void __prioritized_port_test(void *ctx)
 
   tf->printf(SERVER_THREAD"All priority-related tests finished.\n");
   sys_close_port(__prio_port);
-  sleep(1);
+  sleep(HZ);
 }
 
 static void __server_thread(void *ctx)
@@ -1641,11 +1735,15 @@ static void __server_thread(void *ctx)
 
   __server_pid=current_task()->pid;
 
-  __message_read_test(ctx);
+#ifdef CONFIG_SMP
+  kthread_cpu_autodeploy=true;
+#endif
+
   __stack_overflow_test(ctx);
-  __process_events_test(ctx);
-  __prioritized_port_test(ctx);
   __ipc_buffer_test(ctx);
+  __process_events_test(ctx);
+  __message_read_test(ctx);
+  __prioritized_port_test(ctx);
   __vectored_messages_test(ctx);
 
   for( i=0;i<SERVER_NUM_PORTS;i++) {

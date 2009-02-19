@@ -66,7 +66,6 @@ typedef struct __scheduler {
   void (*scheduler_tick)(void);
   int (*add_task)(struct __task_struct *task);
   int (*del_task)(struct __task_struct *task);
-  int (*move_task_to_cpu)(struct __task_struct *task,cpu_id_t cpu);
   void (*schedule)(void);
   void (*reset)(void);
   int (*change_task_state)(struct __task_struct *task,task_state_t  state,ulong_t mask);
@@ -176,6 +175,11 @@ static inline void release_task_struct(struct __task_struct *t)
 #define activate_task(t) sched_change_task_state((t),TASK_STATE_RUNNABLE)
 #define stop_task(t) sched_change_task_state((t),TASK_STATE_STOPPED)
 #define suspend_task(t) sched_change_task_state((t),TASK_STATE_SUSPENDED)
+
+#ifdef CONFIG_TEST
+extern bool kthread_cpu_autodeploy;
+#endif
+
 
 #endif
 

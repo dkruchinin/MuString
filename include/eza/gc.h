@@ -28,6 +28,7 @@
 #include <ds/list.h>
 #include <eza/task.h>
 #include <eza/smp.h>
+#include <eza/event.h>
 
 #define NUM_MASTER_PERCPU_THREADS 1
 
@@ -45,7 +46,7 @@ task_t *gc_threads[CONFIG_NRCPUS][NUM_PERCPU_THREADS];
 struct __gc_action;
 
 typedef void (*gc_action_dtor_t)(struct __gc_action *action);
-typedef void (*gc_actor_t)(void *data,ulong_t data_arg);
+typedef void (*gc_actor_t)(struct __gc_action *action);
 typedef void (*actor_t)(void *data);
 
 typedef struct __gc_action {
@@ -53,14 +54,11 @@ typedef struct __gc_action {
   gc_action_dtor_t dtor;
   gc_actor_t action;
   void *data;
-  ulong_t data_arg;
-  list_head_t data_list_head;
   list_node_t l;
 } gc_action_t;
 
 void initialize_gc(void);
-gc_action_t *gc_allocate_action(gc_actor_t actor, void *data,
-                                ulong_t data_arg);
+gc_action_t *gc_allocate_action(gc_actor_t actor,void *data);
 void gc_schedule_action(gc_action_t *action);
 void gc_free_action(gc_action_t *action);
 void spawn_percpu_threads(void);
@@ -68,14 +66,11 @@ void spawn_percpu_threads(void);
 #define GC_TASK_RESOURCE  0x1
 
 static inline void gc_init_action(gc_action_t *action,gc_actor_t actor,
-                                  void *data,long data_arg)
+                                  void *data)
 {
   action->action=actor;
   action->data=data;
-  list_init_node(&action->l);
-  list_init_head(&action->data_list_head);
   action->type=0;
-  action->data_arg=data_arg;
   action->dtor=NULL;
 }
 
@@ -95,11 +90,17 @@ typedef struct __migration_action_t {
   task_t *task;
   event_t e;
   list_node_t l;
-  int status;
-  cpu_id_t target_cpu;
+  cpu_id_t cpu;
 } migration_action_t;
 
+#define INIT_MIGRATION_ACTION(_a,_t,_c)         \
+  (_a)->task=(_t);                              \
+  event_initialize_task(&(_a)->e,(_t));         \
+  (_a)->cpu=(_c)
+
 int schedule_task_migration(migration_action_t *a,cpu_id_t cpu);
+
+void cleanup_thread_data(gc_action_t *action);
 
 #endif
 

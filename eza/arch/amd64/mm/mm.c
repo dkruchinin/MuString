@@ -259,3 +259,8 @@ void arch_smp_mm_init(cpu_id_t cpu)
 {  
   load_cr3(pde_fetch(kernel_rpd.pml4, 0));
 }
+
+long get_swks_virtual_address(void)
+{
+  return swks_mandmap.virt_addr;
+}

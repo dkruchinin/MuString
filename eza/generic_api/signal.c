@@ -62,7 +62,8 @@ static bool __update_pending_signals(task_t *task)
   signal_struct_t *siginfo=&task->siginfo;
   bool delivery_needed;
 
-  if( deliverable_signals_present(siginfo) ) {
+  if( deliverable_signals_present(siginfo) ||
+      !list_is_empty(&task->uworks_data.def_uactions) ) {
     set_task_signals_pending(task);
     delivery_needed=true;
   } else {
@@ -504,4 +505,12 @@ sigq_item_t *extract_one_signal_from_queue(task_t *task)
     return container_of(sh,sigq_item_t,h);
   }
   return NULL;
+}
+
+void schedule_user_deferred_action(task_t *target,gc_action_t *a,bool force)
+{
+  LOCK_TASK_SIGNALS(target);
+  list_add2tail(&target->uworks_data.def_uactions,&a->l);
+  __update_pending_signals(target);
+  UNLOCK_TASK_SIGNALS(target);
 }

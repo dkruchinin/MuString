@@ -649,11 +649,11 @@ static void __print_tnode(ttree_node_t *tnode)
 
   tnode_for_each_index(tnode, i) {
     vmr = container_of(tnode_key(tnode, i), vmrange_t, bounds);
-    kprintf("[%p<->%p FP: %zd), ", vmr->bounds.space_start,
-            vmr->bounds.space_end, (vmr->hole_size >> PAGE_WIDTH));
+    //kprintf("[%p<->%p FP: %zd), ", vmr->bounds.space_start,
+    //        vmr->bounds.space_end, (vmr->hole_size >> PAGE_WIDTH));
   }
 
-  kprintf("\n");
+  // kprintf("\n");
 }
 
 void vmranges_print_tree_dbg(vmm_t *vmm)

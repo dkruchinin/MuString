@@ -39,11 +39,10 @@ swks_t __page_aligned__ swks;
 void initialize_swks(void)
 {
   memset(&swks, 0, sizeof(swks));
-  swks.system_ticks_64 = INITIAL_TICKS_VALUE;
+
+  swks.system_clock_ticks = INITIAL_TICKS_VALUE;
   swks.nr_cpus = CONFIG_NRCPUS;
-  swks.timer_frequency = HZ;
+  swks.hz = HZ;
+  swks.num_irqs=NUM_IRQS;
   arch_initialize_swks();
-  /*kprintf("[LW] Calibrating delay loop ...");
-  swks.delay_loop=arch_calibrate_delay_loop();
-  kprintf("%ld.\n",swks.delay_loop);*/
 }

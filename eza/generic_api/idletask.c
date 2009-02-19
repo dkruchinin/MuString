@@ -43,9 +43,9 @@ task_t *idle_tasks[CONFIG_NRCPUS];
 ulong_t syscall_counter = 0;
 
 void idle_loop(void)
-{    
-  //uint64_t target_tick = swks.system_ticks_64 + 100;
-  //for (;;);  
+{
+  long idle_cycles=0;
+
 #ifdef CONFIG_TEST
   if( !cpu_id() ) {
     run_tests();
@@ -53,14 +53,7 @@ void idle_loop(void)
 #endif
 
   for( ;; ) {
-#ifndef CONFIG_TEST
-      /*if( swks.system_ticks_64 >= target_tick ) {
-        kprintf( " + [Idle #%d] Tick, tick ! (Ticks: %d, PID: %d, ATOM: %d)\n",
-               cpu_id(), swks.system_ticks_64, current_task()->pid, in_atomic() );
-        target_tick += STEP;
-        }*/
-#endif
-
+    idle_cycles++;
   }
 }
 

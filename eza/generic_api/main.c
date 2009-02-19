@@ -79,8 +79,7 @@ static void main_routine_stage1(void)
    * receive interrups from the other CPUs via LAPIC upon unleashing
    * the other CPUs.
    */
-
-  kprintf( "Enabling interrupts ...\n" );
+  setup_time();
   interrupts_enable();
 
   initialize_swks();
@@ -91,9 +90,8 @@ static void main_routine_stage1(void)
   server_run_tasks();
 
   /* Enter idle loop. */
-  //kprintf( "CPU #0 is entering idle loop. Current task: %p, CPU ID: %d\n",
-  //         current_task(), cpu_id() );
-
+  kprintf( "CPU #0 is entering idle loop. Current task: %p, CPU ID: %d\n",
+           current_task(), cpu_id() );
   idle_loop();
 }
 

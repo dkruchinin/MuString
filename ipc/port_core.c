@@ -358,20 +358,6 @@ out_unlock:
   return r;
 }
 
-/* FIXME: [mt] potential deadlock problem ! [R] */
-static int __put_receiver_into_sleep(task_t *receiver,ipc_gen_port_t *port)
-{
-  wqueue_task_t w;
-  int r;
-
-  IPC_TASK_ACCT_OPERATION(receiver);
-  waitqueue_prepare_task(&w,receiver);
-  r=waitqueue_push(&port->waitqueue,&w);
-  IPC_TASK_UNACCT_OPERATION(receiver);
-
-  return r;
-}
-
 static int __transfer_message_data_to_receiver(ipc_port_message_t *msg,
                                                iovec_t *iovec, ulong_t numvecs,
                                                port_msg_info_t *stats,
@@ -459,24 +445,26 @@ int ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
   }
 
   /* Main 'Receive' cycle. */
-recv_cycle:
   msg=NULL;
 
+recv_cycle:
   IPC_LOCK_PORT_W(port);
   if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
     if( !port->avail_messages ) {
       /* No incoming messages: sleep (if requested). */
       if( flags & IPC_BLOCKED_ACCESS ) {
+        wqueue_task_t w;
+
       /* No luck: need to sleep. We don't unlock the port right now
        * since in will be unlocked after putting the receiver in the
        * port's waitqueue.
        */
-        /* FIXME: [mt] new version of __put_receiver_into_sleep() doesn't
-         * require the port to be W-locked !
-         */
+        IPC_TASK_ACCT_OPERATION(owner);
+        waitqueue_prepare_task(&w,owner);
+        r=waitqueue_push(&port->waitqueue,&w);
         IPC_UNLOCK_PORT_W(port);
+        IPC_TASK_UNACCT_OPERATION(owner);
 
-        r=__put_receiver_into_sleep(owner,port);
         if( !r ) {
           goto recv_cycle;
         } else {

@@ -76,9 +76,8 @@ static inline void arch_activate_task(task_t *to)
   }
 
 #ifdef CONFIG_TEST
-  kprintf( "** ACTIVATING TASK: %d:0x%X (CPU: %d). FS=0x%X, LDT=%p,PTD=%p\n",
-           to->pid,to->tid,to->cpu,to_ctx->fs,
-           to_ctx->ldt,to_ctx->per_task_data);
+  kprintf( "** ACTIVATING TASK: %d:0x%X (CPU: %d) **\n",
+           to->pid,to->tid,to->cpu);
 #endif
   
   /* Let's jump ! */

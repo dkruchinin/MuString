@@ -280,6 +280,9 @@ static irq_counter_array_t *__get_irq_array(task_t *task,ulong_t id)
   return NULL;
 }
 
+int ___big_verbose=0;
+int ___target_pid=0x111111111;
+
 int sys_wait_on_irq_array(ulong_t id)
 {
   irq_counter_array_t *array=__get_irq_array(current_task(),id);
@@ -297,11 +300,17 @@ int sys_wait_on_irq_array(ulong_t id)
 
   /* Check the event mask first time. */
   if( !*array->event_mask ) {
+//    kprintf("+ [CPU %d] W: 0x%X\n",
+//            cpu_id(),current_task()->tid);
     event_yield(&array->de.d._event);
   }
 
   arch_bit_clear(&array->flags,__IRQ_ARRAY_ACTIVE_BIT);
   event_reset(&array->de.d._event);
+
+  ___target_pid=current_task()->pid;
+  kprintf("-------------------------[CPU %d, TID: 0x%X]-------------------------\n",
+          cpu_id(),current_task()->tid);
 
   return 0;
 }

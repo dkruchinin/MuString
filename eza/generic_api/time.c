@@ -52,8 +52,13 @@ void initialize_timer(void)
 void timer_tick(void)
 {
   /* Update the ticks counter. */
-  swks.system_ticks_64++;
+  swks.system_clock_ticks++;
   process_timers(); 
+}
+
+void setup_time(void)
+{
+  arch_setup_time();
 }
 
 void timer_interrupt_handler(void *data)

@@ -33,6 +33,8 @@
 #include <eza/posix.h>
 #include <mlibc/kprintf.h>
 #include <eza/usercopy.h>
+#include <config.h>
+#include <eza/gc.h>
 
 #define XMM_CTX_SIZE  512
 
@@ -210,9 +212,7 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
 
   sigitem=extract_one_signal_from_queue(caller);
   if( !sigitem ) {
-    kprintf_dbg("** No signals for delivery for %d/%d !\n",
-                current_task()->pid,current_task()->tid);
-    for(;;);
+    return;
   }
 
   /* Determine if there is a user-specific handler installed. */
@@ -302,6 +302,7 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
 {
   ulong_t uworks=read_task_pending_uworks(current_task());
   task_t *current=current_task();
+  int i;
 
   kprintf_dbg("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
               reason,retcode,
@@ -328,10 +329,31 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
     }
   }
 
-  /* Next, check for pending signals. */
-  if( uworks & ARCH_CTX_UWORKS_SIGNALS_MASK ) {
-    kprintf_dbg("[UWORKS]: Pending signals: 0x%X\n",
-                current->siginfo.pending);
+  i=0;
+repeat:
+  uworks=read_task_pending_uworks(current_task());
+  if( uworks & ARCH_CTX_UWORKS_SIGNALS_MASK ) { /* Next, check for pending signals. */
+    if( i < CONFIG_MAX_DEFERRED_USERSPACE_ACTIONS ) {
+      gc_action_t *a;
+
+      LOCK_TASK_SIGNALS(current);
+      if( !list_is_empty(&current->uworks_data.def_uactions) ) {
+        a=container_of(list_node_first(&current->uworks_data.def_uactions),
+                       gc_action_t,l);
+        list_del(&a->l);
+      } else {
+        a=NULL;
+      }
+      UNLOCK_TASK_SIGNALS(current);
+
+      if( a ) { /* Have some deferred userspace works. */
+        a->action(a);
+        update_pending_signals(current);
+        i++;
+        goto repeat;
+      }
+    }
+
     __handle_pending_signals(reason,retcode,kstack);
   }
 }

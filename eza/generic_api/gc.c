@@ -31,6 +31,8 @@
 #include <eza/arch/spinlock.h>
 #include <eza/task.h>
 #include <eza/scheduler.h>
+#include <eza/signal.h>
+#include <eza/timer.h>
 
 static memcache_t *gc_actions_cache;
 static list_head_t gc_tasklists[CONFIG_NRCPUS];
@@ -86,12 +88,11 @@ static void __gc_thread_logic(void *arg)
     list_for_each(&private,n) {
       struct __gc_action *action=container_of(n,struct __gc_action,l);
 
-      action->action(action->data,action->data_arg);
+      action->action(action);
       if( action->dtor ) {
         action->dtor(action);
       }
     }
-
     sched_change_task_state(current_task(),TASK_STATE_SLEEPING);
   }
 }
@@ -117,12 +118,11 @@ void spawn_percpu_threads(void)
   }
 }
 
-gc_action_t *gc_allocate_action(gc_actor_t actor, void *data,
-                                ulong_t data_arg)
+gc_action_t *gc_allocate_action(gc_actor_t actor, void *data)
 {
   gc_action_t *action=__alloc_gc_action();
   if( action ) {
-    gc_init_action(action,actor,data,data_arg);
+    gc_init_action(action,actor,data);
     action->dtor=__free_gc_action;
   }
   return action;
@@ -144,8 +144,9 @@ void gc_schedule_action(gc_action_t *action)
   UNLOCK_TASKLIST();
 
   if( gc_threads[cpu_id()][GC_THREAD_IDX] ) {
-    sched_change_task_state(gc_threads[cpu_id()][GC_THREAD_IDX], TASK_STATE_RUNNABLE);
+    activate_task(gc_threads[cpu_id()][GC_THREAD_IDX]);
   } else {
     kprintf( KO_WARNING "gc_schedule_action(): scheduling GC action without GC thread !\n" );
   }
 }
+
