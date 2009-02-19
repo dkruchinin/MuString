@@ -220,6 +220,7 @@ static void __server_task_runner(void *data)
 
     modvbase=pframe_id_to_virt(init.server[a].addr>>PAGE_WIDTH);
 
+    kprintf("[LAUNCHER] Starting server: %d ... \n",a);
     if( *(uint32_t *)modvbase == ELF_MAGIC ) { /* ELF module ? */
       ulong_t t;
 
@@ -261,9 +262,9 @@ static void __server_task_runner(void *data)
       }
       sn++;
 
-      if( CONFIG_CORESERVERS_LAUNCH_DELAY >= 100 ) {
-        sleep(CONFIG_CORESERVERS_LAUNCH_DELAY);
-      }
+//      if( CONFIG_CORESERVERS_LAUNCH_DELAY >= 100 ) {
+        sleep(1000);
+//      }
     } else if( !strncmp(&modvbase[257],"ustar",5 ) ) { /* TAR-based ramdisk ? */
       long size;
 
