@@ -56,9 +56,9 @@ DEFINE_ITERATOR_CTX(page_frame, PF_ITER_ARCH,
                     uint32_t e820id;
                     );
 
-static inline bool is_kernel_addr(void *a)
+static inline bool is_kernel_page(page_frame_t *page)
 {
-  uintptr_t addr = (uintptr_t)a;
+  uintptr_t addr = (uintptr_t)pframe_to_virt(page);
 
   if (addr >= KERNEL_START_PHYS)
     return (addr <= KERNEL_END_PHYS);

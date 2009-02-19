@@ -507,7 +507,13 @@ static page_frame_t *tlsf_alloc_pages(page_idx_t n, void *data)
   /* Now we free to build pages chain and set TLSF_PB_BUSY bit for each allocated page */
   list_init_head(list_node2head(&block_head->chain_node));
   for (i = 0; i < n; i++) {
-    bit_set(&block_head[i]._private, TLSF_PB_BUSY);    
+#ifndef CONFIG_DEBUG_MM
+    bit_set(&block_head[i]._private, TLSF_PB_BUSY);
+#else
+    if (bit_test_and_set(&block_head[i]._private, TLSF_PB_BUSY))
+      panic("Just allocated page frame #%#x is *already* busy! WTF?", pframe_number(block_head + i));
+#endif /* CONFIG_DEBUG_MM */
+    
     if (likely(i > 0))
       list_add_before(&block_head->chain_node, &block_head[i].chain_node);
   }

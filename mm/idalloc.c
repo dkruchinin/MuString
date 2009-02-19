@@ -160,7 +160,7 @@ void *idalloc(size_t size)
     goto out;
   else {
     page_frame_t *cur_page = (page_frame_t *)PAGE_ALIGN_DOWN(idalloc_meminfo.mem);      
-    uintptr_t page_bound = PAGE_ALIGN(idalloc_meminfo.mem);
+    uintptr_t page_bound = PAGE_ALIGN_DOWN(idalloc_meminfo.mem) + PAGE_SIZE;
 
     if ((uintptr_t)(idalloc_meminfo.mem + size) < page_bound) {
       /* all is ok, we can just cut size from available address */

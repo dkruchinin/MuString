@@ -235,7 +235,7 @@ static void __pfiter_list_first(page_frame_iterator_t *pfi)
   ctx = iter_fetch_ctx(pfi);
   ctx->cur = ctx->first_node;
   pfi->pf_idx =
-    pframe_number(list_entry(ctx->cur, page_frame_t, node));
+    pframe_number(list_entry(ctx->cur, page_frame_t, chain_node));
   pfi->state = ITER_RUN;
 }
 
@@ -247,7 +247,7 @@ static void __pfiter_list_last(page_frame_iterator_t *pfi)
   ctx = iter_fetch_ctx(pfi);
   ctx->cur = ctx->last_node;
   pfi->pf_idx =
-    pframe_number(list_entry(ctx->cur, page_frame_t, node));
+    pframe_number(list_entry(ctx->cur, page_frame_t, chain_node));
   pfi->state = ITER_RUN;
 }
 
@@ -260,7 +260,7 @@ static void __pfiter_list_next(page_frame_iterator_t *pfi)
   if (likely(ctx->cur != ctx->last_node)) {
     ctx->cur = ctx->cur->next;
     pfi->pf_idx =
-      pframe_number(list_entry(ctx->cur, page_frame_t, node));
+      pframe_number(list_entry(ctx->cur, page_frame_t, chain_node));
   }
   else {
     pfi->pf_idx = PAGE_IDX_INVAL;
@@ -277,7 +277,7 @@ static void __pfiter_list_prev(page_frame_iterator_t *pfi)
   if (likely(ctx->cur != ctx->first_node)) {
     ctx->cur = ctx->cur->prev;
     pfi->pf_idx =
-      pframe_number(list_entry(ctx->cur, page_frame_t, node));
+      pframe_number(list_entry(ctx->cur, page_frame_t, chain_node));
   }
   else {
     pfi->pf_idx = PAGE_IDX_INVAL;

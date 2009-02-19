@@ -130,28 +130,6 @@ static void register_mandatory_mappings(void)
   vm_mandmap_register(&swks_mandmap, "SWKS mapping");
 }
 
-static page_idx_t __count_pages_to_reserve(page_idx_t mapped_pages)
-{
-  uintptr_t va, range, va_to = mapped_pages << PAGE_WIDTH;
-  int level = PTABLE_LEVEL_LAST;
-  page_idx_t num_pages = 0;
-
-  while (level != PTABLE_LEVEL_FIRST) {
-    range = pde_get_addrs_range(level);
-    for (va = 0; va < va_to; va += range) {
-      if (likely((va_to - va) >= range))
-        num_pages += PTABLE_DIR_ENTRIES;
-      else
-        num_pages += pde_offset2idx(va_to - va, level) - pde_offset2idx(va, level);
-    }
-
-    level--;
-  }
-
-  return num_pages;
-}
-
-
 static void scan_phys_mem(void)
 {  
   int idx;
@@ -198,8 +176,6 @@ static void build_page_frames_array(void)
   uintptr_t mmap_end;
   page_frame_t *page;
 
-  bootmem_pages = __count_pages_to_reserve(IDENT_MAP_PAGES - 1);
-  bootmem_pages += __count_pages_to_reserve(num_phys_pages) + 1;
   mmap_end = mmap->base_address + (((uintptr_t)(mmap->length_high) << 32) | mmap->length_low);
   for (idx = 0; idx < num_phys_pages; idx++) {
     page = &page_frames_array[idx];
@@ -216,7 +192,7 @@ static void build_page_frames_array(void)
               e820id, e820count);
       }
     }
-    if ((mmap->type != E820_USABLE) || is_kernel_addr(pframe_to_virt(page)) ||
+    if ((mmap->type != E820_USABLE) || is_kernel_page(page) ||
         (page->idx < LAST_BIOS_PAGE)) {
       page->flags |= PF_RESERVED;
     }
@@ -244,9 +220,8 @@ void arch_mm_init(void)
   scan_phys_mem();
   addr = server_get_end_phy_addr();
   page_frames_array = addr ?
-    (page_frame_t *)PAGE_ALIGN(p2k_code(addr)) : (page_frame_t *)KERNEL_END_PHYS;
+    (page_frame_t *)PAGE_ALIGN(p2k_code(addr)) : (page_frame_t *)KERNEL_END_PHYS;  
   __kernel_first_free_addr = (uintptr_t)page_frames_array + sizeof(page_frame_t) * num_phys_pages;
-  kprintf(" Scanned: %ldM, %ld pages\n", (long)_b2mb(num_phys_pages << PAGE_WIDTH), num_phys_pages);
   build_page_frames_array();
 }
 
@@ -255,20 +230,16 @@ void arch_mm_remap_pages(void)
   int ret;
 
   /* Create identity mapping */
-  kprintf(".1\n");
   ret = mmap_kern(0x1000, 1, IDENT_MAP_PAGES - 1,
                   KMAP_READ | KMAP_WRITE | KMAP_KERN);
-  kprintf(".2\n");
   if (ret) {
     panic("Can't create identity mapping (%p -> %p)! [errcode=%d]",
           0x1000, IDENT_MAP_PAGES << PAGE_WIDTH, ret);
   }
 
   verify_mapping("identity mapping", 0x1000, IDENT_MAP_PAGES - 1, 1);
-  kprintf(".3\n");
   ret = mmap_kern(KERNEL_BASE, 0, num_phys_pages,
                   KMAP_READ | KMAP_WRITE | KMAP_EXEC | KMAP_KERN);
-  kprintf(".4\n");
   if (ret) {
     panic("Can't create kernel mapping (%p -> %p)! [errcode=%d]",
           KERNEL_BASE, num_phys_pages << PAGE_WIDTH, ret);
