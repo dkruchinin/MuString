@@ -37,6 +37,8 @@ ulong_t syscall_counter = 0;
 
 void idle_loop(void)
 {
+  long idle_cycles=0;
+
 #ifdef CONFIG_TEST
   if( !cpu_id() ) {
     run_tests();
@@ -44,6 +46,7 @@ void idle_loop(void)
 #endif
 
   for( ;; ) {
+    idle_cycles++;
   }
 }
 

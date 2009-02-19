@@ -63,7 +63,7 @@
 #define MIN(a,b) ((a)<(b) ? (a) : (b) )
 #define MAX(a,b) ((a)>(b) ? (a) : (b) )
 #define pow2(num) bit_find_msf(num)
-#define bitnumber(po2) ((po2) >> 1)
+#define bitnumber(po2) bit_find_msf(po2)
 #define ARRAY_SIZE(a)  (sizeof((a))/sizeof((a)[0]))
 
 #endif /* __STDDEF_H__ */

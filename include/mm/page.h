@@ -38,10 +38,8 @@
 #include <eza/arch/page.h>
 #include <eza/arch/atomic.h>
 
-#define PAGE_ALIGN(addr) (((addr) + PAGE_MASK) & ~PAGE_MASK)
-#define PAGE_ALIGN_DOWN(addr) ((addr) & ~PAGE_MASK)
-
-#define NOF_MM_POOLS 2 /**< Number of MM pools in system */
+#define PAGE_ALIGN(addr) (((uintptr_t)(addr) + PAGE_MASK) & ~PAGE_MASK)
+#define PAGE_ALIGN_DOWN(addr) ((uintptr_t)(addr) & ~PAGE_MASK)
 
 /**
  * @typedef int page_idx_t
@@ -55,23 +53,18 @@ typedef ulong_t page_idx_t;
  * @typedef uint16_t page_flags_t;
  * Page flags.
  */
-typedef uint16_t page_flags_t;
+typedef uint8_t page_flags_t;
 
-/* page frame flags */
-#define PF_PDMA       0x01 /**< DMA pool is page owner */
-#define PF_PGEN       0x02 /**< GENERAL pool is page owner */
-#define PF_RESERVED   0x04 /**< Page is reserved */
-#define PF_SLAB_LOCK  0x08 /**< Page lock (used by slab allocator) */
+#define PF_RESERVED   0x01 /**< Page is reserved */
+#define PF_SLAB_LOCK  0x02 /**< Page lock (used by slab allocator) */
+
+#define PF_MMPOOL_MASK (PF_MMP_BMEM | PF_MMP_GEN | PF_MMP_DMA)
 
 /* page fault flags */
 #define PFLT_NOT_PRESENT 0x01
 #define PFLT_PROTECT     0x02
 #define PFLT_READ        0x04
 #define PFLT_WRITE       0x08
-
-#define __pool_type(flags) ((flags) >> 1)
-#define PAGE_POOLS_MASK (PF_PGEN | PF_PDMA)
-#define PAGE_PRESENT_MASK (PAGE_POOL_MASK | PF_RESERVED)
 
 #define __page_aligned__ __attribute__((__aligned__(PAGE_SIZE)))
 
@@ -85,18 +78,20 @@ typedef uint16_t page_flags_t;
  * @see pframe_pages_array
  */
 typedef struct __page_frame {
-  list_head_t head;    /**< Obvious */
-  list_node_t node;    /**< Obvious */
-  page_idx_t idx;      /**< Page frame index in the pframe_pages_array */
-  atomic_t refcount;   /**< Number of references to the physical page */
-  page_flags_t flags;  /**< Page flags */
-  uint32_t _private;   /**< Private data that may be used by internal page frame allocator */  
+  list_node_t node;
+  list_node_t chain_node;
+  page_idx_t idx;
+  union {
+    atomic_t refcount;
+    void *slab_pages_start;
+  };
+  ulong_t _private;
+  page_flags_t flags;
+  uint8_t pool_type;
 } page_frame_t;
 
 extern page_frame_t *page_frames_array; /**< An array of all available physical pages */
 extern page_idx_t num_phys_pages;       /**< Number of physical pages in system */
-
-#define pframe_pool_type(page) (__pool_type((page)->flags & PAGE_POOLS_MASK))
 
 /**
  * @struct page_frame_iterator_t
@@ -159,6 +154,8 @@ static inline page_frame_t *virt_to_pframe( void *addr )
   return pframe_by_number(virt_to_pframe_id(addr));
 }
 
+#define pframe_memnull(page) pframes_memnull(page, 1)
+
 /**
  * @fn static inline void pframe_memnull(page_frame_t *start, int block_size)
  * @brief Fill block of @a block_size continuos pages with zero's
@@ -166,11 +163,11 @@ static inline page_frame_t *virt_to_pframe( void *addr )
  * @param block_size - Number of pages in block
  */
 #ifndef ARCH_PAGE_MEMNULL
-static inline void pframe_memnull(page_frame_t *start, int block_size)
+static inline void pframes_memnull(page_frame_t *start, int block_size)
 {
   memset(pframe_to_virt(start), 0, PAGE_SIZE * block_size);
 }
 #else
-#define pframe_memnull(start, block_size) arch_page_memnull(start, block_size)
+#define pframes_memnull(start, block_size) arch_pages_memnull(start, block_size)
 #endif /* ARCH_PAGE_MEMNULL */
 #endif /* __PAGE_H__ */

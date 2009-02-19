@@ -79,7 +79,7 @@ long sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
     pkitems=memalloc(size);
     memset(pkitems,0,size);
   } else {
-    pkitems=alloc_pages_addr((size>>PAGE_WIDTH)+1,AF_PGEN|AF_ZERO);
+    pkitems=alloc_pages_addr((size>>PAGE_WIDTH)+1,AF_ZERO);
   }
 
   if( !pkitems ) {
@@ -165,7 +165,7 @@ put_ports:
   if(use_slab) {
     memfree(pkitems);
   } else {
-    free_pages_addr(pkitems);
+      free_pages_addr(pkitems, (size>>PAGE_WIDTH)+1);
   }
   return nevents;
 }

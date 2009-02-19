@@ -2,6 +2,7 @@
 #include <config.h>
 #include <mm/page.h>
 #include <mm/vmm.h>
+#include <mm/memobj.h>
 #include <mm/pfalloc.h>
 #include <kernel/syscalls.h>
 #include <mlibc/types.h>
@@ -292,7 +293,7 @@ static void tc_vma(void *ctx)
   }
 
   vmm_set_name_dbg(vmm, "VMM [vmmtest]");
-  tf->printf("1) Continousely create VM ranges virtual sapce is end.\n");
+  tf->printf("1) Continousely create VM ranges until virtual sapce is end.\n");
   map_merge_test(tf, vmm);
   tf->printf("2) Now there is no free virtual space. So try to unmap busy chunks\n");
   unmap_split_test(tf, vmm);

@@ -56,9 +56,9 @@ DEFINE_ITERATOR_CTX(page_frame, PF_ITER_ARCH,
                     uint32_t e820id;
                     );
 
-static inline bool is_kernel_addr(void *a)
+static inline bool is_kernel_page(page_frame_t *page)
 {
-  uintptr_t addr = (uintptr_t)a;
+  uintptr_t addr = (uintptr_t)pframe_to_virt(page);
 
   if (addr >= KERNEL_START_PHYS)
     return (addr <= KERNEL_END_PHYS);
@@ -85,6 +85,7 @@ void arch_mm_init(void);
 void arch_mm_remap_pages(void);
 void arch_smp_mm_init(cpu_id_t cpu);
 void arch_mm_stage0_init(cpu_id_t cpu);
+page_idx_t arch_num_pages_to_reserve(void);
 extern void __userspace_trampoline_codepage(void);
 /* FIXME DK: remove after debugging */
 struct __vmm;

@@ -44,6 +44,7 @@
 #define EDEADLOCK     37  /**< Deadlock detected. */
 #define EALREADY      38  /**< Connection already in progress. */
 #define EADDRNOTAVAIL 39  /**< Address not available. */
-    
+#define EIDRM         40  /**< Identifier removed. */
+
 #endif
 

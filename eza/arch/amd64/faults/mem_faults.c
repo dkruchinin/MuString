@@ -63,7 +63,7 @@ static void __dump_regs(regs_t *r,ulong_t rip)
 static bool __read_user_safe(uintptr_t addr,uintptr_t *val)
 {
   uintptr_t *p;
-  page_idx_t pidx = mm_vaddr2page_idx(task_get_rpd(current_task()), addr);
+  page_idx_t pidx = ptable_ops.vaddr2page_idx(task_get_rpd(current_task()), addr);
 
   if( pidx == PAGE_IDX_INVAL ) {
     return false;
@@ -154,7 +154,7 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
      */
 
     vmm_t *vmm = current_task()->task_mm;
-    vmrange_t *vmr;    
+    vmrange_t *vmr;
     uint32_t errmask = 0;
     int ret = -EFAULT;
 

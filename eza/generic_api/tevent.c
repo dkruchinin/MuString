@@ -48,7 +48,6 @@ static task_event_listener_t *__alloc_listener(void)
 void task_event_notify(ulong_t events)
 {
   task_t *task=current_task();
-  task_events_t *te=&task->task_events;
 
   LOCK_TASK_EVENTS_R(te);
   if( !list_is_empty(&task->task_events.listeners) ) {

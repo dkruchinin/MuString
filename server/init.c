@@ -164,7 +164,6 @@ static int __create_task_mm(task_t *task, int num)
   if (r)
     return r;
 
-  //kprintf("DATA: %p -> %p\n", real_data_offset, real_data_offset + (data_size << PAGE_WIDTH));
   /* Create a BSS area. */
   r = vmrange_map(memobj, vmm, bss_virt, bss_size,
                   VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED | VMR_POPULATE, 0);
@@ -181,7 +180,6 @@ static int __create_task_mm(task_t *task, int num)
   ustack_top=USPACE_VA_TOP-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH);
   ustack_top-=PER_TASK_DATA_SIZE;
   ptd=user_to_kernel_vaddr(task_get_rpd(task),ustack_top);
-  ptd = (per_task_data_t *)((char *)ptd + (ustack_top - PAGE_ALIGN_DOWN(ustack_top)));
   if( !ptd ) {
     return -1;
   }
@@ -193,7 +191,7 @@ static int __create_task_mm(task_t *task, int num)
   }
 
   /* Insufficient return address to prevent task from returning to void. */
-  ustack_top-=8;
+  ustack_top-=sizeof(uintptr_t);
   r=do_task_control(task,SYS_PR_CTL_SET_ENTRYPOINT,ehead.e_entry);
   r|=do_task_control(task,SYS_PR_CTL_SET_STACK,ustack_top);
 

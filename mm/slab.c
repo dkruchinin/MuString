@@ -65,7 +65,7 @@ static void free_slab_object(slab_t *slab, void *obj);
 
 /* translate page frame to slab it belongs to */
 #define __page2slab(pf)                         \
-  container_of((page_frame_t *)list_head(&(pf)->head)->prev, slab_t, pages)
+  container_of((page_frame_t *)(pf)->slab_pages_start, slab_t, pages)
 
 /* get slab by virtual address of its object */
 #define __get_slab_by_addr(addr)                \
@@ -397,16 +397,16 @@ static page_frame_t *alloc_slab_pages(memcache_t *cache)
 {
   page_frame_t *pages = NULL;
 
-  pages = alloc_pages(cache->pages_per_slab, AF_PGEN);
+  pages = alloc_pages(cache->pages_per_slab, 0);
   if (pages)
     __prepare_slab_pages_dbg(cache, pages);
 
   return pages;
 }
 
-static inline void free_slab_pages(page_frame_t *pages)
+static inline void free_slab_pages(memcache_t *cache, page_frame_t *pages)
 {
-  free_pages(pages, pages_block_size(pages));
+  free_pages(pages, cache->pages_per_slab);
 }
 
 static void prepare_slab_pages(slab_t *slab)
@@ -420,7 +420,7 @@ static void prepare_slab_pages(slab_t *slab)
    */
   for (i = 0; i < slab->memcache->pages_per_slab; i++) {
     page_frame_t *p = slab->pages + i;
-    list_head(&p->head)->prev = (list_node_t *)&slab->pages;
+    p->slab_pages_start = &slab->pages;
   }
 }
 
@@ -537,6 +537,7 @@ static slab_t *create_new_slab(memcache_t *cache)
 static void destroy_slab(slab_t *slab)
 {
   page_frame_t *slab_page = slab->pages;
+  memcache_t *cache = slab->memcache;
 
   SLAB_VERBOSE("(destroy_slab): %s's slab %p destroying\n",
                slab->memcache->dbg.name, slab);    
@@ -545,7 +546,7 @@ static void destroy_slab(slab_t *slab)
     free_slab_object(slabs_slab, slab);
   }
 
-  free_slab_pages(slab_page);
+  free_slab_pages(cache, slab_page);
 }
 
 static void free_slab_object(slab_t *slab, void *obj)
@@ -724,7 +725,8 @@ static void __create_generic_caches(void)
 void slab_allocator_init(void)
 {
   kprintf("[MM] Initializing slab allocator\n");
-  
+
+  CT_ASSERT(sizeof(atomic_t) >= sizeof(uintptr_t));
   /* create default cache for slab_t structures */
   __create_heart_cache(&slabs_memcache, sizeof(slab_t), "slab_t");
   /* create default cache for memcache_t structures */

@@ -56,6 +56,11 @@ typedef struct __idx_allocator {
   ulong_t max_id;      /**< Maximum index value(exclusive) */
   ulong_t *main_bmap;  /**< First-level(main) bitmap that splits second-level bitmap on several parts */
   ulong_t *ids_bmap;   /**< Second-level bitmap whose each bit corresponds to particular unique identifier */
+  struct {
+    ulong_t (*alloc_id)(struct __idx_allocator *ida);
+    void (*reserve_id)(struct __idx_allocator *ida);
+    void (*free_id)(struct __idx_allocator *ida);
+  } ops;
 } idx_allocator_t;
 
 /**
@@ -63,7 +68,7 @@ typedef struct __idx_allocator {
  * @param ida     - A pointer to particular index allocator
  * @param idx_max - Maximum index value.
  */
-void idx_allocator_init(idx_allocator_t *ida, ulong_t idx_max);
+int idx_allocator_init(idx_allocator_t *ida, ulong_t idx_max);
 
 /**
  * @brief Destroy index allocator.

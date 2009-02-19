@@ -310,7 +310,7 @@ int __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
   /* First port created ? */
   if( !ipc->ports ) {
     r = -ENOMEM;
-    ipc->ports = alloc_pages_addr(1,AF_PGEN|AF_ZERO);
+    ipc->ports = alloc_pages_addr(1,AF_ZERO);
     if( !ipc->ports ) {
       goto out_unlock;
     }

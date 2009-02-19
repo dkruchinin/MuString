@@ -85,7 +85,7 @@ static void __initialize_cpu_sched_data(eza_sched_cpudata_t *queue, cpu_id_t cpu
 static eza_sched_taskdata_t *__allocate_task_sched_data(void)
 {
   /* TODO: [mt] Allocate memory via slabs !!!  */
-  page_frame_t *page = alloc_page(AF_PGEN);
+  page_frame_t *page = alloc_page(0);
   return (eza_sched_taskdata_t *)pframe_to_virt(page);
 }
 
@@ -93,7 +93,7 @@ int sched_verbose=0;
  
 static eza_sched_cpudata_t *__allocate_cpu_sched_data(cpu_id_t cpu) {
   /* TODO: [mt] Allocate memory via slabs !!!  */
-  page_frame_t *page = alloc_pages(16, AF_PGEN);
+  page_frame_t *page = alloc_pages(16, 0);
   eza_sched_cpudata_t *cpudata = (eza_sched_cpudata_t *)pframe_to_virt(page);
 
   if( cpudata != NULL ) {
@@ -582,7 +582,7 @@ static void __shuffle_task(task_t *target,eza_sched_taskdata_t *sdata, uint32_t 
 
 /* NOTE: Upon entering this routine target task is unlocked.
  */
-static long def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
+static int def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
 {
   eza_sched_taskdata_t *sdata = EZA_TASK_SCHED_DATA(target);
   bool trusted=trusted_task(target);

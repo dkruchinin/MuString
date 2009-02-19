@@ -27,52 +27,72 @@
 #include <mm/mmpool.h>
 #include <mm/page.h>
 #include <mm/tlsf.h>
+#include <mm/idalloc.h>
 #include <eza/kernel.h>
 #include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 
-mm_pool_t mm_pools[NOF_MM_POOLS];
+mm_pool_t mm_pools[MMPOOLS_MAX];
 
-void mmpools_init(void)
+void mmpools_initialize(void)
 {
-  mm_pool_type_t t;
+  uint8_t i;
   
-  memset(mm_pools, 0, sizeof(*mm_pools) * NOF_MM_POOLS);
-  for (t = __POOL_FIRST; t < NOF_MM_POOLS; t++) {
-    mm_pools[t].type = t;
-    list_init_head(&mm_pools[t].reserved);
-    atomic_set(&mm_pools[t].free_pages, 0);
+  kprintf("[MM] Initialize memory pools.\n");
+  memset(mm_pools, 0, sizeof(*mm_pools) * MMPOOLS_MAX);
+  for (i = 0; i < MMPOOLS_MAX; i++) {
+    switch (i) {
+        case BOOTMEM_POOL_TYPE:
+          mm_pools[i].name = "Bootmem";
+          break;
+        case GENERAL_POOL_TYPE:
+          mm_pools[i].name = "General";
+          break;
+        case DMA_POOL_TYPE:
+          mm_pools[i].name = "DMA";
+          break;
+        case HIGHMEM_POOL_TYPE:
+          mm_pools[i].name = "Highmem";
+          break;
+        default:
+          panic("Unknown memory pool type: %d\n", i);
+    }
+
+    mm_pools[i].type = i;
+    mm_pools[i].is_active = false;
+    mm_pools[i].first_page_id = PAGE_IDX_INVAL;
   }
 }
 
-void mmpools_add_page(page_frame_t *page)
+void mmpool_add_page(mm_pool_t *pool, page_frame_t *pframe)
 {
-  mm_pool_t *pool = mmpools_get_pool(pframe_pool_type(page));
+  if (pframe_number(pframe) < pool->first_page_id)
+    pool->first_page_id = pframe_number(pframe);
 
-  if (!pool->pages) {
-    pool->pages = page;
-    pool->is_active = true;
-  }
-  if (page->flags & PF_RESERVED) {
+  pool->total_pages++;
+  if (pframe->flags & PF_RESERVED)
     pool->reserved_pages++;
-    list_add2tail(&pool->reserved, &page->node);
-  }
   else
     atomic_inc(&pool->free_pages);
 
-  pool->total_pages++;
+  pframe->pool_type = pool->type;
 }
 
-void mmpools_init_pool_allocator(mm_pool_t *pool)
+void mmpool_activate(mm_pool_t *pool)
 {
-  ASSERT(pool->is_active);
+  ASSERT(pool->type < MMPOOLS_MAX);
+  ASSERT(!pool->is_active);
   switch (pool->type) {
-      case POOL_GENERAL: case POOL_DMA:
-        ASSERT(atomic_get(&pool->free_pages) > 0);
-        tlsf_alloc_init(pool);
+      case GENERAL_POOL_TYPE: case DMA_POOL_TYPE:
+        tlsf_allocator_init(pool);
+        tlsf_validate_dbg(pool->allocator.alloc_ctx);
+        break;
+      case BOOTMEM_POOL_TYPE:
+        idalloc_init(pool);
         break;
       default:
-        panic("Unlnown memory pool type: %d", pool->type);
+        panic("Unknown memory pool type: %d!", pool->type);
   }
-}
 
+  pool->is_active = true;
+}

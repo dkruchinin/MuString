@@ -259,7 +259,7 @@ vmm_t *vmm_create(void)
   ttree_init(&vmm->vmranges_tree, __vmranges_cmp, vmrange_t, bounds);
   atomic_set(&vmm->vmm_users, 1);
   rwsem_initialize(&vmm->rwsem);
-  if (ptable_rpd_initialize(&vmm->rpd) < 0) {
+  if (ptable_ops.initialize_rpd(&vmm->rpd) < 0) {
     memfree(vmm);
     vmm = NULL;
   }
@@ -356,8 +356,8 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   int err = 0;
   bool was_merged = false;
 
-  //kprintf("%p, %ld, %p\n", addr, npages, offs_pages);
   vmr = NULL;
+  ASSERT(memobj != NULL);
   ttree_cursor_init(&vmm->vmranges_tree, &cursor);
   if (!(flags & VMR_PROTO_MASK)
       || !(flags & (VMR_PRIVATE | VMR_SHARED))
@@ -460,7 +460,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
     err = __map_phys_pages(vmm, addr, offs_pages << PAGE_WIDTH, npages, flags & KMAP_FLAGS_MASK);
     if (err)
       goto err;
-  }  
+  }
   else if (flags & VMR_POPULATE) {
     mutex_lock(&memobj->mutex);
     err = memobj->mops.populate_pages(memobj, vmr, addr, npages, offs_pages);
@@ -478,7 +478,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
     ttree_delete_placeful(&cursor);
     destroy_vmrange(vmr);
   }
-
+  
   return err;
 }
 
@@ -577,7 +577,7 @@ long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, int memobj_id, o
   vmm_t *vmm = current_task()->task_mm;
   long ret;
   vmrange_flags_t vmrflags = (prot & VMR_PROTO_MASK) | (flags << VMR_FLAGS_OFFS);
-  
+
   if ((vmrflags & VMR_ANON) || (memobj_id == NULL_MEMOBJ_ID)) {
     memobj = memobj_find_by_id(NULL_MEMOBJ_ID);
     ASSERT(memobj != NULL);    
@@ -592,12 +592,12 @@ long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, int memobj_id, o
   }
   if (!size || ((vmrflags & VMR_FIXED) && (addr & PAGE_MASK)) ||
       ((vmrflags & VMR_PHYS) && (offset & PAGE_MASK))) {
-      return -EINVAL;
+    return -EINVAL;
   }
   
   rwsem_down_write(&vmm->rwsem);
-  ret = vmrange_map(memobj, vmm, addr, size >> PAGE_WIDTH,
-                    vmrflags, offset >> PAGE_WIDTH);
+  ret = vmrange_map(memobj, vmm, addr, PAGE_ALIGN(size) >> PAGE_WIDTH,
+                    vmrflags, PAGE_ALIGN(offset) >> PAGE_WIDTH);
   rwsem_up_write(&vmm->rwsem);
   return ret;
 }
