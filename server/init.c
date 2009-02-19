@@ -214,7 +214,7 @@ static void __server_task_runner(void *data)
 
   if( i > 0 ) {
     kprintf("[LAUNCHER] Starting servers: %d ... \n",i);
-    //kconsole->disable();
+    kconsole->disable();
   }
 
   for(sn=0,a=0;a<i;a++) {

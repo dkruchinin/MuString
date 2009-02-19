@@ -32,10 +32,6 @@
 #define __LOCK_EVENT(e) spinlock_lock(&(e)->__lock)
 #define __UNLOCK_EVENT(e) spinlock_unlock(&(e)->__lock)
 
-#define __TP 0xB
-
-extern int __big_verbose,___big_verbose,___target_pid;
-
 static int __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
 {
   sync_uevent_t *e=__UEVENT_OBJ(obj);
@@ -43,9 +39,6 @@ static int __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
 
   switch( cmd ) {
     case __SYNC_CMD_EVENT_WAIT:
-      if(___big_verbose >= 8 || current_task()->pid == __TP )
-        kprintf(" > [CPU %d] > 0x%X waiting for raw event %d.\n",
-                cpu_id(),current_task()->tid,obj->id);
       __LOCK_EVENT(e);
       while( !e->__ecount) {
         /* Event will be checked one more time later. */
@@ -59,21 +52,12 @@ static int __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
       }
       e->__ecount=0;
       __UNLOCK_EVENT(e);
-      if(___big_verbose >= 8 || current_task()->pid == __TP)
-        kprintf(" > [CPU %d] > 0x%X Got event %d !\n",
-                cpu_id(),current_task()->tid,obj->id);
       break;
     case  __SYNC_CMD_EVENT_SIGNAL:
-      if(___big_verbose >= 8 || current_task()->pid == __TP)
-        kprintf(" [CPU %d] > 0x%X signalling raw event %d.\n",
-                cpu_id(),current_task()->tid,obj->id);
       __LOCK_EVENT(e);
       e->__ecount++;
       __UNLOCK_EVENT(e);
       waitqueue_pop(&e->__wq,NULL);
-      if(___big_verbose >= 8 || current_task()->pid == __TP)
-        kprintf(" [CPU %d] > 0x%X event %d signalled !\n",
-                cpu_id(),current_task()->tid,obj->id);
       break;
     default:
       return -EINVAL;

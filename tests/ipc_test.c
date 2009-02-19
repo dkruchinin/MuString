@@ -1735,7 +1735,9 @@ static void __server_thread(void *ctx)
 
   __server_pid=current_task()->pid;
 
+#ifdef CONFIG_SMP
   kthread_cpu_autodeploy=true;
+#endif
 
   __stack_overflow_test(ctx);
   __ipc_buffer_test(ctx);
