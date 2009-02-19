@@ -49,7 +49,6 @@ uintptr_t __kernel_va_base = KERNEL_BASE;
 uintptr_t __utrampoline_virt = 0;
 
 static vm_mandmap_t ident_mandmap, utramp_mandmap, swks_mandmap;
-static page_idx_t bootmem_pages = CONFIG_IDALLOC_PAGES;
 
 #ifndef CONFIG_IOMMU
 static page_idx_t dma_pages = 0;

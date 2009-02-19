@@ -82,14 +82,8 @@ static page_frame_t *__alloc_pages_ncont(mm_pool_t *pool, page_idx_t n, pfalloc_
   return pages;
 
   failed:
-  if (pages) {
-    list_node_t *n, *save;
-    list_for_each_safe(list_node2head(pages), n, save) {
-      free_page(list_entry(n, page_frame_t, chain_node));
-    }
-
-    free_page(pages);
-  }
+  if (pages)
+    free_pages_chain(pages);
 
   return NULL;
 }

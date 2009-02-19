@@ -26,16 +26,49 @@
 #define __SMP_H__
 
 #include <config.h>
-#include <eza/arch/cpu.h>
+#include <mlibc/kprintf.h>
 #include <mlibc/types.h>
+#include <eza/arch/cpu.h>
 #include <eza/arch/scheduler.h>
 
 extern volatile cpu_id_t online_cpus;
 
 #ifdef CONFIG_SMP
-/* Real cpu_id() is defined in include/<arch>/scheduler.h  */
+#include <ds/list.h>
+
 #define __CPUS CONFIG_NRCPUS
+
+typedef struct __smp_hook {
+  int (*hook)(cpu_id_t cpuid, void *arg);
+  list_node_t node;
+  void *arg;
+  char *name;
+} smp_hook_t;
+
+extern list_head_t smp_hooks;
+static inline void smp_hook_register(smp_hook_t *hook)
+{
+  list_add2tail(&smp_hooks, &hook->node);
+}
+
+static inline void smp_hooks_fire(cpu_id_t cpuid)
+{
+  smp_hook_t *h;
+  int ret, i = 0;
+
+  list_for_each_entry(&smp_hooks, h, node) {
+    kprintf_dbg("[CPU #%d]: Fired SMP hook: %s\n", cpuid, h->name);
+    ret = h->hook(cpuid, h->arg);
+    if (ret)
+      panic("Failed to execute SMP hook #%d: ERR: %d!", i, ret);
+
+    i++;
+  }
+}
+
 #else
+#define smp_hook_register(hook)
+#define smp_hooks_fire(x)
 #define cpu_id() 0
 #define __CPUS 1
 #endif /* CONFIG_SMP */
@@ -43,23 +76,36 @@ extern volatile cpu_id_t online_cpus;
 #define PER_CPU_VAR(name)                       \
   __percpu_var_##name[CONFIG_NRCPUS] __percpu__
 
-#define raw_percpu_get_var(name,cpu)                    \
-  ({ __percpu_var_##name + cpu; })
-
-#define percpu_get_var(name)                    \
-  ({ __percpu_var_##name + cpu_id(); })
-
-#define percpu_set_var(name, value)             \
-  (__percpu_var_##name[cpu_id()] = (value))
+#define raw_percpu_get_var(name, cpu)           \
+  ({ __percpu_var_##name + (cpu); })
+#define raw_percpu_set_var(name, cpu, value)    \
+  (__percpu_var_##name[(cpu)] = (value))
+#define percpu_get_var(name) raw_percpu_get_var(name, cpu_id())
+#define percpu_set_var(name, value) raw_percpu_set_var(name, cpu_id(), value)
 
 #define for_each_percpu_var(ptr, name)          \
   for ((ptr) = __percpu_var_##name;             \
        (ptr) < (__percpu_var_##name + __CPUS);  \
        (ptr)++)
 
-static void set_cpu_online(cpu_id_t cpu, uint32_t online);
-static bool is_cpu_online(cpu_id_t cpu);
+static inline void set_cpu_online(cpu_id_t cpu, uint32_t online)
+{
+  cpu_id_t mask = 1 << cpu;
 
+  if( online ) {
+    online_cpus |= mask;
+  } else {
+    online_cpus &= ~mask;
+  }
+
+  /* Tra-ta-ta-ta-ta! */
+  smp_hooks_fire(cpu);
+}
+
+static inline bool is_cpu_online(cpu_id_t cpu)
+{
+  return !!(online_cpus & (1 << cpu));
+}
 
 #define for_each_cpu(c)           \
   for(c = 0; c < CONFIG_NRCPUS; c++ )   \
