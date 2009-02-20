@@ -38,6 +38,11 @@ int waitqueue_insert_core(wqueue_t *wq, wqueue_task_t *wq_task, wqueue_insop_t i
   pqueue_insert_core(&wq->pqueue, &wq_task->pq_node, wq_task->task->static_priority);
   wq->num_waiters++;
   wq_task->wq = wq;
+
+  if( wq_task->wq_stat ) {
+    atomic_inc(wq_task->wq_stat);
+  }
+
   if (iop != WQ_INSERT_SIMPLE) {
     ret = sched_change_task_state(wq_task->task, (iop == WQ_INSERT_SLEEP_INR) ?
                                   TASK_STATE_SLEEPING : TASK_STATE_SUSPENDED);
@@ -121,6 +126,11 @@ int waitqueue_delete_core(wqueue_task_t *wq_task, wqueue_delop_t dop)
     panic("__waitqueue_delete: Hey! Someone is trying to remove task from an empty wait queue. Liar!\n");
 
   pqueue_delete_core(&wq->pqueue, &wq_task->pq_node);
+
+  if( wq_task->wq_stat ) {
+    atomic_dec(wq_task->wq_stat);
+  }
+
   if (dop == WQ_DELETE_WAKEUP)   
     ret = sched_change_task_state(wq_task->task, TASK_STATE_RUNNABLE);
 

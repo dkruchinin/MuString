@@ -95,9 +95,10 @@ int ipc_close_port(task_t *owner,ulong_t port);
 extern ipc_port_msg_ops_t def_port_msg_ops;
 extern ipc_port_msg_ops_t prio_port_msg_ops;
 /****************************************************************************/
+poll_event_t ipc_port_check_events(ipc_gen_port_t *port,wqueue_task_t *w,
+                                   poll_event_t evmask);
+void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w);
 
-poll_event_t ipc_port_get_pending_events(ipc_gen_port_t *port);
-void ipc_port_add_poller(ipc_gen_port_t *port,task_t *poller, wqueue_task_t *w);
 void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w);
 ipc_port_message_t *ipc_create_port_message_iov_v(iovec_t *snd_kiovecs,ulong_t snd_numvecs,
                                                   ulong_t data_len,bool blocked,

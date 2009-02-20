@@ -1740,11 +1740,17 @@ static void __server_thread(void *ctx)
 #endif
 
   __stack_overflow_test(ctx);
+  sleep(HZ);
   __ipc_buffer_test(ctx);
+  sleep(HZ);
   __process_events_test(ctx);
+  sleep(HZ);
   __message_read_test(ctx);
+  sleep(HZ);
   __prioritized_port_test(ctx);
+  sleep(HZ);
   __vectored_messages_test(ctx);
+  sleep(HZ);
 
   for( i=0;i<SERVER_NUM_PORTS;i++) {
     if( i != NON_BLOCKED_PORT_ID ) {
@@ -1763,6 +1769,8 @@ static void __server_thread(void *ctx)
 
   tctx->server_pid=current_task()->pid;
   tf->printf(SERVER_THREAD "%d ports created.\n", SERVER_NUM_PORTS );
+
+  goto poll_tests;
 
   if( kernel_thread(__client_thread,ctx,NULL) ) {
     tf->printf(SERVER_THREAD "Can't launch client thread.\n",
@@ -1890,6 +1898,7 @@ static void __server_thread(void *ctx)
     }
   }
 
+poll_tests:
   /*****************************************************************
    * Testing port polling.
    ****************************************************************/

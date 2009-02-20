@@ -300,8 +300,6 @@ int sys_wait_on_irq_array(ulong_t id)
 
   /* Check the event mask first time. */
   if( !*array->event_mask ) {
-//    kprintf("+ [CPU %d] W: 0x%X\n",
-//            cpu_id(),current_task()->tid);
     event_yield(&array->de.d._event);
   }
 
@@ -309,8 +307,6 @@ int sys_wait_on_irq_array(ulong_t id)
   event_reset(&array->de.d._event);
 
   ___target_pid=current_task()->pid;
-  kprintf("-------------------------[CPU %d, TID: 0x%X]-------------------------\n",
-          cpu_id(),current_task()->tid);
 
   return 0;
 }

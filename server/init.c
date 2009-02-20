@@ -209,9 +209,10 @@ static void __server_task_runner(void *data)
   task_t *server;
   int r,sn;
   kconsole_t *kconsole=default_console();
+  int delay=CONFIG_CORESERVERS_LAUNCH_DELAY > 300 ? CONFIG_CORESERVERS_LAUNCH_DELAY : 300;
 
   if( i > 0 ) {
-    kprintf("[LAUNCHER] Starting servers: %d ... \n",i);
+    kprintf("[LAUNCHER] Starting %d servers with delay %d ... \n",i,delay);
     kconsole->disable();
   }
 
@@ -220,12 +221,12 @@ static void __server_task_runner(void *data)
 
     modvbase=pframe_id_to_virt(init.server[a].addr>>PAGE_WIDTH);
 
-    kprintf("[LAUNCHER] Starting server: %d ... \n",a);
+    kprintf("[LAUNCHER] Starting server: %d.\n",a);
     if( *(uint32_t *)modvbase == ELF_MAGIC ) { /* ELF module ? */
       ulong_t t;
 
       if( !sn ) { /* First module is always NS. */
-        t = TASK_INIT;
+        t=TASK_INIT;
       } else {
         t=0;
       }
@@ -261,10 +262,7 @@ static void __server_task_runner(void *data)
         panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);
       }
       sn++;
-
-//      if( CONFIG_CORESERVERS_LAUNCH_DELAY >= 100 ) {
-        sleep(1000);
-//      }
+      sleep(delay);
     } else if( !strncmp(&modvbase[257],"ustar",5 ) ) { /* TAR-based ramdisk ? */
       long size;
 

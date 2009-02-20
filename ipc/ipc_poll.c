@@ -42,17 +42,18 @@ typedef struct __poll_kitem {
   wqueue_task_t qtask;
   ipc_gen_port_t *port;
   poll_event_t events,revents;
+  bool queued;
 } poll_kitem_t;
 
 struct __plazy_data {
-  task_t *task;
   ulong_t nqueues;
+  atomic_t wq_stat;
 };
 
 static bool poll_deferred_sched_handler(void *data)
 {
   struct __plazy_data *p=(struct __plazy_data*)data;
-  return atomic_get(&p->task->ipc_priv->pstats.active_queues)==p->nqueues;
+  return atomic_get(&p->wq_stat)==p->nqueues;
 }
 
 long sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
@@ -63,16 +64,15 @@ long sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
   poll_kitem_t *pkitems;
   bool use_slab=(size<=512);
   ulong_t i;
-  bool caller_was_added;
   struct __plazy_data ldata;
 
   if( !pfds || !nfds || !caller->ipc || nfds > MAX_POLL_OBJECTS ) {
     return -EINVAL;
   }
 
-  /*if( !valid_user_address_range((uintptr_t)pfds,nfds*sizeof(pollfd_t)) ) {
+  if( !valid_user_address_range((uintptr_t)pfds,nfds*sizeof(pollfd_t)) ) {
     return -EFAULT;
-    }*/
+  }
 
   /* TODO: [mt] Add process memory limit check. [R] */
   if( use_slab ) {
@@ -87,7 +87,8 @@ long sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
   }
 
   nevents=0;
-  caller_was_added=false;
+  atomic_set(&ldata.wq_stat,0);
+  ldata.nqueues=0;
 
   /* First, create the list of all IPC ports to be polled. */
   for(i=0;i<nfds;i++) {
@@ -107,10 +108,17 @@ long sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
 
     pkitems[i].port=port;
     pkitems[i].events=upfd.events;
-    pkitems[i].revents=ipc_port_get_pending_events(port) & upfd.events;
 
+    waitqueue_prepare_task(&pkitems[i].qtask,current_task());
+    pkitems[i].qtask.wq_stat=&ldata.wq_stat;
+
+    pkitems[i].revents=ipc_port_check_events(port,&pkitems[i].qtask,
+                                             upfd.events);
+    pkitems[i].queued=pkitems[i].revents==0;
     if( pkitems[i].revents ) {
       nevents++;
+    } else {
+      ldata.nqueues++;
     }
   }
 
@@ -120,24 +128,14 @@ long sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
     goto put_ports;
   }
 
-  /* No pending events found, so add caller to waitqueues. */
-  for(i=0;i<nfds;i++) {
-    IPC_TASK_ACCT_OPERATION(caller);
-    ipc_port_add_poller(pkitems[i].port,caller,&pkitems[i].qtask);
-  }
-  caller_was_added=true;
-
   /* Sleep a little bit. */
-  ldata.task=caller;
-  ldata.nqueues=nfds;
   sched_change_task_state_deferred(caller,TASK_STATE_SLEEPING,
                                   poll_deferred_sched_handler,&ldata);
 
   /* Count the resulting number of pending events. */
   nevents=0;
   for(i=0;i<nfds;i++) {
-    pkitems[i].revents=ipc_port_get_pending_events(pkitems[i].port) &
-                                                   pkitems[i].events;
+    pkitems[i].revents=ipc_port_check_events(pkitems[i].port,NULL,pkitems[i].events);
     if( pkitems[i].revents ) {
       nevents++;
     }
@@ -146,14 +144,13 @@ long sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
 put_ports:
   /* Process pending events. */
   for(i=0;i<nfds && pkitems[i].port;i++) {
-    if(caller_was_added) {
+    if( pkitems[i].queued ) {
       ipc_port_remove_poller(pkitems[i].port,&pkitems[i].qtask);
-      IPC_TASK_UNACCT_OPERATION(caller);
     }
     __ipc_put_port(pkitems[i].port);
 
     /* Copy resulting events back to userspace. */
-    if(nevents>0) {
+    if( nevents > 0 ) {
       if(copy_to_user(&pfds[i].revents,&pkitems[i].revents,
                       sizeof(poll_event_t))) {
         nevents=-EFAULT;
@@ -162,10 +159,10 @@ put_ports:
   }
 
   /* Free buffers. */
-  if(use_slab) {
+  if( use_slab ) {
     memfree(pkitems);
   } else {
-      free_pages_addr(pkitems, (size>>PAGE_WIDTH)+1);
+    free_pages_addr(pkitems, (size>>PAGE_WIDTH)+1);
   }
   return nevents;
 }
