@@ -23,6 +23,8 @@
 #ifndef __KPRINTF_H__
 #define __KPRINTF_H__
 
+#include <config.h>
+
 /* type of data, that will be printed (0 - 2 bits) */
 #define FMT_TNUM    0x00001 /* number */
 #define FMT_TSTR    0x00002 /* string */
@@ -136,7 +138,7 @@ size_t kbuf_insert(const char *, const size_t);
 char *kbuf_get(void);
 
 #ifdef CONFIG_DEBUG
-#define kprintf_dbg(fmt, args...) kprintf(KO_DEBUG, fmt, ##args)
+#define kprintf_dbg(fmt, args...) kprintf(KO_DEBUG fmt, ##args)
 #else
 #define kprintf_dbg(fmt, args...)
 #endif /* CONFIG_DEBUG */

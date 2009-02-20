@@ -170,22 +170,6 @@ static inline void release_task_struct(struct __task_struct *t)
 {
 }
 
-static inline void set_cpu_online(cpu_id_t cpu, uint32_t online)
-{
-  cpu_id_t mask = 1 << cpu;
-
-  if( online ) {
-    online_cpus |= mask;
-  } else {
-    online_cpus &= ~mask;
-  }
-}
-
-static inline bool is_cpu_online(cpu_id_t cpu)
-{
-  return (online_cpus & (1 << cpu)) ? true : false;
-}
-
 #define cpu_affinity_ok(task,c) ( ((task)->cpu_affinity_mask & (1<<(c))) && is_cpu_online((c)) )
 
 #define activate_task(t) sched_change_task_state((t),TASK_STATE_RUNNABLE)

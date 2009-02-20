@@ -25,6 +25,13 @@
 #include <eza/swks.h>
 #include <eza/smp.h>
 
+#ifdef CONFIG_SMP
+/* FIXME: I don't know a better place for this global vaiable,
+ * so if u'll find one, feel free to move smp_hooks there.
+ */
+LIST_DEFINE(smp_hooks);
+#endif /* CONFIG_SMP */
+
 #ifdef CONFIG_TEST
 #include <test.h>
 #endif
