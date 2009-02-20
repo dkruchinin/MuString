@@ -212,7 +212,8 @@ static void __server_task_runner(void *data)
   int delay=CONFIG_CORESERVERS_LAUNCH_DELAY > 300 ? CONFIG_CORESERVERS_LAUNCH_DELAY : 300;
 
   if( i > 0 ) {
-    kprintf("[LAUNCHER] Starting %d servers with delay %d ... \n",i,delay);
+    kprintf("[LAUNCHER] Starting %d servers with delay %d. First user (non-NS) PID is %d\n",
+            i,delay,2*CONFIG_NRCPUS+3);
     kconsole->disable();
   }
 

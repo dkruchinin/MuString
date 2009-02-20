@@ -169,11 +169,6 @@ free_message:
   return NULL;
 }
 
-static void __notify_message_arrived(ipc_gen_port_t *port)
-{
-  
-}
-
 static int __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
                                 ulong_t queue_size,task_t *owner)
 {

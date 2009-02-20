@@ -44,9 +44,17 @@ static void __def_run(test_framework_t *tf,void *ctx)
       break;
     }
 
+#ifdef CONFIG_SMP
+  kthread_cpu_autodeploy=tcase->autodeploy_threads;
+#endif
+
     tf->printf( "\nRunning testcase: '%s'\n\n", tcase->id );
     tcase->run(tf,t_ctx);
     tcase->deinitialize(t_ctx);
+
+#ifdef CONFIG_SMP
+  kthread_cpu_autodeploy=false;
+#endif
 
     tc_ctx->num_executed++;
     if( !tf->continue_testing() ) {
