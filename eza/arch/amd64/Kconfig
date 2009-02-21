@@ -1,4 +1,5 @@
 # amd64 configuration
+
 mainmenu "MuString Kernel Configuration for amd64"
 
 config AMD64
@@ -35,26 +36,13 @@ config IOMMU
        bool "Use IOMMU"
        default y
 
-endmenu
-
-menu "Memory manager"
-     depends on AMD64
-
 config GENARCH_MM
      def_bool y
      bool "Use generic page table operations"
 
-config KCORE_STACK_PAGES
-       int "Kernel core stack pages"
-       range 2 8
-       default "2"
-       help
-         You may specify number of kernel core stack pages.
-         Strictly speaking it's a kernel stack size.
-
-source "mm/Kconfig"
 endmenu
 
+source "mm/Kconfig"
 source "kernel/Kconfig"
 source "tests/Kconfig"
 source "ds/Kconfig"

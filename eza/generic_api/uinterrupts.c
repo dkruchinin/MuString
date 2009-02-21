@@ -281,7 +281,6 @@ static irq_counter_array_t *__get_irq_array(task_t *task,ulong_t id)
 }
 
 int ___big_verbose=0;
-int ___target_pid=0x111111111;
 
 int sys_wait_on_irq_array(ulong_t id)
 {
@@ -305,8 +304,6 @@ int sys_wait_on_irq_array(ulong_t id)
 
   arch_bit_clear(&array->flags,__IRQ_ARRAY_ACTIVE_BIT);
   event_reset(&array->de.d._event);
-
-  ___target_pid=current_task()->pid;
 
   return 0;
 }

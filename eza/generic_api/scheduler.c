@@ -336,7 +336,6 @@ static void __self_move_gc_actor(gc_action_t *action)
 {
   migration_action_t a;
 
-  ASSERT(arg < CONFIG_NRCPUS && cpu_is_online(arg));
   INIT_MIGRATION_ACTION(&a,current_task(),(long)action->data);
 
   action->data=&a;
@@ -399,7 +398,7 @@ lock_src_cpu:
   __UNLOCK_CPU_SCHED_DATA(dst_data);
 unlock_src_data:
   if( !r ) {
-    atomic_test_and_reset_bit(&task->flags,__TF_UNDER_MIGRATION_BIT);
+    atomic_test_and_clear_bit(&task->flags,__TF_UNDER_MIGRATION_BIT);
   }
 
   __UNLOCK_CPU_SCHED_DATA(src_data);

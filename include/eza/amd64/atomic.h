@@ -31,6 +31,7 @@
 #ifndef __ARCH_ATOMIC_H__
 #define __ARCH_ATOMIC_H__
 
+#include <eza/arch/bitwise.h>
 #include <mlibc/types.h>
 
 typedef volatile long atomic_t;
@@ -130,25 +131,9 @@ static always_inline bool atomic_sub_and_test(atomic_t *a,long sub)
   return (atomic_get(a) == 0);
 }
 
-static always_inline bool atomic_test_and_set_bit(void *v,ulong_t bit) {
-  bool res;
-
-  __asm__ __volatile__( __LOCK_PREFIX "bts %0,%1\n"
-                        "adc $0,%2\n"
-                        :"=r"(res)
-                        :"m"(*(unsigned long *)v),"r"(bit), "r"(0))  ;
-  return !!res;
-}
-
-static always_inline bool atomic_test_and_reset_bit(void *v,ulong_t bit) {
-  bool res;
-
-  __asm__ __volatile__( __LOCK_PREFIX "btr %0,%1\n"
-                        "adc $0,%2\n"
-                        :"=r"(res)
-                        :"m"(*(unsigned long *)v),"r"(bit), "r"(0))  ;
-  return !!res;
-}
-
+#define atomic_test_and_set_bit(bitmap, bit)    \
+    arch_bit_test_and_set(bitmap, bit)
+#define atomic_test_and_clear_bit(bitmap, bit)  \
+    arch_bit_test_and_clear(bitmap, bit)
 
 #endif /* __ARCH_ATOMIC_H__ */

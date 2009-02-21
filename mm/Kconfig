@@ -1,5 +1,15 @@
 # main memory manager configuration
 
+menu "Memory manager"
+
+config KCORE_STACK_PAGES
+       int "Kernel core stack pages"
+       range 2 8
+       default "2"
+       help
+         You may specify number of kernel core stack pages.
+         Strictly speaking it's a kernel stack size.
+
 config IDALLOC_PAGES
        int "Numer of pages for init-data allocator"
        range 1 8
@@ -53,3 +63,5 @@ config DEBUG_PTABLE
          Enabling of this option causes displaying of various page-tables related
          verbose information and some external runtime checks. In general it shouldn't
          strongly affect the speed.
+
+endmenu

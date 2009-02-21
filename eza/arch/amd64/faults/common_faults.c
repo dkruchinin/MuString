@@ -29,6 +29,7 @@
 #include <eza/kernel.h>
 #include <mlibc/kprintf.h>
 #include <eza/arch/mm.h>
+#include <eza/arch/fault.h>
 #include <eza/smp.h>
 
 void bound_range_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
@@ -39,8 +40,11 @@ void bound_range_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 
 void invalid_opcode_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
-    kprintf( "  [!!] #Invalid opcode exception raised ! (%p)\n", stack_frame->rip );
-    for(;;);
+  regs_t *regs = (regs_t *)(((uintptr_t)stack_frame)-sizeof(struct __gpr_regs)-8);
+  
+  fault_dump_regs(regs, stack_frame->rip);
+  show_stack_trace(stack_frame->old_rsp);
+  for(;;);
 }
 
 void device_not_available_fault_handler_impl(interrupt_stack_frame_t *stack_frame)

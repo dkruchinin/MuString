@@ -47,17 +47,6 @@
 #define get_fault_address(x) \
     __asm__ __volatile__( "movq %%cr2, %0" : "=r"(x) )
 
-static void __dump_regs(regs_t *r,ulong_t rip)
-{
-  kprintf(" Current task: PID=%d, TID=0x%X\n",
-          current_task()->pid,current_task()->tid);
-  kprintf(" RAX: %p, RBX: %p, RDI: %p, RSI: %p\n RDX: %p, RCX: %p\n",
-          r->rax,r->gpr_regs.rbx,
-          r->gpr_regs.rdi,r->gpr_regs.rsi,
-          r->gpr_regs.rdx,r->gpr_regs.rcx);
-  kprintf(" RIP: %p\n",rip);
-}
-
 #define NUM_STACKWORDS 5
 
 static bool __read_user_safe(uintptr_t addr,uintptr_t *val)
@@ -127,12 +116,12 @@ kernel_fault:
   kprintf("[CPU %d] Unhandled kernel-mode GPF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
   stop_cpu:  
-  __dump_regs(regs,stack_frame->rip);
-
-  if( !kernel_fault(stack_frame) ) {
-    __dump_stack(stack_frame->old_rsp);
-  }
-  
+  fault_dump_regs(regs,stack_frame->rip);
+  show_stack_trace(stack_frame->old_rsp);
+#ifdef CONFIG_DUMP_USTACK
+  if (!kernel_fault(stack_frame))
+    __dump_user_stack(stack_frame->old_rsp);
+#endif
   interrupts_disable();
   for(;;);
 }
@@ -195,13 +184,13 @@ kernel_fault:
   kprintf("[CPU %d] Unhandled kernel-mode PF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
 stop_cpu:
-  __dump_regs(regs,stack_frame->rip);
+  fault_dump_regs(regs,stack_frame->rip);
   kprintf( " Invalid address: %p\n", invalid_address );
-
-  if( !kernel_fault(stack_frame) ) {
-    __dump_stack(stack_frame->old_rsp);
-  }
-
+  show_stack_trace(stack_frame->old_rsp);
+#ifdef CONFIG_DUMP_USTACK
+  if (!kernel_fault(stack_frame))
+    __dump_user_stack(stack_frame->old_rsp);
+#endif /* CONFIG_DUMP_USTACK */
   interrupts_disable();
   for (;;);
 
