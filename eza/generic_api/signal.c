@@ -30,6 +30,7 @@
 #include <mm/pfalloc.h>
 #include <eza/security.h>
 #include <eza/usercopy.h>
+#include <eza/posix.h>
 
 static memcache_t *sigq_cache;
 
@@ -57,7 +58,7 @@ void initialize_signals(void)
 }
 
 /* NOTE: Signals must be locked before calling this function ! */
-static bool __update_pending_signals(task_t *task)
+bool __update_pending_signals(task_t *task)
 {
   signal_struct_t *siginfo=&task->siginfo;
   bool delivery_needed;
@@ -371,7 +372,7 @@ out:
 }
 
 static int sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
-                          int sig) {
+                     int sig) {
   task_t *caller=current_task();
   sa_sigaction_t s=sact->a.sa_sigaction;
   sq_header_t *removed_signals=NULL;
@@ -393,14 +394,14 @@ static int sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
   if( s == SIG_IGN || (s == SIG_DFL && def_ignorable(sig)) ) {
     sigaddset(&caller->siginfo.ignored,sig);
 
-    __update_pending_signals(caller);
     removed_signals=sigqueue_remove_item(&caller->siginfo.sigqueue,sig,true);
+    __update_pending_signals(caller);
   } else {
     sigdelset(&caller->siginfo.ignored,sig);
   }
   UNLOCK_TASK_SIGNALS(caller);
 
-  /* Now we can sefely remove queue items. */
+  /* Now we can sefely remove all dequeued items. */
   if( removed_signals != NULL ) {
     list_node_t *last=removed_signals->l.prev;
     list_node_t *next=&removed_signals->l;
@@ -513,4 +514,107 @@ void schedule_user_deferred_action(task_t *target,gc_action_t *a,bool force)
   list_add2tail(&target->uworks_data.def_uactions,&a->l);
   __update_pending_signals(target);
   UNLOCK_TASK_SIGNALS(target);
+}
+
+void process_sigitem_private(sigq_item_t *sigitem)
+{
+  if( !sigitem->kern_priv ) {
+    return;
+  }
+
+  /* Have to perform some signal-related kernel work (for example,
+   * rearm the timer related to this signal).
+   */
+  posix_timer_t *ptimer=(posix_timer_t *)sigitem->kern_priv;
+
+  LOCK_POSIX_STUFF_W(stuff);
+  if( ptimer->interval ) {
+    ulong_t next_tick=ptimer->ktimer.time_x+ptimer->interval;
+    ulong_t overrun;
+
+    /* Calculate overrun for this timer,if any. */
+    if( next_tick <= system_ticks ) {
+      overrun=(system_ticks-ptimer->ktimer.time_x)/ptimer->interval;
+      next_tick=system_ticks%ptimer->interval+ptimer->interval;
+    } else {
+      overrun=0;
+    }
+
+    /* Rearm this timer. */
+    ptimer->overrun=overrun;
+    TIMER_RESET_TIME(&ptimer->ktimer,next_tick);
+    add_timer(&ptimer->ktimer);
+    kprintf("TTTT: %d\n",next_tick);
+  }
+  UNLOCK_POSIX_STUFF_W(stuff);
+}
+
+long sys_sigwait(sigset_t *set,int *sig)
+{
+  sigset_t kset;
+  int is,sidx,r;
+  task_t *caller=current_task();
+  signal_struct_t *sigstruct=&caller->siginfo;
+  sigset_t *pending=&sigstruct->pending;
+  sq_header_t *sh;
+
+  if( copy_from_user(&kset,set,sizeof(kset)) ) {
+    return -EFAULT;
+  }
+
+  if( !kset || (kset & UNTOUCHABLE_SIGNALS) ) {
+    return -EINVAL;
+  }
+
+  /* First, unblock target signals and chek that caller has blocked them. */
+  LOCK_TASK_SIGNALS_INT(caller,is);
+  if( (kset & sigstruct->blocked) != kset ) {
+    for(;;);
+    r=-EINVAL;
+    goto unlock_signals;
+  } else {
+    sigstruct->blocked &= ~kset;
+  }
+  UNLOCK_TASK_SIGNALS_INT(caller,is);
+
+  while(true) {
+    LOCK_TASK_SIGNALS_INT(caller,is);
+    if( *pending & kset ) {
+      sidx=first_signal_in_set(pending);
+      sh=sigqueue_remove_item(&caller->siginfo.sigqueue,sidx,false);
+      ASSERT(sh);
+    } else {
+      sh=NULL;
+    }
+    UNLOCK_TASK_SIGNALS_INT(caller,is);
+
+    if( sh ) {
+      sigq_item_t *sigitem=(sigq_item_t *)sh;
+
+      /* Signal might have some associated private actions (like timer
+       * rearming, etc). So take it into account.
+       */
+      if( sigitem->kern_priv ) {
+        process_sigitem_private(sigitem);
+      }
+      free_sigqueue_item(sigitem);
+      r=copy_to_user(sig,&sidx,sizeof(*sig)) ? -EFAULT : 0;
+      break;
+    }
+
+    if( deliverable_signals_present(&caller->siginfo) ) {
+      /* Bad luck - we were interrupted by a different signal. */
+      r=-EINTR;
+      break;
+    }
+    put_task_into_sleep(caller);
+  }
+
+  /* Now block target signals again and recalculate pending signals. */
+  LOCK_TASK_SIGNALS_INT(caller,is);
+  sigstruct->blocked |= kset;
+  __update_pending_signals(caller);
+unlock_signals:
+  UNLOCK_TASK_SIGNALS_INT(caller,is);
+  return r;
 }

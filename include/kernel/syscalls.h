@@ -77,6 +77,7 @@
 #define SC_PORT_MSG_READ       38
 #define SC_KERNEL_CONTROL      39
 #define SC_TIMER_DELETE        40
+#define SC_SIGWAIT             41
 
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */
@@ -481,6 +482,8 @@ long sys_port_msg_read(ulong_t port,ulong_t msg_id,uintptr_t recv_buf,
 long sys_kernel_control(kcontrol_args_t *arg);
 
 long sys_timer_delete(long id);
+
+long sys_sigwait(sigset_t *set,int *sig);
 
 #endif
 

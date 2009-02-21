@@ -56,7 +56,7 @@ struct __signal_context {
   struct __gen_ctx gen_ctx;
   siginfo_t siginfo;
   sigset_t saved_blocked;
-  int retcode;
+  long retcode;
   uintptr_t retaddr;
 };
 
@@ -253,39 +253,13 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
     caller->siginfo.blocked=sa_mask;
     UNLOCK_TASK_SIGNALS(caller);
 
-    if( copy_to_user(&pctx->saved_blocked,&kmask,sizeof(sigset_t)) ) {
+    if( copy_to_user(&pctx->saved_blocked,&kmask,sizeof(kmask)) ) {
       goto bad_memory;
     }
   }
 
   if( sigitem->kern_priv ) {
-    /* Have to perform some signal-related kernel work (for example,
-     * rearm the timer related to this signal).
-     */
-    posix_timer_t *ptimer=(posix_timer_t *)sigitem->kern_priv;
-
-    LOCK_POSIX_STUFF_W(stuff);
-    if( ptimer->interval ) {
-      ulong_t next_tick=ptimer->ktimer.time_x+ptimer->interval;
-      ulong_t overrun;
-
-      /* Calculate overrun for this timer,if any. */
-      if( next_tick <= system_ticks ) {
-        overrun=(system_ticks-ptimer->ktimer.time_x)/ptimer->interval;
-        next_tick=system_ticks%ptimer->interval+ptimer->interval;
-      } else {
-        overrun=0;
-      }
-
-      /* Rearm this timer. */
-      ptimer->overrun=overrun;
-      TIMER_RESET_TIME(&ptimer->ktimer,next_tick);
-      add_timer(&ptimer->ktimer);
-
-      kprintf_dbg("[++] Rearming timer: TICK=%d,interval=%d,next_tick=%d, OVRRUN: %d\n",
-                  system_ticks,ptimer->interval,next_tick,overrun);
-    }
-    UNLOCK_POSIX_STUFF_W(stuff);
+    process_sigitem_private(sigitem);
   }
 
 out_recalc:
@@ -358,10 +332,10 @@ repeat:
   }
 }
 
-int sys_sigreturn(uintptr_t ctx)
+long sys_sigreturn(uintptr_t ctx)
 {
   struct __signal_context *uctx=(struct __signal_context *)ctx;
-  int retcode;
+  long retcode;
   task_t *caller=current_task();
   uintptr_t kctx=caller->kernel_stack.high_address-sizeof(struct __gpr_regs)-
                  sizeof(struct __int_stackframe);
@@ -379,10 +353,11 @@ int sys_sigreturn(uintptr_t ctx)
   }
 
   /* Don't touch these signals ! */
-  sa_mask &= UNTOUCHABLE_SIGNALS;
+  sa_mask &= ~UNTOUCHABLE_SIGNALS;
 
   LOCK_TASK_SIGNALS(caller);
   caller->siginfo.blocked=sa_mask;
+  __update_pending_signals(caller);
   UNLOCK_TASK_SIGNALS(caller);
 
   /* Restore GPRs. */
@@ -421,11 +396,11 @@ int sys_sigreturn(uintptr_t ctx)
   sframe->old_rsp=(uintptr_t)uctx;
 
   /* Update pending signals to let any unblocked signals be processed. */
-  update_pending_signals(caller);
   return retcode;
 
 bad_ctx:
   kprintf("[!!!] BAD context for 'sys_sigreturn()' for task %d !\n",
           caller->tid);
   for(;;);
+  return -1;
 }

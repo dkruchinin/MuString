@@ -175,6 +175,7 @@ static inline void release_task_struct(struct __task_struct *t)
 #define activate_task(t) sched_change_task_state((t),TASK_STATE_RUNNABLE)
 #define stop_task(t) sched_change_task_state((t),TASK_STATE_STOPPED)
 #define suspend_task(t) sched_change_task_state((t),TASK_STATE_SUSPENDED)
+#define put_task_into_sleep(t) sched_change_task_state((t),TASK_STATE_SLEEPING)
 
 #ifdef CONFIG_TEST
 extern bool kthread_cpu_autodeploy;

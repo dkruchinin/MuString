@@ -48,7 +48,7 @@ static inline int sigqueue_add_item(sigqueue_t *sq,sq_header_t *item)
 }
 
 static inline sq_header_t *sigqueue_remove_item(sigqueue_t *sq,long idx,
-                                                 bool remove_all)
+                                                bool remove_all)
 {
   sq_header_t *item;
   list_node_t *ln;

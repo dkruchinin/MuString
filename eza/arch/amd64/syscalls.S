@@ -76,6 +76,7 @@ syscall_table:
 	.quad   sys_port_msg_read
 	.quad   sys_kernel_control
 	.quad   sys_timer_delete                /* 40 */
+	.quad   sys_sigwait
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

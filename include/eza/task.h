@@ -257,6 +257,9 @@ typedef struct __task_struct {
 #define LOCK_TASK_SIGNALS(t)  spinlock_lock(&(t)->siginfo.lock)
 #define UNLOCK_TASK_SIGNALS(t)  spinlock_unlock(&(t)->siginfo.lock)
 
+#define LOCK_TASK_SIGNALS_INT(t,_is)  spinlock_lock_irqsave(&(t)->siginfo.lock,(_is))
+#define UNLOCK_TASK_SIGNALS_INT(t,_is)  spinlock_unlock_irqrestore(&(t)->siginfo.lock,(_is))
+
 #define __ATTR_OFF  0  /**< Attribute is enabled **/
 #define __ATTR_ON   1  /**< Attribute is disabled **/
 
