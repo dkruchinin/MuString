@@ -18,8 +18,8 @@ config CORESERVERS_PERCPU_LAUNCH
 
 config CORESERVERS_LAUNCH_DELAY
        int "Delay (in system clock ticks) between launching next core server."
-       range 0 3000
-       default 300
+       range 500 3000
+       default 500
 
 config TIMER_GRANULARITY
        int "Granularity of timer major tick"

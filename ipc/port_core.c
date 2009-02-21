@@ -169,11 +169,6 @@ free_message:
   return NULL;
 }
 
-static void __notify_message_arrived(ipc_gen_port_t *port)
-{
-    waitqueue_pop(&port->waitqueue, NULL);
-}
-
 static int __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
                                 ulong_t queue_size,task_t *owner)
 {
@@ -459,11 +454,9 @@ recv_cycle:
        * since in will be unlocked after putting the receiver in the
        * port's waitqueue.
        */
-        IPC_TASK_ACCT_OPERATION(owner);
         waitqueue_prepare_task(&w,owner);
         r=waitqueue_push(&port->waitqueue,&w);
         IPC_UNLOCK_PORT_W(port);
-        IPC_TASK_UNACCT_OPERATION(owner);
 
         if( !r ) {
           goto recv_cycle;
@@ -633,11 +626,12 @@ int ipc_port_send_iov(struct __ipc_gen_port *port,
   }
 
   if( !r ) {
-      if( !(port->flags & IPC_PORT_SHUTDOWN ) ) {
-        r=msg_ops->insert_message(port,msg);
-      } else {
-        r=-EPIPE;
-      }
+    if( !(port->flags & IPC_PORT_SHUTDOWN ) ) {
+      r=msg_ops->insert_message(port,msg);
+      waitqueue_pop(&port->waitqueue,NULL);
+    } else {
+      r=-EPIPE;
+    }
   }
   IPC_UNLOCK_PORT_W(port);
 
@@ -645,18 +639,13 @@ int ipc_port_send_iov(struct __ipc_gen_port *port,
     return r;
   }
 
-  __notify_message_arrived(port);
-
   /* Sender should wait for the reply, so put it into sleep here. */
   if( sync_send ) {
     bool b;
     int ir=0;
 
   wait_for_reply:
-    IPC_TASK_ACCT_OPERATION(sender);
     r=event_yield(&msg->event);
-    IPC_TASK_UNACCT_OPERATION(sender);
-
     if( task_was_interrupted(sender) ) {
       /* No luck: we were interrupted asynchronously.
        * So try to remove our message from the port's queue, if possible.
@@ -761,32 +750,34 @@ int ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
   return r;
 }
 
-poll_event_t ipc_port_get_pending_events(ipc_gen_port_t *port)
+void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w)
 {
-  poll_event_t e;
+  if( w ) {
+    IPC_LOCK_PORT_W(port);
+    if( w->wq == &port->waitqueue ) {
+      waitqueue_delete(w,WQ_DELETE_SIMPLE);
+    }
+    IPC_UNLOCK_PORT_W(port);
+  }
+}
+
+/* NOTE: Caller must initialized waitque task before calling this function.
+ */
+poll_event_t ipc_port_check_events(ipc_gen_port_t *port,wqueue_task_t *w,
+                                   poll_event_t evmask)
+{
+  poll_event_t e=0;
 
   IPC_LOCK_PORT_W(port);
-  if(port->avail_messages) {
+  if( port->avail_messages ) {
     e=POLLIN | POLLRDNORM;
-  } else {
-    e=0;
+  }
+
+  e &= evmask;
+  if( !e && w ) {
+    /* No pending events, so add target task to port's waitqueue. */
+    waitqueue_insert(&port->waitqueue,w,WQ_INSERT_SIMPLE);
   }
   IPC_UNLOCK_PORT_W(port);
   return e;
-}
-
-void ipc_port_add_poller(ipc_gen_port_t *port,task_t *poller, wqueue_task_t *w)
-{
-  //IPC_LOCK_PORT_W(port);
-  //waitqueue_add_task(&port->waitqueue,w);
-  waitqueue_prepare_task(w,poller);
-  waitqueue_insert(&port->waitqueue,w,WQ_INSERT_SIMPLE);
-  //IPC_UNLOCK_PORT_W(port);
-}
-
-void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w)
-{
-  //IPC_LOCK_PORT_W(port);
-  waitqueue_delete(w,WQ_DELETE_SIMPLE);
-  //IPC_UNLOCK_PORT_W(port);
 }

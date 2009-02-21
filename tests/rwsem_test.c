@@ -168,4 +168,5 @@ testcase_t rws_testcase = {
   .initialize = rws_test_init,
   .deinitialize = rws_test_deinit,
   .run = rws_test_run,
+  .autodeploy_threads=true,
 };

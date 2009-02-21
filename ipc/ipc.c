@@ -51,7 +51,6 @@ static task_ipc_priv_t *__allocate_ipc_private_data(void)
 
   if( priv ) {
     memset(&priv->pstats,0,sizeof(ipc_pstats_t));
-    atomic_set(&priv->pstats.active_queues,0);
   }
   return priv;
 }

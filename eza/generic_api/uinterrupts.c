@@ -299,8 +299,6 @@ int sys_wait_on_irq_array(ulong_t id)
 
   /* Check the event mask first time. */
   if( !*array->event_mask ) {
-//    kprintf("+ [CPU %d] W: 0x%X\n",
-//            cpu_id(),current_task()->tid);
     event_yield(&array->de.d._event);
   }
 

@@ -36,6 +36,7 @@
 #include <eza/spinlock.h>
 #include <eza/errno.h>
 #include <mlibc/types.h>
+#include <eza/arch/atomic.h>
 
 struct __task_struct;
 
@@ -54,6 +55,7 @@ typedef struct __wqueue_task {
   struct __task_struct *task; /**< The task itself */
   pqueue_node_t pq_node;
   void *private;
+  atomic_t *wq_stat;
 } wqueue_task_t;
 
 /**
@@ -94,6 +96,7 @@ static inline void waitqueue_prepare_task(wqueue_task_t *wq_task, struct __task_
 {
   wq_task->task = task;
   wq_task->wq = NULL;
+  wq_task->wq_stat=NULL;
 }
 
 #define waitqueue_push(wq, wq_task)                     \

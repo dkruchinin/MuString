@@ -31,6 +31,7 @@
 #define POLLRDNORM    0x2  /* Normal data may be read without blocking. */
 #define POLLOUT       0x4  /* Data may be written without blocking. */
 #define POLLWRNORM    0x8  /* Equivalent to POLLOUT. */
+#define POLLERR       0x10 /* Error condition (output only). */
 
 #define MAX_POLL_OBJECTS  65535
 

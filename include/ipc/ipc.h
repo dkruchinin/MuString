@@ -36,7 +36,7 @@ typedef struct __ipc_cached_data {
 } ipc_cached_data_t;
 
 typedef struct __ipc_pstats {
-  atomic_t active_queues; /* Number of waitqueues in the process is. */
+  int foo[4];
 } ipc_pstats_t;
 
 typedef struct __task_ipc {
@@ -82,9 +82,6 @@ void release_task_ipc_priv(task_ipc_priv_t *priv);
 
 #define IPC_LOCK_CHANNELS(ipc) spinlock_lock(&ipc->channel_lock)
 #define IPC_UNLOCK_CHANNELS(ipc) spinlock_unlock(&ipc->channel_lock)
-
-#define IPC_TASK_ACCT_OPERATION(t) atomic_inc(&t->ipc_priv->pstats.active_queues)
-#define IPC_TASK_UNACCT_OPERATION(t) atomic_dec(&t->ipc_priv->pstats.active_queues)
 
 #define REF_IPC_ITEM(c)  atomic_inc(&c->use_count)
 #define UNREF_IPC_ITEM(c)  atomic_dec(&c->use_count)

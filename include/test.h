@@ -20,6 +20,7 @@ typedef struct __testcase {
   bool (*initialize)(void **ctx);
   void (*run)(test_framework_t *f,void *ctx);
   void (*deinitialize)(void *ctx);
+  bool autodeploy_threads;
 } testcase_t;
 
 typedef struct __test_collection {
