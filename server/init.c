@@ -203,6 +203,16 @@ static int __create_task_mm(task_t *task, int num)
   return 0;
 }
 
+void f(kconsole_t *k)
+{
+  int a =1;
+  int b = 2;
+  int c = 3;
+  int x = 4;
+  int z = 5;
+  ASSERT(1 == 0);
+}
+
 static void __server_task_runner(void *data)
 {
   int i=server_get_num(),a;
@@ -210,6 +220,7 @@ static void __server_task_runner(void *data)
   int r,sn;
   kconsole_t *kconsole=default_console();
 
+  f(kconsole);  
   if( i > 0 ) {
     kprintf("[LAUNCHER] Starting servers: %d ... \n",i);
     kconsole->disable();

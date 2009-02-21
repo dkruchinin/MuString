@@ -25,8 +25,6 @@
 #ifndef __ASSERT_H__
 #define __ASSERT_H__
 
-#include <config.h>
-#include <mlibc/kprintf.h>
 /*
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -50,24 +48,22 @@
  *
  */
 
+#include <config.h>
+#include <mlibc/kprintf.h>
 
 #include <config.h>
 #include <eza/kernel.h>
+#include <eza/arch/bug.h>
 
-#ifdef CONFIG_DEBUG
 #define CT_ASSERT(cond) ((void)sizeof(char[1 - 2 * !(cond)]))
 #define ASSERT(cond)                                    \
   do {                                                  \
     if (!(cond)) {                                      \
     kprintf("[KERNEL ASSERT] " #cond "\n" );            \
     kprintf("   in: %s:%d\n", __FILE__, __LINE__);      \
-    for (;;);                                           \
+    BUG();                                              \
   }                                                     \
 } while (0)
-#else
-#define CT_ASSERT(cond)
-#define ASSERT(cond)
-#endif /* CONFIG_DEBUG */
 
 #endif /* __ASSERT_H__ */
 

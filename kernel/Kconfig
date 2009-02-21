@@ -64,5 +64,14 @@ config DEBUG_IRQ_ACTIVITY
        depends on DEBUG_SERIAL_CONSOLE
        default n
 
+config DUMP_USPACE_STACK
+       bool "Dump user-space stack after any exception occurs"
+       default n
+
+config NUM_STACKWORDS
+       int "Number of stack words that will be printed during the stack dump."
+       range 5 50
+       default "5"
+
 endmenu
 

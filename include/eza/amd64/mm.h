@@ -51,11 +51,6 @@ extern uintptr_t __kernel_va_base;
 
 #define USER_STACK_SIZE 4
 
-DEFINE_ITERATOR_CTX(page_frame, PF_ITER_ARCH,
-                    e820memmap_t *mmap;
-                    uint32_t e820id;
-                    );
-
 static inline bool is_kernel_page(page_frame_t *page)
 {
   uintptr_t addr = (uintptr_t)pframe_to_virt(page);
