@@ -157,18 +157,23 @@ static int __create_task_mm(task_t *task, int num)
     return r;
 
   //kprintf("TEXT: %p -> %p\n", USPACE_VA_BOTTOM, USPACE_VA_BOTTOM + (text_size << PAGE_WIDTH));
-  r = vmrange_map(memobj, vmm, real_data_offset, data_size, VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED, 0);
-  if (!PAGE_ALIGN(r))
-    return r;
-  r = mmap_core(task_get_rpd(task), real_data_offset, data_bss >> PAGE_WIDTH, data_size, KMAP_READ | KMAP_WRITE);
-  if (r)
-    return r;
+  if (data_size) {
+    r = vmrange_map(memobj, vmm, real_data_offset, data_size, VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED, 0);
+    if (!PAGE_ALIGN(r))
+      return r;
 
-  /* Create a BSS area. */
-  r = vmrange_map(memobj, vmm, bss_virt, bss_size,
-                  VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED | VMR_POPULATE, 0);
-  if(!PAGE_ALIGN(r)) {
-    return r;
+    r = mmap_core(task_get_rpd(task), real_data_offset, data_bss >> PAGE_WIDTH, data_size, KMAP_READ | KMAP_WRITE);
+    if (r)
+      return r;
+  }
+
+  if (bss_size) {
+    /* Create a BSS area. */
+    r = vmrange_map(memobj, vmm, bss_virt, bss_size,
+                    VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED | VMR_POPULATE, 0);
+    if(!PAGE_ALIGN(r)) {
+      return r;
+    }
   }
 
   r = vmrange_map(memobj, vmm, USPACE_VA_TOP - 0x40000, USER_STACK_SIZE,
