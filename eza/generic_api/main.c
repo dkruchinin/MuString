@@ -106,6 +106,7 @@ void main_routine(void) /* this function called from boostrap assembler code */
   arch_cpu_init(0);
   install_fault_handlers();
   initialize_irqs();
+  kcons->init();
   kcons->enable();
   //print_kernel_version_info();
   kprintf("[MB] Modules: %d\n",init.c);
