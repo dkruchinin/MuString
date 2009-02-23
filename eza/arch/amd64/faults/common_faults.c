@@ -31,6 +31,7 @@
 #include <eza/arch/mm.h>
 #include <eza/arch/fault.h>
 #include <eza/smp.h>
+#include <eza/kconsole.h>
 
 void bound_range_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
@@ -42,6 +43,8 @@ void invalid_opcode_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
   regs_t *regs = (regs_t *)(((uintptr_t)stack_frame)-sizeof(struct __gpr_regs)-8);
   
+  PREPARE_DEBUG_CONSOLE();
+  kprintf("Invalid opcode exception!!!\n");
   fault_dump_regs(regs, stack_frame->rip);
   show_stack_trace(stack_frame->old_rsp);
   for(;;);
