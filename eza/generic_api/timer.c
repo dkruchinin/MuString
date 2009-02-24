@@ -176,6 +176,27 @@ void delete_timer(ktimer_t *timer)
   UNLOCK_MAJOR_TIMER_TICK(tt->major_tick,is);
 }
 
+long modify_timer(ktimer_t *timer,ulong_t time_x)
+{
+  long r;
+  major_timer_tick_t *mt;
+
+  if( time_x <= system_ticks ) {
+    return -EAGAIN;
+  }
+
+  mt=timer->minor_tick.major_tick;
+  if( !mt ) { /* Ignore clear timers. */
+    return -EINVAL;
+  }
+
+  delete_timer(timer);
+  TIMER_RESET_TIME(timer,time_x);
+  r=add_timer(timer);
+
+  return r;
+}
+
 long add_timer(ktimer_t *t)
 {
   long is;
@@ -258,7 +279,7 @@ long add_timer(ktimer_t *t)
   t->minor_tick.major_tick=mt;
 
   LOCK_MAJOR_TIMER_TICK(mt,is);
-  if( t->time_x <= system_ticks  ) {
+  if( t->time_x <= __last_processed_timer_tick  ) {
     r=-EAGAIN;
     goto out_unlock_tick;
   }

@@ -209,6 +209,8 @@ void schedule_user_deferred_action(task_t *target,gc_action_t *a,bool force);
 
 #define first_signal_in_set(s) (arch_bit_find_lsf(*(long *)(s)))
 
-#define task_was_interrupted(t)  ( read_task_pending_uworks((t)) != 0 || pending_signals_present((t)) )
+static inline bool task_was_interrupted(task_t *t) {
+  return read_task_pending_uworks(t) != 0 || deliverable_signals_present(&t->siginfo);
+}
 
 #endif

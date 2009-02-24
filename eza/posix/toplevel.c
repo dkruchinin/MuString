@@ -208,8 +208,12 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
           }
 
           ptimer->interval=itx;
-          TIMER_RESET_TIME(ktimer,tx);
-          r=add_timer(ktimer);
+          if( ktimer->time_x ) { /* New time for active timer. */
+            r=modify_timer(ktimer,tx);
+          } else {
+            TIMER_RESET_TIME(ktimer,tx);
+            r=add_timer(ktimer);
+          }
         }
         UNLOCK_POSIX_STUFF_W(stuff);
 
