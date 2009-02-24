@@ -273,6 +273,7 @@ long add_timer(ktimer_t *t)
         goto out_insert;
       } else if( tt->time_x > t->time_x ) {
         list_insert_before(&t->minor_tick.node,ln);
+        list_add2tail(&t->minor_tick.actions,&t->da.node);
         goto out_insert;
       }
       /* Fallthrough in case of the lowest tick value - it will be added to

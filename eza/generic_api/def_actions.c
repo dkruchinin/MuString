@@ -57,6 +57,10 @@ void schedule_deffered_actions(list_head_t *actions)
   long is;
   deffered_irq_action_t *a;
 
+  if( list_is_empty(actions) ) {
+    return;
+  }
+
   spinlock_lock_irqsave(&acts->lock,is);
 
   if( list_is_empty(&acts->pending_actions) ) {
