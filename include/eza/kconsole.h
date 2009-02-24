@@ -59,9 +59,11 @@
 #endif /* KCONS_COLOR_MODE */     
 
 typedef struct __kconsole_type {
+  void (*init)(void);
   void (*enable)(void);
   void (*display_string)(const char*);
   void (*display_char)(const char);
+  void (*clear)(void);
   void (*disable)(void);
   spinlock_t lock;
   bool is_enabled;

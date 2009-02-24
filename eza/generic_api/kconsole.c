@@ -30,7 +30,9 @@
 #include <config.h>
 
 /* VGA console */
+static void vga_cons_init(void);
 static void vga_cons_enable(void);
+static void vga_cons_clear(void);
 static void vga_cons_disable(void);
 static void vga_cons_display_string(const char *);
 static void vga_cons_display_char(const char);
@@ -38,22 +40,32 @@ static void vga_cons_display_char(const char);
 extern kconsole_t serial_console;
 
 static kconsole_t __vga_cons = {
+  .init = vga_cons_init,
   .enable = vga_cons_enable,
+  .clear = vga_cons_clear,
   .disable = vga_cons_disable,
   .display_string = vga_cons_display_string,
   .display_char = vga_cons_display_char,
 };
 
-static void vga_cons_enable(void)
+static void vga_cons_init(void)
 {
   vga_init();
+}
+
+static void vga_cons_enable(void)
+{
   vga_cursor(true);
   vga_set_cursor_attrs(VGA_CRSR_LOW);
   vga_set_bg(KCONS_DEF_BG);
   vga_set_fg(KCONS_DEF_FG);
-  vga_cls();
   __vga_cons.is_enabled = true;
   spinlock_initialize(&__vga_cons.lock);
+}
+
+static void vga_cons_clear(void)
+{
+  vga_cls();
 }
 
 static void vga_cons_disable(void)
