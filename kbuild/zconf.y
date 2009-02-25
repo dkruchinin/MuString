@@ -14,8 +14,6 @@
 #define LKC_DIRECT_LINK
 #include "lkc.h"
 
-#include "zconf.hash.c"
-
 #define printd(mask, fmt...) if (cdebug & (mask)) printf(fmt)
 
 #define PRINTD		0x0001
@@ -92,6 +90,10 @@ static struct menu *current_menu, *current_entry;
 %type <id> option_name
 %type <menu> if_entry menu_entry choice_entry
 %type <string> symbol_option_arg word_opt
+
+%{
+  #include "zconf.hash.c"
+%}
 
 %destructor {
 	fprintf(stderr, "%s:%d: missing end statement for this entry\n",
