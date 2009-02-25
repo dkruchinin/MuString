@@ -518,6 +518,8 @@ void schedule_user_deferred_action(task_t *target,gc_action_t *a,bool force)
 
 void process_sigitem_private(sigq_item_t *sigitem)
 {
+  bool expired;
+
   if( !sigitem->kern_priv ) {
     return;
   }
@@ -543,10 +545,13 @@ void process_sigitem_private(sigq_item_t *sigitem)
     /* Rearm this timer. */
     ptimer->overrun=overrun;
     TIMER_RESET_TIME(&ptimer->ktimer,next_tick);
-    add_timer(&ptimer->ktimer);
-    kprintf("TTTT: %d\n",next_tick);
+    expired=(add_timer(&ptimer->ktimer) == -EAGAIN);
   }
   UNLOCK_POSIX_STUFF_W(stuff);
+
+  if( expired ) {
+    execute_deffered_action(&ptimer->ktimer.da);
+  }
 }
 
 long sys_sigwait(sigset_t *set,int *sig)
@@ -569,7 +574,6 @@ long sys_sigwait(sigset_t *set,int *sig)
   /* First, unblock target signals and chek that caller has blocked them. */
   LOCK_TASK_SIGNALS_INT(caller,is);
   if( (kset & sigstruct->blocked) != kset ) {
-    for(;;);
     r=-EINVAL;
     goto unlock_signals;
   } else {
@@ -586,11 +590,11 @@ long sys_sigwait(sigset_t *set,int *sig)
     } else {
       sh=NULL;
     }
-    UNLOCK_TASK_SIGNALS_INT(caller,is);
 
     if( sh ) {
       sigq_item_t *sigitem=(sigq_item_t *)sh;
 
+      UNLOCK_TASK_SIGNALS_INT(caller,is);
       /* Signal might have some associated private actions (like timer
        * rearming, etc). So take it into account.
        */
@@ -601,12 +605,12 @@ long sys_sigwait(sigset_t *set,int *sig)
       r=copy_to_user(sig,&sidx,sizeof(*sig)) ? -EFAULT : 0;
       break;
     }
-
     if( deliverable_signals_present(&caller->siginfo) ) {
       /* Bad luck - we were interrupted by a different signal. */
       r=-EINTR;
       break;
     }
+    UNLOCK_TASK_SIGNALS_INT(caller,is);
     put_task_into_sleep(caller);
   }
 

@@ -229,13 +229,6 @@ void sched_timer_tick(void)
   }
 }
 
-int sys_yield(void)
-{
-  schedule();
-  return 0;
-}
-
-
 long do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
 {
   switch( cmd ) {

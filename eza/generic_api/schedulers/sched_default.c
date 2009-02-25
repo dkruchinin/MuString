@@ -481,8 +481,13 @@ static int __change_task_state(task_t *task,task_state_t new_state,
           __reschedule_task(task);
         }
         break;
-      case TASK_STATE_STOPPED:
       case TASK_STATE_SLEEPING:
+        if( deliverable_signals_present(&task->siginfo) ) {
+          r=-EINTR;
+          break;
+        }
+        /* Fallthrough. */
+      case TASK_STATE_STOPPED:
       case TASK_STATE_SUSPENDED:
         if( task->state == TASK_STATE_RUNNABLE
             || task->state == TASK_STATE_RUNNING
@@ -668,4 +673,9 @@ static struct __scheduler eza_default_scheduler = {
 scheduler_t *get_default_scheduler(void)
 {
   return &eza_default_scheduler;
+}
+
+int sys_yield(void)
+{
+  return 0;
 }
