@@ -60,6 +60,7 @@ static void vga_cons_enable(void)
   vga_set_bg(KCONS_DEF_BG);
   vga_set_fg(KCONS_DEF_FG);
   __vga_cons.is_enabled = true;
+  vga_set_x(0);
   spinlock_initialize(&__vga_cons.lock);
 }
 
