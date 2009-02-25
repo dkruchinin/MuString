@@ -57,13 +57,16 @@ typedef enum __task_state {
 
 #define __ALL_TASK_STATE_MASK  0x3F  /**< All possible task states exclude zombies */
 
+#define __SCHED_TICK_NORMAL   0  /**< Usual scheduler tick. */
+#define __SCHED_TICK_LAST     1  /**< Force task to exaust its timeslice **/
+
 /* Abstract scheduler. */
 typedef struct __scheduler {
   const char *id;
   list_node_t l;
   cpu_id_t (*cpus_supported)(void);
   int (*add_cpu)(cpu_id_t cpu);
-  void (*scheduler_tick)(void);
+  void (*scheduler_tick)(int op);
   int (*add_task)(struct __task_struct *task);
   int (*del_task)(struct __task_struct *task);
   void (*schedule)(void);
@@ -150,7 +153,6 @@ void schedule(void);
 
 #define SCHEDULER_MAX_COMMON_IOCTL SYS_SCHED_CTL_SET_CPU
 
-int sys_yield(void);
 long sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
 long do_scheduler_control(struct __task_struct *task, ulong_t cmd, ulong_t arg);
 long sleep(ulong_t ticks);

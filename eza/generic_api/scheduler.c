@@ -225,7 +225,7 @@ void schedule(void)
 void sched_timer_tick(void)
 {
   if(active_scheduler != NULL) {
-    active_scheduler->scheduler_tick();
+    active_scheduler->scheduler_tick(__SCHED_TICK_NORMAL);
   }
 }
 

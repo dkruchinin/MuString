@@ -222,7 +222,7 @@ static int def_add_cpu(cpu_id_t cpu)
   return r;
 }
 
-static void def_scheduler_tick(void)
+static void def_scheduler_tick(int op)
 {
   task_t *current = current_task();
   eza_sched_cpudata_t *cpudata = CPU_SCHED_DATA();
@@ -248,19 +248,23 @@ static void def_scheduler_tick(void)
 
   LOCK_CPU_SCHED_DATA(cpudata);
 
-  if( discipl != SCHED_FIFO ) {
-    tdata->time_slice--;
+  switch( op ) {
+    case __SCHED_TICK_LAST:
+      tdata->time_slice=0;
+      break;
+    default: /* __SCHED_TICK_NORMAL */
+      if( discipl != SCHED_FIFO ) {
+        tdata->time_slice--;
+      }
+      break;
   }
 
   if( !tdata->time_slice ) {
-    if( cpu_id() && sched_verbose1 ) {
-      kprintf( "* Timeslice is over for %d\n", current->pid );
-    }
-    if( discipl == SCHED_RR ) {
+    if( discipl == SCHED_RR || discipl == SCHED_FIFO ) {
       __remove_task_from_array(cpudata->active_array,current);
       __recalculate_timeslice_and_priority(current);
       __add_task_to_array(cpudata->active_array,current);
-    } else if( discipl == SCHED_OTHER ) {
+    } else {
       __remove_task_from_array(cpudata->active_array,current);
       __recalculate_timeslice_and_priority(current);
       __add_task_to_array(cpudata->expired_array,current);
@@ -675,7 +679,11 @@ scheduler_t *get_default_scheduler(void)
   return &eza_default_scheduler;
 }
 
-int sys_yield(void)
+void sys_sched_yield(void)
 {
-  return 0;
+  interrupts_disable();
+  def_scheduler_tick(__SCHED_TICK_LAST);
+  def_schedule();
+  interrupts_enable();
+  return;
 }

@@ -78,6 +78,7 @@
 #define SC_KERNEL_CONTROL      39
 #define SC_TIMER_DELETE        40
 #define SC_SIGWAIT             41
+#define SC_SCHED_YIELD         42
 
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */
@@ -484,6 +485,8 @@ long sys_kernel_control(kcontrol_args_t *arg);
 long sys_timer_delete(long id);
 
 long sys_sigwait(sigset_t *set,int *sig);
+
+void sys_sched_yield(void);
 
 #endif
 
