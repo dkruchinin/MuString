@@ -58,7 +58,6 @@ typedef struct __ipc_port_msg_ops {
                              ipc_port_message_t *msg);
   ipc_port_message_t *(*extract_message)(struct __ipc_gen_port *port,
                                          ulong_t flags);
-  void (*free_data_storage)(struct __ipc_gen_port *port);
   void (*dequeue_message)(struct __ipc_gen_port *port,ipc_port_message_t *msg);
   int (*remove_message)(struct __ipc_gen_port *port,
                                     ipc_port_message_t *msg);
@@ -66,7 +65,6 @@ typedef struct __ipc_port_msg_ops {
 } ipc_port_msg_ops_t;
 
 typedef struct __ipc_port_ops {
-  struct __ipc_gen_port *(*clone)(struct __ipc_gen_port *port);
   void (*destructor)(struct __ipc_gen_port *port);
 } ipc_port_ops_t;
 
@@ -123,6 +121,7 @@ int ipc_port_send_iov(struct __ipc_gen_port *port,
                       ulong_t reply_len);
 long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
                        iovec_t *rcv_iov,ulong_t numvecs,ulong_t offset);
+ipc_gen_port_t *ipc_clone_port(ipc_gen_port_t *p);
 
 #define IPC_NB_MESSAGE_MAXLEN  (512-sizeof(ipc_port_message_t))
 

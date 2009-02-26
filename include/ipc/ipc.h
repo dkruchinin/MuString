@@ -95,6 +95,8 @@ void release_task_ipc_priv(task_ipc_priv_t *priv);
 void release_task_ipc(task_ipc_t *ipc);
 void close_ipc_resources(task_ipc_t *ipc);
 void dup_task_ipc_resources(task_ipc_t *ipc);
+void *allocate_ipc_memory(long size);
+void free_ipc_memory(void *addr,int size);
 
 static inline task_ipc_t *get_task_ipc(task_t *t)
 {

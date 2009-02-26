@@ -55,6 +55,15 @@
   }                                                                     \
   IPC_UNLOCK_PORT_W((_p));
 
+#define IPC_INIT_PORT(p)                        \
+  memset((p),0,sizeof(ipc_gen_port_t));         \
+  atomic_set(&(p)->use_count,1);                \
+  atomic_set(&(p)->own_count,1);                \
+  spinlock_initialize(&(p)->lock);              \
+  (p)->avail_messages=(p)->total_messages=0;    \
+  list_init_head(&(p)->channels);               \
+  waitqueue_initialize(&(p)->waitqueue)
+
 static ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf,
                                                  ulong_t snd_size,bool copy_data)
 {
@@ -179,7 +188,7 @@ static int __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
     return -ENOMEM;
   }
 
-  memset(p,0,sizeof(*p));
+  IPC_INIT_PORT(p);
 
   if( flags & IPC_PRIORITIZED_ACCESS ) {
     p->msg_ops=&prio_port_msg_ops;
@@ -190,19 +199,12 @@ static int __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
   }
 
   p->flags=(flags & IPC_PORT_DIRECT_FLAGS);
-
   r=p->msg_ops->init_data_storage(p,owner,queue_size);
   if( r ) {
     goto out_free_port;
   }
 
-  atomic_set(&p->use_count,1);
-  atomic_set(&p->own_count,1);
-  spinlock_initialize(&p->lock);
-  p->avail_messages = p->total_messages=0;
   p->flags = flags;
-  list_init_head(&p->channels);
-  waitqueue_initialize(&p->waitqueue);
   *out_port = p;
   return 0;
 out_free_port:
@@ -210,7 +212,27 @@ out_free_port:
   return r;
 }
 
-static void __shutdown_port( ipc_gen_port_t *port )
+ipc_gen_port_t *ipc_clone_port(ipc_gen_port_t *p)
+{
+  ipc_gen_port_t *port=memalloc(sizeof(*p));
+
+  if( port ) {
+    IPC_INIT_PORT(port);
+    port->flags=p->flags;
+    port->msg_ops=p->msg_ops;
+    port->port_ops=p->port_ops;
+
+    if( port->msg_ops->init_data_storage(port,current_task(),
+                                         p->capacity) ) {
+      memfree(port);
+      port=NULL;
+    }
+  }
+
+  return port;
+}
+
+static void __shutdown_port(ipc_gen_port_t *port)
 {
   ipc_port_message_t *msg;
 
@@ -220,7 +242,6 @@ static void __shutdown_port( ipc_gen_port_t *port )
       event_raise(&msg->event);
     }
   }
-  port->msg_ops->free_data_storage(port);
 }
 
 int ipc_close_port(task_t *owner,ulong_t port)
@@ -537,9 +558,8 @@ ipc_gen_port_t * __ipc_get_port(task_t *task,ulong_t port)
 
 void __ipc_put_port(ipc_gen_port_t *p)
 {
-  UNREF_PORT(p);
-
-  if( !atomic_get(&p->use_count) ) {
+  if( atomic_dec_and_test(&p->use_count) ) {
+    p->port_ops->destructor(p);
     memfree(p);
   }
 }

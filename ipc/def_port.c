@@ -23,7 +23,7 @@ typedef struct __def_port_data_storage {
 } def_port_data_storage_t;
 
 static int def_init_data_storage(struct __ipc_gen_port *port,
-                                      task_t *owner,ulong_t queue_size)
+                                 task_t *owner,ulong_t queue_size)
 {
   def_port_data_storage_t *ds;
   int r;
@@ -37,7 +37,7 @@ static int def_init_data_storage(struct __ipc_gen_port *port,
     return -ENOMEM;
   }
 
-  ds->message_ptrs = alloc_pages_addr(1,AF_ZERO);
+  ds->message_ptrs=allocate_ipc_memory(queue_size*sizeof(ipc_port_message_t*));
   if( ds->message_ptrs == NULL ) {
     goto free_ds;
   }
@@ -53,7 +53,7 @@ static int def_init_data_storage(struct __ipc_gen_port *port,
   port->capacity=queue_size;
   return 0;
 free_messages:
-  free_pages_addr(ds->message_ptrs, 1);
+  free_ipc_memory(ds->message_ptrs,queue_size*sizeof(ipc_port_message_t*));
 free_ds:
   memfree(ds);
   return -ENOMEM;
@@ -90,10 +90,6 @@ static ipc_port_message_t *def_extract_message(ipc_gen_port_t *p,ulong_t flags)
     return msg;
   }
   return NULL;
-}
-
-static void def_free_data_storage(struct __ipc_gen_port *port)
-{
 }
 
 static int def_remove_message(struct __ipc_gen_port *port,
@@ -175,19 +171,18 @@ static ipc_port_message_t *def_lookup_message(struct __ipc_gen_port *port,
   return NULL;
 }
 
-static ipc_gen_port_t *def_clone(struct __ipc_gen_port *port)
-{
-  return NULL;
-}
-
 static void def_destructor(struct __ipc_gen_port *port)
 {
+  def_port_data_storage_t *ds=(def_port_data_storage_t *)port->data_storage;
+
+  free_ipc_memory(ds->message_ptrs,port->capacity*sizeof(ipc_port_message_t*));
+  linked_array_deinitialize(&ds->msg_array);
+  memfree(ds);
 }
 
 ipc_port_msg_ops_t def_port_msg_ops = {
   .init_data_storage=def_init_data_storage,
   .insert_message=def_insert_message,
-  .free_data_storage=def_free_data_storage,
   .extract_message=def_extract_message,
   .remove_message=def_remove_message,
   .remove_head_message=def_remove_head_message,
@@ -196,6 +191,5 @@ ipc_port_msg_ops_t def_port_msg_ops = {
 };
 
 ipc_port_ops_t def_port_ops = {
-  .clone=def_clone,
   .destructor=def_destructor,
 };

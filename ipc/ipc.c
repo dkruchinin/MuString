@@ -118,7 +118,7 @@ void close_ipc_resources(task_ipc_t *ipc)
   }
 }
 
-void *__allocate_memory(long size)
+void *allocate_ipc_memory(long size)
 {
   void *addr;
 
@@ -138,7 +138,7 @@ void *__allocate_memory(long size)
   return addr;
 }
 
-void __free_memory(void *addr,int size)
+void free_ipc_memory(void *addr,int size)
 {
   if( size <= SLAB_MAXSIZE ) {
     memfree(addr);
@@ -188,6 +188,7 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
   long i,r=-ENOMEM;
   task_ipc_t *tipc;
 
+  kprintf("* Replicating IPC.\n");
   if( ipc ) {
     if( setup_task_ipc(rcpt) ) {
       return -ENOMEM;
@@ -196,7 +197,7 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
     tipc=rcpt->ipc;
     LOCK_IPC(ipc);
     if( ipc->ports ) { /* Duplicate all open ports. */
-      tipc->ports=__allocate_memory(ipc->allocated_ports*sizeof(ipc_gen_port_t *));
+      tipc->ports=allocate_ipc_memory(ipc->allocated_ports*sizeof(ipc_gen_port_t *));
       if( !tipc->ports ) {
         goto out_unlock;
       }
@@ -205,7 +206,7 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
 
       for(i=0;i<=ipc->max_port_num;i++) {
         if( ipc->ports[i] ) {
-          tipc->ports[i]=ipc->ports[i]->port_ops->clone(ipc->ports[i]);
+          tipc->ports[i]=ipc_clone_port(ipc->ports[i]);
           if( !tipc->ports[i] ) {
             UNLOCK_IPC(ipc);
             goto put_ports;
@@ -215,7 +216,7 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
     }
 
     if( ipc->channels ) { /* Duplicate all open channels. */
-      tipc->channels=__allocate_memory(ipc->allocated_channels*sizeof(ipc_channel_t *));
+      tipc->channels=allocate_ipc_memory(ipc->allocated_channels*sizeof(ipc_channel_t *));
       if( !tipc->channels ) {
         UNLOCK_IPC(ipc);
         goto put_ports;
@@ -245,14 +246,14 @@ put_channels:
       memfree(tipc->channels[i]);
     }
   }
-  __free_memory(tipc->channels,tipc->allocated_channels*sizeof(ipc_channel_t *));
+  free_ipc_memory(tipc->channels,tipc->allocated_channels*sizeof(ipc_channel_t *));
 put_ports:
   for(i=0;i<tipc->allocated_ports;i++) {
     if( tipc->ports[i] ) {
       tipc->ports[i]->port_ops->destructor(tipc->ports[i]);
     }
   }
-  __free_memory(tipc->ports,tipc->allocated_ports*sizeof(ipc_gen_port_t *));
+  free_ipc_memory(tipc->ports,tipc->allocated_ports*sizeof(ipc_gen_port_t *));
   release_task_ipc(tipc);
   return -ENOMEM;
 }
