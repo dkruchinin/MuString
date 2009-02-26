@@ -266,10 +266,6 @@ static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags,
       dup_task_ipc_resources(task->ipc);
     }
   } else {
-    if( attrs ) {
-      kprintf("[R]: %d\n",attrs->exec_attrs.flags & __EXEC_ATTRS_COPY_IPC);
-    }
-
     if( attrs && attrs->exec_attrs.flags & __EXEC_ATTRS_COPY_IPC ) {
       r=replicate_ipc(parent->ipc,task);
     } else {

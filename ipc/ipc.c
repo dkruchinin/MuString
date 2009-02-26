@@ -188,7 +188,6 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
   long i,r=-ENOMEM;
   task_ipc_t *tipc;
 
-  kprintf("* Replicating IPC.\n");
   if( ipc ) {
     if( setup_task_ipc(rcpt) ) {
       return -ENOMEM;
