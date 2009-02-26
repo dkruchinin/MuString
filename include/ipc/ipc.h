@@ -22,8 +22,12 @@
  */
 #define MAX_IOVECS  8
 
-/* TODO: [mt] Changes IPC_DEFAULT_PORTS to a smoller value !!! */
-#define IPC_DEFAULT_PORTS  512
+/* Initial number of ports to allocate when the first port is created. */
+#define IPC_DEFAULT_PORTS  32
+
+/* Initial number of channels to allocate when the first channel is opened. */
+#define IPC_DEFAULT_CHANNELS  32
+
 #define IPC_DEFAULT_PORT_MESSAGES  512
 #define IPC_DEFAULT_USER_BUFFERS  512
 #define IPC_DEFAULT_USER_CHANNELS  512
@@ -47,6 +51,7 @@ typedef struct __task_ipc {
   ulong_t num_ports,max_port_num;
   ipc_gen_port_t **ports;
   linked_array_t ports_array;
+  int allocated_ports;
   spinlock_t port_lock;
 
   /* Channels-related stuff. */
@@ -54,6 +59,7 @@ typedef struct __task_ipc {
   ulong_t num_channels,max_channel_num;
   ipc_channel_t **channels;
   spinlock_t channel_lock;
+  int allocated_channels;
 
   /* Userspace buffers-related stuff. */
   spinlock_t buffer_lock;
@@ -86,7 +92,7 @@ void release_task_ipc_priv(task_ipc_priv_t *priv);
 #define REF_IPC_ITEM(c)  atomic_inc(&c->use_count)
 #define UNREF_IPC_ITEM(c)  atomic_dec(&c->use_count)
 
-void free_task_ipc(task_ipc_t *ipc);
+void release_task_ipc(task_ipc_t *ipc);
 void close_ipc_resources(task_ipc_t *ipc);
 void dup_task_ipc_resources(task_ipc_t *ipc);
 
@@ -106,12 +112,6 @@ static inline task_ipc_t *get_task_ipc(task_t *t)
   return ipc;
 }
 
-static inline void release_task_ipc(task_ipc_t *ipc)
-{
-  atomic_dec(&ipc->use_count);
-  if( !atomic_get(&ipc->use_count) ) {
-    free_task_ipc(ipc);
-  }
-}
+long replicate_ipc(task_ipc_t *source,task_t *rcpt);
 
 #endif

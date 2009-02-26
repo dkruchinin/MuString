@@ -142,7 +142,6 @@ static ipc_port_message_t *prio_extract_message(ipc_gen_port_t *p,ulong_t flags)
     ipc_port_message_t *msg=container_of(list_node_first(&ds->prio_head),
                                          ipc_port_message_t,l);
     if (ds->message_ptrs[msg->id] == NULL)
-        kprintf("WTF?\n");
     __remove_message(msg);
     p->avail_messages--;
     return msg;
@@ -252,6 +251,15 @@ static ipc_port_message_t *prio_lookup_message(struct __ipc_gen_port *port,
   return NULL;
 }
 
+static ipc_gen_port_t *prio_clone(struct __ipc_gen_port *port)
+{
+  return NULL;
+}
+
+static void prio_destructor(ipc_gen_port_t *port)
+{
+}
+
 ipc_port_msg_ops_t prio_port_msg_ops = {
   .init_data_storage=prio_init_data_storage,
   .insert_message=prio_insert_message,
@@ -261,4 +269,9 @@ ipc_port_msg_ops_t prio_port_msg_ops = {
   .remove_head_message=prio_remove_head_message,
   .dequeue_message=prio_dequeue_message,
   .lookup_message=prio_lookup_message,
+};
+
+ipc_port_ops_t prio_port_ops = {
+  .clone=prio_clone,
+  .destructor=prio_destructor,
 };

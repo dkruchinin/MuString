@@ -1962,5 +1962,5 @@ testcase_t ipc_testcase={
   .initialize=__ipc_tests_initialize,
   .deinitialize=__ipc_tests_deinitialize,
   .run=__ipc_tests_run,
-  .autodeploy_threads=true;
+  .autodeploy_threads=true,
 };

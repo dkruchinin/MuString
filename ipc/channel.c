@@ -75,7 +75,6 @@ void ipc_unref_channel(ipc_channel_t *channel,ulong_t c)
   IPC_UNLOCK_CHANNELS(channel->ipc);
 
   if( shutdown ) {
-//    kprintf( "* Shutting down channel: %d\n",channel->id );
     __shutdown_channel(channel);
   }
 }
@@ -123,7 +122,7 @@ int __check_port_flags( ipc_gen_port_t *port,ulong_t flags)
 }
 
 int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
-                          ulong_t flags)
+                     ulong_t flags)
 {
   task_ipc_t *ipc=get_task_ipc(owner);
   int r;
@@ -133,11 +132,11 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
 
   if( !ipc ) {
     return -EINVAL;
-  }  
+  }
 
   LOCK_IPC(ipc);
   if(ipc->num_channels >= owner->limits->limits[LIMIT_IPC_MAX_CHANNELS]) {
-    r = -EMFILE;
+    r=-EMFILE;
     goto out_unlock;
   }
 
@@ -151,14 +150,15 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
     r=-EINVAL;
     goto out_unlock;
   }
-  
+
   /* First channel opened ? */
   if( !ipc->channels ) {
     r = -ENOMEM;
-    ipc->channels=alloc_pages_addr(1,AF_ZERO);
+    ipc->channels=memalloc(sizeof(ipc_channel_t *)*IPC_DEFAULT_CHANNELS);
     if( !ipc->channels ) {
       goto out_put_port;
     }
+    ipc->allocated_channels=IPC_DEFAULT_CHANNELS;
 
     if( !linked_array_is_initialized( &ipc->channel_array ) ) {
       if( linked_array_initialize(&ipc->channel_array,
@@ -167,6 +167,9 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
         goto out_put_port;
       }
     }
+  } else if( ipc->num_channels >= ipc->allocated_channels ) {
+    r=-EMFILE;
+    goto out_unlock;
   }
 
   id = linked_array_alloc_item(&ipc->channel_array);
@@ -205,6 +208,11 @@ out_unlock:
   return r;
 }
 
+ipc_channel_t *ipc_clone_channel(ipc_channel_t *target)
+{
+  return NULL;
+}
+
 int ipc_channel_control(task_t *caller,int channel,ulong_t cmd,ulong_t arg) {
   ipc_channel_t *c=ipc_get_channel(caller,channel);
   int r;
@@ -222,7 +230,6 @@ int ipc_channel_control(task_t *caller,int channel,ulong_t cmd,ulong_t arg) {
       break;
   }
 
-put_channel:
   ipc_put_channel(c);
   return r;
 }

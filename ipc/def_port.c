@@ -175,6 +175,15 @@ static ipc_port_message_t *def_lookup_message(struct __ipc_gen_port *port,
   return NULL;
 }
 
+static ipc_gen_port_t *def_clone(struct __ipc_gen_port *port)
+{
+  return NULL;
+}
+
+static void def_destructor(struct __ipc_gen_port *port)
+{
+}
+
 ipc_port_msg_ops_t def_port_msg_ops = {
   .init_data_storage=def_init_data_storage,
   .insert_message=def_insert_message,
@@ -184,4 +193,9 @@ ipc_port_msg_ops_t def_port_msg_ops = {
   .remove_head_message=def_remove_head_message,
   .dequeue_message=def_dequeue_message,
   .lookup_message=def_lookup_message,
+};
+
+ipc_port_ops_t def_port_ops = {
+  .clone=def_clone,
+  .destructor=def_destructor,
 };

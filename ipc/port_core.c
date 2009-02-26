@@ -183,8 +183,10 @@ static int __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
 
   if( flags & IPC_PRIORITIZED_ACCESS ) {
     p->msg_ops=&prio_port_msg_ops;
+    p->port_ops=&prio_port_ops;
   } else {
     p->msg_ops=&def_port_msg_ops;
+    p->port_ops=&def_port_ops;
   }
 
   p->flags=(flags & IPC_PORT_DIRECT_FLAGS);
@@ -305,10 +307,11 @@ int __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
   /* First port created ? */
   if( !ipc->ports ) {
     r = -ENOMEM;
-    ipc->ports = alloc_pages_addr(1,AF_ZERO);
+    ipc->ports=memalloc(sizeof(ipc_gen_port_t *)*IPC_DEFAULT_PORTS);
     if( !ipc->ports ) {
       goto out_unlock;
     }
+    ipc->allocated_ports=IPC_DEFAULT_PORTS;
 
     if( !linked_array_is_initialized( &ipc->ports_array ) ) {
       if( linked_array_initialize(&ipc->ports_array,
@@ -317,6 +320,9 @@ int __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
         goto out_unlock;
       }
     }
+  } else if( ipc->num_ports >= ipc->allocated_ports ) {
+    r=-EMFILE;
+    goto out_unlock;
   }
 
   id = linked_array_alloc_item(&ipc->ports_array);

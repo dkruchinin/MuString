@@ -250,7 +250,8 @@ static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
   return task;
 }
 
-static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
+static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags,
+                            task_creation_attrs_t *attrs)
 {
   int r;
 
@@ -264,11 +265,14 @@ static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags)
       get_task_ipc(parent);
       dup_task_ipc_resources(task->ipc);
     }
-    return r;
   } else {
-    task->ipc=NULL;
-    return setup_task_ipc(task);
+    if( attrs && attrs->exec_attrs.flags & __EXEC_ATTRS_COPY_IPC ) {
+      r=replicate_ipc(parent->ipc,task);
+    } else {
+      r=setup_task_ipc(task);
+    }
   }
+  return r;
 }
 
 static int __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags,
@@ -363,7 +367,7 @@ static int initialize_task_mm(task_t *orig, task_t *target,
 }
 
 int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t,
-                         task_creation_attrs_t *attrs)
+                    task_creation_attrs_t *attrs)
 {
   task_t *task;
   int r = -ENOMEM;
@@ -426,7 +430,7 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
     task->limits = limits;
   }
 
-  r=__setup_task_ipc(task,parent,flags);
+  r=__setup_task_ipc(task,parent,flags,attrs);
   if( r ) {
     goto free_limits;
   }

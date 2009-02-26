@@ -65,6 +65,11 @@ typedef struct __ipc_port_msg_ops {
   ipc_port_message_t *(*remove_head_message)(struct __ipc_gen_port *port);
 } ipc_port_msg_ops_t;
 
+typedef struct __ipc_port_ops {
+  struct __ipc_gen_port *(*clone)(struct __ipc_gen_port *port);
+  void (*destructor)(struct __ipc_gen_port *port);
+} ipc_port_ops_t;
+
 typedef struct __ipc_gen_port {
   ulong_t flags;
   spinlock_t lock;
@@ -72,6 +77,7 @@ typedef struct __ipc_gen_port {
   ulong_t avail_messages,total_messages,capacity;
   wqueue_t waitqueue;
   ipc_port_msg_ops_t *msg_ops;
+  ipc_port_ops_t *port_ops;
   void *data_storage;
   list_head_t channels;  
 } ipc_gen_port_t;
@@ -94,6 +100,8 @@ int ipc_close_port(task_t *owner,ulong_t port);
 
 extern ipc_port_msg_ops_t def_port_msg_ops;
 extern ipc_port_msg_ops_t prio_port_msg_ops;
+extern ipc_port_ops_t def_port_ops;
+extern ipc_port_ops_t prio_port_ops;
 /****************************************************************************/
 poll_event_t ipc_port_check_events(ipc_gen_port_t *port,wqueue_task_t *w,
                                    poll_event_t evmask);

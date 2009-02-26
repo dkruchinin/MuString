@@ -120,6 +120,8 @@ typedef struct __slab {
   slab_state_t state;   /**< Slab state */
 } slab_t;
 
+#define SLAB_MAXSIZE  1024  /**< mMximum size of object for slab allocation */
+
 /**
  * The following flags controls memory cache behaviour
  * @see memcache_t

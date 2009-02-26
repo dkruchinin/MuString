@@ -38,7 +38,7 @@ int ipc_channel_control(task_t *caller,int channel,ulong_t cmd,
 #define ipc_put_channel(c)  ipc_unref_channel(c,1)
 
 static inline int ipc_get_channel_port(ipc_channel_t *c,
-                                            ipc_gen_port_t **outport) {
+                                       ipc_gen_port_t **outport) {
   ipc_gen_port_t *p;
   int r;
   
@@ -60,6 +60,8 @@ static inline int ipc_get_channel_port(ipc_channel_t *c,
   *outport=p;
   return r;
 }
+
+ipc_channel_t *ipc_clone_channel(ipc_channel_t *target);
 
 #define IPC_CHANNEL_DIRECT_OP_FLAGS  1
 #define IPC_CHANNEL_DIRECT_OP_MASK  ((1<<(IPC_CHANNEL_DIRECT_OP_FLAGS))-1)
