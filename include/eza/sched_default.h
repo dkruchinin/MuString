@@ -160,6 +160,11 @@ static inline task_t *__get_most_prioritized_task(eza_sched_cpudata_t *sched_dat
 
 #define __LOCK_CPU_SCHED_DATA(d)  bound_spinlock_lock_cpu(&(d)->__lock,cpu_id())
 #define __UNLOCK_CPU_SCHED_DATA(d)  bound_spinlock_unlock(&(d)->__lock)
+#define __UNLOCK_CPU_SCHED_DATA_INT(d,is) do {  \
+    __UNLOCK_CPU_SCHED_DATA((d));               \
+    interrupts_restore((is));                   \
+    cond_reschedule();                          \
+  } while(0)
 
 #define try_to_lock_sched_data(sd)              \
   bound_spinlock_trylock_cpu(&(sd)->__lock,cpu_id())
