@@ -83,7 +83,7 @@ static int generic_populate_pages(memobj_t *memobj, vmrange_t *vmr, uintptr_t ad
   
   ASSERT(memobj->id == NULL_MEMOBJ_ID);
   ASSERT(vmr->parent_vmm != NULL);
-  pages = alloc_pages(npages, AF_ZERO);
+  pages = alloc_pages(npages, AF_ZERO | AF_USER);
   if (!pages)
     return -ENOMEM;
 
