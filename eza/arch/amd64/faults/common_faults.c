@@ -99,7 +99,7 @@ void nmi_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
   for(;;);
 }
 
-void doublefault_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+void doublefault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 { 
   char b[128];
 
@@ -109,7 +109,6 @@ void doublefault_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
   sprintf(b, "[!!] Fatal double fault exception! RIP=%p. CPU stopped.\n",
           stack_frame->rip);
   get_fault_console()->display_string(b);
-  for(;;);
 }
 
 void reserved_exception_fault_handler_impl(interrupt_stack_frame_t *stack_frame)

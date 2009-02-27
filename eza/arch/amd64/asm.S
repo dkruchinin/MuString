@@ -401,7 +401,6 @@ doublefault_fault_handler:
    * and invoke handler directly.
    */
   cli
-  jmp doublefault_fault_handler
   movq %rsp,%rdi
   call doublefault_fault_handler_impl
 1:

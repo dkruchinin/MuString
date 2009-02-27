@@ -68,8 +68,6 @@ static inline void arch_activate_task(task_t *to)
   /* We should setup TSS to reflect new task's kernel stack. */
   tss->rsp0 = to->kernel_stack.high_address;
   /* Reload TSS. */
-  kprintf("**[%d:%d] Reloading TSS. IST1=%p\n",
-          cpu_id(),to->pid,tss->ist1);
   load_tss(to->cpu,tss,tss_limit);
 
   /* Setup LDT for new task. */
