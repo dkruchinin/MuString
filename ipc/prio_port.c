@@ -141,7 +141,6 @@ static ipc_port_message_t *prio_extract_message(ipc_gen_port_t *p,ulong_t flags)
   if( !list_is_empty(&ds->prio_head) ) {
     ipc_port_message_t *msg=container_of(list_node_first(&ds->prio_head),
                                          ipc_port_message_t,l);
-    if (ds->message_ptrs[msg->id] == NULL)
     __remove_message(msg);
     p->avail_messages--;
     return msg;
@@ -154,7 +153,9 @@ static int prio_remove_message(struct __ipc_gen_port *port,
 {
   prio_port_data_storage_t *ds=(prio_port_data_storage_t*)port->data_storage;
 
-  ASSERT(list_node_is_bound(&msg->messages_list));
+  if( !list_node_is_bound(&msg->messages_list) ) {
+    return -EINVAL;
+  }
 
   if( msg->id < port->capacity ) {
     if( list_node_is_bound(&msg->l) ) {
@@ -209,7 +210,9 @@ static void prio_dequeue_message(struct __ipc_gen_port *port,
 {
   prio_port_data_storage_t *ds=(prio_port_data_storage_t*)port->data_storage;
 
-  ASSERT(list_node_is_bound(&msg->messages_list));
+  if( !list_node_is_bound(&msg->messages_list) ) {
+    return;
+  }
 
   if( msg->id < port->capacity ) {
     if( list_node_is_bound(&msg->l) ) {

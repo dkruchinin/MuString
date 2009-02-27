@@ -1721,7 +1721,6 @@ static void __prioritized_port_test(void *ctx)
 
   tf->printf(SERVER_THREAD"All priority-related tests finished.\n");
   sys_close_port(__prio_port);
-  sleep(HZ);
 }
 
 static void __server_thread(void *ctx)

@@ -142,15 +142,14 @@ static void def_dequeue_message(struct __ipc_gen_port *port,
 {
   def_port_data_storage_t *ds=(def_port_data_storage_t *)port->data_storage;
 
-  ASSERT(list_node_is_bound(&msg->messages_list));
-
-  if( list_node_is_bound(&msg->l) ) {
-    port->avail_messages--;
-    list_del(&msg->l);
+  if( list_node_is_bound(&msg->messages_list) ) {
+    if( list_node_is_bound(&msg->l) ) {
+      port->avail_messages--;
+      list_del(&msg->l);
+    }
+    list_del(&msg->messages_list);
+    ds->message_ptrs[msg->id]=__MSG_WAS_DEQUEUED;
   }
-
-  list_del(&msg->messages_list);
-  ds->message_ptrs[msg->id]=__MSG_WAS_DEQUEUED;
 }
 
 static ipc_port_message_t *def_lookup_message(struct __ipc_gen_port *port,
@@ -175,8 +174,8 @@ static void def_destructor(struct __ipc_gen_port *port)
 {
   def_port_data_storage_t *ds=(def_port_data_storage_t *)port->data_storage;
 
-  free_ipc_memory(ds->message_ptrs,port->capacity*sizeof(ipc_port_message_t*));
   linked_array_deinitialize(&ds->msg_array);
+  free_ipc_memory(ds->message_ptrs,port->capacity*sizeof(ipc_port_message_t*));
   memfree(ds);
 }
 

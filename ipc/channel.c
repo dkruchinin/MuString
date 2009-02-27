@@ -210,7 +210,12 @@ out_unlock:
 
 ipc_channel_t *ipc_clone_channel(ipc_channel_t *target)
 {
-  return __allocate_channel(target->server_port,target->flags);
+  ipc_channel_t *c=__allocate_channel(target->server_port,target->flags);
+
+  if( c ) {
+    REF_PORT(c->server_port);
+  }
+  return c;
 }
 
 int ipc_channel_control(task_t *caller,int channel,ulong_t cmd,ulong_t arg) {
