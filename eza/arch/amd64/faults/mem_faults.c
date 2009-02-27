@@ -36,6 +36,7 @@
 #include <eza/kconsole.h>
 #include <eza/arch/context.h>
 #include <eza/signal.h>
+#include <eza/arch/cpu.h>
 
 #define PFAULT_NP(errcode) (((errcode) & 0x1) == 0)
 #define PFAULT_PROTECT(errcode) ((errcode) & 0x01)
@@ -126,7 +127,26 @@ kernel_fault:
   for(;;);
 }
 
+static int __foo(void)
+{
+  char b[512];
+  __foo();
+}
+
+extern idescriptor_t idt[256];
+
 void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
+{
+  idescriptor_t *p=&idt[DF_FAULT];
+  
+  kprintf("<FAULT>: %p\n",get_cpu_tss(cpu_id())->ist1);
+  kprintf("<FAULT>: %d\n",p->ist);
+  //__foo();
+  *(char *)0x0=10;
+  for(;;);
+}
+
+void page_fault_fault_handler_impl1(interrupt_stack_frame_err_t *stack_frame)
 {
   uint64_t invalid_address,fixup;
   regs_t *regs=(regs_t *)(((uintptr_t)stack_frame)-sizeof(struct __gpr_regs)-8);

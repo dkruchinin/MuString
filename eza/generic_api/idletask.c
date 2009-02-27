@@ -42,15 +42,28 @@ task_t *idle_tasks[CONFIG_NRCPUS];
 
 ulong_t syscall_counter = 0;
 
+static int __foo(void)
+{
+  char b[512];
+  __foo();
+}
+
 void idle_loop(void)
 {
   long idle_cycles=0;
+  int b;
 
 #ifdef CONFIG_TEST
   if( !cpu_id() ) {
     run_tests();
   }
 #endif
+
+  if( !cpu_id() ) {
+    *(char *)0x0=10;
+    //for(;;);
+    //__foo();
+  }
 
   for( ;; ) {
     idle_cycles++;
