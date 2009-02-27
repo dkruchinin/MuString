@@ -60,7 +60,7 @@ static int prio_init_data_storage(struct __ipc_gen_port *port,
     return -ENOMEM;
   }
 
-  ds->message_ptrs = alloc_pages_addr(1,AF_ZERO);
+  ds->message_ptrs=allocate_ipc_memory(queue_size*sizeof(ipc_port_message_t*));
   if( ds->message_ptrs == NULL ) {
     goto free_ds;
   }
@@ -78,7 +78,7 @@ static int prio_init_data_storage(struct __ipc_gen_port *port,
   port->capacity=queue_size;
   return 0;
 free_messages:
-  free_pages_addr(ds->message_ptrs, 1);
+  free_ipc_memory(ds->message_ptrs,queue_size*sizeof(ipc_port_message_t*));  
 free_ds:
   memfree(ds);
   return -ENOMEM;
@@ -141,8 +141,6 @@ static ipc_port_message_t *prio_extract_message(ipc_gen_port_t *p,ulong_t flags)
   if( !list_is_empty(&ds->prio_head) ) {
     ipc_port_message_t *msg=container_of(list_node_first(&ds->prio_head),
                                          ipc_port_message_t,l);
-    if (ds->message_ptrs[msg->id] == NULL)
-        kprintf("WTF?\n");
     __remove_message(msg);
     p->avail_messages--;
     return msg;
@@ -150,16 +148,14 @@ static ipc_port_message_t *prio_extract_message(ipc_gen_port_t *p,ulong_t flags)
   return NULL;
 }
 
-static void prio_free_data_storage(struct __ipc_gen_port *port)
-{
-}
-
 static int prio_remove_message(struct __ipc_gen_port *port,
                                     ipc_port_message_t *msg)
 {
   prio_port_data_storage_t *ds=(prio_port_data_storage_t*)port->data_storage;
 
-  ASSERT(list_node_is_bound(&msg->messages_list));
+  if( !list_node_is_bound(&msg->messages_list) ) {
+    return -EINVAL;
+  }
 
   if( msg->id < port->capacity ) {
     if( list_node_is_bound(&msg->l) ) {
@@ -214,7 +210,9 @@ static void prio_dequeue_message(struct __ipc_gen_port *port,
 {
   prio_port_data_storage_t *ds=(prio_port_data_storage_t*)port->data_storage;
 
-  ASSERT(list_node_is_bound(&msg->messages_list));
+  if( !list_node_is_bound(&msg->messages_list) ) {
+    return;
+  }
 
   if( msg->id < port->capacity ) {
     if( list_node_is_bound(&msg->l) ) {
@@ -252,13 +250,25 @@ static ipc_port_message_t *prio_lookup_message(struct __ipc_gen_port *port,
   return NULL;
 }
 
+static void prio_destructor(ipc_gen_port_t *port)
+{
+  prio_port_data_storage_t *ds=(prio_port_data_storage_t*)port->data_storage;
+
+  free_ipc_memory(ds->message_ptrs,port->capacity*sizeof(ipc_port_message_t*));
+  linked_array_deinitialize(&ds->msg_array);
+  memfree(ds);
+}
+
 ipc_port_msg_ops_t prio_port_msg_ops = {
   .init_data_storage=prio_init_data_storage,
   .insert_message=prio_insert_message,
-  .free_data_storage=prio_free_data_storage,
   .extract_message=prio_extract_message,
   .remove_message=prio_remove_message,
   .remove_head_message=prio_remove_head_message,
   .dequeue_message=prio_dequeue_message,
   .lookup_message=prio_lookup_message,
+};
+
+ipc_port_ops_t prio_port_ops = {
+  .destructor=prio_destructor,
 };

@@ -23,7 +23,7 @@ typedef struct __def_port_data_storage {
 } def_port_data_storage_t;
 
 static int def_init_data_storage(struct __ipc_gen_port *port,
-                                      task_t *owner,ulong_t queue_size)
+                                 task_t *owner,ulong_t queue_size)
 {
   def_port_data_storage_t *ds;
   int r;
@@ -37,7 +37,7 @@ static int def_init_data_storage(struct __ipc_gen_port *port,
     return -ENOMEM;
   }
 
-  ds->message_ptrs = alloc_pages_addr(1,AF_ZERO);
+  ds->message_ptrs=allocate_ipc_memory(queue_size*sizeof(ipc_port_message_t*));
   if( ds->message_ptrs == NULL ) {
     goto free_ds;
   }
@@ -53,7 +53,7 @@ static int def_init_data_storage(struct __ipc_gen_port *port,
   port->capacity=queue_size;
   return 0;
 free_messages:
-  free_pages_addr(ds->message_ptrs, 1);
+  free_ipc_memory(ds->message_ptrs,queue_size*sizeof(ipc_port_message_t*));
 free_ds:
   memfree(ds);
   return -ENOMEM;
@@ -90,10 +90,6 @@ static ipc_port_message_t *def_extract_message(ipc_gen_port_t *p,ulong_t flags)
     return msg;
   }
   return NULL;
-}
-
-static void def_free_data_storage(struct __ipc_gen_port *port)
-{
 }
 
 static int def_remove_message(struct __ipc_gen_port *port,
@@ -146,15 +142,14 @@ static void def_dequeue_message(struct __ipc_gen_port *port,
 {
   def_port_data_storage_t *ds=(def_port_data_storage_t *)port->data_storage;
 
-  ASSERT(list_node_is_bound(&msg->messages_list));
-
-  if( list_node_is_bound(&msg->l) ) {
-    port->avail_messages--;
-    list_del(&msg->l);
+  if( list_node_is_bound(&msg->messages_list) ) {
+    if( list_node_is_bound(&msg->l) ) {
+      port->avail_messages--;
+      list_del(&msg->l);
+    }
+    list_del(&msg->messages_list);
+    ds->message_ptrs[msg->id]=__MSG_WAS_DEQUEUED;
   }
-
-  list_del(&msg->messages_list);
-  ds->message_ptrs[msg->id]=__MSG_WAS_DEQUEUED;
 }
 
 static ipc_port_message_t *def_lookup_message(struct __ipc_gen_port *port,
@@ -175,13 +170,25 @@ static ipc_port_message_t *def_lookup_message(struct __ipc_gen_port *port,
   return NULL;
 }
 
+static void def_destructor(struct __ipc_gen_port *port)
+{
+  def_port_data_storage_t *ds=(def_port_data_storage_t *)port->data_storage;
+
+  linked_array_deinitialize(&ds->msg_array);
+  free_ipc_memory(ds->message_ptrs,port->capacity*sizeof(ipc_port_message_t*));
+  memfree(ds);
+}
+
 ipc_port_msg_ops_t def_port_msg_ops = {
   .init_data_storage=def_init_data_storage,
   .insert_message=def_insert_message,
-  .free_data_storage=def_free_data_storage,
   .extract_message=def_extract_message,
   .remove_message=def_remove_message,
   .remove_head_message=def_remove_head_message,
   .dequeue_message=def_dequeue_message,
   .lookup_message=def_lookup_message,
+};
+
+ipc_port_ops_t def_port_ops = {
+  .destructor=def_destructor,
 };

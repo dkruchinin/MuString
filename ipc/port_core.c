@@ -55,6 +55,15 @@
   }                                                                     \
   IPC_UNLOCK_PORT_W((_p));
 
+#define IPC_INIT_PORT(p)                        \
+  memset((p),0,sizeof(ipc_gen_port_t));         \
+  atomic_set(&(p)->use_count,1);                \
+  atomic_set(&(p)->own_count,1);                \
+  spinlock_initialize(&(p)->lock);              \
+  (p)->avail_messages=(p)->total_messages=0;    \
+  list_init_head(&(p)->channels);               \
+  waitqueue_initialize(&(p)->waitqueue)
+
 static ipc_port_message_t *__ipc_create_nb_port_message(task_t *owner,uintptr_t snd_buf,
                                                  ulong_t snd_size,bool copy_data)
 {
@@ -179,28 +188,23 @@ static int __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
     return -ENOMEM;
   }
 
-  memset(p,0,sizeof(*p));
+  IPC_INIT_PORT(p);
 
   if( flags & IPC_PRIORITIZED_ACCESS ) {
     p->msg_ops=&prio_port_msg_ops;
+    p->port_ops=&prio_port_ops;
   } else {
     p->msg_ops=&def_port_msg_ops;
+    p->port_ops=&def_port_ops;
   }
 
   p->flags=(flags & IPC_PORT_DIRECT_FLAGS);
-
   r=p->msg_ops->init_data_storage(p,owner,queue_size);
   if( r ) {
     goto out_free_port;
   }
 
-  atomic_set(&p->use_count,1);
-  atomic_set(&p->own_count,1);
-  spinlock_initialize(&p->lock);
-  p->avail_messages = p->total_messages=0;
   p->flags = flags;
-  list_init_head(&p->channels);
-  waitqueue_initialize(&p->waitqueue);
   *out_port = p;
   return 0;
 out_free_port:
@@ -208,7 +212,27 @@ out_free_port:
   return r;
 }
 
-static void __shutdown_port( ipc_gen_port_t *port )
+ipc_gen_port_t *ipc_clone_port(ipc_gen_port_t *p)
+{
+  ipc_gen_port_t *port=memalloc(sizeof(*p));
+
+  if( port ) {
+    IPC_INIT_PORT(port);
+    port->flags=p->flags;
+    port->msg_ops=p->msg_ops;
+    port->port_ops=p->port_ops;
+
+    if( port->msg_ops->init_data_storage(port,current_task(),
+                                         p->capacity) ) {
+      memfree(port);
+      port=NULL;
+    }
+  }
+
+  return port;
+}
+
+static void __shutdown_port(ipc_gen_port_t *port)
 {
   ipc_port_message_t *msg;
 
@@ -218,7 +242,6 @@ static void __shutdown_port( ipc_gen_port_t *port )
       event_raise(&msg->event);
     }
   }
-  port->msg_ops->free_data_storage(port);
 }
 
 int ipc_close_port(task_t *owner,ulong_t port)
@@ -305,10 +328,11 @@ int __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
   /* First port created ? */
   if( !ipc->ports ) {
     r = -ENOMEM;
-    ipc->ports = alloc_pages_addr(1,AF_ZERO);
+    ipc->ports=memalloc(sizeof(ipc_gen_port_t *)*IPC_DEFAULT_PORTS);
     if( !ipc->ports ) {
       goto out_unlock;
     }
+    ipc->allocated_ports=IPC_DEFAULT_PORTS;
 
     if( !linked_array_is_initialized( &ipc->ports_array ) ) {
       if( linked_array_initialize(&ipc->ports_array,
@@ -317,6 +341,9 @@ int __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
         goto out_unlock;
       }
     }
+  } else if( ipc->num_ports >= ipc->allocated_ports ) {
+    r=-EMFILE;
+    goto out_unlock;
   }
 
   id = linked_array_alloc_item(&ipc->ports_array);
@@ -531,9 +558,8 @@ ipc_gen_port_t * __ipc_get_port(task_t *task,ulong_t port)
 
 void __ipc_put_port(ipc_gen_port_t *p)
 {
-  UNREF_PORT(p);
-
-  if( !atomic_get(&p->use_count) ) {
+  if( atomic_dec_and_test(&p->use_count) ) {
+    p->port_ops->destructor(p);
     memfree(p);
   }
 }

@@ -1721,7 +1721,6 @@ static void __prioritized_port_test(void *ctx)
 
   tf->printf(SERVER_THREAD"All priority-related tests finished.\n");
   sys_close_port(__prio_port);
-  sleep(HZ);
 }
 
 static void __server_thread(void *ctx)
@@ -1962,5 +1961,5 @@ testcase_t ipc_testcase={
   .initialize=__ipc_tests_initialize,
   .deinitialize=__ipc_tests_deinitialize,
   .run=__ipc_tests_run,
-  .autodeploy_threads=true;
+  .autodeploy_threads=true,
 };

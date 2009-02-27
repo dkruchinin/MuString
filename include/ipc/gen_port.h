@@ -58,12 +58,15 @@ typedef struct __ipc_port_msg_ops {
                              ipc_port_message_t *msg);
   ipc_port_message_t *(*extract_message)(struct __ipc_gen_port *port,
                                          ulong_t flags);
-  void (*free_data_storage)(struct __ipc_gen_port *port);
   void (*dequeue_message)(struct __ipc_gen_port *port,ipc_port_message_t *msg);
   int (*remove_message)(struct __ipc_gen_port *port,
                                     ipc_port_message_t *msg);
   ipc_port_message_t *(*remove_head_message)(struct __ipc_gen_port *port);
 } ipc_port_msg_ops_t;
+
+typedef struct __ipc_port_ops {
+  void (*destructor)(struct __ipc_gen_port *port);
+} ipc_port_ops_t;
 
 typedef struct __ipc_gen_port {
   ulong_t flags;
@@ -72,6 +75,7 @@ typedef struct __ipc_gen_port {
   ulong_t avail_messages,total_messages,capacity;
   wqueue_t waitqueue;
   ipc_port_msg_ops_t *msg_ops;
+  ipc_port_ops_t *port_ops;
   void *data_storage;
   list_head_t channels;  
 } ipc_gen_port_t;
@@ -94,6 +98,8 @@ int ipc_close_port(task_t *owner,ulong_t port);
 
 extern ipc_port_msg_ops_t def_port_msg_ops;
 extern ipc_port_msg_ops_t prio_port_msg_ops;
+extern ipc_port_ops_t def_port_ops;
+extern ipc_port_ops_t prio_port_ops;
 /****************************************************************************/
 poll_event_t ipc_port_check_events(ipc_gen_port_t *port,wqueue_task_t *w,
                                    poll_event_t evmask);
@@ -115,6 +121,7 @@ int ipc_port_send_iov(struct __ipc_gen_port *port,
                       ulong_t reply_len);
 long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
                        iovec_t *rcv_iov,ulong_t numvecs,ulong_t offset);
+ipc_gen_port_t *ipc_clone_port(ipc_gen_port_t *p);
 
 #define IPC_NB_MESSAGE_MAXLEN  (512-sizeof(ipc_port_message_t))
 

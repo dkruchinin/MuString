@@ -437,13 +437,9 @@ static inline void __reschedule_task(task_t *t)
 
 int __big_verbose=0;
 
-static void __show_calltrace(ulong_t *rsp)
-{
-}
-
 static int __change_task_state(task_t *task,task_state_t new_state,
-                                    deferred_sched_handler_t h,void *data,
-                                    ulong_t mask)
+                               deferred_sched_handler_t h,void *data,
+                               ulong_t mask)
 {
   long is;
   int r=0;
@@ -551,41 +547,28 @@ static int def_setup_idle_task(task_t *task)
   return 0;
 }
 
-static void __shuffle_remote_task(task_t *target)
+/* NOTE: Scheduler data must be locked upon entering this function ! */
+static void __shuffle_task(task_t *target,eza_sched_cpudata_t *sched_data, uint32_t new_prio)
 {
-}
+  task_t *mpt;
 
-/* NOTE: target task must be locked ! */
-static void __shuffle_task(task_t *target,eza_sched_taskdata_t *sdata, uint32_t new_prio)
-{
-  /* In case task is sleeping we must be able to change its priority as well */
+  /* In case task is sleeping we must be able to change its priority quitely. */
   if (target->state != TASK_STATE_RUNNING && target->state != TASK_STATE_RUNNABLE) {
     target->priority = target->static_priority = new_prio;
     return;
   }
-  if( target->cpu == cpu_id() ) {
-    eza_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
-    task_t *mpt;
 
-    
-    LOCK_CPU_SCHED_DATA(sched_data);    
+  __remove_task_from_array(sched_data->active_array,target);
+  target->priority = target->static_priority = new_prio;
+  __add_task_to_array(sched_data->active_array,target);
 
-    __remove_task_from_array(sched_data->active_array,target);
-    target->priority = target->static_priority = new_prio;
-    __add_task_to_array(sched_data->active_array,target);
-
-    mpt=__get_most_prioritized_task(sched_data);
-    if( mpt != NULL ) {
-      if( mpt->priority < current_task()->priority ) {
-        sched_set_current_need_resched();
-      }
-    } else {
-      panic( "__shuffle_task(): No runnable tasks after adding a task !" );
+  mpt=__get_most_prioritized_task(sched_data);
+  if( mpt != NULL ) {
+    if( mpt->priority < sched_data->running_task->priority ) {
+      __reschedule_task(target);
     }
-
-    UNLOCK_CPU_SCHED_DATA(sched_data);
   } else {
-    __shuffle_remote_task(target);
+    panic( "__shuffle_task(): No runnable tasks after adding a task !" );
   }
 }
 
@@ -593,63 +576,53 @@ static void __shuffle_task(task_t *target,eza_sched_taskdata_t *sdata, uint32_t 
  */
 static int def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
 {
-  eza_sched_taskdata_t *sdata = EZA_TASK_SCHED_DATA(target);
+  long is;
   bool trusted=trusted_task(target);
-  ulong_t is;
+  int r=-EINVAL;
+  eza_sched_taskdata_t *sdata = EZA_TASK_SCHED_DATA(target);
+  eza_sched_cpudata_t *sched_data=get_task_sched_data_locked(target,&is,true);
 
   switch(cmd) {
     /* Getters. */
     case SYS_SCHED_CTL_GET_MAX_TIMISLICE:
-      return sdata->max_timeslice;
+      r=sdata->max_timeslice;
+      break;
     case SYS_SCHED_CTL_GET_POLICY:
-      return sdata->sched_discipline;
-
-    /* Setters.  */
+      r=sdata->sched_discipline;
+      break;
+    /* Setters. */
     case SYS_SCHED_CTL_SET_POLICY:
       if( arg == SCHED_RR || arg == SCHED_FIFO || arg == SCHED_OTHER ) {
-        interrupts_save_and_disable(is);
-
-        LOCK_TASK_STRUCT(target);
         sdata->sched_discipline = arg;
-        UNLOCK_TASK_STRUCT(target);
-
-        interrupts_restore(is);
-        return 0;
+        r=0;
       }
-      return -EINVAL;
+      break;
     case SYS_SCHED_CTL_SET_PRIORITY:
-      if(arg <= EZA_SCHED_PRIORITY_MAX) {
-          if( trusted ) {
-            interrupts_disable();
-            LOCK_TASK_STRUCT(target);
-            ASSERT(!(target->flags & TF_USPC_BLOCKED));
-            __shuffle_task(target,sdata, arg);
-            
-            UNLOCK_TASK_STRUCT(target);
-            interrupts_enable();
-            cond_reschedule();
-            return 0;
+      if( arg <= EZA_SCHED_PRIORITY_MAX ) {
+        if( trusted ) {
+          if( !(target->flags & TF_USPC_BLOCKED) ) {
+            __shuffle_task(target,sched_data,arg);
+            r=0;
+          } else {
+            r=-EBUSY;
+          }
         } else {
-          return -EPERM;
+          r=-EPERM;
         }
       }
-      return -EINVAL;
+      break;
     case SYS_SCHED_CTL_SET_MAX_TIMISLICE:
-      if(arg > 0 && arg < HZ) {
-        interrupts_save_and_disable(is);
-
-        LOCK_TASK_STRUCT(target);
-        sdata->max_timeslice = arg;
-        UNLOCK_TASK_STRUCT(target);
-
-        interrupts_restore(is);
-        return 0;
+      if( arg > 0 && arg < HZ ) {
+        sdata->max_timeslice=arg;
+        r=0;
       }
-      return -EINVAL;
+      break;
     case SYS_SCHED_CTL_SET_STATE:
+      __UNLOCK_CPU_SCHED_DATA_INT(sched_data,is);
       return def_change_task_state(target,arg,__ALL_TASK_STATE_MASK);
   }
-  return -EINVAL;
+  __UNLOCK_CPU_SCHED_DATA_INT(sched_data,is);
+  return r;
 }
 
 static int def_change_task_state_deferred(task_t *task, task_state_t state,

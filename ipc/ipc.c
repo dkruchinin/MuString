@@ -7,6 +7,7 @@
 #include <mm/slab.h>
 #include <eza/errno.h>
 #include <eza/kconsole.h>
+#include <mlibc/string.h>
 
 static memcache_t *ipc_priv_data_cache;
 
@@ -20,42 +21,14 @@ void initialize_ipc(void)
   }
 }
 
-static task_ipc_t *__allocate_task_ipc(void)
+void release_task_ipc(task_ipc_t *ipc)
 {
-  page_frame_t *p = alloc_page(AF_ZERO);
-  if( p!= NULL ) {
-    task_ipc_t *ipc = (task_ipc_t*)pframe_to_virt(p);
-
-    memset(ipc,0,sizeof(task_ipc_t));
-
-    atomic_set(&ipc->use_count,1);
-
-    spinlock_initialize(&ipc->port_lock);
-    mutex_initialize(&ipc->mutex);
-    spinlock_initialize(&ipc->buffer_lock);
-
-    return ipc;
+  if( atomic_dec_and_test(&ipc->use_count) ) {
+    memfree(ipc);
   }
-  return NULL;
-  /* TODO: [mt] allocate task_ipc_t via slabs ! */
 }
 
-void free_task_ipc(task_ipc_t *ipc)
-{
-  /* TODO:[mt] free IPC structure properly ! */
-}
-
-static task_ipc_priv_t *__allocate_ipc_private_data(void)
-{
-  task_ipc_priv_t *priv=alloc_from_memcache(ipc_priv_data_cache);
-
-  if( priv ) {
-    memset(&priv->pstats,0,sizeof(ipc_pstats_t));
-  }
-  return priv;
-}
-
-static void __free_ipc_private_data(task_ipc_priv_t *p)
+void release_task_ipc_priv(task_ipc_priv_t *p)
 {
   if( p->cached_data.cached_page1 ) {
     free_pages_addr(p->cached_data.cached_page1, 1);
@@ -75,15 +48,22 @@ int setup_task_ipc(task_t *task)
   if( task->ipc ) {
     ipc=NULL;
   } else {
-    ipc=__allocate_task_ipc();
+    ipc=memalloc(sizeof(*ipc));
     if( !ipc ) {
       return -ENOMEM;
     }
+    memset(ipc,0,sizeof(task_ipc_t));
+    atomic_set(&ipc->use_count,1);
+    spinlock_initialize(&ipc->port_lock);
+    mutex_initialize(&ipc->mutex);
+    spinlock_initialize(&ipc->buffer_lock);
   }
 
-  ipc_priv=__allocate_ipc_private_data();
+  ipc_priv=alloc_from_memcache(ipc_priv_data_cache);
   if( !ipc_priv ) {
     goto free_ipc;
+  } else {
+    memset(&ipc_priv->pstats,0,sizeof(ipc_pstats_t));
   }
 
   p1=alloc_pages_addr(1, AF_ZERO);
@@ -107,10 +87,10 @@ int setup_task_ipc(task_t *task)
 free_page1:
   free_pages_addr(p1, 1);
 free_ipc_priv:
-  __free_ipc_private_data(ipc_priv);
+  release_task_ipc_priv(ipc_priv);
 free_ipc:
   if(ipc) {
-    free_task_ipc(ipc);
+    release_task_ipc(ipc);
   }
   return -ENOMEM;
 }
@@ -136,8 +116,40 @@ void close_ipc_resources(task_ipc_t *ipc)
       }
     }
   }
+}
 
-  /* Close all buffers */
+void *allocate_ipc_memory(long size)
+{
+  void *addr;
+
+  if( size <= SLAB_MAXSIZE ) {
+    addr=memalloc(size);
+    if( addr ) {
+      memset(addr,0,size);
+    }
+  } else {
+    int pages=size >> PAGE_WIDTH;
+
+    if( size & PAGE_MASK ) {
+      pages++;
+    }
+    addr=alloc_pages_addr(pages,AF_ZERO);
+  }
+  return addr;
+}
+
+void free_ipc_memory(void *addr,int size)
+{
+  if( size <= SLAB_MAXSIZE ) {
+    memfree(addr);
+  } else {
+    int pages=size >> PAGE_WIDTH;
+
+    if( size & PAGE_MASK ) {
+      pages++;
+    }
+    free_pages_addr(addr,pages);
+  }
 }
 
 void dup_task_ipc_resources(task_ipc_t *ipc)
@@ -171,7 +183,76 @@ void dup_task_ipc_resources(task_ipc_t *ipc)
   UNLOCK_IPC(ipc);
 }
 
-void release_task_ipc_priv(task_ipc_priv_t *priv)
+long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
 {
-  __free_ipc_private_data(priv);
+  long i,r=-ENOMEM;
+  task_ipc_t *tipc;
+
+  if( ipc ) {
+    if( setup_task_ipc(rcpt) ) {
+      return -ENOMEM;
+    }
+
+    tipc=rcpt->ipc;
+    LOCK_IPC(ipc);
+    if( ipc->ports ) { /* Duplicate all open ports. */
+      tipc->ports=allocate_ipc_memory(ipc->allocated_ports*sizeof(ipc_gen_port_t *));
+      if( !tipc->ports ) {
+        goto out_unlock;
+      }
+      tipc->allocated_ports=ipc->allocated_ports;
+      tipc->max_port_num=ipc->max_port_num;
+
+      for(i=0;i<=ipc->max_port_num;i++) {
+        if( ipc->ports[i] ) {
+          tipc->ports[i]=ipc_clone_port(ipc->ports[i]);
+          if( !tipc->ports[i] ) {
+            UNLOCK_IPC(ipc);
+            goto put_ports;
+          }
+        }
+      }
+    }
+
+    if( ipc->channels ) { /* Duplicate all open channels. */
+      tipc->channels=allocate_ipc_memory(ipc->allocated_channels*sizeof(ipc_channel_t *));
+      if( !tipc->channels ) {
+        UNLOCK_IPC(ipc);
+        goto put_ports;
+      }
+      tipc->allocated_channels=ipc->allocated_channels;
+      tipc->max_channel_num=ipc->max_channel_num;
+
+      for(i=0;i<=ipc->max_channel_num;i++) {
+        if( ipc->channels[i] ) {
+          tipc->channels[i]=ipc_clone_channel(ipc->channels[i]);
+          if( !tipc->channels[i] ) {
+            UNLOCK_IPC(ipc);
+            goto put_channels;
+          }
+        }
+      }
+    }
+  }
+
+  r=0;
+out_unlock:
+  UNLOCK_IPC(ipc);
+  return r;
+put_channels:
+  for(i=0;i<tipc->allocated_channels;i++) {
+    if( tipc->channels[i] ) {
+      memfree(tipc->channels[i]);
+    }
+  }
+  free_ipc_memory(tipc->channels,tipc->allocated_channels*sizeof(ipc_channel_t *));
+put_ports:
+  for(i=0;i<tipc->allocated_ports;i++) {
+    if( tipc->ports[i] ) {
+      tipc->ports[i]->port_ops->destructor(tipc->ports[i]);
+    }
+  }
+  free_ipc_memory(tipc->ports,tipc->allocated_ports*sizeof(ipc_gen_port_t *));
+  release_task_ipc(tipc);
+  return -ENOMEM;
 }

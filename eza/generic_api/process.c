@@ -214,14 +214,22 @@ int create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
 
 static bool __check_task_exec_attrs(exec_attrs_t *ea)
 {
-  bool valid;
+  bool valid=true;
 
-  valid=valid_user_address(ea->stack);
-  valid *=valid_user_address(ea->entrypoint);
-  valid *=valid_user_address(ea->destructor);
+  if( ea->stack ) {
+    valid=valid_user_address(ea->stack);
+  }
 
-  if( ea->per_task_data ) {
-    valid *=valid_user_address(ea->per_task_data);
+  if( valid && ea->entrypoint ) {
+    valid=valid_user_address(ea->entrypoint);
+  }
+
+  if( valid && ea->destructor ) {
+    valid=valid_user_address(ea->destructor);
+  }
+
+  if( valid && ea->per_task_data ) {
+    valid=valid_user_address(ea->per_task_data);
   }
 
   return valid;

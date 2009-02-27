@@ -267,9 +267,13 @@ typedef struct __task_attrs {
   uint8_t run_immediately;
 } task_attrs_t;
 
+#define __EXEC_ATTRS_COW       0x1
+#define __EXEC_ATTRS_COPY_IPC  0x2
+
 typedef struct __exec_attrs {
   uintptr_t stack,entrypoint,destructor,arg1,arg2;
   uintptr_t per_task_data;
+  long flags;
 } exec_attrs_t;
 
 typedef struct __task_creation_attrs {
