@@ -35,6 +35,13 @@
 #include <eza/interrupt.h>
 #include <eza/arch/mm.h>
 
+/* We allocate a double-fault stack statically to have it ready
+ * as quick, as possible.
+ */
+#define IST_STACK_SIZE  PAGE_SIZE
+#define NUM_IST_STACKS  1
+static char __ist_stacks[NUM_IST_STACKS][IST_STACK_SIZE] __page_aligned__;
+
 /* Global per-CPU GDT entries. */
 descriptor_t gdt[CONFIG_NRCPUS][GDT_ITEMS]={
   GDT_CPU_ENTRIES
@@ -49,8 +56,15 @@ idescriptor_t idt[IDT_ITEMS];
 /* init tss - just fill it nil */
 void tss_init(tss_t *tp)
 {
+  int i;
+  uint64_t *ist;
+
   memset((void*)tp,'\0',sizeof(tss_t));
   tp->iomap_base=TSS_BASIC_SIZE;
+
+  for(ist=&tp->ist1,i=0;i<NUM_IST_STACKS;i++,ist++) {
+    *ist=(uint64_t)&__ist_stacks[i]+IST_STACK_SIZE;
+  }
   return;
 }
 
@@ -148,7 +162,6 @@ int install_trap_gate( uint32_t slot, uintptr_t handler,
     p->present = 1;
     p->dpl = dpl;
     p->ist = ist;
-
     return 0;
   }
   return -EINVAL;
@@ -196,6 +209,7 @@ void arch_pmm_init(cpu_id_t cpu)
   tss_dsc->type=AR_TSS;
   tss_dsc->dpl=PL_KERNEL;
   gdt_tss_setbase(&gdt[cpu][TSS_DES],(uintptr_t)tss_p);
+  kprintf("CPU %d: tss->ist1=%p\n",cpu,tss_p->ist1);
 
   gdtr.limit = sizeof(gdt) / CONFIG_NRCPUS;
   gdtr.base = (uint64_t)&gdt[cpu][0];

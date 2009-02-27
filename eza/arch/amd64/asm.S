@@ -397,12 +397,14 @@ device_not_available_fault_handler:
   jmp common_exception_path
 
 doublefault_fault_handler:
-1:
-        jmp 1b
+  /* Double-fault is a one-way journey, so don't enable interrupts
+   * and invoke handler directly.
+   */
   cli
-  push %rax
-  movl $0x8,%eax
-  jmp common_exception_path
+  movq %rsp,%rdi
+  call doublefault_fault_handler_impl
+1:
+  jmp 1b /* Spin forever. */
 
 invalid_tss_fault_handler:
 	cli

@@ -41,29 +41,30 @@ struct __fixup_record_t {
 struct __fault_descr_t {
   uint32_t slot;
   void (*handler)();
+  uint8_t ist;
 };
 
 /* The list of exceptions we want to install. */
 static struct __fault_descr_t faults_to_install[] = {
-  {DE_FAULT, divide_by_zero_fault_handler},
-  {DB_FAULT, debug_fault_handler},
-  {NMI_FAULT, nmi_fault_handler},
-  {BP_FAULT, breakpoint_fault_handler},
-  {OF_FAULT, overflow_fault_handler},
-  {BR_FAULT, bound_range_fault_handler},
-  {UD_FAULT, invalid_opcode_fault_handler},
-  {NM_FAULT, device_not_available_fault_handler},
-  {DF_FAULT, doublefault_fault_handler},
-  {TS_FAULT, invalid_tss_fault_handler},
-  {NP_FAULT, segment_not_present_fault_handler},
-  {SS_FAULT, stack_fault_handler},
-  {GP_FAULT, general_protection_fault_handler},
-  {PF_FAULT, page_fault_fault_handler},
-  {MF_FAULT, fpu_fault_handler},
-  {AC_FAULT, alignment_check_fault_handler},
-  {MC_FAULT, machine_check_fault_handler},
-  {XF_FAULT, simd_fault_handler},
-  {SX_FAULT, security_exception_fault_handler},
+  {DE_FAULT, divide_by_zero_fault_handler,0},
+  {DB_FAULT, debug_fault_handler,0},
+  {NMI_FAULT, nmi_fault_handler,0},
+  {BP_FAULT, breakpoint_fault_handler,0},
+  {OF_FAULT, overflow_fault_handler,0},
+  {BR_FAULT, bound_range_fault_handler,0},
+  {UD_FAULT, invalid_opcode_fault_handler,0},
+  {NM_FAULT, device_not_available_fault_handler,0},
+  {DF_FAULT, doublefault_fault_handler,1},
+  {TS_FAULT, invalid_tss_fault_handler,0},
+  {NP_FAULT, segment_not_present_fault_handler,0},
+  {SS_FAULT, stack_fault_handler,0},
+  {GP_FAULT, general_protection_fault_handler,0},
+  {PF_FAULT, page_fault_fault_handler,0},
+  {MF_FAULT, fpu_fault_handler,0},
+  {AC_FAULT, alignment_check_fault_handler,0},
+  {MC_FAULT, machine_check_fault_handler,0},
+  {XF_FAULT, simd_fault_handler,0},
+  {SX_FAULT, security_exception_fault_handler,0},
   {0,0},
 };
 
@@ -83,15 +84,17 @@ uint64_t fixup_fault_address(uint64_t fault_address)
 
 void install_fault_handlers(void)
 {
-  int idx, r;
+  int r;
+  struct __fault_descr_t *fd=faults_to_install;
 
   /* Install all known fault handlers. */
-  for( idx = 0; faults_to_install[idx].handler != NULL; idx++ ) {
-    r = install_trap_gate(faults_to_install[idx].slot,
-                          (uintptr_t)faults_to_install[idx].handler,PROT_RING_0,0);
-    if(r != 0) {
-      panic( "Can't install fault handler #%d", faults_to_install[idx].slot );
+  while( fd->handler ) {
+    r = install_trap_gate(fd->slot,(uintptr_t)fd->handler,
+                          PROT_RING_0,fd->ist);
+    if( r != 0 ) {
+      panic( "Can't install fault handler #%d", fd->slot );
     }
+    fd++;
   }
 }
 

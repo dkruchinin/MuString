@@ -81,9 +81,7 @@ static void main_routine_stage1(void)
    */
   setup_time();
   interrupts_enable();
-
   initialize_swks();
-  //swks_add_version_info();
 
   /* OK, we can proceed. */
   spawn_percpu_threads();
@@ -106,9 +104,9 @@ void main_routine(void) /* this function called from boostrap assembler code */
   arch_cpu_init(0);
   install_fault_handlers();
   initialize_irqs();
+
   kcons->init();
   kcons->enable();
-  //print_kernel_version_info();
   kprintf("[MB] Modules: %d\n",init.c);
 
   mm_initialize();
@@ -117,7 +115,7 @@ void main_routine(void) /* this function called from boostrap assembler code */
   initialize_scheduler();
 
   initialize_timer();
-
+  
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.
    */
@@ -132,8 +130,6 @@ void main_routine(void) /* this function called from boostrap assembler code */
 #ifdef CONFIG_SMP
 static void main_smpap_routine_stage1(cpu_id_t cpu)
 {
-  install_fault_handlers();
-
   arch_ap_specific_init();
 
   /* We're online. */
@@ -167,7 +163,7 @@ void main_smpap_routine(void)
    * contexts, etc.
    */
   arch_activate_idle_task(cpu);
-	cpu++;
+  cpu++;
 
   /* Continue CPU initialization in new context. */
   main_smpap_routine_stage1(cpu - 1);

@@ -32,6 +32,7 @@
 #include <eza/arch/fault.h>
 #include <eza/smp.h>
 #include <eza/kconsole.h>
+#include <eza/arch/cpu.h>
 
 void bound_range_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
@@ -99,10 +100,15 @@ void nmi_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 }
 
 void doublefault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
-{
-    kprintf( "  [!!] #Double fault exception raised ! RIP: %p\n",
-             stack_frame->rip);
-    for(;;);
+{ 
+  char b[128];
+
+  get_fault_console()->init();
+  PREPARE_DEBUG_CONSOLE();
+
+  sprintf(b, "[!!] Fatal double fault exception! RIP=%p. CPU stopped.\n",
+          stack_frame->rip);
+  get_fault_console()->display_string(b);
 }
 
 void reserved_exception_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
