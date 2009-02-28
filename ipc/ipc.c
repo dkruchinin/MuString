@@ -2,7 +2,7 @@
 #include <ipc/ipc.h>
 #include <mm/pfalloc.h>
 #include <mm/page.h>
-#include <ds/linked_array.h>
+#include <ds/idx_allocator.h>
 #include <mlibc/string.h>
 #include <mm/slab.h>
 #include <eza/errno.h>
@@ -24,6 +24,8 @@ void initialize_ipc(void)
 void release_task_ipc(task_ipc_t *ipc)
 {
   if( atomic_dec_and_test(&ipc->use_count) ) {
+    idx_allocator_destroy(&ipc->ports_array);
+    idx_allocator_destroy(&ipc->channel_array);   
     memfree(ipc);
   }
 }
@@ -31,10 +33,10 @@ void release_task_ipc(task_ipc_t *ipc)
 void release_task_ipc_priv(task_ipc_priv_t *p)
 {
   if( p->cached_data.cached_page1 ) {
-    free_pages_addr(p->cached_data.cached_page1, 1);
+    free_pages_addr(p->cached_data.cached_page1,IPC_PERTASK_PAGES);
   }
   if( p->cached_data.cached_page2 ) {
-    free_pages_addr(p->cached_data.cached_page2, 1);
+    free_pages_addr(p->cached_data.cached_page2,IPC_PERTASK_PAGES);
   }
   memfree(p);
 }
@@ -55,8 +57,13 @@ int setup_task_ipc(task_t *task)
     memset(ipc,0,sizeof(task_ipc_t));
     atomic_set(&ipc->use_count,1);
     spinlock_initialize(&ipc->port_lock);
+    spinlock_initialize(&ipc->channel_lock);
     mutex_initialize(&ipc->mutex);
-    spinlock_initialize(&ipc->buffer_lock);
+
+    if( idx_allocator_init(&ipc->ports_array,IPC_DEFAULT_PORTS) ||
+        idx_allocator_init(&ipc->channel_array,IPC_DEFAULT_CHANNELS) ) {
+      goto free_ipc;
+    }
   }
 
   ipc_priv=alloc_from_memcache(ipc_priv_data_cache);
@@ -66,12 +73,12 @@ int setup_task_ipc(task_t *task)
     memset(&ipc_priv->pstats,0,sizeof(ipc_pstats_t));
   }
 
-  p1=alloc_pages_addr(1, AF_ZERO);
+  p1=alloc_pages_addr(IPC_PERTASK_PAGES, AF_ZERO);
   if( !p1 ) {
     goto free_ipc_priv;
   }
 
-  p2=alloc_pages_addr(1, AF_ZERO);
+  p2=alloc_pages_addr(IPC_PERTASK_PAGES, AF_ZERO);
   if( !p2 ) {
     goto free_page1;
   }
@@ -85,10 +92,16 @@ int setup_task_ipc(task_t *task)
   task->ipc_priv=ipc_priv;
   return 0;
 free_page1:
-  free_pages_addr(p1, 1);
+  free_pages_addr(p1, IPC_PERTASK_PAGES);
 free_ipc_priv:
   release_task_ipc_priv(ipc_priv);
 free_ipc:
+  if( idx_allocator_initialized(&ipc->ports_array) ) {
+    idx_allocator_destroy(&ipc->ports_array);
+  }
+  if( idx_allocator_initialized(&ipc->channel_array) ) {
+    idx_allocator_destroy(&ipc->channel_array);
+  }
   if(ipc) {
     release_task_ipc(ipc);
   }
@@ -126,10 +139,6 @@ void *allocate_ipc_memory(long size)
     addr=memalloc(size);
     if( addr ) {
       memset(addr,0,size);
-    } else {
-      kprintf("memalloc(%d) failed ! %p\n",
-              size,addr);
-      for(;;);
     }
   } else {
     int pages=size >> PAGE_WIDTH;

@@ -29,7 +29,7 @@
 #include <eza/task.h>
 #include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
-#include <ds/linked_array.h>
+#include <ds/idx_allocator.h>
 #include <ds/list.h>
 #include <eza/waitqueue.h>
 #include <eza/event.h>
@@ -71,7 +71,7 @@ typedef struct __ipc_port_message_t {
 typedef struct __ipc_port_t {
   ulong_t flags;
   spinlock_t lock;
-  linked_array_t msg_array;
+  idx_allocator_t msg_array;
   atomic_t use_count;
   ulong_t queue_size,avail_messages;
   list_head_t messages;

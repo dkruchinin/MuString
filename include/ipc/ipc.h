@@ -5,7 +5,7 @@
 #include <eza/mutex.h>
 #include <ipc/port.h>
 #include <eza/arch/atomic.h>
-#include <ds/linked_array.h>
+#include <ds/idx_allocator.h>
 #include <eza/spinlock.h>
 #include <eza/arch/arch_ipc.h>
 #include <ipc/buffer.h>
@@ -32,6 +32,9 @@
 #define IPC_MAX_PORT_MESSAGES  512
 #define IPC_DEFAULT_BUFFERS 512
 
+/**< Number of pages statically allocated for a task for its large messages. */
+#define IPC_PERTASK_PAGES 1
+
 typedef struct __ipc_cached_data {
   void *cached_page1, *cached_page2;
   ipc_port_message_t cached_port_message;
@@ -48,22 +51,16 @@ typedef struct __task_ipc {
   /* port-related stuff. */
   ulong_t num_ports,max_port_num;
   ipc_gen_port_t **ports;
-  linked_array_t ports_array;
+  idx_allocator_t ports_array;
   int allocated_ports;
   spinlock_t port_lock;
 
   /* Channels-related stuff. */
-  linked_array_t channel_array;
+  idx_allocator_t channel_array;
   ulong_t num_channels,max_channel_num;
   ipc_channel_t **channels;
   spinlock_t channel_lock;
   int allocated_channels;
-
-  /* Userspace buffers-related stuff. */
-  spinlock_t buffer_lock;
-  ipc_user_buffer_t **user_buffers;
-  linked_array_t buffers_array;
-  ulong_t num_buffers;
 } task_ipc_t;
 
 typedef struct __task_ipc_priv {

@@ -28,7 +28,7 @@
 #include <eza/mutex.h>
 #include <mm/pfalloc.h>
 #include <mm/page.h>
-#include <ds/linked_array.h>
+#include <ds/idx_allocator.h>
 #include <ipc/ipc.h>
 #include <ipc/buffer.h>
 #include <mlibc/stddef.h>
@@ -279,7 +279,7 @@ int ipc_close_port(task_t *owner,ulong_t port)
       /* For better efficiency wi will actually shutdown port after
        * unlocking the IPC lock.
        */
-      linked_array_free_item(&ipc->ports_array,port);
+      idx_free(&ipc->ports_array,port);
       ipc->num_ports--;
     }
     r=0;
@@ -330,30 +330,16 @@ int __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
     r = -ENOMEM;
     ipc->ports=allocate_ipc_memory(sizeof(ipc_gen_port_t *)*IPC_DEFAULT_PORTS);
     if( !ipc->ports ) {
-      kprintf("[!!!] Can't allocate %d bytes for 0x%X (P) !\n",
-              sizeof(ipc_gen_port_t*)*IPC_DEFAULT_PORTS,
-	      current_task()->tid);
       goto out_unlock;
     }
     ipc->allocated_ports=IPC_DEFAULT_PORTS;
-
-    if( !linked_array_is_initialized( &ipc->ports_array ) ) {
-      if( linked_array_initialize(&ipc->ports_array,
-                                  owner->limits->limits[LIMIT_IPC_MAX_PORTS]) != 0 ) {
-        /* TODO: [mt] allocate/free memory via slabs. */
-        goto out_unlock;
-      }
-    }
   } else if( ipc->num_ports >= ipc->allocated_ports ) {
-    kprintf("[!!] Can't allocate a port (%d of %d) for 0x%X !\n",
-             ipc->num_ports,ipc->allocated_ports,
-	     current_task()->tid);
     r=-EMFILE;
     goto out_unlock;
   }
 
-  id = linked_array_alloc_item(&ipc->ports_array);
-  if(id == INVALID_ITEM_IDX) {
+  id = idx_allocate(&ipc->ports_array);
+  if( id == IDX_INVAL ) {
     r = -EMFILE;
     goto out_unlock;
   }
@@ -379,7 +365,7 @@ int __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
   release_task_ipc(ipc);
   return r;
 free_id:
-  linked_array_free_item(&ipc->ports_array,id);
+  idx_free(&ipc->ports_array,id);
 out_unlock:
   UNLOCK_IPC(ipc);
   release_task_ipc(ipc);

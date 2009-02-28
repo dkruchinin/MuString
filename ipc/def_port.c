@@ -4,7 +4,7 @@
 #include <eza/errno.h>
 #include <mm/pfalloc.h>
 #include <mm/page.h>
-#include <ds/linked_array.h>
+#include <ds/idx_allocator.h>
 #include <ipc/ipc.h>
 #include <ipc/buffer.h>
 #include <mlibc/stddef.h>
@@ -19,7 +19,7 @@
 typedef struct __def_port_data_storage {
   list_head_t new_messages,all_messages;
   ipc_port_message_t **message_ptrs;
-  linked_array_t msg_array;
+  idx_allocator_t msg_array;
 } def_port_data_storage_t;
 
 static int def_init_data_storage(struct __ipc_gen_port *port,
@@ -42,7 +42,7 @@ static int def_init_data_storage(struct __ipc_gen_port *port,
     goto free_ds;
   }
 
-  r=linked_array_initialize(&ds->msg_array,queue_size);
+  r=idx_allocator_init(&ds->msg_array,queue_size);
   if( r ) {
     goto free_messages;
   }
@@ -63,9 +63,9 @@ static int def_insert_message(struct __ipc_gen_port *port,
                                    ipc_port_message_t *msg)
 {
   def_port_data_storage_t *ds=(def_port_data_storage_t *)port->data_storage;
-  ulong_t id=linked_array_alloc_item(&ds->msg_array);
+  long id=idx_allocate(&ds->msg_array);
 
-  if( id != INVALID_ITEM_IDX ) {
+  if( id != IDX_INVAL ) {
     msg->id=id;
     list_add2tail(&ds->new_messages,&msg->l);
     list_add2tail(&ds->all_messages,&msg->messages_list);
@@ -103,7 +103,7 @@ static int def_remove_message(struct __ipc_gen_port *port,
       list_del(&msg->l);
     }
     list_del(&msg->messages_list);
-    linked_array_free_item(&ds->msg_array,msg->id);
+    idx_free(&ds->msg_array,msg->id);
     ds->message_ptrs[msg->id]=NULL;
     port->total_messages--;
     return 0;
@@ -130,7 +130,7 @@ static ipc_port_message_t *def_remove_head_message(struct __ipc_gen_port *port)
 
     ds->message_ptrs[msg->id]=NULL;
     port->total_messages--;
-    linked_array_free_item(&ds->msg_array,msg->id);
+    idx_free(&ds->msg_array,msg->id);
     return msg;
   }
 
@@ -163,7 +163,7 @@ static ipc_port_message_t *def_lookup_message(struct __ipc_gen_port *port,
     if( msg == __MSG_WAS_DEQUEUED ) { /* Deffered cleanup. */
       ds->message_ptrs[msg_id]=NULL;
       port->total_messages--;
-      linked_array_free_item(&ds->msg_array,msg_id);
+      idx_free(&ds->msg_array,msg_id);
     }
     return msg;
   }
@@ -174,7 +174,7 @@ static void def_destructor(struct __ipc_gen_port *port)
 {
   def_port_data_storage_t *ds=(def_port_data_storage_t *)port->data_storage;
 
-  linked_array_deinitialize(&ds->msg_array);
+  idx_allocator_destroy(&ds->msg_array);
   free_ipc_memory(ds->message_ptrs,port->capacity*sizeof(ipc_port_message_t*));
   memfree(ds);
 }

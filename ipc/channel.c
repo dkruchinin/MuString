@@ -8,7 +8,7 @@
 #include <ipc/channel.h>
 #include <mm/slab.h>
 #include <ipc/ipc.h>
-#include <ds/linked_array.h>
+#include <ds/idx_allocator.h>
 #include <eza/errno.h>
 #include <mm/pfalloc.h>
 #include <eza/security.h>
@@ -67,7 +67,7 @@ void ipc_unref_channel(ipc_channel_t *channel,ulong_t c)
       shutdown=true;
       ipc->channels[channel->id]=NULL;
       ipc->num_channels--;
-      linked_array_free_item(&ipc->channel_array,channel->id);
+      idx_free(&ipc->channel_array,channel->id);
     } else {
       shutdown=false;
     }
@@ -151,35 +151,20 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
     goto out_unlock;
   }
 
-  /* First channel opened ? */
-  if( !ipc->channels ) {
+  if( !ipc->channels ) { /* First channel opened ? */
     r = -ENOMEM;
     ipc->channels=allocate_ipc_memory(sizeof(ipc_channel_t *)*IPC_DEFAULT_CHANNELS);
     if( !ipc->channels ) {
-      kprintf("[!!!] Can't allocate %d bytes for 0x%X (Ch) !\n",
-              sizeof(ipc_channel_t *)*IPC_DEFAULT_CHANNELS,
-	      current_task()->tid);
       goto out_put_port;
     }
     ipc->allocated_channels=IPC_DEFAULT_CHANNELS;
-
-    if( !linked_array_is_initialized( &ipc->channel_array ) ) {
-      if( linked_array_initialize(&ipc->channel_array,
-                                  owner->limits->limits[LIMIT_IPC_MAX_CHANNELS]) != 0 ) {
-        /* TODO: [mt] allocate/free memory via slabs. */
-        goto out_put_port;
-      }
-    }
   } else if( ipc->num_channels >= ipc->allocated_channels ) {
-    kprintf("[!!] Can't allocate a channel (%d of%d) for 0x%x !\n",
-            ipc->num_channels,ipc->allocated_channels,
-	    current_task()->tid);
     r=-EMFILE;
     goto out_unlock;
   }
 
-  id = linked_array_alloc_item(&ipc->channel_array);
-  if(id == INVALID_ITEM_IDX) {
+  id = idx_allocate(&ipc->channel_array);
+  if( id == IDX_INVAL ) {
     r=-EMFILE;
     goto out_put_port;
   }
@@ -205,7 +190,7 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
   r=id;
   goto out_unlock;
 free_id:
-  linked_array_free_item(&ipc->channel_array,id);
+  idx_free(&ipc->channel_array,id);
 out_put_port:
   __ipc_put_port(server_port);
 out_unlock:

@@ -28,7 +28,7 @@
 #include <eza/task.h>
 #include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
-#include <ds/linked_array.h>
+#include <ds/idx_allocator.h>
 #include <ds/list.h>
 #include <eza/waitqueue.h>
 #include <eza/event.h>

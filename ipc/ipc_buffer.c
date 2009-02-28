@@ -27,8 +27,6 @@
 #include <ipc/ipc.h>
 #include <mm/pfalloc.h>
 #include <mm/vmm.h>
-#include <ds/linked_array.h>
-#include <eza/limits.h>
 #include <eza/arch/page.h>
 #include <mm/page.h>
 #include <mlibc/stddef.h>
