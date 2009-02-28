@@ -328,8 +328,11 @@ int __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
   /* First port created ? */
   if( !ipc->ports ) {
     r = -ENOMEM;
-    ipc->ports=memalloc(sizeof(ipc_gen_port_t *)*IPC_DEFAULT_PORTS);
+    ipc->ports=allocate_ipc_memory(sizeof(ipc_gen_port_t *)*IPC_DEFAULT_PORTS);
     if( !ipc->ports ) {
+      kprintf("[!!!] Can't allocate %d bytes for 0x%X (P) !\n",
+              sizeof(ipc_gen_port_t*)*IPC_DEFAULT_PORTS,
+	      current_task()->tid);
       goto out_unlock;
     }
     ipc->allocated_ports=IPC_DEFAULT_PORTS;
@@ -342,6 +345,9 @@ int __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
       }
     }
   } else if( ipc->num_ports >= ipc->allocated_ports ) {
+    kprintf("[!!] Can't allocate a port (%d of %d) for 0x%X !\n",
+             ipc->num_ports,ipc->allocated_ports,
+	     current_task()->tid);
     r=-EMFILE;
     goto out_unlock;
   }

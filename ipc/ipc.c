@@ -122,10 +122,14 @@ void *allocate_ipc_memory(long size)
 {
   void *addr;
 
-  if( size <= SLAB_MAXSIZE ) {
+  if( size <= SLAB_OBJECT_MAX_SIZE ) {
     addr=memalloc(size);
     if( addr ) {
       memset(addr,0,size);
+    } else {
+      kprintf("memalloc(%d) failed ! %p\n",
+              size,addr);
+      for(;;);
     }
   } else {
     int pages=size >> PAGE_WIDTH;
@@ -140,7 +144,7 @@ void *allocate_ipc_memory(long size)
 
 void free_ipc_memory(void *addr,int size)
 {
-  if( size <= SLAB_MAXSIZE ) {
+  if( size <= SLAB_OBJECT_MAX_SIZE ) {
     memfree(addr);
   } else {
     int pages=size >> PAGE_WIDTH;
