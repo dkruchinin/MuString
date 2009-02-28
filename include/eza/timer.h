@@ -82,9 +82,14 @@ typedef struct __ktimer {
 typedef struct __major_timer_tick {
   spinlock_t lock;
   atomic_t use_counter;
+
+#ifdef CONFIG_TIMER_RBTREE
   struct rb_node rbnode;
+#endif
+
   ulong_t time_x;
   list_head_t minor_ticks[MINOR_TICK_GROUPS];
+  list_node_t list;
 } major_timer_tick_t;
 
 void init_timers(void);

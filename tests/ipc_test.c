@@ -23,7 +23,6 @@
 #include <mm/slab.h>
 #include <eza/errno.h>
 #include <eza/process.h>
-#include <ds/linked_array.h>
 #include <eza/usercopy.h>
 #include <config.h>
 

@@ -42,10 +42,10 @@
 /*spinlock*/
 static SPINLOCK_DEFINE(timer_lock);
 static SPINLOCK_DEFINE(sw_timers_lock);
-static SPINLOCK_DEFINE(sw_timers_list_lock);
 
 /*list of the timers*/
 static LIST_DEFINE(known_hw_timers);
+static LIST_DEFINE(expired_major_ticks);
 
 static struct rb_root timers_rb_root;
 static ulong_t __last_processed_timer_tick;
@@ -92,8 +92,9 @@ void process_timers(void)
   ulong_t mtickv=system_ticks-(system_ticks % CONFIG_TIMER_GRANULARITY);
 
   LOCK_SW_TIMERS_R(is);
-  n=timers_rb_root.rb_node;
 
+#ifdef CONFIG_TIMER_RBTREE
+  n=timers_rb_root.rb_node;
   while( n ) {
     mt=rb_entry(n,major_timer_tick_t,rbnode);
 
@@ -106,13 +107,16 @@ void process_timers(void)
       break;
     }
   }
-
+#else
+  #error Not implemented yet !
+#endif
   UNLOCK_SW_TIMERS_R(is);
 
   if( major_tick ) { /* Let's see if we have any timers for this major tick. */
     list_head_t *lh=&major_tick->minor_ticks[(system_ticks-mtickv)/MINOR_TICK_GROUP_SIZE];
     list_node_t *ln;
     timer_tick_t *tt;
+    bool expired=(system_ticks==major_tick->time_x+CONFIG_TIMER_GRANULARITY-1);
 
     LOCK_MAJOR_TIMER_TICK(major_tick,is);
     list_for_each(lh,ln) {
@@ -125,6 +129,14 @@ void process_timers(void)
         schedule_deffered_actions(&tt->actions);
         break;
       }
+    }
+
+    if( expired ) {
+      list_add2tail(&expired_major_ticks,&major_tick->list);
+
+#ifndef CONFIG_TIMER_RBTREE
+      #error Not implemented yet !
+#endif
     }
     UNLOCK_MAJOR_TIMER_TICK(major_tick,is);
   }
@@ -222,6 +234,7 @@ long add_timer(ktimer_t *t)
     goto out;
   }
 
+#ifdef CONFIG_TIMER_RBTREE
   n=timers_rb_root.rb_node;
   while( n ) {
     mt=rb_entry(n,major_timer_tick_t,rbnode);
@@ -235,6 +248,9 @@ long add_timer(ktimer_t *t)
       break;
     }
   }
+#else
+  #error Not implemented yet
+#endif
 
   /* No major tick for target time point, so we should create a new one.
    */
@@ -250,15 +266,16 @@ long add_timer(ktimer_t *t)
     atomic_set(&mt->use_counter,1);
     mt->time_x=mtickv;
     spinlock_initialize(&mt->lock);
+    list_init_node(&mt->list);
 
     for( i=0;i<MINOR_TICK_GROUPS;i++ ) {
       list_init_head(&mt->minor_ticks[i]);
     }
 
+#ifdef CONFIG_TIMER_RBTREE
     /* Now insert new tick into RB tree. */
     p=&timers_rb_root.rb_node;
     n=NULL;
-
     while( *p ) {
       n=*p;
       major_timer_tick_t *_mt=rb_entry(n,major_timer_tick_t,rbnode);
@@ -272,6 +289,9 @@ long add_timer(ktimer_t *t)
     rb_link_node(&mt->rbnode,n,p);
     rb_insert_color(&mt->rbnode,&timers_rb_root);
   }
+#else
+  #error Not implemented yet !
+#endif
   UNLOCK_SW_TIMERS(is);
 
   /* OK, our major tick was located so we can add our timer to it.
@@ -311,11 +331,35 @@ out_insert:
   r=0;
 out_unlock_tick:
   UNLOCK_MAJOR_TIMER_TICK(mt,is);
-  /* TODO: [mt] Cleanup major tick structure upon timer expiration. */
+fire_expired_timer:
+  if( r == -EAGAIN ) {
+    execute_deffered_action(&t->da);
+  }
+
+  /* Now check if we need to free any expired major ticks. */
+  i=0;
+  LOCK_SW_TIMERS(is);
+  if( !list_is_empty(&expired_major_ticks) ) {
+    i=1;
+    mt=container_of(list_node_first(&expired_major_ticks),
+                    major_timer_tick_t,list);
+    list_del(&mt->list);
+
+#ifdef CONFIG_TIMER_RBTREE  
+    rb_erase(&mt->rbnode,&timers_rb_root);
+#else
+    #error Not implemented yet !
+#endif
+  }
+  UNLOCK_SW_TIMERS(is);
+
+  if( i ) {
+    memfree(mt);
+  }
   return r;
 out:
   UNLOCK_SW_TIMERS(is);
-  return r;
+  goto fire_expired_timer;
 }
 
 static bool __timer_deffered_sched_handler(void *data)

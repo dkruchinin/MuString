@@ -21,6 +21,18 @@ config CORESERVERS_LAUNCH_DELAY
        range 500 3000
        default 500
 
+menu "Realtime timers"
+
+config TIMER_RBTREE
+       bool "RB-Tree based representation of active kernel timers"
+       default n
+       help
+       By default, kernel keeps track of all active timers in a form of sorted list
+       to eleminate rebalance cost. Such an approach is quite good if you are not
+       going to have lots of active timers. But when number of active timers rises,
+       cost of list traversing may affect realtime. In such a case, by turning this
+       option on you will gain serious search benefits.
+
 config TIMER_GRANULARITY
        int "Granularity of timer major tick"
        range 32 64 
@@ -41,6 +53,7 @@ config MAX_DEFERRED_USERSPACE_ACTIONS
        int "Maximum amount of deferred actions performed upon returning to userspace."
        range 1 32
        default "2"
+endmenu
 
 endmenu
 
