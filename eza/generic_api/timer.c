@@ -67,14 +67,13 @@ static ulong_t __last_processed_timer_tick;
 #define UNLOCK_SW_TIMERS_R(l) spinlock_unlock_irqrestore(&sw_timers_lock,l)
 
 #define get_major_tick(t) atomic_inc(&(t)->use_counter)
-#define put_major_tick(t) if( atomic_dec_and_test(&(t)->use_counter) ) { memfree(t); }
 
 #define GET_NEW_MAJOR_TICK(_pm,_cu,_mtickv) do {                \
     if( !list_is_empty(&cached_major_ticks) ) {                 \
       (_pm)=container_of(list_node_first(&cached_major_ticks),  \
                          major_timer_tick_t,list);              \
       list_del(&(_pm)->list);                                   \
-      (_pm)->time_x=(_mtickv);                                  \
+      MAJOR_TIMER_TICK_INIT((_pm),(_mtickv));                   \
       (_cu)=true;                                               \
       __num_cached_major_ticks--;                               \
     } else {                                                    \
@@ -202,12 +201,16 @@ void delete_timer(ktimer_t *timer)
 {
   long is;
   timer_tick_t *tt=&timer->minor_tick;
+  major_timer_tick_t *mtt;
 
   if( !tt->major_tick ) { /* Ignore clear timers. */
     return;
   }
 
-  LOCK_MAJOR_TIMER_TICK(tt->major_tick,is);
+  mtt=tt->major_tick;
+  LOCK_MAJOR_TIMER_TICK(mtt,is);
+  atomic_dec(&mtt->use_counter);
+
   if( tt->time_x > __last_processed_timer_tick ) {
     /* Timer hasn't triggered yet. So remove it only from timer list.
      */
@@ -240,7 +243,10 @@ void delete_timer(ktimer_t *timer)
      */
     deschedule_deffered_action(&timer->da);
   }
-  UNLOCK_MAJOR_TIMER_TICK(tt->major_tick,is);
+  UNLOCK_MAJOR_TIMER_TICK(mtt,is);
+
+  if( !atomic_get(&mtt->use_counter) ) {
+  }
 }
 
 long modify_timer(ktimer_t *timer,ulong_t time_x)
@@ -406,8 +412,6 @@ fire_expired_timer:
                     major_timer_tick_t,list);
     list_del(&mt->list);
     rb_erase(&mt->rbnode,&timers_rb_root);
-
-    MAJOR_TIMER_TICK_INIT(mt,0);
     list_add2tail(&cached_major_ticks,&mt->list);
     __num_cached_major_ticks++;
     cache_used=false;
