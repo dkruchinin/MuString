@@ -4,6 +4,7 @@
 #include <mm/page.h>
 #include <ipc/ipc.h>
 #include <eza/spinlock.h>
+#include <config.h>
 
 task_limits_t *allocate_task_limits(void)
 {
@@ -21,8 +22,7 @@ task_limits_t *allocate_task_limits(void)
 
 void set_default_task_limits(task_limits_t *l)
 {
-  l->limits[LIMIT_IPC_MAX_PORTS]=IPC_DEFAULT_PORTS;
+  l->limits[LIMIT_IPC_MAX_PORTS]=CONFIG_IPC_DEFAULT_PORTS;
   l->limits[LIMIT_IPC_MAX_PORT_MESSAGES]=IPC_DEFAULT_PORT_MESSAGES;
-  l->limits[LIMIT_IPC_MAX_USER_BUFFERS]=IPC_DEFAULT_BUFFERS;
-  l->limits[LIMIT_IPC_MAX_CHANNELS]=IPC_DEFAULT_CHANNELS;
+  l->limits[LIMIT_IPC_MAX_CHANNELS]=CONFIG_IPC_DEFAULT_CHANNELS;
 }

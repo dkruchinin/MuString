@@ -8,6 +8,7 @@
 #include <eza/errno.h>
 #include <eza/kconsole.h>
 #include <mlibc/string.h>
+#include <config.h>
 
 static memcache_t *ipc_priv_data_cache;
 
@@ -60,8 +61,8 @@ int setup_task_ipc(task_t *task)
     spinlock_initialize(&ipc->channel_lock);
     mutex_initialize(&ipc->mutex);
 
-    if( idx_allocator_init(&ipc->ports_array,IPC_DEFAULT_PORTS) ||
-        idx_allocator_init(&ipc->channel_array,IPC_DEFAULT_CHANNELS) ) {
+    if( idx_allocator_init(&ipc->ports_array,CONFIG_IPC_DEFAULT_PORTS) ||
+        idx_allocator_init(&ipc->channel_array,CONFIG_IPC_DEFAULT_CHANNELS) ) {
       goto free_ipc;
     }
   }

@@ -518,8 +518,6 @@ void schedule_user_deferred_action(task_t *target,gc_action_t *a,bool force)
 
 void process_sigitem_private(sigq_item_t *sigitem)
 {
-  bool expired;
-
   if( !sigitem->kern_priv ) {
     return;
   }
@@ -545,13 +543,9 @@ void process_sigitem_private(sigq_item_t *sigitem)
     /* Rearm this timer. */
     ptimer->overrun=overrun;
     TIMER_RESET_TIME(&ptimer->ktimer,next_tick);
-    expired=(add_timer(&ptimer->ktimer) == -EAGAIN);
+    add_timer(&ptimer->ktimer);
   }
   UNLOCK_POSIX_STUFF_W(stuff);
-
-  if( expired ) {
-    execute_deffered_action(&ptimer->ktimer.da);
-  }
 }
 
 long sys_sigwait(sigset_t *set,int *sig)

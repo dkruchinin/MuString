@@ -15,18 +15,10 @@
 /* Blocking mode */
 #define IPC_BLOCKED_ACCESS  0x1
 
-#define UNTRUSTED_MANDATORY_FLAGS  (IPC_BLOCKED_ACCESS)
-
-/* NOTE: This number is used for allocate temporary arrays on task's
- * kernel stack. So please don't use huge numbers here.
- */
+/**< Maximum numbers of vectors for I/O operations. */
 #define MAX_IOVECS  8
 
-/* Initial number of ports to allocate when the first port is created. */
-#define IPC_DEFAULT_PORTS  32
-
-/* Initial number of channels to allocate when the first channel is opened. */
-#define IPC_DEFAULT_CHANNELS  128
+#define UNTRUSTED_MANDATORY_FLAGS  (IPC_BLOCKED_ACCESS)
 
 #define IPC_DEFAULT_PORT_MESSAGES  512
 #define IPC_MAX_PORT_MESSAGES  512

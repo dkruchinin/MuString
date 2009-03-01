@@ -153,11 +153,11 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
 
   if( !ipc->channels ) { /* First channel opened ? */
     r = -ENOMEM;
-    ipc->channels=allocate_ipc_memory(sizeof(ipc_channel_t *)*IPC_DEFAULT_CHANNELS);
+    ipc->channels=allocate_ipc_memory(sizeof(ipc_channel_t *)*CONFIG_IPC_DEFAULT_CHANNELS);
     if( !ipc->channels ) {
       goto out_put_port;
     }
-    ipc->allocated_channels=IPC_DEFAULT_CHANNELS;
+    ipc->allocated_channels=CONFIG_IPC_DEFAULT_CHANNELS;
   } else if( ipc->num_channels >= ipc->allocated_channels ) {
     r=-EMFILE;
     goto out_unlock;
