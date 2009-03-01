@@ -47,6 +47,7 @@ static SPINLOCK_DEFINE(sw_timers_lock);
 static LIST_DEFINE(known_hw_timers);
 static LIST_DEFINE(expired_major_ticks);
 static LIST_DEFINE(cached_major_ticks);
+static int __num_cached_major_ticks;
 
 #ifdef CONFIG_TIMER_RBTREE
 static struct rb_root timers_rb_root;
@@ -75,6 +76,7 @@ static ulong_t __last_processed_timer_tick;
       list_del(&(_pm)->list);                                   \
       (_pm)->time_x=(_mtickv);                                  \
       (_cu)=true;                                               \
+      __num_cached_major_ticks--;                               \
     } else {                                                    \
       (_cu)=false;                                              \
       (_pm)=memalloc(sizeof(major_timer_tick_t));               \
@@ -105,6 +107,10 @@ static void __init_sw_timers(void)
 {
   int i;
 
+  /*Paranoya check to prevent improper kernel configuration. */
+  ASSERT(CONFIG_MIN_CACHED_MAJOR_TICKS<=CONFIG_CACHED_MAJOR_TICKS);
+
+  __num_cached_major_ticks=CONFIG_CACHED_MAJOR_TICKS;
   for(i=0;i<CONFIG_CACHED_MAJOR_TICKS;i++) {
     major_timer_tick_t *mt=memalloc(sizeof(*mt));
 
@@ -125,13 +131,14 @@ void init_timers(void)
 
 void process_timers(void)
 {
+#ifdef CONFIG_TIMER_RBTREE
+  struct rb_node *n;
+#endif
   major_timer_tick_t *mt,*major_tick=NULL;
   long is;
-  struct rb_node *n;
   ulong_t mtickv=system_ticks-(system_ticks % CONFIG_TIMER_GRANULARITY);
 
   LOCK_SW_TIMERS_R(is);
-
 #ifdef CONFIG_TIMER_RBTREE
   n=timers_rb_root.rb_node;
   while( n ) {
@@ -147,9 +154,13 @@ void process_timers(void)
     }
   }
 #else
-  #error Not implemented yet !
+  if( !list_is_empty(&timers_list) ) {
+    mt=container_of(list_node_first(&timers_list),major_timer_tick_t,list);
+    if( mt->time_x <= mtickv ) {
+      major_tick=mt;
+    }
+  }
 #endif
-
   UNLOCK_SW_TIMERS_R(is);
 
   if( major_tick ) { /* Let's see if we have any timers for this major tick. */
@@ -170,15 +181,19 @@ void process_timers(void)
         break;
       }
     }
+    UNLOCK_MAJOR_TIMER_TICK(major_tick,is);
 
     if( expired ) {
-      list_add2tail(&expired_major_ticks,&major_tick->list);
-
+      LOCK_SW_TIMERS_R(is);
 #ifndef CONFIG_TIMER_RBTREE
-      #error Not implemented yet !
+      list_del(&major_tick->list);
+      list_add2tail(&cached_major_ticks,&major_tick->list);
+      __num_cached_major_ticks++;
+#else
+      list_add2tail(&expired_major_ticks,&major_tick->list);
 #endif
+      UNLOCK_SW_TIMERS_R(is);
     }
-    UNLOCK_MAJOR_TIMER_TICK(major_tick,is);
   }
 }
 
@@ -254,6 +269,8 @@ long add_timer(ktimer_t *t)
 #ifdef CONFIG_TIMER_RBTREE
   struct rb_node *n;
   struct rb_node **p;
+#else
+  list_node_t *succ;
 #endif
   long is;
   ulong_t mtickv;
@@ -306,8 +323,34 @@ long add_timer(ktimer_t *t)
     rb_link_node(&mt->rbnode,n,p);
     rb_insert_color(&mt->rbnode,&timers_rb_root);
   }
-#else
-  #error Not implemented yet !
+#else /* List-based timer representation. */
+  succ=NULL;
+  list_for_each(&timers_list,ln) {
+    _mt=container_of(ln,major_timer_tick_t,list);
+
+    if( _mt->time_x == mtickv ) {
+      mt=_mt;
+      get_major_tick(mt);
+      break;
+    } else if( _mt->time_x > mtickv ) {
+      succ=ln;
+      break;
+    }
+  }
+
+  if( !mt ) {
+    GET_NEW_MAJOR_TICK(mt,cache_used,mtickv);
+    if( !mt ) {
+      r=-ENOMEM;
+      goto out;
+    }
+
+    if( succ ) {
+      list_insert_before(&mt->list,succ);
+    } else {
+      list_add2tail(&timers_list,&mt->list);
+    }
+  }
 #endif
   UNLOCK_SW_TIMERS(is);
 
@@ -366,9 +409,23 @@ fire_expired_timer:
 
     MAJOR_TIMER_TICK_INIT(mt,0);
     list_add2tail(&cached_major_ticks,&mt->list);
+    __num_cached_major_ticks++;
+    cache_used=false;
   }
   UNLOCK_SW_TIMERS(is);
 #endif
+
+  if( cache_used && __num_cached_major_ticks < CONFIG_MIN_CACHED_MAJOR_TICKS ) {
+    mt=memalloc(sizeof(*mt));
+    if( mt ) {
+      MAJOR_TIMER_TICK_INIT(mt,0);
+      LOCK_SW_TIMERS(is);
+      list_add2tail(&cached_major_ticks,&mt->list);
+      __num_cached_major_ticks++;
+      UNLOCK_SW_TIMERS(is);
+    }
+  }
+
   return r;
 out:
   UNLOCK_SW_TIMERS(is);
@@ -381,6 +438,7 @@ static bool __timer_deffered_sched_handler(void *data)
   return (timer->time_x > system_ticks);
 }
 
+#ifdef CONFIG_TIMER_RBTREE
 void __dump_timers(long tick)
 {
   major_timer_tick_t *mt,*major_tick=NULL;
@@ -425,6 +483,7 @@ void __dump_timers(long tick)
   }
   UNLOCK_SW_TIMERS_R(is);
 }
+#endif
 
 long sleep(ulong_t ticks)
 {
