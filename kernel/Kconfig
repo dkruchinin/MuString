@@ -21,6 +21,17 @@ config CORESERVERS_LAUNCH_DELAY
        range 500 3000
        default 500
 
+menu "Scheduler settings"
+
+config TRACE_CURRENT
+       bool "Trace TID of the current process for each CPU."
+       default n
+       help
+       By turning this option on kernel stores TID of the currently executed task
+       in a special array variable defined as follows:
+            tid_t __current_cpu_task[CONFIG_NRCPUS]
+endmenu
+
 menu "Realtime timers"
 
 config TIMER_RBTREE
