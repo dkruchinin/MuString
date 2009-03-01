@@ -100,6 +100,18 @@ void process_timers(void);
 void timer_cleanup_expired_ticks(void);
 long modify_timer(ktimer_t *t,ulong_t time_x);
 
+#define MAJOR_TIMER_TICK_INIT(mt,t)      do {   \
+    int i;                                      \
+    atomic_set(&(mt)->use_counter,1);           \
+    (mt)->time_x=(t);                           \
+    spinlock_initialize(&(mt)->lock);           \
+    list_init_node(&(mt)->list);                \
+                                                \
+    for( i=0;i<MINOR_TICK_GROUPS;i++ ) {        \
+      list_init_head(&(mt)->minor_ticks[i]);    \
+    }                                           \
+  } while(0)
+
 #define init_timer(t,tx,tp)                              \
   DEFFERED_ACTION_INIT(&(t)->da,(tp),0);                 \
   (t)->time_x=(tx);                                      \
@@ -112,3 +124,15 @@ long modify_timer(ktimer_t *t,ulong_t time_x);
 
 #endif /*__EZA_TIMER_H__*/
 
+/*
+  list_for_each(&timers_list,ln) {
+    _mt=container_of(major_timer_tick_t,list,ln);
+    if( mtickv == _mt->time_x ) {
+      get_major_tick(_mt);
+      mt=_mt;
+      break;
+    } else if() {
+    }
+  }
+
+*/

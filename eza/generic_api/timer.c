@@ -46,8 +46,14 @@ static SPINLOCK_DEFINE(sw_timers_lock);
 /*list of the timers*/
 static LIST_DEFINE(known_hw_timers);
 static LIST_DEFINE(expired_major_ticks);
+static LIST_DEFINE(cached_major_ticks);
 
+#ifdef CONFIG_TIMER_RBTREE
 static struct rb_root timers_rb_root;
+#else
+static LIST_DEFINE(timers_list);
+#endif
+
 static ulong_t __last_processed_timer_tick;
 
 #define GRAB_HW_TIMER_LOCK() spinlock_lock(&timer_lock)
@@ -61,6 +67,23 @@ static ulong_t __last_processed_timer_tick;
 
 #define get_major_tick(t) atomic_inc(&(t)->use_counter)
 #define put_major_tick(t) if( atomic_dec_and_test(&(t)->use_counter) ) { memfree(t); }
+
+#define GET_NEW_MAJOR_TICK(_pm,_cu,_mtickv) do {                \
+    if( !list_is_empty(&cached_major_ticks) ) {                 \
+      (_pm)=container_of(list_node_first(&cached_major_ticks),  \
+                         major_timer_tick_t,list);              \
+      list_del(&(_pm)->list);                                   \
+      (_pm)->time_x=(_mtickv);                                  \
+      (_cu)=true;                                               \
+    } else {                                                    \
+      (_cu)=false;                                              \
+      (_pm)=memalloc(sizeof(major_timer_tick_t));               \
+      if( (_pm) ) {                                             \
+        MAJOR_TIMER_TICK_INIT((_pm),(_mtickv));                 \
+      }                                                         \
+    }                                                           \
+  } while(0)
+
 
 static void init_hw_timers (void)
 {
@@ -78,9 +101,25 @@ void hw_timer_generic_suspend(void)
 {
 }
 
+static void __init_sw_timers(void)
+{
+  int i;
+
+  for(i=0;i<CONFIG_CACHED_MAJOR_TICKS;i++) {
+    major_timer_tick_t *mt=memalloc(sizeof(*mt));
+
+    if( !mt ) {
+      panic("Can't allocate memory for pre-cached timer ticks !");
+    }
+    MAJOR_TIMER_TICK_INIT(mt,0);
+    list_add2tail(&cached_major_ticks,&mt->list);
+  }
+}
+
 void init_timers(void)
 {
   init_hw_timers();
+  __init_sw_timers();
   initialize_deffered_actions();
 }
 
@@ -110,6 +149,7 @@ void process_timers(void)
 #else
   #error Not implemented yet !
 #endif
+
   UNLOCK_SW_TIMERS_R(is);
 
   if( major_tick ) { /* Let's see if we have any timers for this major tick. */
@@ -211,14 +251,17 @@ long modify_timer(ktimer_t *timer,ulong_t time_x)
 
 long add_timer(ktimer_t *t)
 {
-  long is;
+#ifdef CONFIG_TIMER_RBTREE
   struct rb_node *n;
+  struct rb_node **p;
+#endif
+  long is;
   ulong_t mtickv;
-  long r=0,i;
-  major_timer_tick_t *mt;
-  struct rb_node ** p;
+  long r=0;
+  major_timer_tick_t *mt=NULL,*_mt;
   list_head_t *lh;
   list_node_t *ln;
+  bool cache_used=false;
 
   if( !t->time_x || !t->minor_tick.time_x ) {
     return -EINVAL;
@@ -226,8 +269,6 @@ long add_timer(ktimer_t *t)
 
   mtickv=t->time_x-(t->time_x % CONFIG_TIMER_GRANULARITY);
 
-  /* First try to locate an existing major tick or create a new one.
-   */
   LOCK_SW_TIMERS(is);
   if( t->time_x <= system_ticks  ) {
     r=-EAGAIN;
@@ -235,57 +276,33 @@ long add_timer(ktimer_t *t)
   }
 
 #ifdef CONFIG_TIMER_RBTREE
-  n=timers_rb_root.rb_node;
-  while( n ) {
-    mt=rb_entry(n,major_timer_tick_t,rbnode);
+  p=&timers_rb_root.rb_node;
+  n=NULL;
 
-    if( mtickv < mt->time_x ) {
-      n=n->rb_left;
-    } else if( mtickv > mt->time_x )  {
-      n=n->rb_right;
-    } else {
+  while( *p ) {
+    n=*p;
+
+    _mt=rb_entry(n,major_timer_tick_t,rbnode);
+    if( _mt->time_x == mtickv ) {
+      mt=_mt;
       get_major_tick(mt);
       break;
     }
+
+    if( mtickv < _mt->time_x ) {
+      p=&(*p)->rb_left;
+    } else if( mtickv > _mt->time_x ) {
+      p=&(*p)->rb_right;
+    }
   }
-#else
-  #error Not implemented yet
-#endif
 
-  /* No major tick for target time point, so we should create a new one.
-   */
-  if( !n ) {
-    mt=memalloc(sizeof(*mt));
-
+  if( !mt ) { /* No major tick found, so create a new one. */
+    GET_NEW_MAJOR_TICK(mt,cache_used,mtickv);
     if( !mt ) {
       r=-ENOMEM;
       goto out;
     }
 
-    /* Initialize a new entry. */
-    atomic_set(&mt->use_counter,1);
-    mt->time_x=mtickv;
-    spinlock_initialize(&mt->lock);
-    list_init_node(&mt->list);
-
-    for( i=0;i<MINOR_TICK_GROUPS;i++ ) {
-      list_init_head(&mt->minor_ticks[i]);
-    }
-
-#ifdef CONFIG_TIMER_RBTREE
-    /* Now insert new tick into RB tree. */
-    p=&timers_rb_root.rb_node;
-    n=NULL;
-    while( *p ) {
-      n=*p;
-      major_timer_tick_t *_mt=rb_entry(n,major_timer_tick_t,rbnode);
-
-      if( mtickv < _mt->time_x ) {
-        p=&(*p)->rb_left;
-      } else if( mtickv > _mt->time_x ) {
-        p=&(*p)->rb_right;
-      }
-    }
     rb_link_node(&mt->rbnode,n,p);
     rb_insert_color(&mt->rbnode,&timers_rb_root);
   }
@@ -336,26 +353,22 @@ fire_expired_timer:
     execute_deffered_action(&t->da);
   }
 
-  /* Now check if we need to free any expired major ticks. */
-  i=0;
+  /* Now check if we need to remove any expired major ticks from
+   * the RB-tree and put them in the list of cached major ticks.
+   */
+#ifdef CONFIG_TIMER_RBTREE
   LOCK_SW_TIMERS(is);
   if( !list_is_empty(&expired_major_ticks) ) {
-    i=1;
     mt=container_of(list_node_first(&expired_major_ticks),
                     major_timer_tick_t,list);
     list_del(&mt->list);
-
-#ifdef CONFIG_TIMER_RBTREE  
     rb_erase(&mt->rbnode,&timers_rb_root);
-#else
-    #error Not implemented yet !
-#endif
+
+    MAJOR_TIMER_TICK_INIT(mt,0);
+    list_add2tail(&cached_major_ticks,&mt->list);
   }
   UNLOCK_SW_TIMERS(is);
-
-  if( i ) {
-    memfree(mt);
-  }
+#endif
   return r;
 out:
   UNLOCK_SW_TIMERS(is);

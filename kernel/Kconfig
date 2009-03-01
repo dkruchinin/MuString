@@ -40,6 +40,25 @@ config TIMER_GRANULARITY
        help
        Granularity (in timer tick) of major tick.
 
+config CACHED_MAJOR_TICKS
+       int "Initial number of cached major ticks"
+       range 16 128
+       default "16"
+       help
+       Initial number of major ticks in the cache. If kernel can't find an active
+       major ticks to a timer being created, it first tries to get a free on from
+       the cache.
+
+config MIN_CACHED_MAJOR_TICKS
+       int "Minimum number of cached major ticks in the cache"
+       range 4 128
+       default 4
+       help
+       Minimum number of cached major ticks in the cache. If the number of cached
+       major ticks falls below this value, the process which made this value to
+       reach this edge (as a result of adding a timer) will allocate a new cached
+       entry.
+
 config MAX_DEFERRED_IRQ_ACTIONS_PER_TICK
        int "Maximum amount of deferred actions fired at one time."
        range 1 512 
