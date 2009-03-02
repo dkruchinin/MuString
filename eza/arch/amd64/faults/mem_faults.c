@@ -143,7 +143,6 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
      */
 
     vmm_t *vmm = current_task()->task_mm;
-    vmrange_t *vmr;
     uint32_t errmask = 0;
     int ret = -EFAULT;
 
@@ -154,6 +153,7 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
     else
       errmask |= PFLT_NOT_PRESENT;
 
+    ret = vmm_handle_page_fault(vmm, invalid_address, errmask);
     rwsem_down_read(&vmm->rwsem);
     vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(invalid_address), invalid_address + PAGE_SIZE, NULL);
     if (vmr)

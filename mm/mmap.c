@@ -551,23 +551,32 @@ int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages
   return __mmap_core(rpd, va, npages, &pfi, flags);
 }
 
-int vmm_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
+int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
 {
-  memobj_t *memobj = vmr->memobj;  
-  int ret;
+  vmrange_t *vmr;
+  int ret = 0;
   off_t off;
 
-  ASSERT(memobj != NULL);
-  off = addr2memobj_offs(vmr, addr);
+  rwsem_down_read(&vmm->rwsem);
+  vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(fault_addr), fault_address + PAGE_SIZE, NULL);
+  if (!vmr) {
+    ret = -EFAULT;
+    goto out;
+  }  
   if (((pfmask & PFLT_WRITE) &&
        ((vmr->flags & (VMR_READ | VMR_WRITE)) == VMR_READ))
       || (vmr->flags & VMR_NONE)) {
-    return -EACCES;
+    ret = -EACCES;
+    goto out;
   }
 
+  ASSERT(vmr->memobj != NULL);
   mutex_lock(&memobj->mutex);
-  ret = memobj->mops.handle_page_fault(memobj, vmr, off, pfmask);
+  ret = memobj->mops.handle_page_fault(vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
   mutex_unlock(&memobj->mutex);
+
+  out:
+  rwsem_up_read(&vmm->rwsem);
   return ret;
 }
 

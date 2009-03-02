@@ -79,12 +79,21 @@ typedef uint8_t page_flags_t;
  */
 typedef struct __page_frame {
   list_node_t node;
-  list_node_t chain_node;
-  page_idx_t idx;
+  
   union {
     atomic_t refcount;
     void *slab_pages_start;
   };
+  
+  union {
+    list_node_t chain_node;
+    struct {
+      pgoff_t offset;
+      atomic_t dirtycount;
+    }
+  };
+
+  page_idx_t idx;
   ulong_t _private;
   page_flags_t flags;
   uint8_t pool_type;
@@ -107,11 +116,9 @@ DEFINE_ITERATOR(page_frame,
  * @see DEFINE_ITERATOR_TYPES
  */
 DEFINE_ITERATOR_TYPES(page_frame,
-                      PF_ITER_ARCH,   /**< Architecture-dependent iterator used for page frames initialization */
                       PF_ITER_INDEX,  /**< Index-based iterator */
                       PF_ITER_LIST,   /**< List-based iterator */
                       PF_ITER_PTABLE, /**< Page table iterator */
-                      PF_ITER_PBLOCK, /**< Iterate through list of page blocks */
                       );
 
 static inline bool page_idx_is_present(page_idx_t page_idx)

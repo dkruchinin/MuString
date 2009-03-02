@@ -22,7 +22,6 @@
  */
 
 #include <config.h>
-#include <ds/ttree.h>
 #include <ds/list.h>
 #include <ds/idx_allocator.h>
 #include <mm/page.h>
@@ -122,12 +121,18 @@ void memobj_subsystem_initialize(void)
   __init_memobj(&null_memobj, MEMOBJ_GENERIC, 0);
 }
 
-memobj_t *memobj_create(memobj_nature_t nature, off_t size)
+int memobj_create(memobj_nature_t nature, off_t size, memobj_t **memobj)
 {
-  memobj_t *memobj = alloc_from_memcache(__memobjs_memcache);
+  memobj_t *obj = 0;
+  int ret = 0;
+  memobj_ops_t *ops;
 
-  if (!memobj)
-    return NULL;
+  ops = __select_memobj_ops(nature);
+  memobj = alloc_from_memcache(__memobjs_memcache);
+  if (!memobj) {
+    ret = -ENOMEM;
+    goto out;
+  }
 
   __init_memobj(memobj, nature, size);
   return memobj;

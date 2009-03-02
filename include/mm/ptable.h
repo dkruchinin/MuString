@@ -17,9 +17,12 @@ typedef struct __ptable_ops {
   int (*mmap)(rpd_t *rpd, uintptr_t va_from, page_idx_t npages,
               page_frame_iterator_t *pfi, ptable_flags_t flags);
   void (*munmap)(rpd_t *prd, uintptr_t va_from, page_idx_t npages);
-  page_idx_t (*vaddr2page_idx)(rpd_t *rpd, uintptr_t vaddr);
+  page_idx_t (*vaddr2page_idx)(rpd_t *rpd, uintptr_t vaddr, /* OUT */ pde_t **retpde);
   pfalloc_flags_t alloc_flags;
 } ptable_ops_t;
+
+#define pagetable_lock(rpd) spinlock_lock(&(rpd)->lock)
+#define pagetable_unlock(rpd) spinlock_lock(&(rpd)->lock)
 
 extern ptable_ops_t ptable_ops;
 

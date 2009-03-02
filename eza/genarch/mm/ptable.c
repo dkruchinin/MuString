@@ -315,13 +315,15 @@ int generic_ptable_map(rpd_t *rpd, uintptr_t va_from, page_idx_t npages,
   return ret;
 }
 
-page_idx_t generic_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr)
+page_idx_t generic_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr, /* OUT */ pde_t **retpde)
 {
   uintptr_t va = PAGE_ALIGN_DOWN(vaddr);
   page_frame_t *cur_dir = RPD_PAGEDIR(rpd);
   pde_t *pde;
   int level;
 
+  if (retpde)
+    *retpde = NULL;
   for (level = PTABLE_LEVEL_LAST; level > PTABLE_LEVEL_FIRST; level--) {
     pde = pde_fetch(cur_dir, pde_offset2idx(va, level));
     if (!(pde->flags & PDE_PRESENT))
@@ -333,7 +335,9 @@ page_idx_t generic_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr)
   pde = pde_fetch(cur_dir, pde_offset2idx(va, PTABLE_LEVEL_FIRST));
   if (!pde_is_present(pde))
     return PAGE_IDX_INVAL;
-
+  if (retpde)
+    *retpde = pde;
+    
   return pde_fetch_page_idx(pde);
 }
 
