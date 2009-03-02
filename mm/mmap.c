@@ -554,26 +554,25 @@ int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages
 int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
 {
   vmrange_t *vmr;
-  int ret = 0;
-  off_t off;
-
+  int ret;
+  pgoff_t offset;
+  
   rwsem_down_read(&vmm->rwsem);
   vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(fault_addr), fault_address + PAGE_SIZE, NULL);
   if (!vmr) {
     ret = -EFAULT;
     goto out;
-  }  
+  }
   if (((pfmask & PFLT_WRITE) &&
        ((vmr->flags & (VMR_READ | VMR_WRITE)) == VMR_READ))
       || (vmr->flags & VMR_NONE)) {
     ret = -EACCES;
     goto out;
   }
-
+  
   ASSERT(vmr->memobj != NULL);
-  mutex_lock(&memobj->mutex);
+  offset = addr2memobj_offs(vmr, fault_addr);
   ret = memobj->mops.handle_page_fault(vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
-  mutex_unlock(&memobj->mutex);
 
   out:
   rwsem_up_read(&vmm->rwsem);

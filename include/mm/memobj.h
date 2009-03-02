@@ -5,7 +5,6 @@
 #include <ds/ttree.h>
 #include <ds/list.h>
 #include <mm/page.h>
-#include <eza/mutex.h>
 #include <mlibc/types.h>
 
 #ifndef CONFIG_MEMOBJS_MAX
@@ -15,26 +14,33 @@
 typedef unsigned long memobj_id_t;
 
 typedef enum __memobj_nature {
-  MEMOBJ_STICKY   = 0x01,
-  MEMOBJ_LEECH    = 0x02,
-  MEMOBJ_IMMORTAL = 0x04,
-  MEMOBJ_CDP      = 0x08,
-  MEMOBJ_SHARED   = 0x10,
-} memobj_nature_t;
+  MMO_NTR_GENERIC = 1,
+  MMO_NTR_PAGECACHE,
+  MMO_NTR_SRV, /* TODO DK: implement this fucking stuff... */
+};
 
-#define MEMOBJ_BEHAVIOUR_MASK (MEMOBJ_LEECH | MEMOBJ_STICKY | MEMOBJ_IMMORTAL)
+enum { /* memory object flags */
+  MMO_FLG_SPIRIT    = 0x01,
+  MMO_FLG_STICKY    = 0x02,
+  MMO_FLG_LEECH     = 0x04,
+  MMO_FLG_DPC       = 0x08,
+  MMO_FLG_BACKENED  = 0x10,
+  MMO_FLG_NOSHARED  = 0x20,
+};
+
+#define MMO_LIVE_MASK (MMO_FLG_SPIRIT | MMO_FLG_STICKY | MMO_FLG_LEECH)
 
 struct __memobj;
 struct __vmrange;
 
 typedef struct __memobj_ops {
-  int (*handle_page_fault)(struct __vmrange *vmr, uintptr_t addr, uint32_t pfmask);
-  int (*populate_pages)(struct __vmrange *vmr, uintptr_t addr, page_idx_t npages, off_t offs_pages);
+  int (*handle_page_fault)(struct __vmrange *vmr, pgoff_t offset, uint32_t pfmask);
+  int (*populate_pages)(struct __vmrange *vmr, , page_idx_t npages, off_t offs_pages);
   int (*put_page)(struct __memobj *memobj, pgoff_t offs, page_frame_t *page);
   page_frame_t *(*get_page)(struct __memobj *memobj, pgoff_t offs);
 } memobj_ops_t;
 
-
+/* FIXME DK: and what about backend? */
 typedef struct __memobj {
   memobj_id_t id;
   memobj_ops_t mops;
@@ -42,14 +48,18 @@ typedef struct __memobj {
   list_head_t *dirty_pages;
   pgoff_t size;
   atomic_t users_count;
-  memobj_nature_t nature;  
-  void *ctx;
+  memobj_nature_t nature;
+  uint32_t flags;
 } memobj_t;
 
-#define NULL_MEMOBJ_ID 0
-extern memobj_t null_memobj;
+#define GENERIC_MEMOBJ_ID 0
+extern memobj_t generic_memobj;
 
 void memobj_subsystem_initialize(void);
+int memobj_create(memobj_nature_t mmo_nature, uint32_t flags, pgoff_t size, /* OUT */ memobj_t **out_memobj);
 memobj_t *memobj_find_by_id(memobj_id_t memobj_id);
+
+/* memobject nature-dependent initialization functions */
+int generic_memobj_initialize(memobj_t *memobj, uint32_t flags);
 
 #endif /* __MEMOBJ_H__ */
