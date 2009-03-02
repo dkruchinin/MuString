@@ -28,5 +28,17 @@
 #include <mm/memobj.h>
 #include <mm/pfalloc.h>
 #include <mm/ptable.h>
+#include <mlibc/stddef.h>
 #include <mlibc/types.h>
 
+static memobj_ops_t pcacge_memobj_ops {
+  .handle_page_fault = pcache_handle_page_fault;
+  .populate_pages = pcache_populate_pages;
+  .put_page = pcache_put_page;
+  .get_page = pcache_get_page;
+};
+
+int pcache_memobj_initialize(memobj_t *memobj, uint32_t flags)
+{
+  if (!(flags & MMO_LIVE_MASK) || !is_powerof_2(flags & MMO_LIVE_MASK))
+}

@@ -40,8 +40,6 @@ static int generic_handle_page_fault(vmrange_t *vmr, pgoff_t offset, uint32_t pf
   
   if (offset >= memobj->size)
     return -ENXIO;
-
-  ASSERT(!(vmr->flags & VMR_PHYS));
   if (pfmask & PFLT_NOT_PRESENT) {
     page_frame_t *pf;
     page_idx_t idx;
@@ -135,7 +133,7 @@ static int generic_put_page(memobj_t *memobj, pgoff_t offset, page_frame_t *page
   return 0;
 }
 
-static page_frame_T *generic_get_page(memobj_t *memobj, pgoff_t offset)
+static page_frame_t *generic_get_page(memobj_t *memobj, pgoff_t offset)
 {
   return NULL;
 }

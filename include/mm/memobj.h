@@ -8,7 +8,7 @@
 #include <mlibc/types.h>
 
 #ifndef CONFIG_MEMOBJS_MAX
-#define CONFIG_MEMOBJS_MAX (PAGE_SIZE << 3)
+#define CONFIG_MEMOBJS_MAX (PAGE_SIZE << 4)
 #endif /* CONFIG_MEMOBJS_MAX */
 
 typedef unsigned long memobj_id_t;
