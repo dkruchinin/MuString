@@ -91,8 +91,8 @@ bool update_pending_signals(task_t *task)
  *   1: signal wasn't queued since it was ignored.
  * -ENOMEM: no memory for a new queue item.
  */
-static int __send_task_siginfo(task_t *task,siginfo_t *info,
-                                    void *kern_priv,bool force_delivery)
+static int __send_task_siginfo(task_t *task,usiginfo_t *info,
+                               void *kern_priv,bool force_delivery)
 {
   int sig=info->si_signo;
   int r;
@@ -133,7 +133,7 @@ static int __send_task_siginfo(task_t *task,siginfo_t *info,
   return r;
 }
 
-static void __send_siginfo_postlogic(task_t *task,siginfo_t *info)
+static void __send_siginfo_postlogic(task_t *task,usiginfo_t *info)
 {
   if( update_pending_signals(task) && task != current_task() ) {
     /* Need to wake up the receiver. */
@@ -149,12 +149,13 @@ static void __send_siginfo_postlogic(task_t *task,siginfo_t *info)
   }
 }
 
-int send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery)
+int send_task_siginfo(task_t *task,usiginfo_t *info,bool force_delivery,
+                      void *kern_priv)
 {
   int r;
 
   LOCK_TASK_SIGNALS(task);
-  r=__send_task_siginfo(task,info,NULL,force_delivery);
+  r=__send_task_siginfo(task,info,kern_priv,force_delivery);
   UNLOCK_TASK_SIGNALS(task);
 
   if( !r ) {
@@ -166,7 +167,7 @@ int send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery)
   return r < 0 ? r : 0;
 }
 
-int send_process_siginfo(pid_t pid,siginfo_t *siginfo,void *kern_priv)
+int send_process_siginfo(pid_t pid,usiginfo_t *siginfo,void *kern_priv)
 {
   task_t *root=pid_to_task(pid);
   task_t *target=NULL;
@@ -244,10 +245,10 @@ send_signal:
   return 0;
 }
 
-int sys_kill(pid_t pid,int sig,siginfo_t *sinfo)
+int sys_kill(pid_t pid,int sig,usiginfo_t *sinfo)
 {
   int r;
-  siginfo_t k_siginfo;
+  usiginfo_t k_siginfo;
 
   if( !valid_signal(sig) ) {
     kprintf_dbg("sys_kill: bad signal %d!\n",sig);
@@ -342,7 +343,7 @@ long sys_thread_kill(pid_t process,tid_t tid,int sig)
 {
   task_t *target;
   long r;
-  siginfo_t k_siginfo;
+  usiginfo_t k_siginfo;
 
   if( !valid_signal(sig) || !is_tid(tid) ) {
     return -EINVAL;
@@ -365,7 +366,7 @@ long sys_thread_kill(pid_t process,tid_t tid,int sig)
   k_siginfo.si_uid=current_task()->uid;
   k_siginfo.si_code=SI_USER;
 
-  r=send_task_siginfo(target,&k_siginfo,false);
+  r=send_task_siginfo(target,&k_siginfo,false,NULL);
 out:
   release_task_struct(target);
   return r;

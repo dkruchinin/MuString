@@ -130,7 +130,7 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
   uint64_t invalid_address,fixup;
   regs_t *regs=(regs_t *)(((uintptr_t)stack_frame)-sizeof(struct __gpr_regs)-8);
-  siginfo_t siginfo;
+  usiginfo_t siginfo;
   task_t *faulter=current_task();
 
   get_fault_address(invalid_address);
@@ -198,13 +198,13 @@ stop_cpu:
 
 send_sigsegv:
   /* Send user the SIGSEGV signal. */
-  INIT_SIGINFO_CURR(&siginfo);
+  INIT_USIGINFO_CURR(&siginfo);
   siginfo.si_signo=SIGSEGV;
   siginfo.si_code=SEGV_MAPERR;
   siginfo.si_addr=(void *)invalid_address;
 
   kprintf( "[F]: Sending SIGSEGV.\n" );
-  send_task_siginfo(faulter,&siginfo,true);
+  send_task_siginfo(faulter,&siginfo,true,NULL);
   kprintf( "[F]: Done !\n" );
 }
 

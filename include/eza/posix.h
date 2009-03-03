@@ -113,7 +113,8 @@ static inline posix_timer_t *posix_lookup_timer(posix_stuff_t *stuff,ulong_t id)
 }
 
 posix_stuff_t *allocate_task_posix_stuff(void);
-#define posix_validate_sigevent(se) ( ((se)->sigev_notify == SIGEV_SIGNAL) && \
+#define posix_validate_sigevent(se) ( ((se)->sigev_notify == SIGEV_SIGNAL || \
+                                       (se)->sigev_notify == SIGEV_SIGNAL_THREAD) && \
                                       valid_signal((se)->sigev_signo) )
 
 #endif

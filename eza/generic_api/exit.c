@@ -309,7 +309,7 @@ void sys_thread_exit(long value)
   do_exit(0,0,value);
 }
 
-long sys_wait_id(idtype_t idtype,id_t id,siginfo_t *siginfo,int options)
+long sys_wait_id(idtype_t idtype,id_t id,usiginfo_t *siginfo,int options)
 {
   return 0;
 }

@@ -51,7 +51,7 @@ typedef union sigval {
   void *sival_ptr;
 } sigval_t;
 
-typedef struct __siginfo {
+typedef struct __user_siginfo {
   int       si_signo;    /* Signal number */
   int       si_errno;    /* An errno value */
   int       si_code;     /* Signal code */
@@ -66,19 +66,29 @@ typedef struct __siginfo {
   void     *si_addr;     /* Memory location which caused fault */
   int       si_band;     /* Band event */
   int      si_fd;       /* File descriptor */
-} siginfo_t;
+} usiginfo_t;
 
-#define INIT_SIGINFO_CURR(s)  do {              \
-  memset((s),0,sizeof(siginfo_t));              \
-  (s)->si_pid=current_task()->pid;              \
-  (s)->si_uid=current_task()->uid;              \
+#define INIT_USIGINFO_CURR(s)  do {              \
+  memset((s),0,sizeof(usiginfo_t));              \
+  (s)->si_pid=current_task()->pid;  \
+  (s)->si_uid=current_task()->uid;  \
+  } while(0)
+
+#define INIT_KSIGINFO_CURR(s) do {              \
+    INIT_USIGINFO_CURR(&(s)->user_siginfo);     \
+    (s)->target=NULL;                           \
   } while(0)
 
 #define SI_USER    0 /* Sent by user */
 #define SI_KERNEL  1 /* Sent by kernel */
 
+typedef struct __ksiginfo {
+  usiginfo_t user_siginfo;
+  task_t *target;
+} ksiginfo_t;
+
 typedef void (*sa_handler_t)(int);
-typedef void (*sa_sigaction_t)(int,siginfo_t *,void *);
+typedef void (*sa_sigaction_t)(int,usiginfo_t *,void *);
 
 typedef struct __sigaction {
   sa_handler_t sa_handler;
@@ -107,7 +117,8 @@ typedef struct __kern_sigaction {
   int sa_flags;
 } kern_sigaction_t;
 
-#define SIGEV_SIGNAL  0
+#define SIGEV_SIGNAL         0
+#define SIGEV_SIGNAL_THREAD  1
 
 typedef struct __sighandlers {
   atomic_t use_count;
@@ -187,7 +198,7 @@ static inline void put_signal_handlers(sighandlers_t *s)
 
 typedef struct __sigq_item {
   sq_header_t h;   /* Must be the first member ! */
-  siginfo_t info;
+  usiginfo_t info;
   void *kern_priv;  /* Kernel private data for deffered signal processing. */
 } sigq_item_t;
 
@@ -197,11 +208,11 @@ sigq_item_t *extract_one_signal_from_queue(task_t *task);
 
 #define pending_signals_present(t) ((t)->siginfo.pending != 0)
 
-int send_task_siginfo(task_t *task,siginfo_t *info,bool force_delivery);
-int send_process_siginfo(pid_t pid,siginfo_t *siginfo,void *kern_priv);
+int send_task_siginfo(task_t *task,usiginfo_t *info,bool force_delivery,
+                      void *kern_priv);
+int send_process_siginfo(pid_t pid,usiginfo_t *siginfo,void *kern_priv);
 bool update_pending_signals(task_t *task);
 bool __update_pending_signals(task_t *task);
-int send_task_siginfo_forced(task_t *task,siginfo_t *info);
 sighandlers_t * allocate_signal_handlers(void);
 void process_sigitem_private(sigq_item_t *sigitem);
 

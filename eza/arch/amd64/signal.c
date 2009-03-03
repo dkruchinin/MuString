@@ -54,7 +54,7 @@ struct __gen_ctx {
 struct __signal_context {
   struct __trampoline_ctx trampl_ctx;
   struct __gen_ctx gen_ctx;
-  siginfo_t siginfo;
+  usiginfo_t siginfo;
   sigset_t saved_blocked;
   long retcode;
   uintptr_t retaddr;
@@ -65,7 +65,7 @@ extern void trampoline_sighandler_invoker_int(void);
 extern void trampoline_cancellation_invoker(void);
 
 static int __setup_trampoline_ctx(struct __signal_context *__user ctx,
-                                       siginfo_t *siginfo,sa_sigaction_t act)
+                                  usiginfo_t *siginfo,sa_sigaction_t act)
 {
   struct __trampoline_ctx kt;
 
@@ -138,7 +138,7 @@ static void __handle_cancellation_request(int reason,uintptr_t kstack)
 }
 
 static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
-                               siginfo_t *info,sa_sigaction_t act,
+                               usiginfo_t *info,sa_sigaction_t act,
                                ulong_t extra_bytes,
                                struct __signal_context **pctx)
 {

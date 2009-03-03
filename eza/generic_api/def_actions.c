@@ -32,11 +32,11 @@
 #include <eza/event.h>
 #include <eza/arch/bits.h>
 #include <ds/skiplist.h>
+#include <eza/process.h>
 #include <config.h>
 
 static percpu_def_actions_t cpu_actions[CONFIG_NRCPUS];
 
-//#define cpu_actions_host()  &cpu_actions[cpu_id()]
 #define cpu_actions_host()  &cpu_actions[0]
 
 void initialize_deffered_actions(void)
@@ -152,14 +152,22 @@ out_unlock:
 
 void execute_deffered_action(deffered_irq_action_t *a)
 {
+  ksiginfo_t *ksiginfo;
+
   switch( a->type ) {
     case DEF_ACTION_EVENT:
       event_raise(&a->d._event);
       break;
     case DEF_ACTION_SIGACTION:
-      kprintf_dbg("execute_deffered_action(): prio=%d. Sending signal %d to %d\n",
-                  a->priority,a->d.siginfo.si_signo,a->d.siginfo.si_pid);
-      send_process_siginfo(a->d.siginfo.si_pid,&a->d.siginfo,a->kern_priv);
+      ksiginfo=&a->d.siginfo;
+
+      if( ksiginfo->target ) {
+        send_task_siginfo(ksiginfo->target,&ksiginfo->user_siginfo,
+                          false,a->kern_priv);
+      } else {
+        send_process_siginfo(ksiginfo->user_siginfo.si_pid,
+                             &ksiginfo->user_siginfo,a->kern_priv);
+      }
       break;
     case  DEF_ACTION_UNBLOCK:
       activate_task(a->d.target);
