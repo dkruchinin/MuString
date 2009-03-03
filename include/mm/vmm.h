@@ -199,10 +199,16 @@ static inline void munmap_core(rpd_t *rpd, uintptr_t va, ulong_t npages)
   ptable_ops.munmap(rpd, va, npages);
 }
 
-static inline pgoff_t addr2memobj_offs(vmrange_t *vmr, uintptr_t addr)
+static inline pgoff_t addr2pgoff(vmrange_t *vmr, uintptr_t addr)
 {
-    return (vmr->offset + ((PAGE_ALIGN_DOWN(addr) -
-                            vmr->bounds.space_start) >> PAGE_WIDTH));
+  return (vmr->offset +
+          ((PAGE_ALIGN_DOWN(addr) - vmr->bounds.space_start) >> PAGE_WIDTH));
+}
+
+static inline uintptr_T pgoff2addr(vmrange_t *vmr, pgoff_t offset)
+{
+  return (vmr->bounds.space_start +
+          ((uintptr_t)(offset - vmr->offset) << PAGE_WIDTH));
 }
 
 #ifdef CONFIG_DEBUG_MM

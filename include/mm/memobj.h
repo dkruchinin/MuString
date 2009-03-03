@@ -34,22 +34,22 @@ struct __memobj;
 struct __vmrange;
 
 typedef struct __memobj_ops {
-  int (*handle_page_fault)(struct __vmrange *vmr, pgoff_t offset, uint32_t pfmask);
-  int (*populate_pages)(struct __vmrange *vmr, , page_idx_t npages, off_t offs_pages);
-  int (*put_page)(struct __memobj *memobj, pgoff_t offs, page_frame_t *page);
-  page_frame_t *(*get_page)(struct __memobj *memobj, pgoff_t offs);
+  int (*handle_page_fault)(struct __vmrange *vmr, pgoff_t addr, uint32_t pfmask);
+  int (*populate_pages)(struct __vmrange *vmr, , pgoff_t offset, page_idx_t npages);
+  int (*put_page)(struct __memobj *memobj, pgoff_t offset, page_frame_t *page);
+  page_frame_t *(*get_page)(struct __memobj *memobj, pgoff_t offset);
 } memobj_ops_t;
 
 /* FIXME DK: and what about backend? */
 typedef struct __memobj {
   memobj_id_t id;
   memobj_ops_t mops;
-  hat_t pagecache;
-  list_head_t *dirty_pages;
   pgoff_t size;
+  list_node_t mmo_node;
   atomic_t users_count;
   memobj_nature_t nature;
   uint32_t flags;
+  void *private;
 } memobj_t;
 
 #define GENERIC_MEMOBJ_ID 0

@@ -32,14 +32,12 @@
 
 /* TODO DK: implement generic pages caching */
 
-static int generic_handle_page_fault(vmrange_t *vmr, pgoff_t offset, uint32_t pfmask)
+static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
 {
   uintptr_t addr = vmr->bounds.space_start + (offset << PAGE_WIDTH);
   int ret = 0;
   vmm_t *vmm = vmr->parent_vmm;
   
-  if (offset >= memobj->size)
-    return -ENXIO;
   if (pfmask & PFLT_NOT_PRESENT) {
     page_frame_t *pf;
     page_idx_t idx;
@@ -95,9 +93,10 @@ static int generic_handle_page_fault(vmrange_t *vmr, pgoff_t offset, uint32_t pf
   return ret;
 }
 
-static int generic_populate_pages(memobj_t *memobj, vmrange_t *vmr, pgoff_t offset, page_idx_t npages)
+static int generic_populate_pages(vmrange_t *vmr, pgoff_t offset, page_idx_t npages)
 {
   int ret;
+  memobj_t *memobj = vmr->memobj;  
   page_frame_t *pages;
   page_frame_iterator_t pfi;  
   

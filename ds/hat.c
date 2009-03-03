@@ -140,9 +140,9 @@ void *hat_lookup(hat_t *hat, ulong_t idx)
   
   hb = hat->root_bucket;
   h = hat->tree_heigh;
-  while (hb && (h > 0)) {
+  while (hb && (h > 0))
     hb = hb->slots[index2slot_id(idx, h--)];
-  }
+
   if (!hb)
     return NULL;
 
@@ -153,8 +153,8 @@ void *hat_delete(hat_t *hat, ulong_t idx)
 {
   void *path[HAT_HEIGH_MAX];
   hat_bucket_t *hb;
-  void *ret;
-  int h;
+  void *ret;  
+  int h, i;
 
   if (index2heigh(idx) > hat->tree_heigh)
     return NULL;
@@ -163,7 +163,8 @@ void *hat_delete(hat_t *hat, ulong_t idx)
   hb = hat->root_bucket;
   while (h >= 0) {
     path[h] = hb;
-    hb = hb->slots[index2slot_id(idx, h)];
+    i = index2slot_id(idx, h);
+    hb = hb->slots[i];
     if (!hb)
       return NULL;
     
@@ -171,7 +172,7 @@ void *hat_delete(hat_t *hat, ulong_t idx)
   }
 
   ret = hb;
-  h = 0;
+  path[0]->slots[i] = NULL;
   while (h <= hat->tree_heigh) {
     hb = path[h++];
     if (--hb->num_items > 0)
