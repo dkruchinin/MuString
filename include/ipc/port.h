@@ -114,14 +114,14 @@ typedef struct __ipc_gen_port {
   list_head_t channels;  
 } ipc_gen_port_t;
 
-int __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size);
+int ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size);
 int ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
                      struct __iovec *iovec,ulong_t numvec,
                      port_msg_info_t *msg_info);
-ipc_gen_port_t *__ipc_get_port(task_t *task,ulong_t port);
-void __ipc_put_port(ipc_gen_port_t *p);
-int __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
-                          ulong_t reply_buf,ulong_t reply_len);
+ipc_gen_port_t *ipc_get_port(task_t *task,ulong_t port);
+void ipc_put_port(ipc_gen_port_t *p);
+int ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
+                   ulong_t reply_buf,ulong_t reply_len);
 int ipc_close_port(task_t *owner,ulong_t port);
 
 extern ipc_port_msg_ops_t prio_port_msg_ops;

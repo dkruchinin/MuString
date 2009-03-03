@@ -100,7 +100,7 @@ long sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
       break;
     }
 
-    port=__ipc_get_port(caller,upfd.fd);
+    port=ipc_get_port(caller,upfd.fd);
     if( !port ) {
       nevents=-EINVAL;
       break;
@@ -147,7 +147,7 @@ put_ports:
     if( pkitems[i].queued ) {
       ipc_port_remove_poller(pkitems[i].port,&pkitems[i].qtask);
     }
-    __ipc_put_port(pkitems[i].port);
+    ipc_put_port(pkitems[i].port);
 
     /* Copy resulting events back to userspace. */
     if( nevents > 0 ) {

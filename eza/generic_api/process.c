@@ -243,7 +243,7 @@ static int __disintegrate_task(task_t *target,ulong_t pnum)
   iovec_t iov;
   disintegration_req_packet_t drp;
 
-  if( !(port=__ipc_get_port(current_task(),pnum)) ) {
+  if( !(port=ipc_get_port(current_task(),pnum)) ) {
     return -EINVAL;
   }
 
@@ -295,7 +295,7 @@ static int __disintegrate_task(task_t *target,ulong_t pnum)
 free_descr:
   memfree(descr);
 put_port:
-  __ipc_put_port(port);
+  ipc_put_port(port);
   return r;
 }
 

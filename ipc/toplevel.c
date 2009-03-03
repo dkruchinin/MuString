@@ -62,7 +62,7 @@ long sys_create_port( ulong_t flags, ulong_t queue_size )
     flags |= IPC_BLOCKED_ACCESS;
   }
 
-  return __ipc_create_port(caller,flags,queue_size);
+  return ipc_create_port(caller,flags,queue_size);
 }
 
 long sys_close_port(ulong_t port)
@@ -89,13 +89,13 @@ static long __reply_iov(ulong_t port,ulong_t msg_id,
     }
   }
 
-  p=__ipc_get_port(current_task(),port);
+  p=ipc_get_port(current_task(),port);
   if( !p ) {
     return -EINVAL;
   }
 
   r=ipc_port_reply_iov(p,msg_id,reply_iov,numvecs,reply_size);
-  __ipc_put_port(p);
+  ipc_put_port(p);
   return r;
 }
 
@@ -145,13 +145,13 @@ size_t sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
     piovec=NULL;
   }
 
-  p=__ipc_get_port(current_task(),port);
+  p=ipc_get_port(current_task(),port);
   if( !p ) {
     return -EINVAL;
   }
 
   r=ipc_port_receive(p,flags,piovec,1,msg_info);
-  __ipc_put_port(p);
+  ipc_put_port(p);
   return r;
 }
 
@@ -214,7 +214,7 @@ static int __send_iov_v(ulong_t channel,
 
   }
 
-  __ipc_put_port(port);
+  ipc_put_port(port);
 put_channel:
   ipc_put_channel(c);
   return r;
@@ -295,7 +295,7 @@ long sys_port_msg_read(ulong_t port,ulong_t msg_id,uintptr_t recv_buf,
     return -EFAULT;
   }
 
-  p=__ipc_get_port(current_task(),port);
+  p=ipc_get_port(current_task(),port);
   if( !p ) {
     return -EINVAL;
   }
@@ -304,7 +304,7 @@ long sys_port_msg_read(ulong_t port,ulong_t msg_id,uintptr_t recv_buf,
   iovec.iov_len=recv_len;
 
   r=ipc_port_msg_read(p,msg_id,&iovec,1,offset);
-  __ipc_put_port(p);
+  ipc_put_port(p);
   return r;
 }
 

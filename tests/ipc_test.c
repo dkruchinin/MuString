@@ -1706,7 +1706,7 @@ static void __prioritized_port_test(void *ctx)
     }
   }
 
-  genport=__ipc_get_port(current_task(),__prio_port);
+  genport=ipc_get_port(current_task(),__prio_port);
   if( !genport ) {
     tf->printf(SERVER_THREAD"Can't resolve port !");
     tf->abort();

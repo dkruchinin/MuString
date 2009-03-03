@@ -466,6 +466,9 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   task->flags = 0;
   task->priv = priv;
 
+  task->uid=parent->uid;
+  task->gid=parent->gid;
+
   __add_to_parent(task,parent,flags,priv);
 
   *t = task;
