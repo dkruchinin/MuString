@@ -164,14 +164,6 @@ void migration_thread(void *data);
 
 #endif
 
-static inline void grab_task_struct(struct __task_struct *t)
-{
-}
-
-static inline void release_task_struct(struct __task_struct *t)
-{
-}
-
 #define cpu_affinity_ok(task,c) ( ((task)->cpu_affinity_mask & (1<<(c))) && is_cpu_online((c)) )
 
 #define activate_task(t) sched_change_task_state((t),TASK_STATE_RUNNABLE)

@@ -287,9 +287,9 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
 
   /* First, check for pending disintegration requests. */
   if( uworks & ARCH_CTX_UWORKS_DISINT_REQ_MASK ) {
-    if( current->uworks_data.cancellation_pending ) {
-      /* Cancellation request.
-       */
+    if( current->uworks_data.exit_pending ) {
+      do_exit(current->jointee.exit_ptr,0,0);
+    } else if( current->uworks_data.cancellation_pending ) {
       __handle_cancellation_request(reason,kstack);
       clear_task_disintegration_request(current);
     } else {

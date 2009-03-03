@@ -35,6 +35,7 @@
 #include <eza/event.h>
 #include <eza/scheduler.h>
 #include <ds/idx_allocator.h>
+#include <eza/arch/atomic.h>
 
 typedef uint32_t time_slice_t;
 typedef uint16_t uid_t;
@@ -161,7 +162,7 @@ typedef struct __uwork_data {
   /* Thread cancellation-related stuff. */
   uintptr_t destructor;
   uint8_t cancel_state,cancel_type;
-  bool cancellation_pending;
+  bool cancellation_pending,exit_pending;
 } uworks_data_t;
 
 /* Task that waits another task to exit. */
@@ -189,8 +190,8 @@ typedef struct __task_struct {
   task_state_t state;
   cpu_array_t cpu_affinity_mask;
   priority_t static_priority, priority, orig_priority;
-
   kernel_stack_t kernel_stack;
+
   union {
     rpd_t rpd;
     vmm_t *task_mm;
@@ -199,6 +200,7 @@ typedef struct __task_struct {
   task_flags_t flags;
 
   spinlock_t lock;
+  atomic_t refcount;
 
   /* Children/threads - related stuff. */
   struct __task_struct *group_leader;
@@ -242,9 +244,7 @@ typedef struct __task_struct {
   struct __task_struct *terminator;
   event_t reinc_event;
 
-  /* POSIX items related stuff. */
   struct __posix_stuff *posix_stuff;
-
   tg_leader_private_t *tg_priv;
 
   /* Userspace works-reated stuff. */
@@ -424,5 +424,9 @@ void exit_task_events(struct __task_struct *target);
   arch_read_pending_uworks( &(((task_t*)(t))->arch_context[0]) )
 
 #define __UNUSABLE_PTR (void *)0x007  /* Target pointer is not usable now. */
+
+#define grab_task_struct(t) atomic_inc(&(t)->refcount)
+
+void release_task_struct(struct __task_struct *t);
 
 #endif

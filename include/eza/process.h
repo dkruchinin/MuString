@@ -93,11 +93,13 @@ typedef enum {
   EF_DISINTEGRATE=0x1,
 } exit_flags_t;
 
-void do_exit(int code,ulong_t flags,ulong_t exitval);
+void do_exit(int code,ulong_t flags,long exitval);
 
 void perform_disintegrate_work(void);
 
 #define perform_disintegration_work()  do_exit(0,EF_DISINTEGRATE,0)
 #define perform_cancellation_work()    do_exit(0,0,PTHREAD_CANCELED)
+
+void force_task_exit(task_t *target,int exit_value);
 
 #endif

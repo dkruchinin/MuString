@@ -223,10 +223,6 @@ static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
       }
     }
 
-    list_init_node(&task->pid_list);
-    list_init_node(&task->child_list);
-    list_init_node(&task->migration_list);
-
     list_init_head(&task->children);
     list_init_head(&task->threads);
 
@@ -234,13 +230,11 @@ static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
     list_init_head(&task->task_events.listeners);
     list_init_head(&task->jointed);
 
-    event_initialize(&task->jointee.e);
-    list_init_node(&task->jointee.l);
-
     spinlock_initialize(&task->lock);
     mutex_initialize(&task->child_lock);
     spinlock_initialize(&task->member_lock);
 
+    atomic_set(&task->refcount,1);
     task->flags = 0;
     task->group_leader=task;
     task->cpu_affinity_mask=ONLINE_CPUS_MASK;
@@ -497,3 +491,8 @@ task_create_fault:
   return r;
 }
 
+void release_task_struct(struct __task_struct *t)
+{
+  if( atomic_dec_and_test(&t->refcount) ) {
+  }
+}

@@ -220,7 +220,7 @@ static void __server_task_runner(void *data)
   if( i > 0 ) {
     kprintf("[LAUNCHER] Starting %d servers with delay %d. First user (non-NS) PID is %d\n",
             i,delay,2*CONFIG_NRCPUS+3);
-    kconsole->disable();
+    //kconsole->disable();
   }
 
   for(sn=0,a=0;a<i;a++) {
@@ -268,7 +268,7 @@ static void __server_task_runner(void *data)
         panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);
       }
       sn++;
-      sleep(delay);
+      //sleep(delay);
     } else if( !strncmp(&modvbase[257],"ustar",5 ) ) { /* TAR-based ramdisk ? */
       if( initrd_start_page ) {
         panic("Only one instance of initial RAM disk is allowed !");
@@ -281,14 +281,15 @@ static void __server_task_runner(void *data)
     }
   }
   kprintf("[LAUNCHER]: All servers started. Exiting ...\n");
-  sys_exit(0);
+  //sys_exit(0);
 }
 
 void server_run_tasks(void)
 {
-  if( kernel_thread(__server_task_runner,NULL,NULL) ) {
-    panic("Can't launch a Core Servers runner !");
-  }
+  //if( kernel_thread(__server_task_runner,NULL,NULL) ) {
+  //panic("Can't launch a Core Servers runner !");
+//}
+  __server_task_runner(NULL);
 }
 
 #else

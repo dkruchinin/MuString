@@ -114,7 +114,7 @@ static void __exit_resources(task_t *exiter,ulong_t flags)
   }
 }
 
-void do_exit(int code,ulong_t flags,ulong_t exitval)
+void do_exit(int code,ulong_t flags,long exitval)
 {
   task_t *exiter=current_task();
   list_node_t *ln;
@@ -271,7 +271,13 @@ void do_exit(int code,ulong_t flags,ulong_t exitval)
 
 void sys_exit(int code)
 {
-  do_exit(code,0,0);
+  code=EXITCODE(code,code);
+
+  if( is_thread(current_task() ) ) {
+    /* Initiate termination of the root thread and proceed. */
+    force_task_exit(current_task()->group_leader,code);
+  }
+  do_exit(code,code,0);
 }
 
 void sys_thread_exit(long value)
