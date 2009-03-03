@@ -39,6 +39,7 @@
 #include <eza/arch/scheduler.h>
 #include <mlibc/types.h>
 #include <eza/process.h>
+#include <config.h>
 
 /* Available PIDs live here. */
 static index_array_t pid_array;
@@ -90,31 +91,6 @@ void initialize_task_subsystem(void)
   initialize_process_subsystem();
 }
 
-static void __free_pid(pid_t pid)
-{
-  LOCK_PID_ARRAY;
-  index_array_free_value(&pid_array,pid);
-  UNLOCK_PID_ARRAY;
-}
-
-static page_frame_t *alloc_stack_pages(void)
-{
-  page_frame_t *p;
-
-  p = alloc_pages(KERNEL_STACK_PAGES, 0);
-  return p;
-}
-
-static tid_t __allocate_tid(task_t *group_leader)
-{
-  static tid_t tid=1;
-  return tid++;
-}
-
-static void __free_tid(tid_t tid,task_t *group_leader)
-{
-}
-
 static int __alloc_pid_and_tid(task_t *parent,ulong_t flags,
                                     pid_t *ppid, tid_t *ptid,
                                     task_privelege_t priv)
@@ -141,7 +117,16 @@ static int __alloc_pid_and_tid(task_t *parent,ulong_t flags,
 
   if( (flags & CLONE_MM) && priv != TPL_KERNEL ) {
     pid=parent->pid;
-    tid=GENERATE_TID(pid,__allocate_tid(parent->group_leader));
+
+    LOCK_TASK_STRUCT(parent);
+    tid=idx_allocate(&parent->group_leader->tg_priv->tid_allocator);
+    UNLOCK_TASK_STRUCT(parent);
+
+    if( tid != IDX_INVAL ) {
+      tid=GENERATE_TID(pid,tid);
+    } else {
+      return -ENOMEM;
+    }
   } else {
     pid = __allocate_pid();
     if( pid == INVALID_PID ) {
@@ -155,10 +140,18 @@ static int __alloc_pid_and_tid(task_t *parent,ulong_t flags,
   return 0;
 }
 
-static void __free_pid_and_tid(task_t *parent,pid_t pid, tid_t tid)
+static void __free_pid_and_tid(task_t *parent,pid_t pid, tid_t tid,
+                               bool thread)
 {
-  __free_pid(pid);
-  __free_tid(tid,parent->group_leader);
+  if( thread ) {
+    LOCK_TASK_STRUCT(parent);
+    idx_free(&parent->group_leader->tg_priv->tid_allocator,TID(tid));
+    UNLOCK_TASK_STRUCT(parent);
+  } else {
+    LOCK_PID_ARRAY;
+    index_array_free_value(&pid_array,pid);
+    UNLOCK_PID_ARRAY;
+  }
 }
 
 static void __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
@@ -187,13 +180,6 @@ static void __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
     task->ppid=0;
   }
 }
- 
-#if 0 /* [DEACTIVATED] */
-static void __free_task_struct(task_t *task)
-{
-  memfree(task);
-}
-#endif 
 
 void cleanup_thread_data(gc_action_t *action)
 {
@@ -205,20 +191,36 @@ void cleanup_thread_data(gc_action_t *action)
   free_kernel_stack(task->kernel_stack.id);
 }
 
+static tg_leader_private_t *__allocate_tg_data(task_privelege_t priv)
+{
+  tg_leader_private_t *d=memalloc(sizeof(*d));
+
+  if( d ) {
+    memset(d,0,sizeof(*d));
+    if( priv != TPL_KERNEL ) {
+       if(idx_allocator_init(&d->tid_allocator,CONFIG_THREADS_PER_PROCESS) ) {
+         memfree(d);
+         return NULL;
+       } else {
+         /* Reserve zero index for the main thread. */
+         idx_reserve(&d->tid_allocator,0);
+       }
+    }
+  }
+  return d;
+}
+
 static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
 {
   task_t *task=alloc_pages_addr(1, AF_ZERO);
 
   if( task ) {
     if( !(flags & CLONE_MM) || priv == TPL_KERNEL ) {
-      task->tg_priv=memalloc(sizeof(tg_leader_private_t));
-
+      task->tg_priv=__allocate_tg_data(priv);
       if( !task->tg_priv ) {
         free_pages_addr(task, 1);
         return NULL;
       }
-
-      memset(task->tg_priv,0,sizeof(tg_leader_private_t));
     }
 
     list_init_node(&task->pid_list);
@@ -342,8 +344,8 @@ static long __setup_posix(task_t *task,task_t *parent,
   }
 }
 
-static int initialize_task_mm(task_t *orig, task_t *target,
-                              task_creation_flags_t flags, task_privelege_t priv)
+static int __initialize_task_mm(task_t *orig, task_t *target,
+                                task_creation_flags_t flags, task_privelege_t priv)
 {
   int ret = 0;
   
@@ -401,15 +403,12 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
     goto free_task;
   }
 
-  /* Initialize task's MM. */
-  r = initialize_task_mm(parent,task,flags,priv);
+  r = __initialize_task_mm(parent,task,flags,priv);
   if( r != 0 ) {
     goto free_stack;
   }
 
-  /* Prepare kernel stack. */
-  /* TODO: [mt] Implement normal stack allocation. */
-  if(!(stack_pages = alloc_stack_pages())) {
+  if( !(stack_pages = alloc_pages(KERNEL_STACK_PAGES,0)) ) {
     r = -ENOMEM;
     goto free_mm;
   }
@@ -492,7 +491,7 @@ free_stack:
 free_task:
   /* TODO: Free task struct page here. [mt] */
 free_pid:
-  __free_pid_and_tid(parent,pid,tid);
+  __free_pid_and_tid(parent,pid,tid,(flags & CLONE_MM)!=0);
 task_create_fault:
   *t = NULL;
   return r;

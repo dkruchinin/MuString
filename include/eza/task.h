@@ -27,7 +27,6 @@
 #include <mlibc/types.h>
 #include <eza/kstack.h>
 #include <eza/arch/context.h>
-#include <mlibc/index_array.h>
 #include <mm/page.h>
 #include <mm/vmm.h>
 #include <eza/limits.h>
@@ -35,6 +34,7 @@
 #include <eza/mutex.h>
 #include <eza/event.h>
 #include <eza/scheduler.h>
+#include <ds/idx_allocator.h>
 
 typedef uint32_t time_slice_t;
 typedef uint16_t uid_t;
@@ -76,7 +76,6 @@ typedef uint16_t uid_t;
 #define UNLOCK_TASK_EVENTS_R(t)
 #define LOCK_TASK_EVENTS_W(t)
 #define UNLOCK_TASK_EVENTS_W(t)
-
 
 typedef struct __task_event_ctl_arg {
   ulong_t ev_mask;
@@ -176,6 +175,7 @@ typedef struct __jointee {
 typedef struct __tg_leader_private {
   countered_event_t ce;
   ulong_t num_threads;
+  idx_allocator_t tid_allocator;
 } tg_leader_private_t;
 
 /* Abstract object for scheduling. */
