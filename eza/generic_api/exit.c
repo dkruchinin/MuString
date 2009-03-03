@@ -29,7 +29,7 @@
 #include <ipc/ipc.h>
 #include <eza/security.h>
 #include <eza/process.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 #include <eza/signal.h>
 #include <eza/event.h>
 #include <eza/wait.h>

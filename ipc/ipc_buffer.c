@@ -30,7 +30,7 @@
 #include <eza/arch/page.h>
 #include <mm/page.h>
 #include <mlibc/stddef.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 #include <eza/usercopy.h>
 
 #define LOCK_TASK_VM(x)

@@ -27,7 +27,6 @@
 #include <eza/task.h>
 #include <eza/arch/types.h>
 #include <kernel/syscalls.h>
-#include <ipc/gen_port.h>
 #include <ipc/port.h>
 #include <eza/wait.h>
 

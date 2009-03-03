@@ -31,7 +31,7 @@
 #include <eza/process.h>
 #include <eza/security.h>
 #include <eza/usercopy.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 #include <ipc/channel.h>
 
 /* TODO: [mt] Implement security checks for port-related syscalls ! */

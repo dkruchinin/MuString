@@ -3,14 +3,12 @@
 
 #include <eza/arch/types.h>
 #include <eza/mutex.h>
-#include <ipc/port.h>
 #include <eza/arch/atomic.h>
 #include <ds/idx_allocator.h>
 #include <eza/spinlock.h>
 #include <eza/arch/arch_ipc.h>
-#include <ipc/buffer.h>
 #include <ipc/channel.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 
 /* Blocking mode */
 #define IPC_BLOCKED_ACCESS  0x1
@@ -85,6 +83,11 @@ void dup_task_ipc_resources(task_ipc_t *ipc);
 void *allocate_ipc_memory(long size);
 void free_ipc_memory(void *addr,int size);
 
+typedef struct __iovec {
+  void *iov_base;
+  size_t iov_len;
+} iovec_t;
+
 static inline task_ipc_t *get_task_ipc(task_t *t)
 {
   task_ipc_t *ipc;
@@ -102,5 +105,6 @@ static inline task_ipc_t *get_task_ipc(task_t *t)
 }
 
 long replicate_ipc(task_ipc_t *source,task_t *rcpt);
+void initialize_ipc(void);
 
 #endif

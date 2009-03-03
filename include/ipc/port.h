@@ -36,14 +36,20 @@
 #include <ipc/buffer.h>
 #include <ipc/poll.h>
 
-struct __ipc_port_t;
-
 #define IPC_BUFFERED_PORT_LENGTH  PAGE_SIZE
+#define MAX_PORT_MSG_LENGTH  _mb2b(2)
 
-#define IPC_PORT_SHUTDOWN  0x800
+/* Common port flags. */
+#define IPC_PORT_SHUTDOWN     0x800 /**< Port is under shutdown. */
 
-#define INSUFFICIENT_MSG_ID  0x100000
+#define INSUFFICIENT_MSG_ID  ~(unsigned long)0
 #define WAITQUEUE_MSG_ID     INSUFFICIENT_MSG_ID 
+
+#define REF_PORT(p)  atomic_inc(&p->use_count)
+#define UNREF_PORT(p)  atomic_dec(&p->use_count)
+
+#define IPC_PORT_DIRECT_FLAGS  (IPC_BLOCKED_ACCESS)
+#define __MSG_WAS_DEQUEUED  (ipc_port_message_t *)0x007
 
 typedef enum __ipc_msg_state {
   MSG_STATE_NOT_PROCESSED,
@@ -61,24 +67,11 @@ typedef struct __ipc_port_message_t {
   list_node_t l,messages_list;
   list_head_t h;  /* For implementing skiplists. */
   event_t event;
-  struct __ipc_port_t *port;
   ipc_user_buffer_t *snd_buf, *rcv_buf;
   ulong_t num_send_bufs,num_recv_buffers;
   task_t *sender;
   ipc_msg_state_t state;
 } ipc_port_message_t;
-
-typedef struct __ipc_port_t {
-  ulong_t flags;
-  spinlock_t lock;
-  idx_allocator_t msg_array;
-  atomic_t use_count;
-  ulong_t queue_size,avail_messages;
-  list_head_t messages;
-  ipc_port_message_t **message_ptrs;
-  task_t *owner;
-  wqueue_t waitqueue;
-} ipc_port_t;
 
 typedef struct __port_msg_info {
   uint16_t msg_id;
@@ -89,12 +82,92 @@ typedef struct __port_msg_info {
   uid_t sender_gid;
 } port_msg_info_t;
 
+struct __ipc_gen_port;
+
+typedef struct __ipc_port_msg_ops {
+  ipc_port_message_t *(*lookup_message)(struct __ipc_gen_port *port,
+                                        ulong_t msg_id);
+  int (*init_data_storage)(struct __ipc_gen_port *port,task_t *owner, ulong_t queue_size);
+  int (*insert_message)(struct __ipc_gen_port *port,
+                             ipc_port_message_t *msg);
+  ipc_port_message_t *(*extract_message)(struct __ipc_gen_port *port,
+                                         ulong_t flags);
+  void (*dequeue_message)(struct __ipc_gen_port *port,ipc_port_message_t *msg);
+  int (*remove_message)(struct __ipc_gen_port *port,
+                                    ipc_port_message_t *msg);
+  ipc_port_message_t *(*remove_head_message)(struct __ipc_gen_port *port);
+} ipc_port_msg_ops_t;
+
+typedef struct __ipc_port_ops {
+  void (*destructor)(struct __ipc_gen_port *port);
+} ipc_port_ops_t;
+
+typedef struct __ipc_gen_port {
+  ulong_t flags;
+  spinlock_t lock;
+  atomic_t use_count,own_count;
+  ulong_t avail_messages,total_messages,capacity;
+  wqueue_t waitqueue;
+  ipc_port_msg_ops_t *msg_ops;
+  ipc_port_ops_t *port_ops;
+  void *data_storage;
+  list_head_t channels;  
+} ipc_gen_port_t;
+
+int __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size);
+int ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
+                     struct __iovec *iovec,ulong_t numvec,
+                     port_msg_info_t *msg_info);
+ipc_gen_port_t *__ipc_get_port(task_t *task,ulong_t port);
+void __ipc_put_port(ipc_gen_port_t *p);
+int __ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
+                          ulong_t reply_buf,ulong_t reply_len);
+int ipc_close_port(task_t *owner,ulong_t port);
+
+extern ipc_port_msg_ops_t prio_port_msg_ops;
+extern ipc_port_ops_t prio_port_ops;
+
 #define IPC_LOCK_PORT(p) spinlock_lock(&p->lock)
 #define IPC_UNLOCK_PORT(p) spinlock_unlock(&p->lock)
 
 #define IPC_LOCK_PORT_W(p) spinlock_lock(&p->lock)
 #define IPC_UNLOCK_PORT_W(p) spinlock_unlock(&p->lock)
 
-void initialize_ipc(void);
+struct __iovec;
+
+poll_event_t ipc_port_check_events(ipc_gen_port_t *port,wqueue_task_t *w,
+                                   poll_event_t evmask);
+void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w);
+
+void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w);
+ipc_port_message_t *ipc_create_port_message_iov_v(struct __iovec *snd_kiovecs,ulong_t snd_numvecs,
+                                                  ulong_t data_len,bool blocked,
+                                                  struct __iovec *rcv_kiovecs,ulong_t rcv_numvecs,
+                                                  ipc_user_buffer_t *snd_bufs,
+                                                  ipc_user_buffer_t *rcv_bufs,
+                                                  ulong_t rcv_size);
+int ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
+                       struct __iovec *reply_iov,ulong_t numvecs,
+                       ulong_t reply_size);
+int ipc_port_send_iov(struct __ipc_gen_port *port,
+                      ipc_port_message_t *msg,bool sync_send,
+                      struct __iovec *iovecs,ulong_t numvecs,
+                      ulong_t reply_len);
+long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
+                       struct __iovec *rcv_iov,ulong_t numvecs,ulong_t offset);
+ipc_gen_port_t *ipc_clone_port(ipc_gen_port_t *p);
+
+#define IPC_NB_MESSAGE_MAXLEN  (512-sizeof(ipc_port_message_t))
+
+#define IPC_RESET_MESSAGE(m,t)   do {           \
+    list_init_node(&(m)->l);                    \
+    list_init_node(&(m)->messages_list);        \
+    event_initialize(&(m)->event);              \
+    event_set_task(&(m)->event,(t));            \
+    (m)->state=MSG_STATE_NOT_PROCESSED;         \
+  } while(0)
+
+#define put_ipc_port_message(m)  memfree((m))
+#define ipc_message_data(m) ((m)->data_size <= IPC_NB_MESSAGE_MAXLEN ? (void *)(m)->send_buffer : NULL )
 
 #endif

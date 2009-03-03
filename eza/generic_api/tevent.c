@@ -27,7 +27,7 @@
 #include <mm/slab.h>
 #include <ds/list.h>
 #include <eza/task.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 #include <ipc/ipc.h>
 
 #define __free_listener(l)  memfree(l)

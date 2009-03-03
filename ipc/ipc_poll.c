@@ -36,7 +36,7 @@
 #include <eza/scheduler.h>
 #include <eza/usercopy.h>
 #include <eza/arch/atomic.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 
 typedef struct __poll_kitem {
   wqueue_task_t qtask;

@@ -40,7 +40,7 @@
 #include <kernel/syscalls.h>
 #include <eza/kconsole.h>
 #include <eza/usercopy.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 #include <ipc/ipc.h>
 
 typedef uint32_t hash_level_t;

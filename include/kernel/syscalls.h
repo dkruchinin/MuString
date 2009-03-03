@@ -28,7 +28,7 @@
 #include <ipc/port.h>
 #include <eza/time.h>
 #include <ipc/poll.h>
-#include <ipc/gen_port.h>
+#include <ipc/ipc.h>
 #include <eza/sync.h>
 #include <eza/signal.h>
 #include <eza/kcontrol.h>

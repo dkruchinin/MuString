@@ -35,7 +35,7 @@
 #include <eza/arch/preempt.h>
 #include <eza/kconsole.h>
 #include <mm/slab.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 #include <eza/event.h>
 #include <eza/signal.h>
 #include <eza/usercopy.h>
@@ -190,14 +190,8 @@ static int __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
 
   IPC_INIT_PORT(p);
 
-  if( flags & IPC_PRIORITIZED_ACCESS ) {
-    p->msg_ops=&prio_port_msg_ops;
-    p->port_ops=&prio_port_ops;
-  } else {
-    p->msg_ops=&def_port_msg_ops;
-    p->port_ops=&def_port_ops;
-  }
-
+  p->msg_ops=&prio_port_msg_ops;
+  p->port_ops=&prio_port_ops;
   p->flags=(flags & IPC_PORT_DIRECT_FLAGS);
   r=p->msg_ops->init_data_storage(p,owner,queue_size);
   if( r ) {

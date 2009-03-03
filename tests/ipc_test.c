@@ -17,7 +17,7 @@
 #include <eza/uinterrupt.h>
 #include <ipc/poll.h>
 #include <eza/gc.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 #include <ipc/channel.h>
 #include <test.h>
 #include <mm/slab.h>
@@ -1595,7 +1595,7 @@ static void __prioritized_port_test(void *ctx)
   /* Only one task from the most prioritized group can initially be
    * in the port's message queue. This will give us a better test conditions.
    */
-  __prio_port=sys_create_port(IPC_PRIORITIZED_ACCESS | IPC_BLOCKED_ACCESS,
+  __prio_port=sys_create_port(IPC_BLOCKED_ACCESS,
                               __NUM_PRIO_THREADS-(__NGROUP_TASKS-1));
   if( __prio_port < 0 ) {
     tf->printf("Can't create prioritized port !");

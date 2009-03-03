@@ -3,7 +3,7 @@
 #include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
 #include <eza/task.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 #include <ds/list.h>
 #include <ipc/channel.h>
 #include <mm/slab.h>
