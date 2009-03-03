@@ -15,20 +15,24 @@ typedef unsigned long memobj_id_t;
 
 typedef enum __memobj_nature {
   MMO_NTR_GENERIC = 1,
+  MMO_NTR_COW,
+  MMO_NTR_SRV,
   MMO_NTR_PAGECACHE,
-  MMO_NTR_SRV, /* TODO DK: implement this fucking stuff... */
+  MMO_NTR_PROXY,
+  MMO_NTR_STATIC,  
 };
 
 enum { /* memory object flags */
   MMO_FLG_SPIRIT    = 0x01,
   MMO_FLG_STICKY    = 0x02,
   MMO_FLG_LEECH     = 0x04,
-  MMO_FLG_DPC       = 0x08,
-  MMO_FLG_BACKENED  = 0x10,
-  MMO_FLG_NOSHARED  = 0x20,
+  MMO_FLG_IMMORTAL  = 0x08,
+  MMO_FLG_DPC       = 0x10,
+  MMO_FLG_BACKENED  = 0x20,
+  MMO_FLG_NOSHARED  = 0x40,
 };
 
-#define MMO_LIVE_MASK (MMO_FLG_SPIRIT | MMO_FLG_STICKY | MMO_FLG_LEECH)
+#define MMO_LIVE_MASK (MMO_FLG_SPIRIT | MMO_FLG_STICKY | MMO_FLG_LEECH | MMO_FLG_IMMORTAL)
 
 struct __memobj;
 struct __vmrange;
@@ -43,16 +47,23 @@ typedef struct __memobj_ops {
 /* FIXME DK: and what about backend? */
 typedef struct __memobj {
   memobj_id_t id;
-  memobj_ops_t mops;
+  memobj_ops_t *mops;
   pgoff_t size;
+  spinlock_t  vmrs_lst_lock;
+  list_head_t vmranges_lst;
   list_node_t mmo_node;
   atomic_t users_count;
+  atomic_t num_vmrs;
   memobj_nature_t nature;
-  uint32_t flags;
+  uint32_t flags;  
   void *private;
 } memobj_t;
 
-#define GENERIC_MEMOBJ_ID 0
+#define NUM_RSRV_MEMOBJ_IDS 3
+#define GENERIC_MEMOBJ_ID   0
+#define COW_MEMOBJ_ID       1
+#define SRV_MEMOBJ_ID       2
+
 extern memobj_t generic_memobj;
 
 void memobj_subsystem_initialize(void);

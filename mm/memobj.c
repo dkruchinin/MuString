@@ -46,9 +46,13 @@ static int __memobjs_cmp_func(void *k1, void *k2)
 
 void memobj_subsystem_initialize(void)
 {
+  memobj_id_t i;
+  
   kprintf("[MM] Initializing memory objects subsystem...\n");
   idx_allocator_init(&memobjs_ida, CONFIG_MEMOBJS_MAX);
-  idx_reserve(&memobjs_ida, GENERIC_MEMOBJ_ID);
+  for (i = 0; i < NUM_RSRV_MEMOBJ_IDS)
+    idx_reserve(&memobjs_ida, i);
+
   memobjs_memcache = create_memcache("Mmemory objects cache", sizeof(memobj_t),
                                      DEFAULT_SLAB_PAGES, SMCF_PGEN | SMCF_GENERIC);
   if (!memobjs_memcache)
@@ -80,6 +84,7 @@ int memobj_create(memobj_nature_t nature, uint32_t flags, pgoff_t size, /* OUT *
 
   memset(memobj, 0, sizeof(*memobj));
   memobj->size = size;
+  list_init_head(&memobj->vmranges_lst);
   switch (nature) {
       case MMO_NTR_GENERIC:
         ret = generic_memobj_intialize(memobj, flags);
