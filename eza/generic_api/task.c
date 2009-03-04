@@ -154,9 +154,11 @@ static void __free_pid_and_tid(task_t *parent,pid_t pid, tid_t tid,
   }
 }
 
-static void __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
+static int __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
                             task_privelege_t priv)
 {
+  int r=0;
+
   if( parent && parent->pid ) {
     task->ppid = parent->pid;
 
@@ -165,9 +167,13 @@ static void __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
       LOCK_TASK_CHILDS(task->group_leader);
       LOCK_TASK_STRUCT(task->group_leader);
 
-      parent->group_leader->tg_priv->num_threads++;
-      list_add2tail(&parent->group_leader->threads,
-                    &task->child_list);
+      if( !(task->group_leader->flags & TF_EXITING) ) {
+        parent->group_leader->tg_priv->num_threads++;
+        list_add2tail(&parent->group_leader->threads,
+                      &task->child_list);
+      } else {
+        r=-EAGAIN;
+      }
       UNLOCK_TASK_STRUCT(task->group_leader);
       UNLOCK_TASK_CHILDS(task->group_leader);
     } else {
@@ -179,6 +185,7 @@ static void __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
   } else {
     task->ppid=0;
   }
+  return r;
 }
 
 void cleanup_thread_data(gc_action_t *action)
@@ -463,10 +470,10 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   task->uid=parent->uid;
   task->gid=parent->gid;
 
-  __add_to_parent(task,parent,flags,priv);
-
-  *t = task;
-  return 0;
+  if( !(r=__add_to_parent(task,parent,flags,priv)) ) {
+    *t = task;
+    return 0; 
+  }
 free_signals:
   /* TODO: [mt] Free signals data properly. */
 free_uevents:
