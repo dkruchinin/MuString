@@ -77,10 +77,11 @@ bool __update_pending_signals(task_t *task)
 bool update_pending_signals(task_t *task)
 {
   bool r;
+  int is;
 
-  LOCK_TASK_SIGNALS(task);
+  LOCK_TASK_SIGNALS_INT(task,is);
   r=__update_pending_signals(task);
-  UNLOCK_TASK_SIGNALS(task);
+  UNLOCK_TASK_SIGNALS_INT(task,is);
 
   return r;
 }
@@ -152,11 +153,11 @@ static void __send_siginfo_postlogic(task_t *task,usiginfo_t *info)
 int send_task_siginfo(task_t *task,usiginfo_t *info,bool force_delivery,
                       void *kern_priv)
 {
-  int r;
+  int r,is;
 
-  LOCK_TASK_SIGNALS(task);
+  LOCK_TASK_SIGNALS_INT(task,is);
   r=__send_task_siginfo(task,info,kern_priv,force_delivery);
-  UNLOCK_TASK_SIGNALS(task);
+  UNLOCK_TASK_SIGNALS_INT(task,is);
 
   if( !r ) {
     __send_siginfo_postlogic(task,info);
@@ -172,7 +173,7 @@ int send_process_siginfo(pid_t pid,usiginfo_t *siginfo,void *kern_priv)
   task_t *root=pid_to_task(pid);
   task_t *target=NULL;
   int sig=siginfo->si_signo;
-  int i,ab=SIGRTMAX;
+  int i,is1,ab=SIGRTMAX;
   list_node_t *ln;
   bool unlock_childs=false;
 
@@ -185,6 +186,7 @@ int send_process_siginfo(pid_t pid,usiginfo_t *siginfo,void *kern_priv)
     /* Locate a valid target thread within target process starting from
      * the main thread.
      */
+    interrupts_save_and_disable(is1);
     LOCK_TASK_SIGNALS(root);
     if( can_send_signal_to_task(sig,root) ) {
       target=root;
@@ -222,12 +224,14 @@ int send_process_siginfo(pid_t pid,usiginfo_t *siginfo,void *kern_priv)
 
   if( !target ) {
     /* No valid targets found. */
+    interrupts_restore(is1);
     return 0;
   } else {
     /* Only one valid target was found, so check it one more time. */
     LOCK_TASK_SIGNALS(target);
     if( !can_send_signal_to_task(sig,target) ) {
       UNLOCK_TASK_SIGNALS(target);
+      interrupts_restore(is1);
       return 0;
     }
     /* Fallthrough. */
@@ -240,6 +244,7 @@ send_signal:
   if( unlock_childs ) {
     UNLOCK_TASK_CHILDS(root);
   }
+  interrupts_restore(is1);
 
   __send_siginfo_postlogic(target,siginfo);
   return 0;
@@ -295,15 +300,16 @@ long sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset)
 {
   task_t *target=current_task();
   sigset_t kset,wset;
+  int is;
 
   if( how < 0 || how > SIG_SETMASK ) {
     return -EINVAL;
   }
 
   if( oldset != NULL ) {
-    LOCK_TASK_SIGNALS(target);
+    LOCK_TASK_SIGNALS_INT(target,is);
     kset=target->siginfo.blocked;
-    UNLOCK_TASK_SIGNALS(target);
+    UNLOCK_TASK_SIGNALS_INT(target,is);
 
     if( copy_to_user(oldset,&kset,sizeof(kset)) ) {
       return -EFAULT;
@@ -316,7 +322,7 @@ long sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset)
     }
     kset &= ~UNTOUCHABLE_SIGNALS;
 
-    LOCK_TASK_SIGNALS(target);
+    LOCK_TASK_SIGNALS_INT(target,is);
     wset=target->siginfo.blocked;
 
     switch( how ) {
@@ -333,7 +339,7 @@ long sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset)
 
     target->siginfo.blocked=wset;
     __update_pending_signals(target);
-    UNLOCK_TASK_SIGNALS(target);
+    UNLOCK_TASK_SIGNALS_INT(target,is);
   }
 
   return 0;
@@ -377,6 +383,7 @@ static int sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
   task_t *caller=current_task();
   sa_sigaction_t s=sact->a.sa_sigaction;
   sq_header_t *removed_signals=NULL;
+  int is;
 
   if( !valid_signal(sig) ) {
     return -EINVAL;
@@ -385,7 +392,7 @@ static int sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
   /* Remove signals that can't be blocked. */
   sact->sa_mask &= ~UNTOUCHABLE_SIGNALS;
 
-  LOCK_TASK_SIGNALS(caller);
+  LOCK_TASK_SIGNALS_INT(caller,is);
   if( oact ) {
     *oact=caller->siginfo.handlers->actions[sig];
   }
@@ -400,7 +407,7 @@ static int sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
   } else {
     sigdelset(&caller->siginfo.ignored,sig);
   }
-  UNLOCK_TASK_SIGNALS(caller);
+  UNLOCK_TASK_SIGNALS_INT(caller,is);
 
   /* Now we can sefely remove all dequeued items. */
   if( removed_signals != NULL ) {
@@ -498,10 +505,11 @@ sighandlers_t *allocate_signal_handlers(void)
 sigq_item_t *extract_one_signal_from_queue(task_t *task)
 {
   sq_header_t *sh;
+  int is;
 
-  LOCK_TASK_SIGNALS(task);
+  LOCK_TASK_SIGNALS_INT(task,is);
   sh=sigqueue_remove_first_item(&task->siginfo.sigqueue,false);
-  UNLOCK_TASK_SIGNALS(task);
+  UNLOCK_TASK_SIGNALS_INT(task,is);
 
   if( sh != NULL ) {
     return container_of(sh,sigq_item_t,h);
@@ -511,10 +519,12 @@ sigq_item_t *extract_one_signal_from_queue(task_t *task)
 
 void schedule_user_deferred_action(task_t *target,gc_action_t *a,bool force)
 {
-  LOCK_TASK_SIGNALS(target);
+  int is;
+
+  LOCK_TASK_SIGNALS_INT(target,is);
   list_add2tail(&target->uworks_data.def_uactions,&a->l);
   __update_pending_signals(target);
-  UNLOCK_TASK_SIGNALS(target);
+  UNLOCK_TASK_SIGNALS_INT(target,is);
 }
 
 void process_sigitem_private(sigq_item_t *sigitem)

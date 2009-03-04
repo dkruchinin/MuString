@@ -65,8 +65,8 @@ typedef uint16_t uid_t;
 #define LOCK_TASK_STRUCT(t) spinlock_lock(&t->lock)
 #define UNLOCK_TASK_STRUCT(t) spinlock_unlock(&t->lock)
 
-#define LOCK_TASK_CHILDS(t) mutex_lock(&(t)->child_lock) 
-#define UNLOCK_TASK_CHILDS(t) mutex_unlock(&(t)->child_lock)
+#define LOCK_TASK_CHILDS(t) spinlock_lock(&(t)->child_lock) 
+#define UNLOCK_TASK_CHILDS(t) spinlock_unlock(&(t)->child_lock)
 
 #define LOCK_TASK_MEMBERS(t) spinlock_lock(&t->member_lock)
 #define UNLOCK_TASK_MEMBERS(t) spinlock_unlock(&t->member_lock)
@@ -141,6 +141,7 @@ typedef struct __signal_struct {
 #define __TF_UNDER_MIGRATION_BIT  1
 #define __TF_EXITING_BIT  2
 #define __TF_DISINTEGRATION_BIT  3
+#define __TF_GCOLLECTED_BIT      4
 
 typedef enum __task_privilege {
   TPL_KERNEL = 0,  /* Kernel task - the most serious level. */
@@ -151,8 +152,13 @@ typedef enum __task_flags {
   TF_USPC_BLOCKED=(1<<__TF_USPC_BLOCKED_BIT),/**< Block facility to change task's static priority outside the kernel **/
   TF_UNDER_MIGRATION=(1<<__TF_UNDER_MIGRATION_BIT), /**< Task is currently being migrated. Don't disturb. **/
   TF_EXITING=(1<<__TF_EXITING_BIT), /**< Task is exiting to avoid faults during 'sys_exit()' **/
-  TF_DISINTEGRATING=(1<<__TF_DISINTEGRATION_BIT) /**< Task is being disintegrated **/
+  TF_DISINTEGRATING=(1<<__TF_DISINTEGRATION_BIT), /**< Task is being disintegrated **/
+  TF_GCOLLECTED=(1<<__TF_GCOLLECTED_BIT) /**< Parent collected resources of this thread (threads only)*/
 } task_flags_t;
+
+/* Flags related to deferred userspace action processing */
+#define DAF_CANCELLATION_PENDING 0x1 /**< Thread cancellation requested. */
+#define DAF_EXIT_PENDING         0x2 /**< exit() is requested. */
 
 struct __disintegration_descr_t;
 typedef struct __uwork_data {
@@ -161,8 +167,9 @@ typedef struct __uwork_data {
 
   /* Thread cancellation-related stuff. */
   uintptr_t destructor;
+  int exit_value;
   uint8_t cancel_state,cancel_type;
-  bool cancellation_pending,exit_pending;
+  uint8_t flags;
 } uworks_data_t;
 
 /* Task that waits another task to exit. */
@@ -177,6 +184,7 @@ typedef struct __tg_leader_private {
   countered_event_t ce;
   ulong_t num_threads;
   idx_allocator_t tid_allocator;
+  mutex_t thread_mutex;
 } tg_leader_private_t;
 
 /* Abstract object for scheduling. */
@@ -204,7 +212,7 @@ typedef struct __task_struct {
 
   /* Children/threads - related stuff. */
   struct __task_struct *group_leader;
-  mutex_t child_lock;
+  spinlock_t child_lock;
   list_head_t children,threads;
   list_node_t child_list;
 

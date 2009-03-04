@@ -204,6 +204,7 @@ static tg_leader_private_t *__allocate_tg_data(task_privelege_t priv)
        } else {
          /* Reserve zero index for the main thread. */
          idx_reserve(&d->tid_allocator,0);
+         mutex_initialize(&d->thread_mutex);
        }
     }
   }
@@ -231,10 +232,10 @@ static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
     list_init_head(&task->jointed);
 
     spinlock_initialize(&task->lock);
-    mutex_initialize(&task->child_lock);
+    spinlock_initialize(&task->child_lock);
     spinlock_initialize(&task->member_lock);
 
-    atomic_set(&task->refcount,1);
+    atomic_set(&task->refcount,2); /* One extra ref is for 'wait()' */
     task->flags = 0;
     task->group_leader=task;
     task->cpu_affinity_mask=ONLINE_CPUS_MASK;

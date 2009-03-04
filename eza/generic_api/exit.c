@@ -114,10 +114,62 @@ static void __exit_resources(task_t *exiter,ulong_t flags)
   }
 }
 
+static void __kill_all_threads(task_t *exiter)
+{
+  list_head_t zthreads;
+  list_node_t *ln;
+  tg_leader_private_t *priv=exiter->tg_priv;
+  task_t *thread;
+  bool gc;
+
+  atomic_set(&priv->ce.counter,0);
+  event_initialize_task(&priv->ce.e,exiter);
+  list_init_head(&zthreads);
+
+  /* Stage 1: initiate thread shutdown. */
+  mutex_lock(&priv->thread_mutex);
+repeat:
+  LOCK_TASK_CHILDS(exiter);
+  if( !list_is_empty(&exiter->threads) ) {
+    ln=list_node_first(&exiter->threads);
+    thread=container_of(ln,task_t,child_list);
+
+    LOCK_TASK_STRUCT(thread);
+    thread->flags |= TF_GCOLLECTED;
+    list_del(ln);
+    if( thread->cwaiter == __UNUSABLE_PTR ) {
+      priv->num_threads--;
+      gc=true;
+    } else {
+      atomic_inc(&priv->ce.counter);
+      thread->cwaiter=&priv->ce;
+      list_add2tail(&zthreads,ln);
+      gc=false;
+    }
+    UNLOCK_TASK_STRUCT(thread);
+    UNLOCK_TASK_CHILDS(exiter);
+
+    if( gc ) {
+      release_task_struct(thread);
+    } else {
+      force_task_exit(thread,0);
+    }
+    goto repeat;
+  } else {
+    UNLOCK_TASK_CHILDS(exiter);
+  }
+  mutex_unlock(&priv->thread_mutex);
+
+  /* Stage 2: handle zombies. */
+  list_for_each(&zthreads,ln) {
+    thread=container_of(ln,task_t,child_list);
+    release_task_struct(thread);
+  }
+}
+
 void do_exit(int code,ulong_t flags,long exitval)
 {
   task_t *exiter=current_task();
-  list_node_t *ln;
   disintegration_descr_t *dreq;
 
   if( !exiter->pid ) {
@@ -135,60 +187,26 @@ void do_exit(int code,ulong_t flags,long exitval)
            cpu_id() );
   }
 
-  /* Voila ! We're invisible now ! */
   __set_exiting_flag(exiter);
 
-  /* Only threads and not-terminated processes become zombies. */
-  if( !(flags & EF_DISINTEGRATE) || is_thread(exiter) ) {
+  if( is_thread(exiter) ) {
     zombify_task(exiter);
   }
 
-  /* Flush any pending uworks. */
   if( !(flags & EF_DISINTEGRATE) ) {
     __flush_pending_uworks(exiter);
     task_event_notify(TASK_EVENT_TERMINATION);
   }
 
-  /* Perform general exit()-related works. */
   __exit_mm(exiter);
-
-  /* Clear any pending extra termination requests. */
   clear_task_disintegration_request(exiter);
 
   if( !is_thread(exiter) ) { /* All process-related works are performed here. */
-    tg_leader_private_t *priv=exiter->tg_priv;
-
     if( !(flags & EF_DISINTEGRATE) ) {
       __exit_limits(exiter);
       __exit_ipc(exiter);
     }
-
-    atomic_set(&priv->ce.counter,1);
-    event_initialize(&priv->ce.e);
-    event_set_task(&priv->ce.e,exiter);
-
-    LOCK_TASK_CHILDS(exiter);
-    if( priv->num_threads ) { /* Terminate all process's threads. */
-      list_for_each(&exiter->threads,ln) {
-        task_t *thread=container_of(ln,task_t,child_list);
-
-        LOCK_TASK_STRUCT(thread);
-        if( thread->cwaiter != __UNUSABLE_PTR ) {
-          atomic_inc(&priv->ce.counter);
-          thread->cwaiter=&priv->ce;
-        }
-        UNLOCK_TASK_STRUCT(thread);
-
-        set_task_disintegration_request(thread);
-        activate_task(thread);
-      }
-      UNLOCK_TASK_CHILDS(exiter);
-      event_yield(&priv->ce.e);
-    } else {
-      UNLOCK_TASK_CHILDS(exiter);
-    }
-
-    /* TODO: [mt] After we have terminated all our threads, we should notify our parent. */
+    __kill_all_threads(exiter);
 
     if( flags & EF_DISINTEGRATE ) {
       /* Prepare the final reincarnation event. */
@@ -233,6 +251,7 @@ void do_exit(int code,ulong_t flags,long exitval)
       }
     }
     __exit_resources(exiter,flags);
+    /* TODO: [mt] Notify our parent. */
   } else { /* is_thread(). */
     countered_event_t *ce;
 
@@ -240,11 +259,13 @@ void do_exit(int code,ulong_t flags,long exitval)
     __exit_ipc(exiter);
     __exit_resources(exiter,flags);
 
+    mutex_lock(&exiter->group_leader->tg_priv->thread_mutex);
     LOCK_TASK_STRUCT(exiter);
     exiter->jointee.exit_ptr=exitval;
     ce=exiter->cwaiter;
     exiter->cwaiter=__UNUSABLE_PTR; /* We don't wake anybody up anymore ! */
     UNLOCK_TASK_STRUCT(exiter);
+    mutex_unlock(&exiter->group_leader->tg_priv->thread_mutex);
 
     if( !list_is_empty(&exiter->jointed) ) { /* Notify the waiting task. */
       jointee_t *j=container_of(list_node_first(&exiter->jointed),jointee_t,l);
@@ -262,6 +283,9 @@ void do_exit(int code,ulong_t flags,long exitval)
     if( ce ) {
       countered_event_raise(ce);
     }
+    /* Note that thread's resources will be freed after either 'joining' or
+     * its parent's exiting.
+     */
   }
 
   sched_del_task(exiter);
@@ -335,10 +359,11 @@ long sys_thread_wait(tid_t tid,void **value_ptr)
     task_t *tgleader=target->group_leader;
     UNLOCK_TASK_STRUCT(target);
 
-    LOCK_TASK_STRUCT(tgleader);
+    LOCK_TASK_CHILDS(tgleader);
     LOCK_TASK_STRUCT(target);
 
-    if( list_node_is_bound(&target->child_list) ) {
+    if( list_node_is_bound(&target->child_list) &&
+        !(target->flags & TF_GCOLLECTED) ) {
       tgleader->tg_priv->num_threads--;
       list_del(&target->child_list);
       exitval=target->jointee.exit_ptr;
@@ -347,7 +372,7 @@ long sys_thread_wait(tid_t tid,void **value_ptr)
     }
 
     UNLOCK_TASK_STRUCT(target);
-    UNLOCK_TASK_STRUCT(tgleader);
+    UNLOCK_TASK_CHILDS(tgleader);
 
     if( !r ) {
       goto out_copy;

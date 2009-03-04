@@ -402,7 +402,7 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       r=target->uworks_data.cancel_state;
       target->uworks_data.cancel_state=arg;
       if( arg == PTHREAD_CANCEL_ENABLE ) {
-        if( target->uworks_data.cancellation_pending &&
+        if( (target->uworks_data.flags & DAF_CANCELLATION_PENDING ) &&
             target->uworks_data.cancel_type == PTHREAD_CANCEL_ASYNCHRONOUS) {
           set_task_disintegration_request(current_task());
         }
@@ -419,7 +419,7 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       r=target->uworks_data.cancel_type;
       target->uworks_data.cancel_type=arg;
       if( arg == PTHREAD_CANCEL_ASYNCHRONOUS ) {
-        if( target->uworks_data.cancellation_pending &&
+        if( (target->uworks_data.flags & DAF_CANCELLATION_PENDING) &&
             target->uworks_data.cancel_state == PTHREAD_CANCEL_ENABLE ) {
           set_task_disintegration_request(current_task());
         }
@@ -431,9 +431,8 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
         return -ESRCH;
       }
       LOCK_TASK_STRUCT(target);
-      if( !target->uworks_data.cancellation_pending &&
-          !((target->flags & TF_EXITING)) ) {
-        target->uworks_data.cancellation_pending=true;
+      if( !(target->uworks_data.flags & DAF_CANCELLATION_PENDING) ) {
+        target->uworks_data.flags |= DAF_CANCELLATION_PENDING;
 
         if( target->uworks_data.cancel_state == PTHREAD_CANCEL_ENABLE ) {
           ulong_t mask;
@@ -457,10 +456,10 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
 void force_task_exit(task_t *target,int exit_value)
 {
   LOCK_TASK_STRUCT(target);
-  if( !(target->flags & TF_EXITING) && !target->uworks_data.exit_pending ) {
-    target->uworks_data.exit_pending=true;
+  if( !(target->flags & TF_EXITING) && !(target->uworks_data.flags & DAF_EXIT_PENDING) ) {
+    target->uworks_data.flags |= DAF_EXIT_PENDING;
     set_task_disintegration_request(target);
-    target->jointee.exit_ptr=exit_value;
+    target->uworks_data.exit_value=exit_value;
     sched_change_task_state_mask(target,TASK_STATE_RUNNABLE,TASK_STATE_SLEEPING);
   }
   UNLOCK_TASK_STRUCT(target);

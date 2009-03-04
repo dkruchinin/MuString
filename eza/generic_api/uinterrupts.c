@@ -280,8 +280,6 @@ static irq_counter_array_t *__get_irq_array(task_t *task,ulong_t id)
   return NULL;
 }
 
-int ___big_verbose=0;
-
 int sys_wait_on_irq_array(ulong_t id)
 {
   irq_counter_array_t *array=__get_irq_array(current_task(),id);
