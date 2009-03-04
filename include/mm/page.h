@@ -69,6 +69,8 @@ typedef uint8_t page_flags_t;
 
 #define __page_aligned__ __attribute__((__aligned__(PAGE_SIZE)))
 
+struct __memobj;
+
 /**
  * @struct page_frame_t
  * @brief Describes one physical page.
@@ -84,6 +86,7 @@ typedef struct __page_frame {
   union {
     atomic_t refcount;
     void *slab_pages_start;
+    struct __memobj *owner;
   };
   
   union {
@@ -91,7 +94,8 @@ typedef struct __page_frame {
     struct {
       pgoff_t offset;
       atomic_t dirtycount;
-    }
+        
+    };
   };
 
   page_idx_t idx;

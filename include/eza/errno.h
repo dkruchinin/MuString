@@ -45,6 +45,7 @@
 #define EALREADY      38  /**< Connection already in progress. */
 #define EADDRNOTAVAIL 39  /**< Address not available. */
 #define EIDRM         40  /**< Identifier removed. */
+#define ENOTSUP       41  /**< Not supported */
 
 #endif
 

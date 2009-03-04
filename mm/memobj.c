@@ -29,6 +29,7 @@
 #include <mm/slab.h>
 #include <mm/memobj.h>
 #include <mm/pfi.h>
+#include <ipc/port.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/types.h>
 #include <eza/spinlock.h>
@@ -71,20 +72,22 @@ int memobj_create(memobj_nature_t nature, uint32_t flags, pgoff_t size, /* OUT *
     ret = -ENOMEM;
     goto error;
   }
-  if (likely(nature != MMO_NTR_GENERIC)) {
+  if (likely(!memobj_kernel_nature(nature))) {
     spinlock_lock(&memobjs_lock);
-    memobj->id = idx_allocate(&memobjs_ida);
-    if (likely(memboj->id == IDX_INVAL))
-      ASSERT(!ttree_insert(&memobjs_tree, &memobj->id));
-    else
-      ret = -ENOSPC;
-    
+    memobj->id = idx_allocate(&memobjs_ida);    
     spinlock_unlock(&memobjs_lock);
   }
-
+  else
+    memobj->id = memobj_kernel_nature2id(nature);  
+  if (likely(memboj->id != IDX_INVAL))
+    ASSERT(!ttree_insert(&memobjs_tree, &memobj->id));
+  else {
+    ret = -ENOSPC;
+    goto error;
+  }
+  
   memset(memobj, 0, sizeof(*memobj));
   memobj->size = size;
-  list_init_head(&memobj->vmranges_lst);
   switch (nature) {
       case MMO_NTR_GENERIC:
         ret = generic_memobj_intialize(memobj, flags);
@@ -120,4 +123,49 @@ memobj_t *memobj_find_by_id(memobj_id_t memobj_id)
 
     return ret;
   }
+}
+
+memobj_backend_t *memobj_create_backend(void)
+{
+  memobj_backend_t *backend = memalloc(sizeof(*backend));
+
+  if (backend) {
+    backend->server = NULL;
+    backend->port_id = IPC_PORT_ID_INVAL;
+  }
+
+  return backend;
+}
+
+void memobj_release_backend(memobj_backend_t *backend)
+{
+  /*
+   * FIXME DK: may be it has a sence to report the server
+   * abount memobject releasing?
+   */
+  memfree(backend);
+}
+
+int memobj_prepare_page_raw(memobj_t *memobj, page_frame_t **page)
+{
+  int ret = 0;
+  page_frame_t *pf = NULL;
+
+  pf = alloc_page(AF_USER | AF_ZERO);
+  if (pf) {
+    pf->owner = memobj;
+    atomic_set(&pf->dirtycount, 0);
+    atomic_set(&pf->refcount, 0);
+  }
+  else
+    ret = -ENOMEM;
+
+  *page = pf;
+  return ret;
+}
+
+int memobj_prepare_page_backended(memobj_t *memobj, page_frame_t **page)
+{
+  *page = NULL;
+  return -ENOTSUP;
 }

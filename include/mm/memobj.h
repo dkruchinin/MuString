@@ -44,25 +44,34 @@ typedef struct __memobj_ops {
   page_frame_t *(*get_page)(struct __memobj *memobj, pgoff_t offset);
 } memobj_ops_t;
 
+struct __task_struct;
+
+typedef struct __memobj_backend {
+  ulong_t port_id;
+  struct __task_struct *server;
+} memobj_backend_t;
+
 /* FIXME DK: and what about backend? */
 typedef struct __memobj {
   memobj_id_t id;
   memobj_ops_t *mops;
   pgoff_t size;
-  spinlock_t  vmrs_lst_lock;
-  list_head_t vmranges_lst;
-  list_node_t mmo_node;
-  atomic_t users_count;
-  atomic_t num_vmrs;
-  memobj_nature_t nature;
-  uint32_t flags;  
+  list_head_t pagelist;
+  list_node_t mmo_node;  
+  memobj_backend_t *backend;
   void *private;
+  atomic_t users_count;
+  memobj_nature_t nature;
+  uint32_t flags;
 } memobj_t;
 
 #define NUM_RSRV_MEMOBJ_IDS 3
 #define GENERIC_MEMOBJ_ID   0
 #define COW_MEMOBJ_ID       1
 #define SRV_MEMOBJ_ID       2
+
+#define memobj_kernel_nature(ntr) ((ntr) < NUM_RESRV_MEMOBJ_IDS)
+#define memobj_kernel_nature2id(ntr) (ntr)
 
 extern memobj_t generic_memobj;
 

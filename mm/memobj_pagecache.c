@@ -40,6 +40,12 @@ struct pcache_private {
   uint32_t num_dirty_pages;
 };
 
+static inline void __add_dirty_page(struct pcache_private *priv, page_frame_t *page)
+{
+  list_add2tail(&priv->dirty_pages, &page->node);
+  priv->num_dirty_pages++;
+}
+
 static inline page_frame_t *__pcache_get_page(struct pcache_private *priv, pgoff_t offset)
 {
   return hat_lookup(&priv->pagecache, offset);
@@ -58,36 +64,51 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
     return -ENXIO;
 
   ASSERT(!(vmr->flags & VMR_NONE));
+  ASSERT(!((memobj->flags & MMO_FLG_NOSHARED) && (vmr->flags & VMR_SHARED)));
   if (pfmask & PFLT_NOT_PRESENT) {
     page_frame_t *page;
 
+    /* At first try to find out if the page is already in the cache... */
     spinlock_lock_read(&priv->cache_lock);
     page = __pcache_get_page(priv, offset);
+    if (page)
+      atomic_inc(&page->refcount);
+    
+    spinlock_unlock_read(&priv->cache_lock);
     if (!page) {
-      if (!(memobj->flags & MMO_FLG_BACKENDED)) {
-        page = pfalloc(AF_ZERO | AF_USER);
-        if (!page) {
-          ret = -ENOMEM;
-          spinlock_unlock_read(&priv->cache_lock);
-          goto out;
-        }
-
-        atomic_set(&page->refcount, 1);
-        atomic_set(&page->dirtycount, 0);
-        page->offset = offset;
-        hat_insert(&priv->pagecache, offset, page);
-      }
+      if (!(memobj->flags & MMO_FLG_BACKENDED))
+        ret = memobj_prepare_page_raw(memobj, &page);
       else
-        /* TODO DK: implement handle case for backeneded memobj. */
+        ret = memobj_prepare_page_backended(memobj, &page);      
+      if (ret)
+        return ret;
+
+      page->offset = offset;      
+      if (likely(vmr->flags & VMR_SHARED)) {
+        atomic_set(&page->refcount, 2);
+        spinlock_lock_write(&priv->cache_lock);
+        ret = hat_insert(&priv->pagecache, offset, page);
+        if (!ret && (pfmask & PFLT_WRITE) && (memobj->flags & MMO_FLG_DPC)) {
+          atomic_inc(&page->dirtycount);
+          list_add2tail(&priv->dirty_pages, &);
+        }
+        /*
+         * While we were allocating and initializing the page, somebody
+         * could insert another page by given offset.
+         */
+        if (unlikely(ret == -EEXIST)) {
+          /* If so, the proper page may be easily taken from the cache by its offset */
+          free_page(page);
+          page = __pcache_get_page(priv, offset);
+          ASSERT(page != NULL);
+          ret = 0;
+        }
+      }
     }
 
-    spinlock_unlock_read(&priv->cache_lock);
-    if (memobj->flags & MMO_FLG_DPC)
+    if ((memobj->flags & MMO_FLG_DPC) && !(vmr->flags & VMR_PRIVATE))
       mmap_flags &= ~VMR_WRITE;
-    if (pfmask & PFLT_READ)
-      goto map_page;
-  }
-  if (!(memobj->flags & MMO_FLG_DPC))
+  if (!(memobj->flags & MMO_FLG_DPC))    
     goto map_page;
   if (unlikely(!atomic_inc_and_test(&page->dirtycount))) {
     spinlock_lock_write(&priv->lock);
@@ -130,7 +151,8 @@ static memobj_ops_t pcacge_memobj_ops {
 /* TODO DK: BTW how am I going to collect other(RO) pages? */
 int pcache_memobj_initialize(memobj_t *memobj, uint32_t flags)
 {
-  struct pcache_private *priv;
+  struct pcache_private *priv = NULL;
+  int ret = 0;
   
   if (!(flags & MMO_LIVE_MASK) || !is_powerof2(flags & MMO_LIVE_MASK))
     return -EINVAL;
@@ -140,6 +162,15 @@ int pcache_memobj_initialize(memobj_t *memobj, uint32_t flags)
   priv = memalloc(sizeof(*priv));
   if (!priv)
     return -ENOMEM;
+  if (flags & MMO_FLG_BACKENDED) {
+    memobj->backend = memobj_create_backend();
+    if (!memobj->backend) {
+      ret = -ENOMEM;
+      goto error;
+    }
+  }
+  if (flags & (MMO_FLG_SPIRIT | MMO_FLG_IMMORTAL))
+    atomic_set(&memobj->users_count, 1);
 
   hat_initialize(&priv->pagecache);
   list_init_head(&priv->dirty_pages);
@@ -148,5 +179,13 @@ int pcache_memobj_initialize(memobj_t *memobj, uint32_t flags)
   memobj->private = priv;
 
   /* TODO DK: add backend support */
-  return 0;
+  return ret;
+  
+  error:
+  if (priv)
+    memfree(priv);
+  if (memobj->backend)
+    memobj_release_backend(memobj->backend);
+
+  return ret;
 }

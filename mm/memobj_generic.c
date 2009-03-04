@@ -149,12 +149,11 @@ memobj_t *generic_memobj = NULL;
 int generic_memobj_initialize(memobj_t *memobj, uint32_t flags)
 {
   ASSERT(!generic_memobj);
+  ASSERT(memobj->id == GENERIC_MEMOBJ_ID);
   generic_memobj = memobj;
-  memobj->id = GENERIC_MEMOBJ_ID;
   memobj->mops = generic_memobj_ops;
   atomic_set(&memobj->refcount, 1); /* Generic memobject is immortal */
-  ASSERT(!flags || ((flags & MMO_FLG_NOSHARED) == MMO_FLG_NOSHARED));
-  memobj->flags = MMO_FLG_NOSHARED;
+  memobj->flags = MMO_FLG_NOSHARED | MMO_FLG_IMMORTAL;
 
   return 0;
 }
