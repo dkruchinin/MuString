@@ -52,7 +52,7 @@
 static bool __read_user_safe(uintptr_t addr,uintptr_t *val)
 {
   uintptr_t *p;
-  page_idx_t pidx = ptable_ops.vaddr2page_idx(task_get_rpd(current_task()), addr);
+  page_idx_t pidx = ptable_ops.vaddr2page_idx(task_get_rpd(current_task()), addr, NULL);
 
   if( pidx == PAGE_IDX_INVAL ) {
     return false;
@@ -154,15 +154,8 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
       errmask |= PFLT_NOT_PRESENT;
 
     ret = vmm_handle_page_fault(vmm, invalid_address, errmask);
-    rwsem_down_read(&vmm->rwsem);
-    vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(invalid_address), invalid_address + PAGE_SIZE, NULL);
-    if (vmr)
-      ret = vmm_handle_page_fault(vmr, invalid_address, errmask);
-    
-    rwsem_up_read(&vmm->rwsem);
-    if (ret >= 0) {
+    if (!ret)
       return;
-    }
 
     PREPARE_DEBUG_CONSOLE();
     kprintf("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",

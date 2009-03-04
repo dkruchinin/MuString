@@ -29,10 +29,10 @@
 
 #include <config.h>
 #include <eza/arch/atomic.h>
-#include <eza/arch/types.h>
 #include <eza/arch/preempt.h>
 #include <eza/arch/interrupt.h>
 #include <eza/arch/spinlock.h>
+#include <mlibc/types.h>
 #include <eza/raw_sync.h>
 
 #ifdef CONFIG_SMP

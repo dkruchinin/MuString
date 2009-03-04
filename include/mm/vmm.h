@@ -62,11 +62,11 @@ typedef enum __vmrange_flags {
 
 typedef vmrange_flags_t kmap_flags_t;
 
-#define KMAP_KERN    VMR_NONE
-#define KMAP_READ    VMR_READ
-#define KMAP_WRITE   VMR_WRITE
-#define KMAP_EXEC    VMR_EXEC
-#define KMAP_NOCACHE VMR_NOCACHE
+#define KMAP_KERN     VMR_NONE
+#define KMAP_READ     VMR_READ
+#define KMAP_WRITE    VMR_WRITE
+#define KMAP_EXEC     VMR_EXEC
+#define KMAP_NOCACHE  VMR_NOCACHE
 #define KMAP_FLAGS_MASK (KMAP_KERN | KMAP_READ | KMAP_WRITE | KMAP_EXEC | KMAP_NOCACHE)
 
 struct __vmm;
@@ -133,7 +133,7 @@ static inline bool valid_user_address_range(uintptr_t va_start, uintptr_t length
 
 static inline void *user_to_kernel_vaddr(rpd_t *rpd, uintptr_t addr)
 {
-  page_idx_t idx = ptable_ops.vaddr2page_idx(rpd, addr);
+  page_idx_t idx = ptable_ops.vaddr2page_idx(rpd, addr, NULL);
 
   if (idx == PAGE_IDX_INVAL)
     return NULL;
@@ -152,16 +152,16 @@ static inline void pin_page_frame(page_frame_t *pf)
   atomic_inc(&pf->refcount);
 }
 
-#define mmap_kern(va, first_page, npages, flags)    \
-  mmap_core(&kernel_rpd, va, first_page, npages, flags)
-#define munmap_kern(va, npages)                 \
-  munmap_core(&kernel_rpd, va, npages)
-#define __mmap_core(rpd, va, npages, pfi, __flags)    \
-  ptable_ops.mmap(rpd, va, npages, pfi, kmap_to_ptable_flags((__flags) & KMAP_FLAGS_MASK))
+#define mmap_kern(va, first_page, npages, flags)       \
+  mmap_core(&kernel_rpd, va, first_page, npages, flags, false)
+#define munmap_kern(va, npages, unpin_pages)                \
+  munmap_core(&kernel_rpd, va, npages, unpin_pages)
+#define __mmap_core(rpd, va, npages, pfi, __flags, pin_pages)                     \
+  ptable_ops.mmap(rpd, va, npages, pfi, kmap_to_ptable_flags((__flags) & KMAP_FLAGS_MASK), pin_pages)
 
 static inline bool mm_vaddr_is_mapped(rpd_t *rpd, uintptr_t va)
 {
-  return (ptable_ops.vaddr2page_idx(rpd, va) != PAGE_IDX_INVAL);
+  return (ptable_ops.vaddr2page_idx(rpd, va, NULL) != PAGE_IDX_INVAL);
 }
 
 /**
@@ -174,13 +174,14 @@ void vmm_subsystem_initialize(void);
 void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name);
 int vm_mandmaps_roll(vmm_t *target_mm);
 vmm_t *vmm_create(void);
-int vmm_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask);
+int vmm_handle_page_fault(vmm_t *vmm, uintptr_t addr, uint32_t pfmask);
 long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages,
                  vmrange_flags_t flags, page_idx_t offs_pages);
 void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages);
 vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, ttree_cursor_t *cursor);
 void vmranges_find_covered(vmm_t *vmm, uintptr_t va_from, uintptr_t va_to, vmrange_set_t *vmrs);
-int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages, kmap_flags_t flags);
+int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page,
+              page_idx_t npages, kmap_flags_t flags, bool pin_pages);
 
 static inline void vmrange_set_next(vmrange_set_t *vmrs)
 {
@@ -194,9 +195,9 @@ static inline void vmrange_set_next(vmrange_set_t *vmrs)
     vmrs->vmr = NULL;
 }
 
-static inline void munmap_core(rpd_t *rpd, uintptr_t va, ulong_t npages)
+static inline void munmap_core(rpd_t *rpd, uintptr_t va, ulong_t npages, bool unpin_pages)
 {
-  ptable_ops.munmap(rpd, va, npages);
+  ptable_ops.munmap(rpd, va, npages, unpin_pages);
 }
 
 static inline pgoff_t addr2pgoff(vmrange_t *vmr, uintptr_t addr)
@@ -205,7 +206,7 @@ static inline pgoff_t addr2pgoff(vmrange_t *vmr, uintptr_t addr)
           ((PAGE_ALIGN_DOWN(addr) - vmr->bounds.space_start) >> PAGE_WIDTH));
 }
 
-static inline uintptr_T pgoff2addr(vmrange_t *vmr, pgoff_t offset)
+static inline uintptr_t pgoff2addr(vmrange_t *vmr, pgoff_t offset)
 {
   return (vmr->bounds.space_start +
           ((uintptr_t)(offset - vmr->offset) << PAGE_WIDTH));

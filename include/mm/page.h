@@ -84,9 +84,8 @@ typedef struct __page_frame {
   list_node_t node;
   
   union {
+    void *slab_pages_start;    
     atomic_t refcount;
-    void *slab_pages_start;
-    struct __memobj *owner;
   };
   
   union {
@@ -94,7 +93,7 @@ typedef struct __page_frame {
     struct {
       pgoff_t offset;
       atomic_t dirtycount;
-        
+      struct __memobj *owner;
     };
   };
 
@@ -182,4 +181,13 @@ static inline void pframes_memnull(page_frame_t *start, int block_size)
 #else
 #define pframes_memnull(start, block_size) arch_pages_memnull(start, block_size)
 #endif /* ARCH_PAGE_MEMNULL */
+
+#ifndef ARCH_COPY_PAGE
+static inline void copy_page_frame(page_frame_t *dst, page_frame_t *src)
+{
+  memcpy(pframe_to_virt(dst), pframe_to_virt(src), PAGE_SIZE);
+}
+#else
+#define copy_page_frame(dst, src) arch_copy_page_frame(dst, src)
+#endif /* ARCH_COPY_PAGE */
 #endif /* __PAGE_H__ */

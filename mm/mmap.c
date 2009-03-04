@@ -185,7 +185,7 @@ static void fix_vmrange_holes(vmm_t *vmm, vmrange_t *vmrange, ttree_cursor_t *cu
   }
 }
 
-static int __map_phys_pages(vmm_t *vmm, uintptr_t va, uintptr_t phys,
+/*static int __map_phys_pages(vmm_t *vmm, uintptr_t va, uintptr_t phys,
                             page_idx_t npages, kmap_flags_t flags)
 {
   page_frame_iterator_t pfi;
@@ -195,7 +195,7 @@ static int __map_phys_pages(vmm_t *vmm, uintptr_t va, uintptr_t phys,
                  (phys >> PAGE_WIDTH) + npages - 1);  
   iter_first(&pfi);
   return __mmap_core(&vmm->rpd, va, npages, &pfi, flags);
-}
+}*/
 
 void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name)
 {
@@ -216,7 +216,7 @@ int vm_mandmaps_roll(vmm_t *target_mm)
 
   list_for_each_entry(&__mandmaps_lst, mandmap, node) {
     status = mmap_core(&target_mm->rpd, mandmap->virt_addr, mandmap->phys_addr >> PAGE_WIDTH,
-                       mandmap->num_pages, mandmap->flags);
+                       mandmap->num_pages, mandmap->flags, true);
     VMM_VERBOSE("[%s]: Mandatory mapping \"%s\" [%p -> %p] was initialized\n",
                 vmm_get_name_dbg(target_mm), mandmap->name,
                 mandmap->virt_addr, mandmap->virt_addr + (mandmap->num_pages << PAGE_WIDTH));
@@ -373,7 +373,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
       err = -EPERM;
       goto err;
     }
-    if (memobj != &null_memobj) {
+    if (!memobj_is_generic(memobj)) {
       err = -EINVAL;
       goto err;
     }
@@ -456,15 +456,13 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   }
 
   vmr->memobj = memobj;
-  if (flags & VMR_PHYS) {
-    err = __map_phys_pages(vmm, addr, offs_pages << PAGE_WIDTH, npages, flags & KMAP_FLAGS_MASK);
-    if (err)
-      goto err;
-  }
-  else if (flags & VMR_POPULATE) {
-    mutex_lock(&memobj->mutex);
-    err = memobj->mops.populate_pages(memobj, vmr, addr, npages, offs_pages);
-    mutex_unlock(&memobj->mutex);
+  if (flags & (VMR_PHYS | VMR_POPULATE)) {
+    pgoff_t offset = offs_pages;
+    
+    if (((flags & (VMR_PHYS | VMR_POPULATE)) == VMR_PHYS) && memobj_is_generic(memobj))
+      offset = addr2pgoff(vmr, addr);
+    
+    err = memobj->mops->populate_pages(vmr, offset, npages);
     if (err)
       goto err;
   }
@@ -504,12 +502,12 @@ void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
               vmr->bounds.space_start, vmr->bounds.space_end);
     }
 
-    munmap_core(&vmm->rpd, va_from, npages);
+    munmap_core(&vmm->rpd, va_from, npages, true);
     return;
   }
   else if (va_from > vmr->bounds.space_start) {
     vmr->hole_size += vmr->bounds.space_end - va_from;    
-    munmap_core(&vmm->rpd, va_from, vmr->bounds.space_end);
+    munmap_core(&vmm->rpd, va_from, vmr->bounds.space_end, true);
     vmr->bounds.space_end = va_from;
   }
 
@@ -518,7 +516,7 @@ void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
     return;
   while (va_from < va_to) {
     vmr = ttree_item_from_cursor(&cursor);
-    munmap_core(&vmm->rpd, va_from, ((va_to - va_from) << PAGE_WIDTH));
+    munmap_core(&vmm->rpd, va_from, ((va_to - va_from) << PAGE_WIDTH), true);
     if (unlikely(va_to < vmr->bounds.space_end)) {
       ttree_cursor_t csr_prev;
 
@@ -538,7 +536,8 @@ void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
   }
 }
 
-int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages, kmap_flags_t flags)
+int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page,
+              page_idx_t npages, kmap_flags_t flags, bool pin_pages)
 {
   page_frame_iterator_t pfi;
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) pf_idx_ctx;
@@ -548,17 +547,16 @@ int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page, page_idx_t npages
 
   pfi_index_init(&pfi, &pf_idx_ctx, first_page, first_page + npages - 1);
   iter_first(&pfi);
-  return __mmap_core(rpd, va, npages, &pfi, flags);
+  return __mmap_core(rpd, va, npages, &pfi, flags, pin_pages);
 }
 
 int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
 {
   vmrange_t *vmr;
   int ret;
-  pgoff_t offset;
   
   rwsem_down_read(&vmm->rwsem);
-  vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(fault_addr), fault_address + PAGE_SIZE, NULL);
+  vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(fault_addr), fault_addr + PAGE_SIZE, NULL);
   if (!vmr) {
     ret = -EFAULT;
     goto out;
@@ -571,8 +569,7 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
   }
   
   ASSERT(vmr->memobj != NULL);
-  offset = addr2memobj_offs(vmr, fault_addr);
-  ret = memobj->mops.handle_page_fault(vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
+  ret = vmr->memobj->mops->handle_page_fault(vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
 
   out:
   rwsem_up_read(&vmm->rwsem);
@@ -586,8 +583,8 @@ long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, int memobj_id, o
   long ret;
   vmrange_flags_t vmrflags = (prot & VMR_PROTO_MASK) | (flags << VMR_FLAGS_OFFS);
 
-  if ((vmrflags & VMR_ANON) || (memobj_id == NULL_MEMOBJ_ID)) {
-    memobj = memobj_find_by_id(NULL_MEMOBJ_ID);
+  if ((vmrflags & VMR_ANON) || (memobj_id == GENERIC_MEMOBJ_ID)) {
+    memobj = memobj_find_by_id(GENERIC_MEMOBJ_ID);
     ASSERT(memobj != NULL);    
   }
   else if (memobj_id) {
@@ -657,11 +654,11 @@ static void __print_tnode(ttree_node_t *tnode)
 
   tnode_for_each_index(tnode, i) {
     vmr = container_of(tnode_key(tnode, i), vmrange_t, bounds);
-    //kprintf("[%p<->%p FP: %zd), ", vmr->bounds.space_start,
-    //        vmr->bounds.space_end, (vmr->hole_size >> PAGE_WIDTH));
+    kprintf("[%p<->%p FP: %zd), ", vmr->bounds.space_start,
+            vmr->bounds.space_end, (vmr->hole_size >> PAGE_WIDTH));
   }
 
-  // kprintf("\n");
+  kprintf("\n");
 }
 
 void vmranges_print_tree_dbg(vmm_t *vmm)

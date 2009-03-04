@@ -34,13 +34,11 @@
 
 static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
 {
-  uintptr_t addr = vmr->bounds.space_start + (offset << PAGE_WIDTH);
   int ret = 0;
   vmm_t *vmm = vmr->parent_vmm;
   
   if (pfmask & PFLT_NOT_PRESENT) {
     page_frame_t *pf;
-    page_idx_t idx;
 
     /*
      * Simple "not-present" fault is handled by allocating a new page and
@@ -64,12 +62,14 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
     }
 
     ret = mmap_core(&vmm->rpd, addr,
-                    pframe_number(pf), 1, vmr->flags & VMR_PROTO_MASK);
+                    pframe_number(pf), 1, vmr->flags & VMR_PROTO_MASK, true);
     pagetable_unlock(&vmm->rpd);
     if (ret)
       free_page(pf);
   }
   else  { /* protection fault */
+    ret = -ENOTSUP;
+#if 0 /* FIXME DK: implement this stuff properly */
     pde_t *pde = NULL;
 
     /*
@@ -86,8 +86,9 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
     }
 
     /* TODO DK: ... and what about caching, a? */
-    ret = mmap_core(&vmm->rpd, addr, idx, 1, vmr->flags & VMR_PROTO_MASK);
+    ret = mmap_core(&vmm->rpd, addr, idx, 1, vmr->flags & VMR_PROTO_MASK, true);
     pagetable_unlock();
+#endif /* DEAD CODE */
   }
 
   return ret;
@@ -98,9 +99,9 @@ static int generic_populate_pages(vmrange_t *vmr, pgoff_t offset, page_idx_t npa
   int ret;
   memobj_t *memobj = vmr->memobj;  
   page_frame_t *pages;
-  page_frame_iterator_t pfi;  
+  page_frame_iterator_t pfi;
+  vmm_t *vmm = vmr->parent_vmm;
   
-  ASSERT(memobj->id == NULL_MEMOBJ_ID);
   ASSERT(vmr->parent_vmm != NULL);
   if (offset >= memobj->size)
     return -ENXIO;
@@ -119,7 +120,8 @@ static int generic_populate_pages(vmrange_t *vmr, pgoff_t offset, page_idx_t npa
 
   iter_first(&pfi);
   pagetable_lock(&vmm->rpd);  
-  ret = __mmap_core(&vmr->parent_vmm->rpd, (offset << PAGE_WIDTH), npages, &pfi, vmr->flags & KMAP_FLAGS_MASK);
+  ret = __mmap_core(&vmr->parent_vmm->rpd, (offset << PAGE_WIDTH), npages, &pfi,
+                    vmr->flags & KMAP_FLAGS_MASK, true);
   pagetable_unlock(&vmm->rpd);
   if (ret)
     free_pages_chain(pages);
@@ -138,10 +140,10 @@ static page_frame_t *generic_get_page(memobj_t *memobj, pgoff_t offset)
 }
 
 static memobj_ops_t generic_memobj_ops = {
-  .handle_page_fault = generic_handle_page_fault;
-  .populate_pages = generic_populate_pages;
-  .put_page = generic_put_page;
-  .get_page = generic_get_page;
+  .handle_page_fault = generic_handle_page_fault,
+  .populate_pages = generic_populate_pages,
+  .put_page = generic_put_page,
+  .get_page = generic_get_page,
 };
 
 memobj_t *generic_memobj = NULL;
@@ -151,8 +153,8 @@ int generic_memobj_initialize(memobj_t *memobj, uint32_t flags)
   ASSERT(!generic_memobj);
   ASSERT(memobj->id == GENERIC_MEMOBJ_ID);
   generic_memobj = memobj;
-  memobj->mops = generic_memobj_ops;
-  atomic_set(&memobj->refcount, 1); /* Generic memobject is immortal */
+  memobj->mops = &generic_memobj_ops;
+  atomic_set(&memobj->users_count, 1); /* Generic memobject is immortal */
   memobj->flags = MMO_FLG_NOSHARED | MMO_FLG_IMMORTAL;
 
   return 0;

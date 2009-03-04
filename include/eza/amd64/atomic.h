@@ -34,8 +34,7 @@
 #include <eza/arch/bitwise.h>
 #include <mlibc/types.h>
 
-typedef volatile uint_t atomic_t;
-typedef volatile ulong_t atomic64_t;
+typedef volatile ulong_t atomic_t;
 
 /**
  * @def atomic_set(a, val)
@@ -64,9 +63,21 @@ typedef volatile ulong_t atomic64_t;
  */
 static always_inline void atomic_add(atomic_t *a, long add)
 {
-    __asm__ volatile (__LOCK_PREFIX "add %1, %0\n\t"
+    __asm__ volatile (__LOCK_PREFIX "addq %1, %0\n\t"
                       : "+m" (*a)
                       : "ir" (add));
+}
+
+static always_inline int atomic_test_and_add(atomic_t *a, long add)
+{
+  uint8_t ret;
+  
+  __asm__ volatile (__LOCK_PREFIX "addq %2, %0\n\t"
+                    "sete %1"
+                    : "=m" (*a), "=m" (ret)
+                    : "ir" (add));
+
+  return ret;
 }
 
 /**
@@ -77,8 +88,19 @@ static always_inline void atomic_add(atomic_t *a, long add)
  */
 static always_inline void atomic_inc(atomic_t *a)
 {
-  __asm__ volatile (__LOCK_PREFIX "inc %0\n\t"
+  __asm__ volatile (__LOCK_PREFIX "incq %0\n\t"
                     : "+m" (*a));
+}
+
+static always_inline int atomic_test_and_inc(atomic_t *a)
+{
+  uint8_t ret;
+
+  __asm__ volatile (__LOCK_PREFIX "incq %0\n\t"
+                    "sete %1"
+                    : "+m" (*a), "=m" (ret));
+
+  return ret;
 }
 
 /**
@@ -90,7 +112,7 @@ static always_inline void atomic_inc(atomic_t *a)
  */
 static always_inline void atomic_sub(atomic_t *a, long sub)
 {
-  __asm__ volatile (__LOCK_PREFIX "sub %1, %0\n\t"
+  __asm__ volatile (__LOCK_PREFIX "subq %1, %0\n\t"
                     : "+m" (*a)
                     : "ir" (sub));
 }
@@ -103,7 +125,7 @@ static always_inline void atomic_sub(atomic_t *a, long sub)
  */
 static always_inline void atomic_dec(atomic_t *a)
 {
-  __asm__ volatile (__LOCK_PREFIX "dec %0\n\t"
+  __asm__ volatile (__LOCK_PREFIX "decq %0\n\t"
                     : "+m" (*a));
 }
 

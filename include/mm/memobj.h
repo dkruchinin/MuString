@@ -20,16 +20,16 @@ typedef enum __memobj_nature {
   MMO_NTR_PAGECACHE,
   MMO_NTR_PROXY,
   MMO_NTR_STATIC,  
-};
+} memobj_nature_t;
 
 enum { /* memory object flags */
-  MMO_FLG_SPIRIT    = 0x01,
-  MMO_FLG_STICKY    = 0x02,
-  MMO_FLG_LEECH     = 0x04,
-  MMO_FLG_IMMORTAL  = 0x08,
-  MMO_FLG_DPC       = 0x10,
-  MMO_FLG_BACKENED  = 0x20,
-  MMO_FLG_NOSHARED  = 0x40,
+  MMO_FLG_SPIRIT     = 0x01,
+  MMO_FLG_STICKY     = 0x02,
+  MMO_FLG_LEECH      = 0x04,
+  MMO_FLG_IMMORTAL   = 0x08,
+  MMO_FLG_DPC        = 0x10,
+  MMO_FLG_BACKENDED  = 0x20,
+  MMO_FLG_NOSHARED   = 0x40,
 };
 
 #define MMO_LIVE_MASK (MMO_FLG_SPIRIT | MMO_FLG_STICKY | MMO_FLG_LEECH | MMO_FLG_IMMORTAL)
@@ -38,8 +38,8 @@ struct __memobj;
 struct __vmrange;
 
 typedef struct __memobj_ops {
-  int (*handle_page_fault)(struct __vmrange *vmr, pgoff_t addr, uint32_t pfmask);
-  int (*populate_pages)(struct __vmrange *vmr, , pgoff_t offset, page_idx_t npages);
+  int (*handle_page_fault)(struct __vmrange *vmr, uintptr_t addr, uint32_t pfmask);
+  int (*populate_pages)(struct __vmrange *vmr, pgoff_t offset, page_idx_t npages);
   int (*put_page)(struct __memobj *memobj, pgoff_t offset, page_frame_t *page);
   page_frame_t *(*get_page)(struct __memobj *memobj, pgoff_t offset);
 } memobj_ops_t;
@@ -70,16 +70,22 @@ typedef struct __memobj {
 #define COW_MEMOBJ_ID       1
 #define SRV_MEMOBJ_ID       2
 
-#define memobj_kernel_nature(ntr) ((ntr) < NUM_RESRV_MEMOBJ_IDS)
+#define memobj_kernel_nature(ntr) ((ntr) < NUM_RSRV_MEMOBJ_IDS)
 #define memobj_kernel_nature2id(ntr) (ntr)
+#define memobj_is_generic(memobj) ((memobj) == generic_memobj)
 
-extern memobj_t generic_memobj;
+extern memobj_t *generic_memobj;
 
 void memobj_subsystem_initialize(void);
 int memobj_create(memobj_nature_t mmo_nature, uint32_t flags, pgoff_t size, /* OUT */ memobj_t **out_memobj);
 memobj_t *memobj_find_by_id(memobj_id_t memobj_id);
+memobj_backend_t *memobj_create_backend(void);
+void memobj_release_backend(memobj_backend_t *backend);
+int memobj_prepare_page_raw(memobj_t *memobj, page_frame_t **page);
+int memobj_prepare_page_backended(memobj_t *memobj, page_frame_t **page);
 
 /* memobject nature-dependent initialization functions */
 int generic_memobj_initialize(memobj_t *memobj, uint32_t flags);
+int pagecache_memobj_initialize(memobj_t *memobj, uint32_t flags);
 
 #endif /* __MEMOBJ_H__ */

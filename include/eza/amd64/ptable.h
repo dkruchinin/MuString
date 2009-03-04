@@ -25,7 +25,7 @@
 #define __ARCH_PTABLE_H__
 
 #include <mm/page.h>
-#include <eza/spinlock.h>
+#include <eza/arch/spinlock.h>
 #include <eza/arch/types.h>
 
 typedef enum __ptable_flags {

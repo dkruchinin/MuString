@@ -34,7 +34,7 @@
 #include <mlibc/types.h>
 
 struct pcache_private {
-  hat_t pagecahce;
+  hat_t pagecache;
   list_head_t dirty_pages;
   rw_spinlock_t cache_lock;
   uint32_t num_dirty_pages;
@@ -54,28 +54,33 @@ static inline page_frame_t *__pcache_get_page(struct pcache_private *priv, pgoff
 static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
 {
   int ret = 0;
-  vmm_t *vmm = vmr->parent_mm;
-  memobj_t *memobj = vmrange->memobj;
-  struct pagecache_private *priv = memobj->private;
+  vmm_t *vmm = vmr->parent_vmm;
+  memobj_t *memobj = vmr->memobj;
+  struct pcache_private *priv = memobj->private;
   pgoff_t offset = addr2pgoff(vmr, addr);
   kmap_flags_t mmap_flags = vmr->flags & KMAP_FLAGS_MASK;
+  page_frame_t *page = NULL;
   
   if (unlikely(offset >= memobj->size))
     return -ENXIO;
 
   ASSERT(!(vmr->flags & VMR_NONE));
   ASSERT(!((memobj->flags & MMO_FLG_NOSHARED) && (vmr->flags & VMR_SHARED)));
-  if (pfmask & PFLT_NOT_PRESENT) {
-    page_frame_t *page;
-
+  if (pfmask & PFLT_NOT_PRESENT) {    
     /* At first try to find out if the page is already in the cache... */
     spinlock_lock_read(&priv->cache_lock);
     page = __pcache_get_page(priv, offset);
-    if (page)
-      atomic_inc(&page->refcount);
+    if (page) {
+      /* Page shouldn't be fried while we're working with it. */
+      pin_page_frame(page);
+    }
     
     spinlock_unlock_read(&priv->cache_lock);
     if (!page) {
+      /*
+       * If page wasn't found in a cache, we have to prepare it
+       * depending on the nature of its memory object and VM range.
+       */
       if (!(memobj->flags & MMO_FLG_BACKENDED))
         ret = memobj_prepare_page_raw(memobj, &page);
       else
@@ -83,57 +88,102 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
       if (ret)
         return ret;
 
-      page->offset = offset;      
-      if (likely(vmr->flags & VMR_SHARED)) {
-        atomic_set(&page->refcount, 2);
-        spinlock_lock_write(&priv->cache_lock);
-        ret = hat_insert(&priv->pagecache, offset, page);
-        if (!ret && (pfmask & PFLT_WRITE) && (memobj->flags & MMO_FLG_DPC)) {
+      page->offset = offset;
+      atomic_set(&page->refcount, 1);      
+      if (unlikely(vmr->flags & VMR_PRIVATE)) {
+        /*
+         * Ok, it was a private mapping, so we don't need to put
+         * the page in a cache.
+         */
+        goto map_page;
+      }
+
+      pin_page_frame(page);
+      spinlock_lock_write(&priv->cache_lock);
+      /* put page in the cache */
+      ret = hat_insert(&priv->pagecache, offset, page);
+      if (!ret && (memobj->flags & MMO_FLG_DPC)) {
+        /*
+         * If dirty pages collection facility was enabled in a given
+         * memory object and writing caused the fault, put the page in
+         * a dirty pages list.
+         */
+        if (pfmask & PFLT_WRITE) {
           atomic_inc(&page->dirtycount);
-          list_add2tail(&priv->dirty_pages, &);
+          __add_dirty_page(priv, page);
         }
+        else
+          mmap_flags &= ~VMR_WRITE;
+      }
+      else if (unlikely(ret == -EEXIST)) {
         /*
          * While we were allocating and initializing the page, somebody
          * could insert another page by given offset.
+         * If so, the proper page may be easily taken from the cache by its offset
          */
-        if (unlikely(ret == -EEXIST)) {
-          /* If so, the proper page may be easily taken from the cache by its offset */
-          free_page(page);
-          page = __pcache_get_page(priv, offset);
-          ASSERT(page != NULL);
-          ret = 0;
-        }
+          
+        free_page(page);
+        page = __pcache_get_page(priv, offset);
+        ASSERT(page != NULL);
+        spinlock_unlock_write(&priv->cache_lock);
+        return 0;
+      }
+
+      spinlock_unlock_write(&priv->cache_lock);
+      goto map_page;
+    }
+    if (unlikely(vmr->flags & VMR_PRIVATE)) {
+      page_frame_t *new_page;
+
+      /* Just copy the page if the fault occured in private mapping */
+      ret = memobj_prepare_page_raw(memobj, &new_page);
+      if (ret)
+        return ret;
+
+      copy_page_frame(new_page, page);
+      page = new_page;
+      page->offset = offset;
+      atomic_set(&new_page->refcount, 1);
+      unpin_page_frame(page);
+    }
+  }
+  else if (pfmask & PFLT_WRITE) {
+    if (memobj->flags & MMO_FLG_DPC) {
+      if (unlikely(!atomic_inc_and_test(&page->dirtycount))) {
+        spinlock_lock_write(&priv->lock);
+        if (likely(page->owner == memobj))
+          __add_dirty_page(memobj, page);
+        spinlock_unlock_write(&priv->lock);
       }
     }
 
-    if ((memobj->flags & MMO_FLG_DPC) && !(vmr->flags & VMR_PRIVATE))
-      mmap_flags &= ~VMR_WRITE;
-  if (!(memobj->flags & MMO_FLG_DPC))    
-    goto map_page;
-  if (unlikely(!atomic_inc_and_test(&page->dirtycount))) {
-    spinlock_lock_write(&priv->lock);
-    list_add2tail(&priv->dirty_list, &page->node);
-    priv->num_dirty_pages++;
-    spinlock_unlock_write(&priv->lock);
+    mmap_flags &= ~VMR_WRITE;
   }
 
   map_page:
   pagetable_lock(&vmm->rpd);
-  if (likely(ptable_ops.vaddr2page_idx(&vmm->rpd, addr, NULL) != PAGE_IDX_INVAL))
-    ret = mmap_core(&vmm->rpd, addr, pframe_number(page), mmap_flags);
-  
-  pagetable_unlock(&vmm->rpd);  
+  if (page) {
+    ret = mmap_core(&vmm->rpd, addr, pframe_number(page), mmap_flags, false);
+    if (ret)
+      unpin_page_frame(page);
+  }
+  else {
+    page_idx_t idx = ptable_ops.vaddr2page_idx(&vmm->rpd, addr, NULL);
+    ret = mmap_core(&vmm->rpd, addr, pframe_number(page), mmap_flags, true);
+  }
+
+  pagetable_unlock(&vmm->rpd);
   return ret;
 }
 
 static int pcache_populate_pages(vmrange_t *vmr, page_idx_t npages, pgoff_t offs_pages)
 {
-  return 0;
+  return -ENOTSUP;
 }
 
 static int pcache_put_page(memobj_t *memobj, pgoff_t offset, page_frame_t *page)
 {
-  return 0;
+  return -ENOTSUP;
 }
 
 static page_frame_t pcache_get_page(memobj_t *memobj, pgoff_t offset)

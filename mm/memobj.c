@@ -38,7 +38,7 @@
 static idx_allocator_t memobjs_ida;
 static memcache_t *memobjs_memcache = NULL;
 static ttree_t memobjs_tree;
-static SPINLOCK_DEFINE(memobjs_tree_lock);
+static SPINLOCK_DEFINE(memobjs_lock);
 
 static int __memobjs_cmp_func(void *k1, void *k2)
 {
@@ -51,7 +51,7 @@ void memobj_subsystem_initialize(void)
   
   kprintf("[MM] Initializing memory objects subsystem...\n");
   idx_allocator_init(&memobjs_ida, CONFIG_MEMOBJS_MAX);
-  for (i = 0; i < NUM_RSRV_MEMOBJ_IDS)
+  for (i = 0; i < NUM_RSRV_MEMOBJ_IDS; i++)
     idx_reserve(&memobjs_ida, i);
 
   memobjs_memcache = create_memcache("Mmemory objects cache", sizeof(memobj_t),
@@ -79,7 +79,7 @@ int memobj_create(memobj_nature_t nature, uint32_t flags, pgoff_t size, /* OUT *
   }
   else
     memobj->id = memobj_kernel_nature2id(nature);  
-  if (likely(memboj->id != IDX_INVAL))
+  if (likely(memobj->id != IDX_INVAL))
     ASSERT(!ttree_insert(&memobjs_tree, &memobj->id));
   else {
     ret = -ENOSPC;
@@ -90,7 +90,7 @@ int memobj_create(memobj_nature_t nature, uint32_t flags, pgoff_t size, /* OUT *
   memobj->size = size;
   switch (nature) {
       case MMO_NTR_GENERIC:
-        ret = generic_memobj_intialize(memobj, flags);
+        ret = generic_memobj_initialize(memobj, flags);
         break;
       case MMO_NTR_PAGECACHE:
         ret = pagecache_memobj_initialize(memobj, flags);
@@ -112,17 +112,13 @@ int memobj_create(memobj_nature_t nature, uint32_t flags, pgoff_t size, /* OUT *
 
 memobj_t *memobj_find_by_id(memobj_id_t memobj_id)
 {
-  if (memobj_id == GENERIC_MEMOBJ_OD)
-    return &generic_memobj;
-  else {
-    memobj_t *ret;
+  memobj_t *ret;
 
-    spinlock_lock(&memobjs_lock);
-    ret = ttree_lookup(&memobjs_tree, &memobj_id, NULL);
-    spinlock_unlock(&memobjs_lock);
+  spinlock_lock(&memobjs_lock);
+  ret = ttree_lookup(&memobjs_tree, &memobj_id, NULL);
+  spinlock_unlock(&memobjs_lock);
 
-    return ret;
-  }
+  return ret;
 }
 
 memobj_backend_t *memobj_create_backend(void)
