@@ -62,6 +62,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
   pgoff_t offset = addr2pgoff(vmr, addr);
   kmap_flags_t mmap_flags = vmr->flags & KMAP_FLAGS_MASK;
   page_frame_t *page = NULL;
+  page_idx_t idx;
   
   if (unlikely(offset >= memobj->size))
     return -ENXIO;
@@ -168,7 +169,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
      */
     page = pframe_by_number(idx);
     spinlock_lock_read(&priv->cache_lock);
-    cpage = __pcache_get_page(page->offset);        
+    cpage = __pcache_get_page(priv, page->offset);        
     if (unlikely(cpage != page)) {
       unpin_page_frame(page);
       page = cpage;
@@ -180,10 +181,11 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
     }
     if (memobj->flags & MMO_FLG_DPC) {
       if (unlikely(!atomic_get(&page->dirtycount))) {
-        spinlock_lock_write(&priv->lock);
+        spinlock_lock_write(&priv->cache_lock);
         if (likely(!atomic_get(&page->dirtycount)))
-          __add_dirty_page(memobj, page);
-        spinlock_unlock_write(&priv->lock);
+          __add_dirty_page(priv, page);
+        
+        spinlock_unlock_write(&priv->cache_lock);
       }
     }
 
@@ -194,21 +196,21 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
   pagetable_lock(&vmm->rpd);
   if (pfmask & PFLT_NOT_PRESENT) {
     idx = ptable_ops.vaddr2page_idx(&vmm->rpd, addr, NULL);
-    if (unlikely(idx == PAGE_IDX_IVNAL)) {
+    if (unlikely(idx == PAGE_IDX_INVAL)) {
       ret = 0;
       unpin_page_frame(page);
       goto out;
     }
   }
 
-  ret = mmap_core(&vmm->rpd, addr, pframe_number(page), mmap_flags, false);
+  ret = mmap_core(&vmm->rpd, addr, pframe_number(page), 1, mmap_flags, false);
   pagetable_unlock(&vmm->rpd);
   
   out:
   return ret;
 }
 
-static int pcache_populate_pages(vmrange_t *vmr, page_idx_t npages, pgoff_t offs_pages)
+static int pcache_populate_pages(vmrange_t *vmr, pgoff_t offset, page_idx_t npages)
 {
   return -ENOTSUP;
 }
@@ -228,16 +230,16 @@ static void pcache_cleanup(memobj_t *memobj)
   return; /* Not supported yet... */
 }
 
-static memobj_ops_t pcacge_memobj_ops {
-  .handle_page_fault = pcache_handle_page_fault;
-  .populate_pages = pcache_populate_pages;
-  .put_page = pcache_put_page;
-  .get_page = pcache_get_page;
-  .cleanup = pcache_cleanup;
+static memobj_ops_t pcache_memobj_ops = {
+  .handle_page_fault = pcache_handle_page_fault,
+  .populate_pages = pcache_populate_pages,
+  .put_page = pcache_put_page,
+  .get_page = pcache_get_page,
+  .cleanup = pcache_cleanup,
 };
 
 /* TODO DK: BTW how am I going to collect other(RO) pages? */
-int pcache_memobj_initialize(memobj_t *memobj, uint32_t flags)
+int pagecache_memobj_initialize(memobj_t *memobj, uint32_t flags)
 {
   struct pcache_private *priv = NULL;
   int ret = 0;

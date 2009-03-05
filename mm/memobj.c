@@ -145,7 +145,7 @@ memobj_t *memobj_pin_by_id(memobj_id_t memobj_id)
   return ret;
 }
 
-bool __try_free_memobj(memobj_t *memobj)
+bool __try_destroy_memobj(memobj_t *memobj)
 {
   bool ret = true;
   
@@ -157,7 +157,7 @@ bool __try_free_memobj(memobj_t *memobj)
   }
 
   ASSERT(ttree_delete(&memobjs_tree, &memobj->id) != NULL);
-  idx_free(memobj->id);
+  idx_free(&memobjs_ida, memobj->id);
   spinlock_unlock_write(&memobjs_lock);
 
   memobj->mops->cleanup(memobj);

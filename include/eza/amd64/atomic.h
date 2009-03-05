@@ -68,18 +68,6 @@ static always_inline void atomic_add(atomic_t *a, long add)
                       : "ir" (add));
 }
 
-static always_inline int atomic_test_and_add(atomic_t *a, long add)
-{
-  uint8_t ret;
-  
-  __asm__ volatile (__LOCK_PREFIX "addq %2, %0\n\t"
-                    "sete %1"
-                    : "=m" (*a), "=m" (ret)
-                    : "ir" (add));
-
-  return ret;
-}
-
 /**
  * @fn static always_inline void atomic_inc(atomic_t *a)
  * Atomically increment the value of atomic variable @a a
@@ -92,15 +80,20 @@ static always_inline void atomic_inc(atomic_t *a)
                     : "+m" (*a));
 }
 
-static always_inline int atomic_test_and_inc(atomic_t *a)
+/**
+ * @fn static always_inline bool atomic_sub_and_test(atomic_t *a,long sub)
+ * Atomically decrements target atomic variable by a given amount of bytes
+ * and tests if its
+ * value is zero.
+ * @return true - if atomic variable is zero, false - if not.
+ */
+static always_inline bool atomic_inc_and_test(atomic_t *a)
 {
   uint8_t ret;
-
-  __asm__ volatile (__LOCK_PREFIX "incq %0\n\t"
-                    "sete %1"
+  __asm__ volatile (__LOCK_PREFIX "incq %0; sete %1"
                     : "+m" (*a), "=m" (ret));
 
-  return ret;
+  return (ret != 0);
 }
 
 /**
@@ -115,6 +108,17 @@ static always_inline void atomic_sub(atomic_t *a, long sub)
   __asm__ volatile (__LOCK_PREFIX "subq %1, %0\n\t"
                     : "+m" (*a)
                     : "ir" (sub));
+}
+
+static always_inline bool atomic_sub_and_test(atomic_t *a, long sub)
+{
+  uint8_t ret;
+  __asm__ volatile (__LOCK_PREFIX "subq %2, %0\n\t"
+                    "sete %1"
+                    : "+m" (*a), "=m" (ret)
+                    : "ir" (sub));
+
+  return ret;
 }
 
 /**
@@ -137,26 +141,25 @@ static always_inline void atomic_dec(atomic_t *a)
  */
 static always_inline bool atomic_dec_and_test(atomic_t *a)
 {
-  atomic_dec(a);
-  return (atomic_get(a) == 0);
+  uint8_t ret;
+  __asm__ volatile (__LOCK_PREFIX "decq %0\n\t"
+                    "sete %1"
+                    : "+m" (*a), "=m" (ret));
+
+  return (ret != 0);
 }
 
-/**
- * @fn static always_inline bool atomic_sub_and_test(atomic_t *a,long sub)
- * Atomically decrements target atomic variable by a given amount of bytes
- * and tests if its
- * value is zero.
- * @return true - if atomic variable is zero, false - if not.
- */
-static always_inline bool atomic_sub_and_test(atomic_t *a,long sub)
-{
-  atomic_sub(a,sub);
-  return (atomic_get(a) == 0);
-}
-
+#define atomic_bit_set(bitmap, bit)             \
+  arch_bit_set(bitmap, bit)
+#define atomic_bit_clear(bitmap, bit)           \
+  arch_bit_clear(bitmap, bit)
+#define atomic_bit_toggle(bitmap, bit)          \
+  arch_bit_toggle(bitmap, bit)
+#define atomic_bit_test(bitmap, bit)            \
+  arch_bit_test(bitmap, bit)
 #define atomic_test_and_set_bit(bitmap, bit)    \
-    arch_bit_test_and_set(bitmap, bit)
+  arch_bit_test_and_set(bitmap, bit)
 #define atomic_test_and_clear_bit(bitmap, bit)  \
-    arch_bit_test_and_clear(bitmap, bit)
+  arch_bit_test_and_clear(bitmap, bit)
 
 #endif /* __ARCH_ATOMIC_H__ */

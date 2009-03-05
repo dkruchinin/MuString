@@ -61,7 +61,7 @@ static int expand_tree(hat_t *hat, int new_heigh)
     hb = create_hat_bucket();
     if (!hb)
       return -ENOMEM;  
-    if (likely(hat->root_bucket)) {
+    if (likely(hat->root_bucket != NULL)) {
       hb->slots[0] = hat->root_bucket;
       hb->num_items = 1;
     }
@@ -79,8 +79,8 @@ void hat_initialize(hat_t *hat)
   CT_ASSERT(is_powerof2(HAT_BUCKET_SLOTS));
   CT_ASSERT(sizeof(hat_bucket_t) <= SLAB_OBJECT_MAX_SIZE);
   if (!buckets_cache) {
-    buckets_cahce = create_memcache("HAT memcache", sizeof(hat_bucket_t),
-                                    1, SMCF_PGEN | CMCF_GENERIC);
+    buckets_cache = create_memcache("HAT memcache", sizeof(hat_bucket_t),
+                                    1, SMCF_PGEN | SMCF_GENERIC);
     if (!buckets_cache) {
       panic("Can not create buckets memory cache for HAT! (failed to allocate %zd bytes)",
             sizeof(hat_bucket_t));
@@ -161,7 +161,7 @@ void *hat_delete(hat_t *hat, ulong_t idx)
 
   h = hat->tree_heigh;
   hb = hat->root_bucket;
-  while (h >= 0) {
+  while (h > 0) {
     path[h] = hb;
     i = index2slot_id(idx, h);
     hb = hb->slots[i];
@@ -171,8 +171,10 @@ void *hat_delete(hat_t *hat, ulong_t idx)
     h--;  
   }
 
-  ret = hb;
-  path[0]->slots[i] = NULL;
+  i = index2slot_id(idx, 0);
+  ret = hb->slots[i];
+  hb->slots[i] = NULL;
+  h = 0;
   while (h <= hat->tree_heigh) {
     hb = path[h++];
     if (--hb->num_items > 0)

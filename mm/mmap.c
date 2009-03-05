@@ -463,7 +463,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
     if (((flags & (VMR_PHYS | VMR_POPULATE)) == VMR_PHYS) && memobj_is_generic(memobj))
       offset = addr2pgoff(vmr, addr);
 
-    err = memobj_call_method(memobj, populate_pages, offset, npages);
+    err = memobj_method_call(memobj, populate_pages, vmr, offset, npages);
     if (err)
       goto err;
   }
@@ -555,6 +555,7 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
 {
   vmrange_t *vmr;
   int ret;
+  memobj_t *memobj;
   
   rwsem_down_read(&vmm->rwsem);
   vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(fault_addr), fault_addr + PAGE_SIZE, NULL);
@@ -568,9 +569,10 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
     ret = -EACCES;
     goto out;
   }
-  
+
   ASSERT(vmr->memobj != NULL);
-  ret = vmr->memobj->mops->handle_page_fault(vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
+  memobj = vmr->memobj;
+  ret = memobj_method_call(memobj, handle_page_fault, vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
 
   out:
   rwsem_up_read(&vmm->rwsem);
@@ -590,7 +592,7 @@ long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, int memobj_id, o
   }
   else if (memobj_id) {
     if ((offset & PAGE_MASK) || (vmrflags & VMR_ANON)) {
-      ret -EINVAL;
+      ret = -EINVAL;
       goto out;
     }
     

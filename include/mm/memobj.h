@@ -79,29 +79,13 @@ typedef struct __memobj {
 extern memobj_t *generic_memobj;
 
 #define memobj_method_call(memobj, method, args...)                     \
-  {( int __ret = -ECANCELED;                                            \
+  ({ int __ret = -ECANCELED;                                            \
      if (likely(!atomic_bit_test(&(memobj)->flags,                      \
                                  bitnumber(MMO_FLG_INACTIVE)))) {       \
-       __ret = (memobj)->mops->(method)(args);                          \
+       __ret = (memobj)->mops->method(args);                            \
      }                                                                  \
-     __ret; )}
+     __ret; })
 
-static inline void pin_memobj(memobj_t *memobj)
-{
-  atomic_inc(&memobj->users_count);
-}
-
-static inline bool unpin_memobj(memobj_t *memobj)
-{
-  if (unlikely(memobj->flags & MMO_FLG_INACTIVE))
-    return true;
-  if (atomic_dec_is_zero(&memobj->users_count)) {
-    memobj->flags |= MMO_FLG_INACTIVE;
-    return __try_destroy_memobj(memobj);
-  }
-
-  return false;
-}
 
 void memobj_subsystem_initialize(void);
 int memobj_create(memobj_nature_t mmo_nature, uint32_t flags, pgoff_t size, /* OUT */ memobj_t **out_memobj);
@@ -111,7 +95,27 @@ memobj_backend_t *memobj_create_backend(void);
 void memobj_release_backend(memobj_backend_t *backend);
 int memobj_prepare_page_raw(memobj_t *memobj, page_frame_t **page);
 int memobj_prepare_page_backended(memobj_t *memobj, page_frame_t **page);
-bool __try_free_memobj(memobj_t *memobj);
+bool __try_destroy_memobj(memobj_t *memobj);
+
+static inline void pin_memobj(memobj_t *memobj)
+{
+  if (!(memobj->flags & MMO_FLG_IMMORTAL))
+    atomic_inc(&memobj->users_count);
+}
+
+static inline bool unpin_memobj(memobj_t *memobj)
+{
+  if (memobj->flags & MMO_FLG_IMMORTAL)
+    return false;
+  if (unlikely(memobj->flags & MMO_FLG_INACTIVE))
+    return true;
+  if (atomic_dec_and_test(&memobj->users_count)) {
+    memobj->flags |= MMO_FLG_INACTIVE;
+    return __try_destroy_memobj(memobj);
+  }
+
+  return false;
+}
 
 /* memobject nature-dependent initialization functions */
 int generic_memobj_initialize(memobj_t *memobj, uint32_t flags);
