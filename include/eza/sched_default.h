@@ -72,6 +72,8 @@
 #define FIND_FIRST_BITMAP_BIT(array) \
   find_first_bit_mem(&array->bitmap[0],EZA_SCHED_TOTAL_WIDTH)
 
+#define task_on_runlist(t) (list_node_is_bound(&(t)->runlist))
+
 typedef struct __eza_sched_prio_array {
   eza_sched_type_t bitmap[EZA_SCHED_TOTAL_WIDTH];
   list_head_t queues[EZA_SCHED_TOTAL_PRIOS];

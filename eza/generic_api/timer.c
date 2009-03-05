@@ -38,6 +38,8 @@
 #include <ds/rbtree.h>
 #include <ds/skiplist.h>
 #include <mlibc/types.h>
+#include <eza/kconsole.h>
+#include <eza/serial.h>
 
 /*spinlock*/
 static SPINLOCK_DEFINE(timer_lock);
@@ -126,6 +128,50 @@ void init_timers(void)
   init_hw_timers();
   __init_sw_timers();
   initialize_deffered_actions();
+}
+
+static void __dump_major_tick(major_timer_tick_t *mt)
+{
+  kconsole_t *cons=get_fault_console();
+  char buf[256];
+  int i;
+
+  sprintf(buf,"***** DUMPING MAJOR TICK %d\n",mt->time_x);
+  cons->display_string(buf);
+
+  for(i=0;i<MINOR_TICK_GROUPS;i++) {
+    if( !list_is_empty(&mt->minor_ticks[i]) ) {
+      list_node_t *ln,*ln_a,*ln_b;
+      deffered_irq_action_t *da;
+      ktimer_t *kt;
+
+      list_for_each(&mt->minor_ticks[i],ln) {
+        timer_tick_t *tt=container_of(ln,timer_tick_t,node);
+
+        sprintf(buf,"TIMER TICK: %d\n",tt->time_x);
+
+        list_for_each(&tt->actions,ln_a) {
+          da=container_of(ln_a,deffered_irq_action_t,node);
+          kt=container_of(da,ktimer_t,da);
+
+          sprintf(buf,"    <%d:%d>\n",kt->time_x,da->priority);
+          cons->display_string(buf);
+
+          if( !list_is_empty(&da->head) ) {
+            list_for_each(&da->head,ln_b) {
+              da=container_of(ln_b,deffered_irq_action_t,node);
+              kt=container_of(da,ktimer_t,da);
+
+              sprintf(buf,"                <%d:%d>\n",kt->time_x,da->priority);
+              cons->display_string(buf);
+            }
+          }
+        }
+      }
+    }
+  }
+  sprintf(buf,"***** FINISHED DUMPING MAJOR TICK %d\n",mt->time_x);
+  cons->display_string(buf);
 }
 
 void process_timers(void)
@@ -224,14 +270,24 @@ void delete_timer(ktimer_t *timer)
 
       if( lhn->next != &timer->da.node || lhn->prev != &timer->da.node
           || !list_is_empty(&timer->da.head) ) {
-        skiplist_del(&timer->da,deffered_irq_action_t,head,node);
-        nt=container_of(list_node_first(&tt->actions),ktimer_t,da);
 
+        if( !list_is_empty(&timer->da.head) ) {
+          deffered_irq_action_t *da=container_of(list_node_first(&timer->da.head),
+                                                 deffered_irq_action_t,node);
+          list_del(&da->node);
+          if( !list_is_empty(&timer->da.head) ) {
+            list_move2head(&da->head,&timer->da.head);
+          }
+          list_replace(&timer->da.node,&da->node);
+        } else {
+          list_del(&timer->da.node);
+        }
+
+        nt=container_of(list_node_first(&tt->actions),ktimer_t,da);
         nt->minor_tick.actions.head.next=&nt->da.node;
         nt->da.node.prev=&nt->minor_tick.actions.head;
         nt->minor_tick.actions.head.prev=tt->actions.head.prev;
         tt->actions.head.prev->next=&nt->minor_tick.actions.head;
-
         list_replace(&tt->node,&nt->minor_tick.node);
       } else {
         list_del(&tt->node);
@@ -255,7 +311,8 @@ long modify_timer(ktimer_t *timer,ulong_t time_x)
   major_timer_tick_t *mt;
 
   if( time_x <= system_ticks ) {
-    return -EAGAIN;
+    execute_deffered_action(&timer->da);
+    return 0;
   }
 
   mt=timer->minor_tick.major_tick;

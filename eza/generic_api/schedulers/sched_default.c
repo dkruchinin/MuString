@@ -261,14 +261,16 @@ static void def_scheduler_tick(int op)
   }
 
   if( !tdata->time_slice ) {
-    if( discipl == SCHED_RR || discipl == SCHED_FIFO ) {
-      __remove_task_from_array(cpudata->active_array,current);
-      __recalculate_timeslice_and_priority(current);
-      __add_task_to_array(cpudata->active_array,current);
-    } else {
-      __remove_task_from_array(cpudata->active_array,current);
-      __recalculate_timeslice_and_priority(current);
-      __add_task_to_array(cpudata->expired_array,current);
+    if( task_on_runlist(tdata) ) {
+      if( discipl == SCHED_RR || discipl == SCHED_FIFO ) {
+        __remove_task_from_array(cpudata->active_array,current);
+        __recalculate_timeslice_and_priority(current);
+        __add_task_to_array(cpudata->active_array,current);
+      } else {
+        __remove_task_from_array(cpudata->active_array,current);
+        __recalculate_timeslice_and_priority(current);
+        __add_task_to_array(cpudata->expired_array,current);
+      }
     }
     sched_set_current_need_resched();
   }

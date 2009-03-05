@@ -546,15 +546,14 @@ void process_sigitem_private(sigq_item_t *sigitem)
     /* Calculate overrun for this timer,if any. */
     if( next_tick <= system_ticks ) {
       overrun=(system_ticks-ptimer->ktimer.time_x)/ptimer->interval;
-      next_tick=system_ticks%ptimer->interval+ptimer->interval;
+      next_tick=system_ticks+ptimer->interval;
     } else {
       overrun=0;
     }
 
     /* Rearm this timer. */
     ptimer->overrun=overrun;
-    TIMER_RESET_TIME(&ptimer->ktimer,next_tick);
-    add_timer(&ptimer->ktimer);
+    modify_timer(&ptimer->ktimer,next_tick);
   }
   UNLOCK_POSIX_STUFF_W(stuff);
 }
