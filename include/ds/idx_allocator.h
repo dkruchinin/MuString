@@ -63,6 +63,8 @@ typedef struct __idx_allocator {
   } ops;
 } idx_allocator_t;
 
+#define idx_allocator_initialized(ida)  (((idx_allocator_t*)(ida))->max_id)
+
 /**
  * @brief Initialize an index allocator.
  * @param ida     - A pointer to particular index allocator

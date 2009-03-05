@@ -44,6 +44,7 @@ endmenu
 
 source "mm/Kconfig"
 source "kernel/Kconfig"
+source "ipc/Kconfig"
 source "tests/Kconfig"
 source "ds/Kconfig"
 

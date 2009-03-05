@@ -28,16 +28,17 @@
 #include <eza/signal.h>
 #include <eza/arch/interrupt.h>
 #include <eza/arch/profile.h>
+#include <eza/process.h>
 
 long sys_timer_create(clockid_t clockid,struct sigevent *evp,
                       posixid_t *timerid)
 {
-  task_t *caller=current_task();
+  task_t *caller=current_task(), *target=NULL;
   posix_stuff_t *stuff;
   struct sigevent kevp;
   long id,r;
   posix_timer_t *ptimer=NULL;
-  siginfo_t *siginfo;
+  ksiginfo_t *ksiginfo;
 
   if( clockid != CLOCK_REALTIME ) {
     return -EINVAL;
@@ -82,18 +83,24 @@ long sys_timer_create(clockid_t clockid,struct sigevent *evp,
   ptimer->ktimer.da.kern_priv=ptimer;
   ptimer->overrun=0;
 
+  ksiginfo=&ptimer->ktimer.da.d.siginfo;
+  INIT_KSIGINFO_CURR(ksiginfo);
+  ksiginfo->user_siginfo.si_signo=kevp.sigev_signo;
+  ksiginfo->user_siginfo.si_value=kevp.sigev_value;
+
   switch( kevp.sigev_notify ) {
-    case SIGEV_SIGNAL:
-      siginfo=&ptimer->ktimer.da.d.siginfo;
-      INIT_SIGINFO_CURR(siginfo);
-      siginfo->si_signo=kevp.sigev_signo;
-      siginfo->si_value=kevp.sigev_value;
+    case SIGEV_SIGNAL_THREAD:
+      target=pid_to_task(kevp.tid);
+      if( !target ) {
+        goto free_id;
+      }
+      ksiginfo->target=target;
       break;
   }
 
   if( copy_to_user(timerid,&id,sizeof(id)) ) {
     r=-EFAULT;
-    goto free_id;
+    goto free_target;
   }
 
   LOCK_POSIX_STUFF_W(stuff);
@@ -102,6 +109,10 @@ long sys_timer_create(clockid_t clockid,struct sigevent *evp,
   UNLOCK_POSIX_STUFF_W(stuff);
 
   return 0;
+free_target:
+  if( target ) {
+    release_task_struct(target);
+  }
 free_id:
   LOCK_POSIX_STUFF_W(stuff);
   posix_free_obj_id(stuff,id);

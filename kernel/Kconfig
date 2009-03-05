@@ -21,12 +21,54 @@ config CORESERVERS_LAUNCH_DELAY
        range 500 3000
        default 500
 
+menu "Scheduler settings"
+
+config TRACE_CURRENT
+       bool "Trace TID of the current process for each CPU."
+       default n
+       help
+       By turning this option on kernel stores TID of the currently executed task
+       in a special array variable defined as follows:
+            tid_t __current_cpu_task[CONFIG_NRCPUS]
+endmenu
+
+menu "Realtime timers"
+
+config TIMER_RBTREE
+       bool "RB-Tree based representation of active kernel timers"
+       default n
+       help
+       By default, kernel keeps track of all active timers in a form of sorted list
+       to eleminate rebalance cost. Such an approach is quite good if you are not
+       going to have lots of active timers. But when number of active timers rises,
+       cost of list traversing may affect realtime. In such a case, by turning this
+       option on you will gain serious search benefits.
+
 config TIMER_GRANULARITY
        int "Granularity of timer major tick"
        range 32 64 
        default "32"
        help
        Granularity (in timer tick) of major tick.
+
+config CACHED_MAJOR_TICKS
+       int "Initial number of cached major ticks"
+       range 16 128
+       default "16"
+       help
+       Initial number of major ticks in the cache. If kernel can't find an active
+       major ticks to a timer being created, it first tries to get a free on from
+       the cache.
+
+config MIN_CACHED_MAJOR_TICKS
+       int "Minimum number of cached major ticks in the cache"
+       range 4 128
+       default 4
+       help
+       Minimum number of cached major ticks in the cache. If the number of cached
+       major ticks falls below this value, the process which made this value to
+       reach this edge (as a result of adding a timer) will allocate a new cached
+       entry.
 
 config MAX_DEFERRED_IRQ_ACTIONS_PER_TICK
        int "Maximum amount of deferred actions fired at one time."
@@ -41,6 +83,7 @@ config MAX_DEFERRED_USERSPACE_ACTIONS
        int "Maximum amount of deferred actions performed upon returning to userspace."
        range 1 32
        default "2"
+endmenu
 
 endmenu
 

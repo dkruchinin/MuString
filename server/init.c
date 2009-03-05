@@ -39,6 +39,7 @@
 #include <eza/ptd.h>
 #include <eza/gc.h>
 #include <config.h>
+#include <mm/page.h>
 
 long initrd_start_page,initrd_num_pages;
 
@@ -255,7 +256,6 @@ static void __server_task_runner(void *data)
       }
 
 #ifdef CONFIG_CORESERVERS_PERCPU_LAUNCH
-      /* Perform initial CPU deployment and activate the server. */
       t=sn % CONFIG_NRCPUS;
 
       if( t != cpu_id() ) {
@@ -269,18 +269,12 @@ static void __server_task_runner(void *data)
       sn++;
       sleep(delay);
     } else if( !strncmp(&modvbase[257],"ustar",5 ) ) { /* TAR-based ramdisk ? */
-      long size;
-
       if( initrd_start_page ) {
         panic("Only one instance of initial RAM disk is allowed !");
       }
 
       initrd_start_page=init.server[a].addr>>PAGE_WIDTH;
-      size=init.server[a].size>>PAGE_WIDTH;
-      if( size & PAGE_MASK ) {
-        size++;
-      }
-      initrd_num_pages=size;
+      initrd_num_pages=PAGE_ALIGN(init.server[a].size)>>PAGE_WIDTH;
     } else {
       panic("Unrecognized kernel module N %d !\n",a+1);
     }

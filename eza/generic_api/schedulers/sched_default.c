@@ -47,6 +47,7 @@
 #include <eza/arch/apic.h>
 #include <eza/arch/current.h>
 #include <eza/signal.h>
+#include <config.h>
 
 /* Our own scheduler. */
 static struct __scheduler eza_default_scheduler;
@@ -307,7 +308,9 @@ static int def_add_task(task_t *task)
   return 0;
 }
 
-long __t1;
+#ifdef CONFIG_TRACE_CURRENT
+static tid_t __current_cpu_task[CONFIG_NRCPUS];
+#endif
 
 static void def_schedule(void)
 {
@@ -361,6 +364,11 @@ get_next_task:
   if( next->state == TASK_STATE_RUNNABLE ) {
     next->state = TASK_STATE_RUNNING;
   }
+
+#ifdef CONFIG_TRACE_CURRENT
+  __current_cpu_task[cpu_id()]=next->tid;
+#endif
+
   __UNLOCK_CPU_SCHED_DATA(sched_data);
 
   if( need_switch ) {

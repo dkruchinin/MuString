@@ -3,36 +3,27 @@
 
 #include <eza/arch/types.h>
 #include <eza/mutex.h>
-#include <ipc/port.h>
 #include <eza/arch/atomic.h>
-#include <ds/linked_array.h>
+#include <ds/idx_allocator.h>
 #include <eza/spinlock.h>
 #include <eza/arch/arch_ipc.h>
-#include <ipc/buffer.h>
 #include <ipc/channel.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 
 /* Blocking mode */
 #define IPC_BLOCKED_ACCESS  0x1
 
-#define UNTRUSTED_MANDATORY_FLAGS  (IPC_BLOCKED_ACCESS)
-
-/* NOTE: This number is used for allocate temporary arrays on task's
- * kernel stack. So please don't use huge numbers here.
- */
+/**< Maximum numbers of vectors for I/O operations. */
 #define MAX_IOVECS  8
 
-/* Initial number of ports to allocate when the first port is created. */
-#define IPC_DEFAULT_PORTS  32
-
-/* Initial number of channels to allocate when the first channel is opened. */
-#define IPC_DEFAULT_CHANNELS  32
+#define UNTRUSTED_MANDATORY_FLAGS  (IPC_BLOCKED_ACCESS)
 
 #define IPC_DEFAULT_PORT_MESSAGES  512
-#define IPC_DEFAULT_USER_BUFFERS  512
-#define IPC_DEFAULT_USER_CHANNELS  512
-
 #define IPC_MAX_PORT_MESSAGES  512
+#define IPC_DEFAULT_BUFFERS 512
+
+/**< Number of pages statically allocated for a task for its large messages. */
+#define IPC_PERTASK_PAGES 1
 
 typedef struct __ipc_cached_data {
   void *cached_page1, *cached_page2;
@@ -50,22 +41,16 @@ typedef struct __task_ipc {
   /* port-related stuff. */
   ulong_t num_ports,max_port_num;
   ipc_gen_port_t **ports;
-  linked_array_t ports_array;
+  idx_allocator_t ports_array;
   int allocated_ports;
   spinlock_t port_lock;
 
   /* Channels-related stuff. */
-  linked_array_t channel_array;
+  idx_allocator_t channel_array;
   ulong_t num_channels,max_channel_num;
   ipc_channel_t **channels;
   spinlock_t channel_lock;
   int allocated_channels;
-
-  /* Userspace buffers-related stuff. */
-  spinlock_t buffer_lock;
-  ipc_user_buffer_t **user_buffers;
-  linked_array_t buffers_array;
-  ulong_t num_buffers;
 } task_ipc_t;
 
 typedef struct __task_ipc_priv {
@@ -98,6 +83,11 @@ void dup_task_ipc_resources(task_ipc_t *ipc);
 void *allocate_ipc_memory(long size);
 void free_ipc_memory(void *addr,int size);
 
+typedef struct __iovec {
+  void *iov_base;
+  size_t iov_len;
+} iovec_t;
+
 static inline task_ipc_t *get_task_ipc(task_t *t)
 {
   task_ipc_t *ipc;
@@ -115,5 +105,6 @@ static inline task_ipc_t *get_task_ipc(task_t *t)
 }
 
 long replicate_ipc(task_ipc_t *source,task_t *rcpt);
+void initialize_ipc(void);
 
 #endif

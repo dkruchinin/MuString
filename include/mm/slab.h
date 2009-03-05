@@ -48,10 +48,12 @@
 #define DEFAULT_SLAB_PAGES   1
 /* Minimal allowed object size */
 #define SLAB_OBJECT_MIN_SIZE 8 
-/* Max allowed object size */
-#define SLAB_OBJECT_MAX_SIZE 1024
 #define FIRST_GENSLABS_POW2  3
-#define LAST_GENSLABS_POW2   9
+#define LAST_GENSLABS_POW2   10
+
+/* Max allowed object size */
+#define SLAB_OBJECT_MAX_SIZE (1<<LAST_GENSLABS_POW2)
+
 /* number of generic memory caches(except memory caches for memcache_t and slab_t) */
 #define SLAB_GENERIC_CACHES  (LAST_GENSLABS_POW2 - FIRST_GENSLABS_POW2 + 1)
 
@@ -119,8 +121,6 @@ typedef struct __slab {
   int nobjects;         /**< Number of free objects in slab */
   slab_state_t state;   /**< Slab state */
 } slab_t;
-
-#define SLAB_MAXSIZE  1024  /**< mMximum size of object for slab allocation */
 
 /**
  * The following flags controls memory cache behaviour

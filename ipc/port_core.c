@@ -28,14 +28,14 @@
 #include <eza/mutex.h>
 #include <mm/pfalloc.h>
 #include <mm/page.h>
-#include <ds/linked_array.h>
+#include <ds/idx_allocator.h>
 #include <ipc/ipc.h>
 #include <ipc/buffer.h>
 #include <mlibc/stddef.h>
 #include <eza/arch/preempt.h>
 #include <eza/kconsole.h>
 #include <mm/slab.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 #include <eza/event.h>
 #include <eza/signal.h>
 #include <eza/usercopy.h>
@@ -190,14 +190,8 @@ static int __allocate_port(ipc_gen_port_t **out_port,ulong_t flags,
 
   IPC_INIT_PORT(p);
 
-  if( flags & IPC_PRIORITIZED_ACCESS ) {
-    p->msg_ops=&prio_port_msg_ops;
-    p->port_ops=&prio_port_ops;
-  } else {
-    p->msg_ops=&def_port_msg_ops;
-    p->port_ops=&def_port_ops;
-  }
-
+  p->msg_ops=&prio_port_msg_ops;
+  p->port_ops=&prio_port_ops;
   p->flags=(flags & IPC_PORT_DIRECT_FLAGS);
   r=p->msg_ops->init_data_storage(p,owner,queue_size);
   if( r ) {
@@ -279,7 +273,7 @@ int ipc_close_port(task_t *owner,ulong_t port)
       /* For better efficiency wi will actually shutdown port after
        * unlocking the IPC lock.
        */
-      linked_array_free_item(&ipc->ports_array,port);
+      idx_free(&ipc->ports_array,port);
       ipc->num_ports--;
     }
     r=0;
@@ -292,13 +286,13 @@ out_unlock:
     if( shutdown ) {
       __shutdown_port(p);
     }
-    __ipc_put_port(p);
+    ipc_put_port(p);
   }
   release_task_ipc(ipc);
   return r;
 }
 
-int __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
+int ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
 {
   int r;
   task_ipc_t *ipc = get_task_ipc(owner);
@@ -328,26 +322,18 @@ int __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
   /* First port created ? */
   if( !ipc->ports ) {
     r = -ENOMEM;
-    ipc->ports=memalloc(sizeof(ipc_gen_port_t *)*IPC_DEFAULT_PORTS);
+    ipc->ports=allocate_ipc_memory(sizeof(ipc_gen_port_t *)*CONFIG_IPC_DEFAULT_PORTS);
     if( !ipc->ports ) {
       goto out_unlock;
     }
-    ipc->allocated_ports=IPC_DEFAULT_PORTS;
-
-    if( !linked_array_is_initialized( &ipc->ports_array ) ) {
-      if( linked_array_initialize(&ipc->ports_array,
-                                  owner->limits->limits[LIMIT_IPC_MAX_PORTS]) != 0 ) {
-        /* TODO: [mt] allocate/free memory via slabs. */
-        goto out_unlock;
-      }
-    }
+    ipc->allocated_ports=CONFIG_IPC_DEFAULT_PORTS;
   } else if( ipc->num_ports >= ipc->allocated_ports ) {
     r=-EMFILE;
     goto out_unlock;
   }
 
-  id = linked_array_alloc_item(&ipc->ports_array);
-  if(id == INVALID_ITEM_IDX) {
+  id = idx_allocate(&ipc->ports_array);
+  if( id == IDX_INVAL ) {
     r = -EMFILE;
     goto out_unlock;
   }
@@ -373,7 +359,7 @@ int __ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
   release_task_ipc(ipc);
   return r;
 free_id:
-  linked_array_free_item(&ipc->ports_array,id);
+  idx_free(&ipc->ports_array,id);
 out_unlock:
   UNLOCK_IPC(ipc);
   release_task_ipc(ipc);
@@ -418,6 +404,7 @@ static int __transfer_message_data_to_receiver(ipc_port_message_t *msg,
     info.msg_len=msg->data_size;
     info.sender_tid=msg->sender->tid;
     info.sender_uid=msg->sender->uid;
+    info.sender_gid=msg->sender->gid;
 
     if( copy_to_user(stats,&info,sizeof(info)) ) {
       r=-EFAULT;
@@ -530,7 +517,7 @@ out:
   return r;
 }
 
-ipc_gen_port_t * __ipc_get_port(task_t *task,ulong_t port)
+ipc_gen_port_t *ipc_get_port(task_t *task,ulong_t port)
 {
   ipc_gen_port_t *p=NULL;
   int r=-EINVAL;
@@ -556,7 +543,7 @@ ipc_gen_port_t * __ipc_get_port(task_t *task,ulong_t port)
   return p;
 }
 
-void __ipc_put_port(ipc_gen_port_t *p)
+void ipc_put_port(ipc_gen_port_t *p)
 {
   if( atomic_dec_and_test(&p->use_count) ) {
     p->port_ops->destructor(p);

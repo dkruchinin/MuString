@@ -3,12 +3,12 @@
 #include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
 #include <eza/task.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 #include <ds/list.h>
 #include <ipc/channel.h>
 #include <mm/slab.h>
 #include <ipc/ipc.h>
-#include <ds/linked_array.h>
+#include <ds/idx_allocator.h>
 #include <eza/errno.h>
 #include <mm/pfalloc.h>
 #include <eza/security.h>
@@ -52,7 +52,7 @@ ipc_channel_t *ipc_get_channel(task_t *task,ulong_t ch_id)
 
 static void __shutdown_channel(ipc_channel_t *channel)
 {
-  __ipc_put_port(channel->server_port);
+  ipc_put_port(channel->server_port);
   memfree(channel);
 }
 
@@ -67,7 +67,7 @@ void ipc_unref_channel(ipc_channel_t *channel,ulong_t c)
       shutdown=true;
       ipc->channels[channel->id]=NULL;
       ipc->num_channels--;
-      linked_array_free_item(&ipc->channel_array,channel->id);
+      idx_free(&ipc->channel_array,channel->id);
     } else {
       shutdown=false;
     }
@@ -140,7 +140,7 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
     goto out_unlock;
   }
 
-  server_port=__ipc_get_port(server,port);
+  server_port=ipc_get_port(server,port);
   if( !server_port ) {
     r=-EINVAL;
     goto out_unlock;
@@ -151,29 +151,20 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
     goto out_unlock;
   }
 
-  /* First channel opened ? */
-  if( !ipc->channels ) {
+  if( !ipc->channels ) { /* First channel opened ? */
     r = -ENOMEM;
-    ipc->channels=memalloc(sizeof(ipc_channel_t *)*IPC_DEFAULT_CHANNELS);
+    ipc->channels=allocate_ipc_memory(sizeof(ipc_channel_t *)*CONFIG_IPC_DEFAULT_CHANNELS);
     if( !ipc->channels ) {
       goto out_put_port;
     }
-    ipc->allocated_channels=IPC_DEFAULT_CHANNELS;
-
-    if( !linked_array_is_initialized( &ipc->channel_array ) ) {
-      if( linked_array_initialize(&ipc->channel_array,
-                                  owner->limits->limits[LIMIT_IPC_MAX_CHANNELS]) != 0 ) {
-        /* TODO: [mt] allocate/free memory via slabs. */
-        goto out_put_port;
-      }
-    }
+    ipc->allocated_channels=CONFIG_IPC_DEFAULT_CHANNELS;
   } else if( ipc->num_channels >= ipc->allocated_channels ) {
     r=-EMFILE;
     goto out_unlock;
   }
 
-  id = linked_array_alloc_item(&ipc->channel_array);
-  if(id == INVALID_ITEM_IDX) {
+  id = idx_allocate(&ipc->channel_array);
+  if( id == IDX_INVAL ) {
     r=-EMFILE;
     goto out_put_port;
   }
@@ -199,9 +190,9 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
   r=id;
   goto out_unlock;
 free_id:
-  linked_array_free_item(&ipc->channel_array,id);
+  idx_free(&ipc->channel_array,id);
 out_put_port:
-  __ipc_put_port(server_port);
+  ipc_put_port(server_port);
 out_unlock:
   UNLOCK_IPC(ipc);
   release_task_ipc(ipc);

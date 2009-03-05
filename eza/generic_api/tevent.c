@@ -27,7 +27,7 @@
 #include <mm/slab.h>
 #include <ds/list.h>
 #include <eza/task.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 #include <ipc/ipc.h>
 
 #define __free_listener(l)  memfree(l)
@@ -99,7 +99,7 @@ int task_event_attach(task_t *target,task_t *listener,
     return -ENOMEM;
   }
 
-  if( !(port=__ipc_get_port(listener,ctl_arg->port)) ) {
+  if( !(port=ipc_get_port(listener,ctl_arg->port)) ) {
     goto out_free;
   }
 
@@ -143,7 +143,7 @@ dont_add:
 
   return r;
 put_port:
-  __ipc_put_port(port);
+  ipc_put_port(port);
 out_free:
   __free_listener(l);
   return r;
@@ -171,7 +171,7 @@ void exit_task_events(task_t *target)
       UNLOCK_TASK_EVENTS_W(&l->listener->task_events);
 
       /* Free port and listener itself. */
-      __ipc_put_port(l->port);
+      ipc_put_port(l->port);
       __free_listener(l);
     } else {
       UNLOCK_TASK_EVENTS_W(te);

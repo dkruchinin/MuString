@@ -28,18 +28,18 @@
 #include <eza/errno.h>
 #include <mm/pfalloc.h>
 #include <mm/page.h>
-#include <ds/linked_array.h>
+#include <ds/idx_allocator.h>
 #include <ipc/ipc.h>
 #include <ipc/buffer.h>
 #include <mm/slab.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 #include <ds/list.h>
 #include <ds/skiplist.h>
 
 typedef struct __prio_port_data_storage {
   list_head_t prio_head,all_messages,id_waiters;
   ipc_port_message_t **message_ptrs;
-  linked_array_t msg_array;
+  idx_allocator_t msg_array;
   ulong_t num_waiters;
 } prio_port_data_storage_t;
 
@@ -65,7 +65,7 @@ static int prio_init_data_storage(struct __ipc_gen_port *port,
     goto free_ds;
   }
 
-  r=linked_array_initialize(&ds->msg_array,queue_size);
+  r=idx_allocator_init(&ds->msg_array,queue_size);
   if( r ) {
     goto free_messages;
   }
@@ -113,7 +113,7 @@ static int prio_insert_message(struct __ipc_gen_port *port,
                                    ipc_port_message_t *msg)
 {
   prio_port_data_storage_t *ds=(prio_port_data_storage_t *)port->data_storage;
-  ulong_t id=linked_array_alloc_item(&ds->msg_array);
+  ulong_t id=idx_allocate(&ds->msg_array);
 
   port->avail_messages++;
   port->total_messages++;
@@ -121,8 +121,8 @@ static int prio_insert_message(struct __ipc_gen_port *port,
   list_init_node(&msg->l);
   list_add2tail(&ds->all_messages,&msg->messages_list);
 
-  if( id != INVALID_ITEM_IDX ) { /* Insert this message in the array directly. */
-     ds->message_ptrs[id]=msg;
+  if( id != IDX_INVAL ) { /* Insert this message in the array directly. */
+    ds->message_ptrs[id]=msg;
     __add_one_message(&ds->prio_head,msg);
   } else { /* No free slots - put this message to the waitlist. */
     id=WAITQUEUE_MSG_ID;
@@ -172,7 +172,7 @@ static int prio_remove_message(struct __ipc_gen_port *port,
       __add_one_message(&ds->prio_head,m);
       ds->num_waiters--;
     } else {
-      linked_array_free_item(&ds->msg_array,msg->id);
+      idx_free(&ds->msg_array,msg->id);
       ds->message_ptrs[msg->id]=NULL;
     }
   } else if( msg->id == WAITQUEUE_MSG_ID ) {
@@ -242,7 +242,7 @@ static ipc_port_message_t *prio_lookup_message(struct __ipc_gen_port *port,
     if( msg == __MSG_WAS_DEQUEUED ) { /* Deferred cleanup. */
       ds->message_ptrs[msg_id]=NULL;
       port->total_messages--;
-      linked_array_free_item(&ds->msg_array,msg_id);
+      idx_free(&ds->msg_array,msg_id);
     }
     return msg;
   }
@@ -255,7 +255,7 @@ static void prio_destructor(ipc_gen_port_t *port)
   prio_port_data_storage_t *ds=(prio_port_data_storage_t*)port->data_storage;
 
   free_ipc_memory(ds->message_ptrs,port->capacity*sizeof(ipc_port_message_t*));
-  linked_array_deinitialize(&ds->msg_array);
+  idx_allocator_destroy(&ds->msg_array);
   memfree(ds);
 }
 
