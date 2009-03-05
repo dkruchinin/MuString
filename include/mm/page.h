@@ -58,6 +58,7 @@ typedef uint8_t page_flags_t;
 #define PF_RESERVED   0x01 /**< Page is reserved */
 #define PF_SLAB_LOCK  0x02 /**< Page lock (used by slab allocator) */
 #define PF_SYNCING    0x04
+#define PF_DIRTY      0x08
 
 #define PF_MMPOOL_MASK (PF_MMP_BMEM | PF_MMP_GEN | PF_MMP_DMA)
 

@@ -107,6 +107,7 @@ static vmrange_t *create_vmrange(vmm_t *parent_vmm, uintptr_t va_start,
 
 static void destroy_vmrange(vmrange_t *vmr)
 {
+  unpin_memobj(vmr->memobj);
   vmr->parent_vmm->num_vmrs--;
   memfree(vmr);
 }
@@ -461,8 +462,8 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
     
     if (((flags & (VMR_PHYS | VMR_POPULATE)) == VMR_PHYS) && memobj_is_generic(memobj))
       offset = addr2pgoff(vmr, addr);
-    
-    err = memobj->mops->populate_pages(vmr, offset, npages);
+
+    err = memobj_call_method(memobj, populate_pages, offset, npages);
     if (err)
       goto err;
   }
@@ -531,7 +532,7 @@ void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
     }
 
     ttree_delete_placeful(&cursor);
-    va_from = vmr->bounds.space_end;
+    va_from = vmr->bounds.space_end;    
     destroy_vmrange(vmr);
   }
 }
@@ -584,26 +585,35 @@ long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, int memobj_id, o
   vmrange_flags_t vmrflags = (prot & VMR_PROTO_MASK) | (flags << VMR_FLAGS_OFFS);
 
   if ((vmrflags & VMR_ANON) || (memobj_id == GENERIC_MEMOBJ_ID)) {
-    memobj = memobj_find_by_id(GENERIC_MEMOBJ_ID);
+    memobj = memobj_pin_by_id(GENERIC_MEMOBJ_ID);
     ASSERT(memobj != NULL);    
   }
   else if (memobj_id) {
-    if ((offset & PAGE_MASK) || (vmrflags & VMR_ANON))
-      return -EINVAL;
+    if ((offset & PAGE_MASK) || (vmrflags & VMR_ANON)) {
+      ret -EINVAL;
+      goto out;
+    }
     
-    memobj = memobj_find_by_id(memobj_id);
-    if (!memobj)
-      return -ENOENT;
+    memobj = memobj_pin_by_id(memobj_id);
+    if (!memobj) {
+      ret = -ENOENT;
+      goto out;
+    }
   }
   if (!size || ((vmrflags & VMR_FIXED) && (addr & PAGE_MASK)) ||
       ((vmrflags & VMR_PHYS) && (offset & PAGE_MASK))) {
-    return -EINVAL;
+    ret = -EINVAL;
+    goto out;
   }
   
   rwsem_down_write(&vmm->rwsem);
   ret = vmrange_map(memobj, vmm, addr, PAGE_ALIGN(size) >> PAGE_WIDTH,
                     vmrflags, PAGE_ALIGN(offset) >> PAGE_WIDTH);
   rwsem_up_write(&vmm->rwsem);
+  out:
+  if (ret && memobj)
+    unpin_memobj(memobj);
+
   return ret;
 }
 

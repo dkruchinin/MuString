@@ -30,6 +30,7 @@ enum { /* memory object flags */
   MMO_FLG_DPC        = 0x10,
   MMO_FLG_BACKENDED  = 0x20,
   MMO_FLG_NOSHARED   = 0x40,
+  MMO_FLG_INACTIVE   = 0x80,
 };
 
 #define MMO_LIVE_MASK (MMO_FLG_SPIRIT | MMO_FLG_STICKY | MMO_FLG_LEECH | MMO_FLG_IMMORTAL)
@@ -41,7 +42,8 @@ typedef struct __memobj_ops {
   int (*handle_page_fault)(struct __vmrange *vmr, uintptr_t addr, uint32_t pfmask);
   int (*populate_pages)(struct __vmrange *vmr, pgoff_t offset, page_idx_t npages);
   int (*put_page)(struct __memobj *memobj, pgoff_t offset, page_frame_t *page);
-  page_frame_t *(*get_page)(struct __memobj *memobj, pgoff_t offset);
+  int (*get_page)(struct __memobj *memobj, pgoff_t offset, page_frame_t **page);
+  void (*cleanup)(struct __memobj *memobj);
 } memobj_ops_t;
 
 struct __task_struct;
@@ -76,13 +78,40 @@ typedef struct __memobj {
 
 extern memobj_t *generic_memobj;
 
+#define memobj_method_call(memobj, method, args...)                     \
+  {( int __ret = -ECANCELED;                                            \
+     if (likely(!atomic_bit_test(&(memobj)->flags,                      \
+                                 bitnumber(MMO_FLG_INACTIVE)))) {       \
+       __ret = (memobj)->mops->(method)(args);                          \
+     }                                                                  \
+     __ret; )}
+
+static inline void pin_memobj(memobj_t *memobj)
+{
+  atomic_inc(&memobj->users_count);
+}
+
+static inline bool unpin_memobj(memobj_t *memobj)
+{
+  if (unlikely(memobj->flags & MMO_FLG_INACTIVE))
+    return true;
+  if (atomic_dec_is_zero(&memobj->users_count)) {
+    memobj->flags |= MMO_FLG_INACTIVE;
+    return __try_destroy_memobj(memobj);
+  }
+
+  return false;
+}
+
 void memobj_subsystem_initialize(void);
 int memobj_create(memobj_nature_t mmo_nature, uint32_t flags, pgoff_t size, /* OUT */ memobj_t **out_memobj);
 memobj_t *memobj_find_by_id(memobj_id_t memobj_id);
+memobj_t *memobj_pin_by_id(memobj_id_t memobj_id);
 memobj_backend_t *memobj_create_backend(void);
 void memobj_release_backend(memobj_backend_t *backend);
 int memobj_prepare_page_raw(memobj_t *memobj, page_frame_t **page);
 int memobj_prepare_page_backended(memobj_t *memobj, page_frame_t **page);
+bool __try_free_memobj(memobj_t *memobj);
 
 /* memobject nature-dependent initialization functions */
 int generic_memobj_initialize(memobj_t *memobj, uint32_t flags);

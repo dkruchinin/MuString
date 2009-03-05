@@ -38,7 +38,12 @@
 static idx_allocator_t memobjs_ida;
 static memcache_t *memobjs_memcache = NULL;
 static ttree_t memobjs_tree;
-static SPINLOCK_DEFINE(memobjs_lock);
+static RW_SPINLOCK_DEFINE(memobjs_lock);
+
+static inline memobj_t *__find_by_id_core(memobj_id_t id)
+{
+  return ttree_lookup(&memobjs_tree, &id, NULL);
+}
 
 static int __memobjs_cmp_func(void *k1, void *k2)
 {
@@ -73,17 +78,23 @@ int memobj_create(memobj_nature_t nature, uint32_t flags, pgoff_t size, /* OUT *
     goto error;
   }
   if (likely(!memobj_kernel_nature(nature))) {
-    spinlock_lock(&memobjs_lock);
-    memobj->id = idx_allocate(&memobjs_ida);    
-    spinlock_unlock(&memobjs_lock);
+    spinlock_lock_write(&memobjs_lock);
+    memobj->id = idx_allocate(&memobjs_ida);
+    if (likely(memobj->id != IDX_INVAL))
+      ASSERT(!ttree_insert(&memobjs_tree, &memobj->id));
+    else {
+      spinlock_unlock_write(&memobjs_lock);      
+      ret = -ENOSPC;
+      goto error;
+    }
+    
+    spinlock_unlock_write(&memobjs_lock);
   }
-  else
-    memobj->id = memobj_kernel_nature2id(nature);  
-  if (likely(memobj->id != IDX_INVAL))
-    ASSERT(!ttree_insert(&memobjs_tree, &memobj->id));
   else {
-    ret = -ENOSPC;
-    goto error;
+    memobj->id = memobj_kernel_nature2id(nature);
+    spinlock_lock_write(&memobjs_lock);
+    ASSERT(!ttree_insert(&memobjs_tree, &memobj->id));
+    spinlock_unlock_write(&memobjs_lock);
   }
   
   memset(memobj, 0, sizeof(*memobj));
@@ -114,10 +125,45 @@ memobj_t *memobj_find_by_id(memobj_id_t memobj_id)
 {
   memobj_t *ret;
 
-  spinlock_lock(&memobjs_lock);
-  ret = ttree_lookup(&memobjs_tree, &memobj_id, NULL);
-  spinlock_unlock(&memobjs_lock);
+  spinlock_lock_read(&memobjs_lock);
+  ret = __find_by_id_core(memobj_id);
+  spinlock_unlock_read(&memobjs_lock);
 
+  return ret;
+}
+
+memobj_t *memobj_pin_by_id(memobj_id_t memobj_id)
+{
+  memobj_t *ret;
+
+  spinlock_lock_read(&memobjs_lock);
+  ret = __find_by_id_core(memobj_id);
+  if (ret)
+    pin_memobj(ret);
+  
+  spinlock_unlock_read(&memobjs_lock);
+  return ret;
+}
+
+bool __try_free_memobj(memobj_t *memobj)
+{
+  bool ret = true;
+  
+  spinlock_lock_write(&memobjs_lock);
+  if (unlikely(atomic_get(&memobj->users_count))) {
+    spinlock_unlock_write(&memobjs_lock);
+    ret = false;
+    goto out;
+  }
+
+  ASSERT(ttree_delete(&memobjs_tree, &memobj->id) != NULL);
+  idx_free(memobj->id);
+  spinlock_unlock_write(&memobjs_lock);
+
+  memobj->mops->cleanup(memobj);
+  memfree(memobj);
+  
+  out:
   return ret;
 }
 

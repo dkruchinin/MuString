@@ -46,6 +46,7 @@
 #define EADDRNOTAVAIL 39  /**< Address not available. */
 #define EIDRM         40  /**< Identifier removed. */
 #define ENOTSUP       41  /**< Not supported */
+#define ECANCELED     42  /**< Operation canceled. */
 
 #endif
 
