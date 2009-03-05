@@ -286,6 +286,11 @@ static void __server_task_runner(void *data)
 
 void server_run_tasks(void)
 {
+  get_fault_console()->enable();
+  get_debug_console()->enable();
+
+  get_debug_console()->display_string("Debug console test !\n");
+
   if( kernel_thread(__server_task_runner,NULL,NULL) ) {
     panic("Can't launch a Core Servers runner !");
   }

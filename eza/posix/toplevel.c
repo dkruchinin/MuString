@@ -209,7 +209,8 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
 
         ktimer=&ptimer->ktimer;
         if( !(tspec.it_value.tv_sec | tspec.it_value.tv_nsec) ) {
-          if( ktimer->time_x ) { /* Disarm active timer */
+          if( ktimer->time_x && posix_timer_active(ptimer) ) { /* Disarm active timer */
+            deactivate_posix_timer(ptimer);
             delete_timer(ktimer);
             r=0;
           }
@@ -223,6 +224,7 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
             r=modify_timer(ktimer,tx);
           } else {
             TIMER_RESET_TIME(ktimer,tx);
+            activate_posix_timer(ptimer);
             r=add_timer(ktimer);
           }
         }

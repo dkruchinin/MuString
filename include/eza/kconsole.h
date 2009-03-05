@@ -72,8 +72,7 @@ typedef struct __kconsole_type {
 kconsole_t *default_console(void);
 kconsole_t *get_fault_console(void);
 void set_default_console(kconsole_t *cons);
-
-#define get_debug_console  get_fault_console()
+kconsole_t *get_debug_console(void);
 
 #define PREPARE_DEBUG_CONSOLE()  do {           \
   set_default_console(get_fault_console());     \

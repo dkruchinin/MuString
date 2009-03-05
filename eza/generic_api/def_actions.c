@@ -33,6 +33,7 @@
 #include <eza/arch/bits.h>
 #include <ds/skiplist.h>
 #include <eza/process.h>
+#include <eza/kconsole.h>
 #include <config.h>
 
 static percpu_def_actions_t cpu_actions[CONFIG_NRCPUS];
@@ -153,6 +154,10 @@ out_unlock:
 void execute_deffered_action(deffered_irq_action_t *a)
 {
   ksiginfo_t *ksiginfo;
+  char buf[256];
+
+  sprintf(buf,"(%d) DA type %d\n",system_ticks,a->type);
+  get_fault_console()->display_string(buf);
 
   switch( a->type ) {
     case DEF_ACTION_EVENT:

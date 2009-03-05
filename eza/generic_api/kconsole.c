@@ -125,6 +125,14 @@ void set_default_console(kconsole_t *cons)
   __default_console=cons;
 }
 
+kconsole_t *get_debug_console(void) {
+#ifdef CONFIG_DEBUG_SERIAL_CONSOLE
+  return &serial_console;
+#else
+  return default_console();
+#endif
+}
+
 kconsole_t *get_fault_console(void)
 {
 #ifdef CONFIG_DEBUG_ERR_MESSAGES_TO_SERIAL_CONSOLE

@@ -111,7 +111,8 @@ static int __send_task_siginfo(task_t *task,usiginfo_t *info,
   }
 
   /* Make sure only one instance of a non-RT signal is present. */
-  if( !rt_signal(sig) && signal_matches(&task->siginfo.pending,sig) ) {
+  if( !rt_signal(sig) &&
+      (signal_matches(&task->siginfo.pending,sig) && !kern_priv)) {
     return 0;
   }
 
@@ -551,9 +552,11 @@ void process_sigitem_private(sigq_item_t *sigitem)
       overrun=0;
     }
 
-    /* Rearm this timer. */
+    /* Rearm this timer. We take only active timers into account. */
     ptimer->overrun=overrun;
-    modify_timer(&ptimer->ktimer,next_tick);
+    if( posix_timer_active(ptimer) ) {
+      modify_timer(&ptimer->ktimer,next_tick);
+    }
   }
   UNLOCK_POSIX_STUFF_W(stuff);
 }
