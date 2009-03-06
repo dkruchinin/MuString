@@ -29,6 +29,7 @@
 #include <eza/arch/interrupt.h>
 #include <eza/arch/profile.h>
 #include <eza/process.h>
+#include <eza/kconsole.h>
 
 long sys_timer_create(clockid_t clockid,struct sigevent *evp,
                       posixid_t *timerid)
@@ -203,28 +204,43 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
         LOCK_POSIX_STUFF_W(stuff);
         ptimer=(posix_timer_t*)__posix_locate_object(stuff,id,POSIX_OBJ_TIMER);
         if( !ptimer ) {
+          char b[128];
+
           UNLOCK_POSIX_STUFF_W(stuff);
+          sprintf(b,"** CAN'T LOCATE OBJECT %d\n",id);
+          get_debug_console()->display_string(b);
           break;
         }
 
         ktimer=&ptimer->ktimer;
         if( !(tspec.it_value.tv_sec | tspec.it_value.tv_nsec) ) {
           if( ktimer->time_x && posix_timer_active(ptimer) ) { /* Disarm active timer */
+            char b[128];
+
             deactivate_posix_timer(ptimer);
+            sprintf(b,"+d3: disarming %d\n",
+                    id);
+            get_debug_console()->display_string(b);
             delete_timer(ktimer);
-            r=0;
+            get_debug_console()->display_string(" +d3:Done !\n");
           }
+          r=0;
         } else if( valid_timeval ) {
           if( !(arg1 & TIMER_ABSTIME) ) {
             tx+=system_ticks;
           }
 
           ptimer->interval=itx;
+          activate_posix_timer(ptimer);
           if( ktimer->time_x ) { /* New time for active timer. */
+            char b[128];
+
+            sprintf(b,"+b3: for %d at %d. ITX=%d\n",
+                    id,tx,itx);
+            get_debug_console()->display_string(b);
             r=modify_timer(ktimer,tx);
           } else {
             TIMER_RESET_TIME(ktimer,tx);
-            activate_posix_timer(ptimer);
             r=add_timer(ktimer);
           }
         }

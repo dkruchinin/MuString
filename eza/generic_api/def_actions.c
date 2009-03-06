@@ -178,6 +178,7 @@ void execute_deffered_action(deffered_irq_action_t *a)
       activate_task(a->d.target);
       break;
   }
+  get_debug_console()->display_string("     (DA) is over.\n");
 }
 
 void fire_deffered_actions(void)
@@ -199,12 +200,18 @@ void fire_deffered_actions(void)
 
   fired=0;
   do {
+    char b[128];
+
     spinlock_lock_irqsave(&acts->lock,is);
     action=NULL;
 
     if( !list_is_empty(&acts->pending_actions) ) {
       action=container_of(list_node_first(&acts->pending_actions),
                           deffered_irq_action_t,node);
+
+      sprintf(b," (%d)  > Found an action of priority %d\n",
+              system_ticks,action->priority);
+      get_debug_console()->display_string(b);
 
       if( current_task()->priority >= action->priority ) {
         action->__host=NULL;
@@ -222,6 +229,7 @@ void fire_deffered_actions(void)
       execute_deffered_action(action);
       fired++;
     }
+    get_debug_console()->display_string("     > Iteration end.\n");
   } while(action != NULL && fired < CONFIG_MAX_DEFERRED_IRQ_ACTIONS_PER_TICK);
 
   spinlock_lock_irqsave(&acts->lock,is);

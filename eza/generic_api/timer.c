@@ -123,6 +123,24 @@ static void __init_sw_timers(void)
   }
 }
 
+/*
+void __add_timer(list_head_t *lh,deffered_irq_action_t *target_da)
+{
+  deffered_irq_action_t *da;
+
+  list_for_each_entry(lh,da,node) {
+    if( da->priority == target_da->priority ) {
+      list_add2tail(&da->head,&target_da->node);
+      return;
+    } else if( da->priority > target_da->priority ) {
+      list_insert_before(&target_da->node,&da->node);
+      return;
+    }
+  }
+  list_add2tail(lh,&target_da->node);
+  }
+*/
+
 void init_timers(void)
 {
   init_hw_timers();
@@ -132,9 +150,9 @@ void init_timers(void)
 
 static void __dump_major_tick(major_timer_tick_t *mt)
 {
-  kconsole_t *cons=get_fault_console();
+  kconsole_t *cons=get_debug_console();
   char buf[256];
-  int i;
+  int i,rows=0,cols=0;
 
   sprintf(buf,"***** DUMPING MAJOR TICK %d\n",mt->time_x);
   cons->display_string(buf);
@@ -142,32 +160,44 @@ static void __dump_major_tick(major_timer_tick_t *mt)
   for(i=0;i<MINOR_TICK_GROUPS;i++) {
     if( !list_is_empty(&mt->minor_ticks[i]) ) {
       list_node_t *ln,*ln_a,*ln_b;
-      deffered_irq_action_t *da;
+      deffered_irq_action_t *da,*tda;
       ktimer_t *kt;
 
       list_for_each(&mt->minor_ticks[i],ln) {
         timer_tick_t *tt=container_of(ln,timer_tick_t,node);
 
         sprintf(buf,"TIMER TICK: %d\n",tt->time_x);
+        cons->display_string(buf);
+        cols=0;
 
         list_for_each(&tt->actions,ln_a) {
           da=container_of(ln_a,deffered_irq_action_t,node);
           kt=container_of(da,ktimer_t,da);
 
-          sprintf(buf,"    <%d:%d>\n",kt->time_x,da->priority);
+          sprintf(buf,"    <%d:%d> : list head=%p\n",
+                  kt->time_x,da->priority,&da->head);
           cons->display_string(buf);
 
           if( !list_is_empty(&da->head) ) {
             list_for_each(&da->head,ln_b) {
-              da=container_of(ln_b,deffered_irq_action_t,node);
-              kt=container_of(da,ktimer_t,da);
+              tda=container_of(ln_b,deffered_irq_action_t,node);
+              kt=container_of(tda,ktimer_t,da);
 
-              sprintf(buf,"                <%d:%d>\n",kt->time_x,da->priority);
+              sprintf(buf,"                <%d:%d>\n",kt->time_x,tda->priority);
               cons->display_string(buf);
+
+              if( ++cols >= 10 ) {
+                cons->display_string("__dump_major_tick(): COL loop detected.\n");
+                for(;;);
+              }
             }
           }
         }
       }
+    }
+    if( ++rows >= 10 ) {
+      cons->display_string("__dump_major_tick(): ROW loop detected.\n");
+      for(;;);
     }
   }
   sprintf(buf,"***** FINISHED DUMPING MAJOR TICK %d\n",mt->time_x);
@@ -242,27 +272,62 @@ void process_timers(void)
   }
 }
 
-
 void delete_timer(ktimer_t *timer)
 {
   long is;
   timer_tick_t *tt=&timer->minor_tick;
   major_timer_tick_t *mtt;
+  bool unlock;
 
   if( !tt->major_tick ) { /* Ignore clear timers. */
     return;
   }
 
   mtt=tt->major_tick;
-  LOCK_MAJOR_TIMER_TICK(mtt,is);
-  atomic_dec(&mtt->use_counter);
+
+  interrupts_save_and_disable(is);
+  spinlock_lock(&sw_timers_lock);
+  spinlock_lock(&mtt->lock);
+
+  if( !list_node_is_bound(&timer->da.node) ) {
+    spinlock_unlock(&mtt->lock);
+    spinlock_unlock(&sw_timers_lock);
+    interrupts_restore(is);
+    get_debug_console()->display_string(" Bad boy !\n");
+    return;
+  }
+
+  unlock=!atomic_dec_and_test(&mtt->use_counter);
+  if( !unlock ) {
+#ifndef CONFIG_TIMER_RBTREE
+    list_del(&mtt->list);
+#else
+   #error Not implemented yet !
+#endif
+    if( __num_cached_major_ticks < CONFIG_CACHED_MAJOR_TICKS ) {
+      __num_cached_major_ticks++;
+      list_add2tail(&cached_major_ticks,&mtt->list);
+    }
+
+    spinlock_unlock(&mtt->lock);
+    spinlock_unlock(&sw_timers_lock);
+    interrupts_restore(is);
+  } else {
+    spinlock_unlock(&sw_timers_lock);
+  }
+
+  get_debug_console()->display_string("---------------[delete_timer(): BEGIN----------------------\n");
+  __dump_major_tick(mtt);
+  get_debug_console()->display_string("--------------------------------------------------------\n");
 
   if( tt->time_x > __last_processed_timer_tick ) {
     /* Timer hasn't triggered yet. So remove it only from timer list.
      */
     if( !list_node_is_bound(&tt->node) ) {
       /* The simpliest case - only one timer in this tick, no rebalance. */
+      get_debug_console()->display_string("Timer removing 1\n");
       skiplist_del(&timer->da,deffered_irq_action_t,head,node);
+      get_debug_console()->display_string("Timer removed 1\n");
     } else {
       /* Need to rebalance the whole list associated with this timer. */
       ktimer_t *nt;
@@ -271,6 +336,7 @@ void delete_timer(ktimer_t *timer)
       if( lhn->next != &timer->da.node || lhn->prev != &timer->da.node
           || !list_is_empty(&timer->da.head) ) {
 
+        get_debug_console()->display_string("Timer removing 2\n");
         if( !list_is_empty(&timer->da.head) ) {
           deffered_irq_action_t *da=container_of(list_node_first(&timer->da.head),
                                                  deffered_irq_action_t,node);
@@ -289,6 +355,8 @@ void delete_timer(ktimer_t *timer)
         nt->minor_tick.actions.head.prev=tt->actions.head.prev;
         tt->actions.head.prev->next=&nt->minor_tick.actions.head;
         list_replace(&tt->node,&nt->minor_tick.node);
+
+        get_debug_console()->display_string("Timer removed 2\n");
       } else {
         list_del(&tt->node);
       }
@@ -297,21 +365,47 @@ void delete_timer(ktimer_t *timer)
     /* Bad luck - timer's action has properly been scheduled. So try
      * to remove it from the list of deferred actions.
      */
+    get_debug_console()->display_string("Timer removing 3\n");
     deschedule_deffered_action(&timer->da);
+    get_debug_console()->display_string("Timer removed 3\n");
   }
-  UNLOCK_MAJOR_TIMER_TICK(mtt,is);
+  get_debug_console()->display_string("---------------[delete_timer(): END ----------------------\n");
+  __dump_major_tick(mtt);
+  get_debug_console()->display_string("---------------[delete_timer():  -------------------------\n");
 
-  if( !atomic_get(&mtt->use_counter) ) {
+  if( unlock ) {
+    spinlock_unlock(&mtt->lock);
+    interrupts_restore(is);
+  }
+
+  if( in_atomic() ) {
+    get_debug_console()->display_string("BZZZZZZZZZZZZZZZZZZZZZZZZZZZ!\n");
   }
 }
+
+int __timer_verbose=0;
+static char __b[128];
+
 
 long modify_timer(ktimer_t *timer,ulong_t time_x)
 {
   long r;
   major_timer_tick_t *mt;
 
+  if( __timer_verbose ) {
+    sprintf(__b,">> M.2: time_x = %d, system ticks = %d\n",
+            time_x,system_ticks);
+    get_debug_console()->display_string(__b);
+  }
+
   if( time_x <= system_ticks ) {
+    if( __timer_verbose ) {
+      get_debug_console()->display_string("M.2\n");
+    }
     execute_deffered_action(&timer->da);
+    if( __timer_verbose ) {
+      get_debug_console()->display_string("M.3\n");
+    }
     return 0;
   }
 
@@ -320,12 +414,29 @@ long modify_timer(ktimer_t *timer,ulong_t time_x)
     return -EINVAL;
   }
 
+  if( __timer_verbose ) {
+    get_debug_console()->display_string("M.4\n");
+  }
   delete_timer(timer);
+  if( __timer_verbose ) {
+    get_debug_console()->display_string("M.5\n");
+  }
   TIMER_RESET_TIME(timer,time_x);
+  if( __timer_verbose ) {
+    get_debug_console()->display_string("M.6\n");
+  }
   r=add_timer(timer);
-
+  if( __timer_verbose ) {
+    get_debug_console()->display_string("M.7\n");
+  }
   return r;
 }
+
+#define ___skiplist_add(ptr,lh,type,ln,plh,cv) do {  \
+    if( list_is_empty((lh)) ) {                   \
+      list_add2tail((lh),&((type*)(ptr))->ln);    \
+    }                                             \
+  } while(0)
 
 long add_timer(ktimer_t *t)
 {
@@ -433,11 +544,13 @@ long add_timer(ktimer_t *t)
       timer_tick_t *tt=container_of(ln,timer_tick_t,node);
 
       if( tt->time_x == t->time_x ) {
+        get_debug_console()->display_string("* TYPE A\n");
         skiplist_add(&t->da,&tt->actions,deffered_irq_action_t,node,head,priority);
         goto out_insert;
       } else if( tt->time_x > t->time_x ) {
         list_insert_before(&t->minor_tick.node,ln);
         list_add2tail(&t->minor_tick.actions,&t->da.node);
+        get_debug_console()->display_string("* TYPE B\n");
         goto out_insert;
       }
       /* Fallthrough in case of the lowest tick value - it will be added to
@@ -448,15 +561,19 @@ long add_timer(ktimer_t *t)
   /* By default - add this timer to the end of the list. */
   list_add2tail(lh,&t->minor_tick.node);
   list_add2tail(&t->minor_tick.actions,&t->da.node);
-
+  get_debug_console()->display_string("* TYPE C\n");
 out_insert:
   t->minor_tick.major_tick=mt;
   r=0;
 out_unlock_tick:
+  get_debug_console()->display_string("------------------[add_timer()]------------------- \n");
+  __dump_major_tick(mt);
+  get_debug_console()->display_string("----------------------------------------------------\n");
   UNLOCK_MAJOR_TIMER_TICK(mt,is);
 fire_expired_timer:
   if( r == -EAGAIN ) {
     execute_deffered_action(&t->da);
+    r=0;
   }
 
   /* Now check if we need to remove any expired major ticks from

@@ -128,9 +128,10 @@ static inline bool is_interrupts_enabled(void)
   return (interrupts_read() & 0x200) != 0 ? 1: 0;
 }
 
-#define interrupts_save_and_disable(state)      \
+#define interrupts_save_and_disable(state) do { \
     state=is_interrupts_enabled();              \
-    interrupts_disable()
+    interrupts_disable();                       \
+  } while(0)
 
 #define interrupts_restore(state)               \
     if( state ) {                               \
