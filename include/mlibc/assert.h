@@ -53,15 +53,15 @@
 
 #include <config.h>
 #include <eza/kernel.h>
-#include <eza/arch/bug.h>
+#include <eza/arch/assert.h>
 
 #define CT_ASSERT(cond) ((void)sizeof(char[1 - 2 * !(cond)]))
 #define ASSERT(cond)                                    \
   do {                                                  \
-    if (!(cond)) {                                      \
-    kprintf("[KERNEL ASSERT] " #cond "\n" );            \
-    kprintf("   in: %s:%d\n", __FILE__, __LINE__);      \
-    BUG();                                              \
+    if (unlikely(!(cond))) {                            \
+      ASSERT_LOW_LEVEL("[KERNEL ASSERTION] " #cond "\n" \
+                       "    in %s:%s:%d\n", __FILE__,   \
+                       __FUNCTION__, __LINE__);         \
   }                                                     \
 } while (0)
 

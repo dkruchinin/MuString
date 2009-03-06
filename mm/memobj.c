@@ -50,6 +50,15 @@ static int __memobjs_cmp_func(void *k1, void *k2)
   return (*(long *)k1 - *(long *)k2);
 }
 
+static void __init_kernel_memobjs(void)
+{
+  int ret;
+
+  ret = memobj_create(MMO_NTR_GENERIC, 0, USPACE_VA_TOP >> PAGE_WIDTH, NULL);
+  if (ret)
+    panic("Can't create generic memory object: [ERROR %d]", ret);
+}
+
 void memobj_subsystem_initialize(void)
 {
   memobj_id_t i;
@@ -65,6 +74,7 @@ void memobj_subsystem_initialize(void)
     panic("memobj_subsystem_initialize: Can't create memory cache for memory objects. ENOMEM.");
 
   ttree_init(&memobjs_tree, __memobjs_cmp_func, memobj_t, id);
+  __init_kernel_memobjs();
 }
 
 int memobj_create(memobj_nature_t nature, uint32_t flags, pgoff_t size, /* OUT */ memobj_t **out_memobj)
@@ -110,8 +120,9 @@ int memobj_create(memobj_nature_t nature, uint32_t flags, pgoff_t size, /* OUT *
         ret = -EINVAL;
         goto error;
   }
-
-  *out_memobj = memobj;
+  if (out_memobj)
+    *out_memobj = memobj;
+  
   return ret;
   
   error:

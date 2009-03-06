@@ -40,7 +40,7 @@ struct __vmrange;
 
 typedef struct __memobj_ops {
   int (*handle_page_fault)(struct __vmrange *vmr, uintptr_t addr, uint32_t pfmask);
-  int (*populate_pages)(struct __vmrange *vmr, pgoff_t offset, page_idx_t npages);
+  int (*populate_pages)(struct __vmrange *vmr, uintptr_t addr, page_idx_t npages);
   int (*put_page)(struct __memobj *memobj, pgoff_t offset, page_frame_t *page);
   int (*get_page)(struct __memobj *memobj, pgoff_t offset, page_frame_t **page);
   void (*cleanup)(struct __memobj *memobj);

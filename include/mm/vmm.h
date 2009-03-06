@@ -176,7 +176,7 @@ int vm_mandmaps_roll(vmm_t *target_mm);
 vmm_t *vmm_create(void);
 int vmm_handle_page_fault(vmm_t *vmm, uintptr_t addr, uint32_t pfmask);
 long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages,
-                 vmrange_flags_t flags, page_idx_t offs_pages);
+                 vmrange_flags_t flags, pgoff_t offset);
 void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages);
 vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, ttree_cursor_t *cursor);
 void vmranges_find_covered(vmm_t *vmm, uintptr_t va_from, uintptr_t va_to, vmrange_set_t *vmrs);
@@ -211,6 +211,19 @@ static inline uintptr_t pgoff2addr(vmrange_t *vmr, pgoff_t offset)
   return (vmr->bounds.space_start +
           ((uintptr_t)(offset - vmr->offset) << PAGE_WIDTH));
 }
+
+/**
+ * @fn status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_t offset);
+ * @brief mmap (shared) memory *
+ * @param addr - address where you want to map memory
+ * @param size - size of memory to map
+ * @param flags - mapping flags
+ * @param fd - id of shared memory area
+ * @param offset - offset of the shared area to map
+ *
+ */
+long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, memobj_id_t memobj_id, off_t offset);
+int sys_munmap(uintptr_t addr, size_t length);
 
 #ifdef CONFIG_DEBUG_MM
 static inline char *vmm_get_name_dbg(vmm_t *vmm)

@@ -37,6 +37,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
   int ret = 0;
   vmm_t *vmm = vmr->parent_vmm;
 
+  kprintf("PAGE FAULT!\n");
   ASSERT(!(vmr->flags & VMR_PHYS));
   ASSERT(!(vmr->flags & VMR_NONE));
   if (pfmask & PFLT_NOT_PRESENT) {
@@ -51,7 +52,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
      * mapping it into the place we've been asked.
      */
     pagetable_lock(&vmm->rpd);
-    if (unlikely(ptable_ops.vaddr2page_idx(&vmm->rpd, addr, NULL) == PAGE_IDX_INVAL)) {
+    if (unlikely(ptable_ops.vaddr2page_idx(&vmm->rpd, addr, NULL) != PAGE_IDX_INVAL)) {
       /*
        * In very rare situatinons several threads may generate a fault by one address.
        * So here we have to check if the fault was handled by somebody earlier. If so,
@@ -61,7 +62,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
       free_page(pf);
       return 0;
     }
-    
+
     ret = mmap_core(&vmm->rpd, addr, pframe_number(pf),
                     1, vmr->flags & VMR_PROTO_MASK, true);
     pagetable_unlock(&vmm->rpd);
@@ -95,18 +96,18 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
   return ret;
 }
 
-static int generic_populate_pages(vmrange_t *vmr, pgoff_t offset, page_idx_t npages)
+static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npages)
 {
   int ret;
-  memobj_t *memobj = vmr->memobj;  
-  page_frame_t *pages;
+  memobj_t *memobj = vmr->memobj;    
   page_frame_iterator_t pfi;
   vmm_t *vmm = vmr->parent_vmm;
+  page_frame_t *p, *pages = NULL;
+  pgoff_t offs;
   
-  if (offset >= memobj->size)
-    return -ENXIO;
   if (!(vmr->flags & VMR_PHYS)) {
     ITERATOR_CTX(page_frame, PF_ITER_LIST) list_ctx;
+    
     pages = alloc_pages(npages, AF_ZERO | AF_USER);
     if (!pages)
       return -ENOMEM;
@@ -115,13 +116,25 @@ static int generic_populate_pages(vmrange_t *vmr, pgoff_t offset, page_idx_t npa
   }
   else {
     ITERATOR_CTX(page_frame, PF_ITER_INDEX) index_ctx;
-    pfi_index_init(&pfi, &index_ctx, offset, offset + npages - 1);    
+    pfi_index_init(&pfi, &index_ctx, vmr->offset, vmr->offset + npages - 1);
+  }
+
+  offs = vmr->offset;
+  iterate_forward(&pfi) {
+    if (likely(page_idx_is_present(pfi.pf_idx))) {
+      p = pframe_by_number(pfi.pf_idx);
+      p->offset = offs;
+      p->owner = memobj;
+      pin_page_frame(p);
+    }
+    
+    offs++;
   }
 
   iter_first(&pfi);
-  pagetable_lock(&vmm->rpd);  
-  ret = __mmap_core(&vmr->parent_vmm->rpd, (offset << PAGE_WIDTH), npages, &pfi,
-                    vmr->flags & KMAP_FLAGS_MASK, true);
+  pagetable_lock(&vmm->rpd);
+  ret = __mmap_core(&vmr->parent_vmm->rpd, addr, npages, &pfi,
+                    vmr->flags & KMAP_FLAGS_MASK, false);
   pagetable_unlock(&vmm->rpd);
   if (ret)
     free_pages_chain(pages);

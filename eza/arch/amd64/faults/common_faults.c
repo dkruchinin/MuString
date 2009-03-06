@@ -33,6 +33,7 @@
 #include <eza/smp.h>
 #include <eza/kconsole.h>
 #include <eza/arch/cpu.h>
+#include <eza/arch/assert.h>
 
 void bound_range_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
@@ -45,7 +46,15 @@ void invalid_opcode_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
   regs_t *regs = (regs_t *)(((uintptr_t)stack_frame)-sizeof(struct __gpr_regs)-8);
   
   PREPARE_DEBUG_CONSOLE();
+  if (regs->rax == ASSERT_MAGIC) {
+    kprintf((char *)regs->gpr_regs.r10, (char *)regs->gpr_regs.r11,
+            (char *)regs->gpr_regs.r12, (int)regs->gpr_regs.r13);
+    goto out;
+  }
+  
   kprintf("Invalid opcode exception!!!\n");
+
+  out:
   fault_dump_regs(regs, stack_frame->rip);
   show_stack_trace(stack_frame->old_rsp);
   for(;;);

@@ -210,7 +210,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
   return ret;
 }
 
-static int pcache_populate_pages(vmrange_t *vmr, pgoff_t offset, page_idx_t npages)
+static int pcache_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npages)
 {
   return -ENOTSUP;
 }

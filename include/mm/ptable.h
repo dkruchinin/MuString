@@ -22,7 +22,7 @@ typedef struct __ptable_ops {
 } ptable_ops_t;
 
 #define pagetable_lock(rpd) spinlock_lock(&(rpd)->rpd_lock)
-#define pagetable_unlock(rpd) spinlock_lock(&(rpd)->rpd_lock)
+#define pagetable_unlock(rpd) spinlock_unlock(&(rpd)->rpd_lock)
 
 extern ptable_ops_t ptable_ops;
 

@@ -83,21 +83,18 @@ struct __memobj;
  */
 typedef struct __page_frame {
   list_node_t node;
+  list_node_t chain_node;
   
   union {
-    void *slab_pages_start;    
-    atomic_t refcount;
-  };
-  
-  union {
-    list_node_t chain_node;
-    struct {
-      pgoff_t offset;
+    void *slab_pages_start;
+    struct {  
+      atomic_t refcount;
       atomic_t dirtycount;
+      pgoff_t offset;
       struct __memobj *owner;
     };
   };
-
+  
   page_idx_t idx;
   ulong_t _private;
   page_flags_t flags;

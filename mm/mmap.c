@@ -85,6 +85,22 @@ static inline bool can_be_merged(const vmrange_t *vmr, const memobj_t *memobj, v
           && ((vmr->memobj == memobj)));
 }
 
+static inline void __attach_memobj_to_vmrange(vmrange_t *vmr, memobj_t *memobj, pgoff_t offset)
+{
+  pin_memobj(memobj);
+  if ((memobj->id == GENERIC_MEMOBJ_ID) && !(vmr->flags & VMR_PHYS))
+    offset = vmr->bounds.space_start >> PAGE_WIDTH;
+
+  vmr->memobj = memobj;
+  vmr->offset = offset;
+}
+
+static inline void __detach_vmrange_from_memobj(vmrange_t *vmr)
+{
+  if (memobj->id != GENERIC_MEMOBJ_ID)
+    unpin_memobj(vmr->memobj)
+}
+
 static vmrange_t *create_vmrange(vmm_t *parent_vmm, uintptr_t va_start,
                                  page_idx_t npages, vmrange_flags_t flags)
 {
@@ -125,6 +141,7 @@ static vmrange_t *merge_vmranges(vmrange_t *prev_vmr, vmrange_t *next_vmr)
   ttree_delete(&prev_vmr->parent_vmm->vmranges_tree, &next_vmr->bounds);
   prev_vmr->bounds.space_end = next_vmr->bounds.space_end;
   prev_vmr->hole_size = next_vmr->hole_size;
+  __detach_vmrange_from_memobj(next_vmr);
   destroy_vmrange(next_vmr);
 
   return prev_vmr;
@@ -152,6 +169,7 @@ static vmrange_t *split_vmrange(vmrange_t *vmrange, uintptr_t va_from, uintptr_t
   new_vmr->hole_size = vmrange->hole_size;
   vmrange->hole_size = new_vmr->bounds.space_start - vmrange->bounds.space_end;
   ttree_insert(&vmrange->parent_vmm->vmranges_tree, new_vmr);
+  __attach_memobj_to_vmrange(new_vmr, vmrange->memobj, addr2pgoff(vmrange, new_vmr->bounds.space_start));
 
   return new_vmr;
 }
@@ -350,7 +368,7 @@ void vmranges_find_covered(vmm_t *vmm, uintptr_t va_from, uintptr_t va_to, vmran
 }
 
 long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages,
-                 vmrange_flags_t flags, page_idx_t offs_pages)
+                 vmrange_flags_t flags, pgoff_t offset)
 {
   vmrange_t *vmr;
   ttree_cursor_t cursor, csr_tmp;
@@ -366,6 +384,10 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
       || !npages
       || ((flags & VMR_NONE) && ((flags & VMR_PROTO_MASK) != VMR_NONE))) {
     err = -EINVAL;
+    goto err;
+  }
+  if (offset >= memobj->size) {
+    err = -ENXIO;
     goto err;
   }
   if (flags & VMR_PHYS) {
@@ -419,7 +441,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
     vmr = ttree_item_from_cursor(&csr_tmp);
     if (can_be_merged(vmr, memobj, flags) && (vmr->bounds.space_end == addr)) {
       VMM_VERBOSE("%s: Attach [%p, %p) to the top of [%p, %p)\n",
-                  vmm_get_name_dbg(vmm), addr, addr + (npages << PAGE_WIDTH),
+                  vmm_get_name_dbg(vmm), addr, (npages << PAGE_WIDTH),
                   vmr->bounds.space_start, vmr->bounds.space_end);
       vmr->hole_size -= (addr + (npages << PAGE_WIDTH) - vmr->bounds.space_end);
       vmr->bounds.space_end = addr + (npages << PAGE_WIDTH);
@@ -437,13 +459,14 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
         VMM_VERBOSE("%s: Attach [%p, %p) to the bottom of [%p, %p)\n",
                     vmm_get_name_dbg(vmm), addr, addr + (npages << PAGE_WIDTH),
                     vmr->bounds.space_start, vmr->bounds.space_end);
+        vmr->offset = addr2pgoff(addr);
         vmr->bounds.space_start = addr;
         was_merged = true;
         if (prev)
           prev->hole_size = vmr->bounds.space_start - prev->bounds.space_end;
       }
       else if (was_merged && (prev->bounds.space_end == vmr->bounds.space_start))
-        merge_vmranges(prev, vmr);
+        vmr = merge_vmranges(prev, vmr);
     }
   }
   if (!was_merged) {
@@ -454,16 +477,11 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
     }
     
     ttree_insert_placeful(&cursor, vmr);
+    __attach_memobj_to_vmrange(vmr, memobj, offset);
   }
-
-  vmr->memobj = memobj;
+  
   if (flags & (VMR_PHYS | VMR_POPULATE)) {
-    pgoff_t offset = offs_pages;
-    
-    if (((flags & (VMR_PHYS | VMR_POPULATE)) == VMR_PHYS) && memobj_is_generic(memobj))
-      offset = addr2pgoff(vmr, addr);
-
-    err = memobj_method_call(memobj, populate_pages, vmr, offset, npages);
+    err = memobj_method_call(memobj, populate_pages, vmr, addr, npages);
     if (err)
       goto err;
   }
@@ -481,7 +499,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   return err;
 }
 
-void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
+int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
 {
   ttree_cursor_t cursor;
   uintptr_t va_to = va_from + (npages << PAGE_WIDTH);
@@ -494,17 +512,18 @@ void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
     if (!ttree_cursor_next(&cursor))
       vmr = ttree_item_from_cursor(&cursor);
     else
-      return;
+      return 0;
   }
   if ((vmr->bounds.space_start < va_from) &&
       (vmr->bounds.space_end > va_to)) {
     if (!split_vmrange(vmr, va_from, va_to)) {
       kprintf(KO_ERROR "unmap_vmranges: Failed to split VM range [%p, %p). -ENOMEM\n",
               vmr->bounds.space_start, vmr->bounds.space_end);
+      return -ENOMEM;
     }
 
     munmap_core(&vmm->rpd, va_from, npages, true);
-    return;
+    return 0;
   }
   else if (va_from > vmr->bounds.space_start) {
     vmr->hole_size += vmr->bounds.space_end - va_from;    
@@ -514,7 +533,7 @@ void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
 
   va_from = vmr->bounds.space_end;
   if (ttree_cursor_next(&cursor) < 0)
-    return;
+    return 0;
   while (va_from < va_to) {
     vmr = ttree_item_from_cursor(&cursor);
     munmap_core(&vmm->rpd, va_from, ((va_to - va_from) << PAGE_WIDTH), true);
@@ -522,6 +541,7 @@ void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
       ttree_cursor_t csr_prev;
 
       ttree_cursor_copy(&csr_prev, &cursor);
+      vmr->offset = addr2pgoff(va_to);
       vmr->bounds.space_start = va_to;
       if (!ttree_cursor_prev(&csr_prev)) {
         vmrange_t *vmr_prev = ttree_item_from_cursor(&csr_prev);
@@ -586,51 +606,53 @@ long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, int memobj_id, o
   long ret;
   vmrange_flags_t vmrflags = (prot & VMR_PROTO_MASK) | (flags << VMR_FLAGS_OFFS);
 
+  if ((offset & PAGE_MASK)
+      || ((vmrflags & VMR_FIXED) && (addr & PAGE_MASK))
+      || !size) {
+    ret = -EINVAL;
+    goto out;
+  }
   if ((vmrflags & VMR_ANON) || (memobj_id == GENERIC_MEMOBJ_ID)) {
     memobj = memobj_pin_by_id(GENERIC_MEMOBJ_ID);
     ASSERT(memobj != NULL);    
   }
-  else if (memobj_id) {
-    if ((offset & PAGE_MASK) || (vmrflags & VMR_ANON)) {
-      ret = -EINVAL;
-      goto out;
-    }
-    
+  else {
     memobj = memobj_pin_by_id(memobj_id);
     if (!memobj) {
       ret = -ENOENT;
       goto out;
     }
   }
-  if (!size || ((vmrflags & VMR_FIXED) && (addr & PAGE_MASK)) ||
-      ((vmrflags & VMR_PHYS) && (offset & PAGE_MASK))) {
-    ret = -EINVAL;
-    goto out;
-  }
   
   rwsem_down_write(&vmm->rwsem);
   ret = vmrange_map(memobj, vmm, addr, PAGE_ALIGN(size) >> PAGE_WIDTH,
                     vmrflags, PAGE_ALIGN(offset) >> PAGE_WIDTH);
   rwsem_up_write(&vmm->rwsem);
+  
   out:
-  if (ret && memobj)
+  if (memobj)
     unpin_memobj(memobj);
-
+  
   return ret;
 }
 
-void sys_munmap(uintptr_t addr, size_t length)
+int sys_munmap(uintptr_t addr, size_t length)
 {
   vmm_t *vmm = current_task()->task_mm;
+  int ret;
+
+  if (!length || (addr & PAGE_MASK))
+    return -EINVAL;
   
-  addr = PAGE_ALIGN_DOWN(addr);
-  length = PAGE_ALIGN_DOWN(length);
-  if (!addr || !length || !valid_user_address_range(addr, length))
-    return;
+  length = PAGE_ALIGN(length);
+  if (!valid_user_address_range(addr, length))
+    return -EINVAL;
 
   rwsem_down_write(&vmm->rwsem);
-  unmap_vmranges(vmm, addr, length >> PAGE_WIDTH);
+  ret = unmap_vmranges(vmm, addr, length >> PAGE_WIDTH);
   rwsem_up_write(&vmm->rwsem);
+
+  return ret;
 }
 
 #ifdef CONFIG_DEBUG_MM
