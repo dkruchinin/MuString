@@ -390,45 +390,18 @@ static char __b[128];
 long modify_timer(ktimer_t *timer,ulong_t time_x)
 {
   long r;
-  major_timer_tick_t *mt;
-
-  if( __timer_verbose ) {
-    sprintf(__b,">> M.2: time_x = %d, system ticks = %d\n",
-            time_x,system_ticks);
-    get_debug_console()->display_string(__b);
-  }
 
   if( time_x <= system_ticks ) {
-    if( __timer_verbose ) {
-      get_debug_console()->display_string("M.2\n");
-    }
     execute_deffered_action(&timer->da);
-    if( __timer_verbose ) {
-      get_debug_console()->display_string("M.3\n");
-    }
     return 0;
   }
 
-  mt=timer->minor_tick.major_tick;
-  if( !mt ) { /* Ignore clear timers. */
-    return -EINVAL;
+  if( timer->minor_tick.major_tick ) {
+    delete_timer(timer);
   }
 
-  if( __timer_verbose ) {
-    get_debug_console()->display_string("M.4\n");
-  }
-  delete_timer(timer);
-  if( __timer_verbose ) {
-    get_debug_console()->display_string("M.5\n");
-  }
   TIMER_RESET_TIME(timer,time_x);
-  if( __timer_verbose ) {
-    get_debug_console()->display_string("M.6\n");
-  }
   r=add_timer(timer);
-  if( __timer_verbose ) {
-    get_debug_console()->display_string("M.7\n");
-  }
   return r;
 }
 
