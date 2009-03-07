@@ -35,7 +35,6 @@
 #include <eza/rwsem.h>
 #include <eza/spinlock.h>
 #include <eza/security.h>
-#include <kernel/syscalls.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/types.h>
 
@@ -97,8 +96,8 @@ static inline void __attach_memobj_to_vmrange(vmrange_t *vmr, memobj_t *memobj, 
 
 static inline void __detach_vmrange_from_memobj(vmrange_t *vmr)
 {
-  if (memobj->id != GENERIC_MEMOBJ_ID)
-    unpin_memobj(vmr->memobj)
+  if (vmr->memobj->id != GENERIC_MEMOBJ_ID)
+    unpin_memobj(vmr->memobj);
 }
 
 static vmrange_t *create_vmrange(vmm_t *parent_vmm, uintptr_t va_start,
@@ -459,7 +458,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
         VMM_VERBOSE("%s: Attach [%p, %p) to the bottom of [%p, %p)\n",
                     vmm_get_name_dbg(vmm), addr, addr + (npages << PAGE_WIDTH),
                     vmr->bounds.space_start, vmr->bounds.space_end);
-        vmr->offset = addr2pgoff(addr);
+        vmr->offset = addr2pgoff(vmr, addr);
         vmr->bounds.space_start = addr;
         was_merged = true;
         if (prev)
@@ -522,12 +521,16 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
       return -ENOMEM;
     }
 
+    kprintf("Munmap from %p %d pages\n", va_from, npages);
     munmap_core(&vmm->rpd, va_from, npages, true);
     return 0;
   }
   else if (va_from > vmr->bounds.space_start) {
-    vmr->hole_size += vmr->bounds.space_end - va_from;    
-    munmap_core(&vmm->rpd, va_from, vmr->bounds.space_end, true);
+    kprintf("munmap in range: [%p, %p)\n", vmr->bounds.space_start,
+            vmr->bounds.space_end);
+    vmr->hole_size += vmr->bounds.space_end - va_from;
+    kprintf("2 Munmap from %p %d pages\n", va_from, npages);
+    munmap_core(&vmm->rpd, va_from, npages, true);
     vmr->bounds.space_end = va_from;
   }
 
@@ -541,7 +544,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
       ttree_cursor_t csr_prev;
 
       ttree_cursor_copy(&csr_prev, &cursor);
-      vmr->offset = addr2pgoff(va_to);
+      vmr->offset = addr2pgoff(vmr, va_to);
       vmr->bounds.space_start = va_to;
       if (!ttree_cursor_prev(&csr_prev)) {
         vmrange_t *vmr_prev = ttree_item_from_cursor(&csr_prev);
@@ -555,6 +558,8 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
     va_from = vmr->bounds.space_end;    
     destroy_vmrange(vmr);
   }
+
+  return 0;
 }
 
 int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page,
@@ -592,6 +597,7 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
 
   ASSERT(vmr->memobj != NULL);
   memobj = vmr->memobj;
+  kprintf("Found VMR: [%p, %p)\n", vmr->bounds.space_start, vmr->bounds.space_end);
   ret = memobj_method_call(memobj, handle_page_fault, vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
 
   out:
@@ -599,7 +605,7 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
   return ret;
 }
 
-long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, int memobj_id, off_t offset)
+long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, memobj_id_t memobj_id, off_t offset)
 {
   memobj_t *memobj = NULL;
   vmm_t *vmm = current_task()->task_mm;

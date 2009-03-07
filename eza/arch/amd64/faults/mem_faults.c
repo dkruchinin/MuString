@@ -156,11 +156,13 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
     ret = vmm_handle_page_fault(vmm, invalid_address, errmask);
     if (!ret)
       return;
-
+    
     PREPARE_DEBUG_CONSOLE();
     kprintf("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
             cpu_id(), stack_frame->error_code);
   }
+  if (current_task()->siginfo.handlers->actions[SIGSEGV].a.sa_sigaction != SIG_DFL)
+    goto send_sigsegv;
   if( __send_sigsegv_on_faults )
     goto send_sigsegv;
   goto stop_cpu;

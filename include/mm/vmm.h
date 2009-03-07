@@ -143,8 +143,10 @@ static inline void *user_to_kernel_vaddr(rpd_t *rpd, uintptr_t addr)
 
 static inline void unpin_page_frame(page_frame_t *pf)
 {
-  ASSERT(atomic_get(&pf->refcount) > 0);
-  atomic_dec(&pf->refcount);
+  if (atomic_dec_and_test(&pf->refcount)) {
+    kprintf("FREE PAGE: %#x\n", pframe_number(pf));
+    free_page(pf);
+  }
 }
 
 static inline void pin_page_frame(page_frame_t *pf)
@@ -177,7 +179,7 @@ vmm_t *vmm_create(void);
 int vmm_handle_page_fault(vmm_t *vmm, uintptr_t addr, uint32_t pfmask);
 long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages,
                  vmrange_flags_t flags, pgoff_t offset);
-void unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages);
+int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages);
 vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, ttree_cursor_t *cursor);
 void vmranges_find_covered(vmm_t *vmm, uintptr_t va_from, uintptr_t va_to, vmrange_set_t *vmrs);
 int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page,
