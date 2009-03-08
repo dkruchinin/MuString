@@ -60,7 +60,6 @@ static void unmap_entries(pde_t *start_pde, pde_idx_t num_entries, bool unpin_pa
   ASSERT((num_entries > 0) && (num_entries <= PTABLE_DIR_ENTRIES));
   while (num_entries--) {
     if (!pde_is_present(pde)) {
-      kprintf("WTF?\n");
       pde++;
       continue;
     }
@@ -70,8 +69,7 @@ static void unmap_entries(pde_t *start_pde, pde_idx_t num_entries, bool unpin_pa
       unpin_page_frame(pframe_by_number(pde_fetch_page_idx(pde)));
 
     tlb_flush_entry(task_get_rpd(current_task()), (uintptr_t)pde);
-    kprintf("UNPIN(%d): %d\n", atomic_get(&current_dir->refcount), pframe_number(current_dir));
-    unpin_page_frame(current_dir);
+    atomic_dec(&current_dir->refcount);
     pde++;
   }
 }
@@ -140,7 +138,7 @@ static void depopulate_pagedir(pde_t *pde)
   current_dir = virt_to_pframe(pde);
   pde_set_not_present(pde);
   tlb_flush_entry(task_get_rpd(current_task()), (uintptr_t)pde);
-  unpin_page_frame(current_dir);
+  atomic_dec(&current_dir->refcount);
 }
 
 /*

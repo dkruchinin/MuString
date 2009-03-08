@@ -28,7 +28,7 @@
 #include <eza/arch/page.h>
 #include <eza/arch/current.h>
 #include <eza/arch/cpu.h>
-
+        
 .code64
 
 .text
@@ -114,7 +114,6 @@ low_irq_stubs:
 
 .data
     .quad 1b
-
 .text
 v=v+1
 .endr
@@ -317,7 +316,7 @@ error_code_exception_path_kern:
   mov %r12, %rdi;
   add $SAVED_GPR_SIZE + 8, %rdi
 
-  /* Now we can call the handler. */
+  /* Now we can call the handler. */  
   call *hi_level_fault_handlers(,%rax,8)
 
   /* Now let's see if we need to check for userspace works. */

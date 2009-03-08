@@ -134,8 +134,10 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
   task_t *faulter=current_task();
 
   get_fault_address(invalid_address);
-  if(PFAULT_SVISOR(stack_frame->error_code))
+  if(PFAULT_SVISOR(stack_frame->error_code)) {
+    for (;;);
     goto kernel_fault;
+  }
   else {
     /*
      * PF in user-space. Try to find out correspondig VM range and handle the faut
@@ -153,14 +155,11 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
     else
       errmask |= PFLT_NOT_PRESENT;
 
-    kprintf("BAD ADDRESS = %p\n", invalid_address);
     ret = vmm_handle_page_fault(vmm, invalid_address, errmask);
     if (!ret) {
-      kprintf("done ok\n");
       return;
     }
 
-    kprintf("done bad: %d\n", ret);
     PREPARE_DEBUG_CONSOLE();
     kprintf("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
             cpu_id(), stack_frame->error_code);
@@ -168,8 +167,7 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
   if (current_task()->siginfo.handlers->actions[SIGSEGV].a.sa_sigaction != SIG_DFL)
     goto send_sigsegv;
   if( __send_sigsegv_on_faults )
-    goto send_sigsegv;
-  goto stop_cpu;
+    goto stop_cpu;
 
 kernel_fault:
   /* First, try to fix this exception. */
@@ -193,7 +191,6 @@ stop_cpu:
   }
 #endif /* CONFIG_DUMP_USTACK */
   interrupts_disable();
-  for (;;);
 
 send_sigsegv:
   /* Send user the SIGSEGV signal. */

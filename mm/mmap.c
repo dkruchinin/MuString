@@ -385,6 +385,10 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
     err = -EINVAL;
     goto err;
   }
+  if ((flags & VMR_SHARED) && (memobj->flags & MMO_FLG_NOSHARED)) {
+    err = -ENOTSUP;
+    goto err;
+  }
   if ((offset + (npages << PAGE_WIDTH)) >= memobj->size) {
     err = -ENXIO;
     goto err;
@@ -539,7 +543,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
   ASSERT(va_from == vmr->bounds.space_start);
   while (va_from < va_to) {
     vmr = ttree_item_from_cursor(&cursor);
-    munmap_core(&vmm->rpd, va_from, ((va_to - va_from) << PAGE_WIDTH), true);
+    munmap_core(&vmm->rpd, va_from, ((va_to - va_from) >> PAGE_WIDTH), true);
     if (unlikely(va_to < vmr->bounds.space_end)) {
       ttree_cursor_t csr_prev;
 
