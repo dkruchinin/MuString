@@ -60,16 +60,23 @@ extern void initialize_timer(void);
 
 static void main_routine_stage1(void)
 {
-    /* Initialize PICs and setup common interrupt handlers. */
+  /* Initialize PICs and setup common interrupt handlers. */
+  kprintf("1\n");
   set_cpu_online(0,1);  /* We're online. */
+  kprintf("2\n");
   sched_add_cpu(0);
-
+  kprintf("3\n");
   initialize_ipc();
+  kprintf("4\n");
   initialize_signals();
+  kprintf("5\n");
   initialize_gc();
+  kprintf("6\n");
 
   arch_initialize_irqs();
+  kprintf("7\n");
   arch_specific_init();
+  kprintf("8\n");
 
   /* Initialize known hardware devices. */
   initialize_common_hardware();

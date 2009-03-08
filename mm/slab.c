@@ -52,13 +52,13 @@ static memcache_t slabs_memcache;  /* memory cache for slab_t structures */
  * of object. Object left guard guaranties that if someone tryes to dereference already
  * free slab object, PF will be generated.
  */
-#ifdef DEBUG_SLAB
+#ifdef CONFIG_DEBUG_SLAB
 static int next_memcache_type = SLAB_FIRST_TYPE;
 static SPINLOCK_DEFINE(memcaches_lock);
 static SPINLOCK_DEFINE(verbose_lock);
 static bool verbose = false; /* enable/distable verbose mode */
 static LIST_DEFINE(memcaches_lst); /* A list of all registered memory caches in system */
-#endif /* DEBUG_SLAB */
+#endif /* CONFIG_DEBUG_SLAB */
 
 static void destroy_slab(slab_t *slab);
 static void free_slab_object(slab_t *slab, void *obj);
@@ -81,7 +81,7 @@ static void free_slab_object(slab_t *slab, void *obj);
 #define __slab_unlock(slab)                     \
   __unlock_slab_page((slab)->pages)
 
-#ifdef DEBUG_SLAB
+#ifdef CONFIG_DEBUG_SLAB
 #define SLAB_VERBOSE(fmt, args...)              \
   do {                                          \
     if (verbose) {                              \
@@ -299,7 +299,7 @@ static void __validate_slab_object_dbg(slab_t *slab, void *obj)
 #define __validate_slab_object_dbg(slab, obj)
 #define __validate_address_dbg(addr)
 #define __unregister_memcache_dbg(cache)
-#endif /* DEBUG_SLAB */
+#endif /* CONFIG_DEBUG_SLAB */
 
 static inline int __count_objects_per_slab(memcache_t *cache)
 {
@@ -745,8 +745,9 @@ memcache_t *create_memcache(const char *name, size_t size,
     size = SLAB_OBJECT_MIN_SIZE;
   else if (size > SLAB_OBJECT_MAX_SIZE)
     goto err;
-  
+
   cache = alloc_from_memcache(&caches_memcache);
+  kprintf("two\n");
   if (!cache)
     goto err;
 
@@ -837,7 +838,11 @@ void *alloc_from_memcache(memcache_t *cache)
   void *obj = NULL;
 
   /* firstly try to getper cpu slab */
+  kprintf("try it out\n");
+  kprintf("CPU id = %d\n", cpu_id());
+  kprintf("op\n");  
   slab = __get_percpu_slab(cache);
+  kprintf("po!\n");
   if (unlikely(!slab->nobjects)) {
     slab_t *old_slab = slab;
     
@@ -858,11 +863,16 @@ void *alloc_from_memcache(memcache_t *cache)
     __slab_unlock(old_slab);
     __display_statistics(cache);
   }
-  
-  __slab_lock(slab);  
+
+  kprintf("asd0\n");
+  __slab_lock(slab);
+  kprintf("asd\n");
   obj = __slab_getfreeobj(slab);
+  kprintf("asd1\n");
   __validate_slab_page_dbg(slab, (char *)align_down((uintptr_t)obj, PAGE_SIZE));
+  kprintf("asd2\n");
   __validate_slab_object_dbg(slab, obj);
+  kprintf("asd3\n");
   __slab_unlock(slab);  
   
   out:
@@ -888,14 +898,14 @@ void memfree(void *mem)
 {
   slab_t *slab;
 
-  /* basic validation procedures (if DEBUG_SLAB is enabled...) */
+  /* basic validation procedures (if CONFIG_DEBUG_SLAB is enabled...) */
   __validate_address_dbg(mem);
   slab = __get_slab_by_addr(mem);
   __validate_slab_page_dbg(slab, (char *)align_down((uintptr_t)mem, PAGE_SIZE));
   free_slab_object(slab, mem);
 }
 
-#ifdef DEBUG_SLAB
+#ifdef CONFIG_DEBUG_SLAB
 void slab_verbose_enable(void)
 {
   spinlock_lock(&verbose_lock);
@@ -909,4 +919,4 @@ void slab_verbose_disable(void)
   verbose = false;
   spinlock_unlock(&verbose_lock);
 }
-#endif /* DEBUG_SLAB */
+#endif /* CONFIG_DEBUG_SLAB */

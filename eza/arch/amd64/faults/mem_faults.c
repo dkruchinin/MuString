@@ -178,6 +178,7 @@ kernel_fault:
   PREPARE_DEBUG_CONSOLE();
   kprintf("[CPU %d] Unhandled kernel-mode PF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
+  kprintf("BAD ADDRESS = %p\n", invalid_address);
 stop_cpu:
   fault_dump_regs(regs,stack_frame->rip);
   kprintf( " Invalid address: %p\n", invalid_address );

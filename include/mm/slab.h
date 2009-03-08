@@ -37,7 +37,7 @@
 #include <eza/smp.h>
 #include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
-#include <eza/arch/types.h>
+#include <mlibc/types.h>
 
 /* Max number of empty slabs one memory cache may have. */
 #define SLAB_EMPTYSLABS_MAX  (CONFIG_NRCPUS)
@@ -57,7 +57,7 @@
 /* number of generic memory caches(except memory caches for memcache_t and slab_t) */
 #define SLAB_GENERIC_CACHES  (LAST_GENSLABS_POW2 - FIRST_GENSLABS_POW2 + 1)
 
-#ifdef DEBUG_SLAB
+#ifdef CONFIG_DEBUG_SLAB
 /* Min space required for holding debug information in slab's free objects */
 #define SLAB_OBJDEBUG_MINSIZE ((sizeof(int) << 1) + sizeof(char *))
 #define SLAB_LEFTGUARD_OFFS   sizeof(int)
@@ -86,7 +86,7 @@ struct memcache_debug_info {
 #define SLAB_PAGE_OFFS      0
 #define SLAB_LEFTGUARD_OFFS 0
 #define SLAB_RIGHGUARD_OFFS 0
-#endif /* DEBUG_SLAB */
+#endif /* CONFIG_DEBUG_SLAB */
 
 
 /**
@@ -167,9 +167,9 @@ struct __memcache {
   list_head_t inuse_slabs;               /**< List of active and full slabs */
   list_head_t available_slabs;           /**< List of empty and partial slabs */
   slab_t *active_slabs[CONFIG_NRCPUS];   /**< Active slabs(there may be only one active slab if SMCF_SHARED was set) */
-#ifdef DEBUG_SLAB
+#ifdef CONFIG_DEBUG_SLAB
   struct memcache_debug_info dbg; 
-#endif /* DEBUG_SLAB */
+#endif /* CONFIG_DEBUG_SLAB */
   atomic_t nslabs;                 /**< Total number of slabs in cache */
   atomic_t nempty_slabs;           /**< Number of empty slabs in cache */
   atomic_t npartial_slabs;         /**< Number of partial slabs in cache */
@@ -221,9 +221,9 @@ void *memalloc(size_t size);
  */
 void memfree(void *mem);
 
-#ifdef DEBUG_SLAB
+#ifdef CONFIG_DEBUG_SLAB
 void slab_verbose_enable(void);
 void slab_verbose_disable(void);
-#endif /* DEBUG_SLAB */
+#endif /* CONFIG_DEBUG_SLAB */
 
 #endif /* __SLAB_H__ */
