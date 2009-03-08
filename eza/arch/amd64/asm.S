@@ -309,7 +309,7 @@ error_code_exception_path:
 error_code_exception_path_kern:
   sti
   SAVE_ALL
-  /* No we have to prepare interrupt/exception stack frame.
+  /* Now we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to
    * skip %rax on the stack since we saved it before calling SAVE_ALL
    * %r12 contains the value of %rsp before aligning for saving XMM data.

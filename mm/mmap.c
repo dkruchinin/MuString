@@ -526,7 +526,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
     return 0;
   }
   else if (va_from > vmr->bounds.space_start) {
-    vmr->hole_size += vmr->bounds.space_end - va_from;
+    vmr->hole_size += vmr->bounds.space_end - va_from;    
     munmap_core(&vmm->rpd, va_from, npages, true);
     vmr->bounds.space_end = va_from;
     if (ttree_cursor_next(&cursor) < 0)
@@ -597,8 +597,8 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
 
   ASSERT(vmr->memobj != NULL);
   memobj = vmr->memobj;
+  kprintf("Handling PF: found range [%p, %p)\n", vmr->bounds.space_start, vmr->bounds.space_end);
   ret = memobj_method_call(memobj, handle_page_fault, vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
-
   out:
   rwsem_up_read(&vmm->rwsem);
   return ret;

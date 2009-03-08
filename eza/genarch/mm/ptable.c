@@ -60,6 +60,7 @@ static void unmap_entries(pde_t *start_pde, pde_idx_t num_entries, bool unpin_pa
   ASSERT((num_entries > 0) && (num_entries <= PTABLE_DIR_ENTRIES));
   while (num_entries--) {
     if (!pde_is_present(pde)) {
+      kprintf("WTF?\n");
       pde++;
       continue;
     }
@@ -69,6 +70,7 @@ static void unmap_entries(pde_t *start_pde, pde_idx_t num_entries, bool unpin_pa
       unpin_page_frame(pframe_by_number(pde_fetch_page_idx(pde)));
 
     tlb_flush_entry(task_get_rpd(current_task()), (uintptr_t)pde);
+    kprintf("UNPIN(%d): %d\n", atomic_get(&current_dir->refcount), pframe_number(current_dir));
     unpin_page_frame(current_dir);
     pde++;
   }
@@ -154,7 +156,7 @@ static uintptr_t do_ptable_unmap(page_frame_t *dir, uintptr_t va_from, uintptr_t
   num_entries = __count_num_entries(pde_idx, va_from, va_to, pde_level);
   if (pde_level == PTABLE_LEVEL_FIRST) /* unmap pages in PT */ {
     unmap_entries(pde_fetch(dir, pde_idx), num_entries, unpin_pages);
-    return (va_from + (num_entries << PAGE_WIDTH));
+    return (num_entries << PAGE_WIDTH);
   }
   else {
     pde_t *pde = pde_fetch(dir, pde_idx);

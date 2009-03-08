@@ -110,13 +110,17 @@ void nmi_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 
 void doublefault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 { 
-  char b[128];
+  //char b[512];
+  uintptr_t inval_addr;
 
   PREPARE_DEBUG_CONSOLE();
-
-  sprintf(b, "[!!] Fatal double fault exception! RIP=%p. CPU stopped.\n",
-          stack_frame->rip);
-  kprintf("%s\n", b);
+  __asm__ __volatile__("movq %%cr2, %0" : "=r"(inval_addr));
+  kprintf("[!!] Fatal double fault exception! RIP=%p. (Inval addr = %p) CPU stopped.\n",
+          stack_frame->rip, inval_addr);  
+  //sprintf(b, "[!!] Fatal double fault exception! RIP=%p. CPU stopped.\n",
+  //        stack_frame->rip);
+  //kprintf("%s\n", b);
+  for (;;);
   //get_fault_console()->display_string(b);
 }
 

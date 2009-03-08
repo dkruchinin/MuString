@@ -153,10 +153,14 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
     else
       errmask |= PFLT_NOT_PRESENT;
 
+    kprintf("BAD ADDRESS = %p\n", invalid_address);
     ret = vmm_handle_page_fault(vmm, invalid_address, errmask);
-    if (!ret)
+    if (!ret) {
+      kprintf("done ok\n");
       return;
-    
+    }
+
+    kprintf("done bad: %d\n", ret);
     PREPARE_DEBUG_CONSOLE();
     kprintf("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
             cpu_id(), stack_frame->error_code);
@@ -177,8 +181,7 @@ kernel_fault:
 
   PREPARE_DEBUG_CONSOLE();
   kprintf("[CPU %d] Unhandled kernel-mode PF exception! Stopping CPU with error code=%d.\n\n",
-          cpu_id(), stack_frame->error_code);
-  kprintf("BAD ADDRESS = %p\n", invalid_address);
+          cpu_id(), stack_frame->error_code);  
 stop_cpu:
   fault_dump_regs(regs,stack_frame->rip);
   kprintf( " Invalid address: %p\n", invalid_address );

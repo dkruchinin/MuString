@@ -747,7 +747,6 @@ memcache_t *create_memcache(const char *name, size_t size,
     goto err;
 
   cache = alloc_from_memcache(&caches_memcache);
-  kprintf("two\n");
   if (!cache)
     goto err;
 
@@ -838,11 +837,7 @@ void *alloc_from_memcache(memcache_t *cache)
   void *obj = NULL;
 
   /* firstly try to getper cpu slab */
-  kprintf("try it out\n");
-  kprintf("CPU id = %d\n", cpu_id());
-  kprintf("op\n");  
   slab = __get_percpu_slab(cache);
-  kprintf("po!\n");
   if (unlikely(!slab->nobjects)) {
     slab_t *old_slab = slab;
     
@@ -864,15 +859,10 @@ void *alloc_from_memcache(memcache_t *cache)
     __display_statistics(cache);
   }
 
-  kprintf("asd0\n");
   __slab_lock(slab);
-  kprintf("asd\n");
   obj = __slab_getfreeobj(slab);
-  kprintf("asd1\n");
   __validate_slab_page_dbg(slab, (char *)align_down((uintptr_t)obj, PAGE_SIZE));
-  kprintf("asd2\n");
   __validate_slab_object_dbg(slab, obj);
-  kprintf("asd3\n");
   __slab_unlock(slab);  
   
   out:
