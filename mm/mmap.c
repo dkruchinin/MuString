@@ -385,7 +385,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
     err = -EINVAL;
     goto err;
   }
-  if (offset >= memobj->size) {
+  if ((offset + (npages << PAGE_WIDTH)) >= memobj->size) {
     err = -ENXIO;
     goto err;
   }
@@ -481,8 +481,9 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   
   if (flags & (VMR_PHYS | VMR_POPULATE)) {
     err = memobj_method_call(memobj, populate_pages, vmr, addr, npages);
-    if (err)
+    if (err) {
       goto err;
+    }
   }
   if (!was_merged)
     fix_vmrange_holes(vmm, vmr, &cursor);
@@ -494,7 +495,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
     ttree_delete_placeful(&cursor);
     destroy_vmrange(vmr);
   }
-  
+
   return err;
 }
 
@@ -521,22 +522,21 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
       return -ENOMEM;
     }
 
-    kprintf("Munmap from %p %d pages\n", va_from, npages);
     munmap_core(&vmm->rpd, va_from, npages, true);
     return 0;
   }
   else if (va_from > vmr->bounds.space_start) {
-    kprintf("munmap in range: [%p, %p)\n", vmr->bounds.space_start,
-            vmr->bounds.space_end);
     vmr->hole_size += vmr->bounds.space_end - va_from;
-    kprintf("2 Munmap from %p %d pages\n", va_from, npages);
     munmap_core(&vmm->rpd, va_from, npages, true);
     vmr->bounds.space_end = va_from;
+    if (ttree_cursor_next(&cursor) < 0)
+      return 0;
+
+    vmr = ttree_item_from_cursor(&cursor);
+    va_from = vmr->bounds.space_start;
   }
 
-  va_from = vmr->bounds.space_end;
-  if (ttree_cursor_next(&cursor) < 0)
-    return 0;
+  ASSERT(va_from == vmr->bounds.space_start);
   while (va_from < va_to) {
     vmr = ttree_item_from_cursor(&cursor);
     munmap_core(&vmm->rpd, va_from, ((va_to - va_from) << PAGE_WIDTH), true);
@@ -597,7 +597,6 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
 
   ASSERT(vmr->memobj != NULL);
   memobj = vmr->memobj;
-  kprintf("Found VMR: [%p, %p)\n", vmr->bounds.space_start, vmr->bounds.space_end);
   ret = memobj_method_call(memobj, handle_page_fault, vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
 
   out:

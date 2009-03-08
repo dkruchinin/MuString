@@ -58,20 +58,15 @@ static void unmap_entries(pde_t *start_pde, pde_idx_t num_entries, bool unpin_pa
   page_frame_t *current_dir = virt_to_pframe(start_pde);
 
   ASSERT((num_entries > 0) && (num_entries <= PTABLE_DIR_ENTRIES));
-  kprintf("num_entries = %d\n", num_entries);
   while (num_entries--) {
     if (!pde_is_present(pde)) {
       pde++;
       continue;
     }
 
-    kprintf("PRESENT! => %p\n", pde);
     pde_set_not_present(pde);
-    if (unpin_pages && page_idx_is_present(pde_fetch_page_idx(pde))) {
-      kprintf("UNPIN (%d): %#x\n", atomic_get(&pframe_by_number(pde_fetch_page_idx(pde))->refcount),
-              pframe_by_number(pde_fetch_page_idx(pde)));
+    if (unpin_pages && page_idx_is_present(pde_fetch_page_idx(pde)))
       unpin_page_frame(pframe_by_number(pde_fetch_page_idx(pde)));
-    }
 
     tlb_flush_entry(task_get_rpd(current_task()), (uintptr_t)pde);
     unpin_page_frame(current_dir);
@@ -86,7 +81,6 @@ static void map_entries(pde_t *start_pde, pde_idx_t num_entries,
   page_frame_t *current_dir = virt_to_pframe(start_pde);
 
   ASSERT((num_entries > 0) && (num_entries <= PTABLE_DIR_ENTRIES));
-  kprintf("Entries to map: %d\n", num_entries);
   while (num_entries--) {
     bool pde_was_present;
 
@@ -159,7 +153,6 @@ static uintptr_t do_ptable_unmap(page_frame_t *dir, uintptr_t va_from, uintptr_t
   pde_idx = pde_offset2idx(va_from, pde_level);
   num_entries = __count_num_entries(pde_idx, va_from, va_to, pde_level);
   if (pde_level == PTABLE_LEVEL_FIRST) /* unmap pages in PT */ {
-    kprintf("va_from = %p, va_to = %p\n", va_from, va_to);
     unmap_entries(pde_fetch(dir, pde_idx), num_entries, unpin_pages);
     return (va_from + (num_entries << PAGE_WIDTH));
   }

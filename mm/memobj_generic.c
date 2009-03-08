@@ -37,7 +37,6 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
   int ret = 0;
   vmm_t *vmm = vmr->parent_vmm;
 
-  kprintf("PAGE FAULT!\n");
   ASSERT(!(vmr->flags & VMR_PHYS));
   ASSERT(!(vmr->flags & VMR_NONE));
   if (pfmask & PFLT_NOT_PRESENT) {
@@ -173,6 +172,7 @@ int generic_memobj_initialize(memobj_t *memobj, uint32_t flags)
   ASSERT(memobj->id == GENERIC_MEMOBJ_ID);
   generic_memobj = memobj;
   memobj->mops = &generic_memobj_ops;
+  memobj->size = (USPACE_VA_TOP - USPACE_VA_BOTTOM) >> PAGE_WIDTH;
   atomic_set(&memobj->users_count, 2); /* Generic memobject is immortal */
   memobj->flags = MMO_FLG_NOSHARED | MMO_FLG_IMMORTAL;
 

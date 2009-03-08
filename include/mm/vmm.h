@@ -143,10 +143,8 @@ static inline void *user_to_kernel_vaddr(rpd_t *rpd, uintptr_t addr)
 
 static inline void unpin_page_frame(page_frame_t *pf)
 {
-  if (atomic_dec_and_test(&pf->refcount)) {
-    kprintf("FREE PAGE: %#x\n", pframe_number(pf));
+  if (atomic_dec_and_test(&pf->refcount))
     free_page(pf);
-  }
 }
 
 static inline void pin_page_frame(page_frame_t *pf)
