@@ -29,7 +29,7 @@
 #include <ipc/ipc.h>
 #include <eza/security.h>
 #include <eza/process.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 #include <eza/signal.h>
 #include <eza/event.h>
 #include <eza/wait.h>
@@ -96,7 +96,7 @@ static int __notify_disintegration_done(disintegration_descr_t *dreq,
     p->status=status;
 
     r=ipc_port_send_iov(dreq->port,dreq->msg,false,NULL,0,0);
-    __ipc_put_port(dreq->port);
+    ipc_put_port(dreq->port);
     memfree(dreq);
   }
   return r > 0 ? 0 : r;
@@ -309,7 +309,7 @@ void sys_thread_exit(long value)
   do_exit(0,0,value);
 }
 
-long sys_wait_id(idtype_t idtype,id_t id,siginfo_t *siginfo,int options)
+long sys_wait_id(idtype_t idtype,id_t id,usiginfo_t *siginfo,int options)
 {
   return 0;
 }

@@ -329,7 +329,7 @@ static void __pfi_first(page_frame_iterator_t *pfi)
   ITER_DBG_CHECK_TYPE(pfi, PF_ITER_PTABLE);
   ctx = iter_fetch_ctx(pfi);
   ctx->va_cur = ctx->va_from;
-  pfi->pf_idx = ptable_ops.vaddr2page_idx(ctx->rpd, ctx->va_cur);
+  pfi->pf_idx = ptable_ops.vaddr2page_idx(ctx->rpd, ctx->va_cur, NULL);
   if (pfi->pf_idx == PAGE_IDX_INVAL) {
     pfi->error = -EFAULT;
     pfi->state = ITER_STOP;
@@ -353,7 +353,7 @@ static void __pfi_next(page_frame_iterator_t *pfi)
   }
   else {
     ctx->va_cur += PAGE_SIZE;
-    pfi->pf_idx = ptable_ops.vaddr2page_idx(ctx->rpd, ctx->va_cur);
+    pfi->pf_idx = ptable_ops.vaddr2page_idx(ctx->rpd, ctx->va_cur, NULL);
     if (pfi->pf_idx == PAGE_IDX_INVAL) {
       pfi->error = -EFAULT;
       pfi->state = ITER_STOP;

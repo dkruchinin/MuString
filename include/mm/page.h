@@ -57,6 +57,8 @@ typedef uint8_t page_flags_t;
 
 #define PF_RESERVED   0x01 /**< Page is reserved */
 #define PF_SLAB_LOCK  0x02 /**< Page lock (used by slab allocator) */
+#define PF_SYNCING    0x04
+#define PF_DIRTY      0x08
 
 #define PF_MMPOOL_MASK (PF_MMP_BMEM | PF_MMP_GEN | PF_MMP_DMA)
 
@@ -67,6 +69,8 @@ typedef uint8_t page_flags_t;
 #define PFLT_WRITE       0x08
 
 #define __page_aligned__ __attribute__((__aligned__(PAGE_SIZE)))
+
+struct __memobj;
 
 /**
  * @struct page_frame_t
@@ -80,11 +84,18 @@ typedef uint8_t page_flags_t;
 typedef struct __page_frame {
   list_node_t node;
   list_node_t chain_node;
-  page_idx_t idx;
+  
   union {
-    atomic_t refcount;
     void *slab_pages_start;
+    struct {  
+      atomic_t refcount;
+      atomic_t dirtycount;
+      pgoff_t offset;
+      struct __memobj *owner;
+    };
   };
+  
+  page_idx_t idx;
   ulong_t _private;
   page_flags_t flags;
   uint8_t pool_type;
@@ -107,11 +118,9 @@ DEFINE_ITERATOR(page_frame,
  * @see DEFINE_ITERATOR_TYPES
  */
 DEFINE_ITERATOR_TYPES(page_frame,
-                      PF_ITER_ARCH,   /**< Architecture-dependent iterator used for page frames initialization */
                       PF_ITER_INDEX,  /**< Index-based iterator */
                       PF_ITER_LIST,   /**< List-based iterator */
                       PF_ITER_PTABLE, /**< Page table iterator */
-                      PF_ITER_PBLOCK, /**< Iterate through list of page blocks */
                       );
 
 static inline bool page_idx_is_present(page_idx_t page_idx)
@@ -170,4 +179,13 @@ static inline void pframes_memnull(page_frame_t *start, int block_size)
 #else
 #define pframes_memnull(start, block_size) arch_pages_memnull(start, block_size)
 #endif /* ARCH_PAGE_MEMNULL */
+
+#ifndef ARCH_COPY_PAGE
+static inline void copy_page_frame(page_frame_t *dst, page_frame_t *src)
+{
+  memcpy(pframe_to_virt(dst), pframe_to_virt(src), PAGE_SIZE);
+}
+#else
+#define copy_page_frame(dst, src) arch_copy_page_frame(dst, src)
+#endif /* ARCH_COPY_PAGE */
 #endif /* __PAGE_H__ */

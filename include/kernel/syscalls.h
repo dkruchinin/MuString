@@ -28,7 +28,7 @@
 #include <ipc/port.h>
 #include <eza/time.h>
 #include <ipc/poll.h>
-#include <ipc/gen_port.h>
+#include <ipc/ipc.h>
 #include <eza/sync.h>
 #include <eza/signal.h>
 #include <eza/kcontrol.h>
@@ -159,18 +159,6 @@ long sys_create_task(ulong_t flags,task_creation_attrs_t *a);
  */
 int sys_task_control( pid_t pid, ulong_t cmd, ulong_t arg);
 
-/**
- * @fn status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_t offset);
- * @brief mmap (shared) memory *
- * @param addr - address where you want to map memory
- * @param size - size of memory to map
- * @param flags - mapping flags
- * @param fd - id of shared memory area
- * @param offset - offset of the shared area to map
- *
- */
-long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, int memobj_id, off_t offset);
-void sys_munmap(uintptr_t addr, size_t length);
 
 /**
  * @fn status_t sys_create_port( ulong_t flags, ulong_t queue_size )

@@ -30,7 +30,7 @@
 #include <eza/arch/page.h>
 #include <mm/page.h>
 #include <mlibc/stddef.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 #include <eza/usercopy.h>
 
 #define LOCK_TASK_VM(x)
@@ -55,7 +55,7 @@ int ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
     buf->chunks=addr_array;
 
     /* Process the first chunk. */
-    idx=ptable_ops.vaddr2page_idx(rpd,start_addr);
+    idx=ptable_ops.vaddr2page_idx(rpd,start_addr, NULL);
     if( idx == PAGE_IDX_INVAL ) {
       goto out;
     }
@@ -77,7 +77,7 @@ int ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
 
     /* Process the rest of chunks. */
     while( size ) {
-      idx=ptable_ops.vaddr2page_idx(rpd, start_addr);
+      idx=ptable_ops.vaddr2page_idx(rpd, start_addr, NULL);
       if(idx == PAGE_IDX_INVAL) {
         goto out;
       }

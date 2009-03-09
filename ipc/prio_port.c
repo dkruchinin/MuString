@@ -32,7 +32,7 @@
 #include <ipc/ipc.h>
 #include <ipc/buffer.h>
 #include <mm/slab.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 #include <ds/list.h>
 #include <ds/skiplist.h>
 

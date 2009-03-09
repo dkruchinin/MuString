@@ -14,12 +14,15 @@ static memcache_t *ipc_priv_data_cache;
 
 void initialize_ipc(void)
 {
+  slab_verbose_enable();
   ipc_priv_data_cache= create_memcache( "IPC private data memcache",
                                         sizeof(task_ipc_priv_t),1,
                                         SMCF_PGEN);
+  slab_verbose_disable();
   if( !ipc_priv_data_cache ) {
     panic( "initialize_ipc(): Can't create the IPC private data memcache !" );
   }
+
 }
 
 void release_task_ipc(task_ipc_t *ipc)

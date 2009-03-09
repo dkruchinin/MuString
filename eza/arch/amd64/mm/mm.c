@@ -110,7 +110,7 @@ static void register_mandatory_mappings(void)
   ident_mandmap.virt_addr = 0x1000;
   ident_mandmap.phys_addr = 0x1000;
   ident_mandmap.num_pages = IDENT_MAP_PAGES - 1;
-  ident_mandmap.flags = KMAP_READ | KMAP_WRITE;
+  ident_mandmap.flags = KMAP_READ;
   vm_mandmap_register(&ident_mandmap, "Identity mapping");
 
   memset(&utramp_mandmap, 0, sizeof(utramp_mandmap));

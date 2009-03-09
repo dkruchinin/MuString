@@ -28,7 +28,7 @@
 #include <eza/arch/page.h>
 #include <eza/arch/current.h>
 #include <eza/arch/cpu.h>
-
+        
 .code64
 
 .text
@@ -114,7 +114,6 @@ low_irq_stubs:
 
 .data
     .quad 1b
-
 .text
 v=v+1
 .endr
@@ -309,7 +308,7 @@ error_code_exception_path:
 error_code_exception_path_kern:
   sti
   SAVE_ALL
-  /* No we have to prepare interrupt/exception stack frame.
+  /* Now we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to
    * skip %rax on the stack since we saved it before calling SAVE_ALL
    * %r12 contains the value of %rsp before aligning for saving XMM data.
@@ -317,7 +316,7 @@ error_code_exception_path_kern:
   mov %r12, %rdi;
   add $SAVED_GPR_SIZE + 8, %rdi
 
-  /* Now we can call the handler. */
+  /* Now we can call the handler. */  
   call *hi_level_fault_handlers(,%rax,8)
 
   /* Now let's see if we need to check for userspace works. */

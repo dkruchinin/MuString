@@ -65,7 +65,7 @@ typedef struct __deffered_irq_action {
 
   union {
     event_t _event;         /* DEF_ACTION_EVENT */
-    siginfo_t siginfo;      /* DEF_ACTION_SIGACTION */
+    ksiginfo_t siginfo;     /* DEF_ACTION_SIGACTION */
     task_t *target;         /* DEF_ACTION_UNBLOCK */
   } d;
 } deffered_irq_action_t;

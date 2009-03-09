@@ -15,29 +15,38 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
- * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
+ * (c) Copyright 2009 Dan Kruchinin <dk@jarios.org>
  *
- * include/mlibc/assert.h: defines ASSERT macro similar to libc's assert(...)
+ * include/ds/hat.h - Hashed array tree(HAT) API definitions.
+ * For more information bout HAT see:
+ * "HATs: Hashed array trees", Dr. Dobb's Journal by Sitarski, Edward (September 1996)
  *
  */
 
-
-#ifndef __ASSERT_H__
-#define __ASSERT_H__
+#ifndef __HAT_H__
+#define __HAT_H__
 
 #include <config.h>
-#include <eza/kernel.h>
-#include <eza/arch/assert.h>
+#include <mlibc/types.h>
 
-#define CT_ASSERT(cond) ((void)sizeof(char[1 - 2 * !(cond)]))
-#define ASSERT(cond)                                    \
-  do {                                                  \
-    if (unlikely(!(cond))) {                            \
-      ASSERT_LOW_LEVEL("[KERNEL ASSERTION] " #cond "\n" \
-                       "    in %s:%s:%d\n", __FILE__,   \
-                       __FUNCTION__, __LINE__);         \
-  }                                                     \
-} while (0)
+#define HAT_BUCKET_SHIFT 6
+#define HAT_BUCKET_SLOTS (1UL << HAT_BUCKET_SHIFT)
+#define HAT_BUCKET_MASK  (HAT_BUCKET_SLOTS - 1)
+#define HAT_HEIGH_MAX 31
 
-#endif /* __ASSERT_H__ */
+typedef struct __hat_bucket {  
+  void *slots[HAT_BUCKET_SLOTS];
+  int num_items;
+} hat_bucket_t;
 
+typedef struct __hat {  
+  hat_bucket_t *root_bucket;
+  int tree_heigh;
+} hat_t;
+
+void hat_initialize(hat_t *hat);
+int hat_insert(hat_t *hat, ulong_t idx, void *item);
+void *hat_lookup(hat_t *hat, ulong_t idx);
+void *hat_delete(hat_t *hat, ulong_t idx);
+
+#endif /* __HAT_H__ */

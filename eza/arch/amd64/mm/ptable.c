@@ -30,6 +30,7 @@
 #include <mm/pfalloc.h>
 #include <mm/ptable.h>
 #include <mm/vmm.h>
+#include <eza/spinlock.h>
 #include <eza/errno.h>
 #include <mlibc/types.h>
 #include <eza/genarch/ptable.h>
@@ -43,6 +44,7 @@ static int initialize_rpd(rpd_t *rpd)
   if (!rpd->pml4)
     return -ENOMEM;
 
+  spinlock_initialize(&rpd->rpd_lock);
   return 0;
 }
 

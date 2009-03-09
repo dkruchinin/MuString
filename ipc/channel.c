@@ -3,7 +3,7 @@
 #include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
 #include <eza/task.h>
-#include <ipc/gen_port.h>
+#include <ipc/port.h>
 #include <ds/list.h>
 #include <ipc/channel.h>
 #include <mm/slab.h>
@@ -52,7 +52,7 @@ ipc_channel_t *ipc_get_channel(task_t *task,ulong_t ch_id)
 
 static void __shutdown_channel(ipc_channel_t *channel)
 {
-  __ipc_put_port(channel->server_port);
+  ipc_put_port(channel->server_port);
   memfree(channel);
 }
 
@@ -140,7 +140,7 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
     goto out_unlock;
   }
 
-  server_port=__ipc_get_port(server,port);
+  server_port=ipc_get_port(server,port);
   if( !server_port ) {
     r=-EINVAL;
     goto out_unlock;
@@ -192,7 +192,7 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
 free_id:
   idx_free(&ipc->channel_array,id);
 out_put_port:
-  __ipc_put_port(server_port);
+  ipc_put_port(server_port);
 out_unlock:
   UNLOCK_IPC(ipc);
   release_task_ipc(ipc);

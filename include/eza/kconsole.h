@@ -26,6 +26,7 @@
 #ifndef __EZA_KCONSOLE_H__
 #define __EZA_KCONSOLE_H__
 
+#include <config.h>
 #include <eza/arch/types.h>
 #include <eza/vga.h>
 #include <eza/spinlock.h>
@@ -69,18 +70,29 @@ typedef struct __kconsole_type {
   bool is_enabled;
 } kconsole_t;
 
-kconsole_t *default_console(void);
-kconsole_t *get_fault_console(void);
-void set_default_console(kconsole_t *cons);
+#ifdef CONFIG_DEFCONS_VGA
+#define default_console() (&vga_console)
+#elif defined(CONFIG_DEFCONS_SERIAL)
+#define default_console() (&serial_console)
+#else
+#error "Default kernel console is not selected!"
+#endif
 
-#define get_debug_console  get_fault_console()
+#ifdef CONFIG_FAULTCONS_VGA
+#define fault_console() (&vga_console)
+#elif defined(CONFIG_FAULTCONS_SERIAL)
+#define fault_console() (&serial_console)
+#else
+#error "Fault kernel console is not selected!"
+#endif
 
-#define PREPARE_DEBUG_CONSOLE()  do {           \
-  set_default_console(get_fault_console());     \
-  if (!default_console()->is_enabled)           \
-    default_console()->enable();                \
+extern kconsole_t vga_console, serial_console;
+
+#define PREPARE_DEBUG_CONSOLE()                     \
+  do {                                              \
+    set_default_console(get_fault_console());       \
+    if (!default_console()->is_enabled)             \
+      default_console()->enable();                  \
   } while(0)
-
-#define DEACTIVATE_DEBUG_CONSOLE()  get_fault_console()->disable()
 
 #endif /* __EZA_KCONSOLE_H__ */

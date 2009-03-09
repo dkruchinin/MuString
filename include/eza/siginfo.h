@@ -7,6 +7,7 @@ struct sigevent {
   int sigev_notify;
   int sigev_signo;
   union sigval sigev_value;
+  tid_t tid;
 };
 
 #define INIT_SIGEVENT(e)                        \

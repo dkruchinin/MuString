@@ -52,7 +52,7 @@
 static bool __read_user_safe(uintptr_t addr,uintptr_t *val)
 {
   uintptr_t *p;
-  page_idx_t pidx = ptable_ops.vaddr2page_idx(task_get_rpd(current_task()), addr);
+  page_idx_t pidx = ptable_ops.vaddr2page_idx(task_get_rpd(current_task()), addr, NULL);
 
   if( pidx == PAGE_IDX_INVAL ) {
     return false;
@@ -68,13 +68,13 @@ void __dump_stack(uintptr_t ustack)
   int i;
   uintptr_t d;
 
-  kprintf("\nTop %d words of userspace stack (RSP=%p).\n\n",
+  kprintf_fault("\nTop %d words of userspace stack (RSP=%p).\n\n",
           NUM_STACKWORDS,ustack);
   for(i=0;i<NUM_STACKWORDS;i++) {
     if( __read_user_safe(ustack,&d) ) {
-      kprintf("  <%p>\n",d);
+      kprintf_fault("  <%p>\n",d);
     } else {
-      kprintf("  <Invalid stack pointer>\n");
+      kprintf_fault("  <Invalid stack pointer>\n");
     }
     ustack += sizeof(uintptr_t);
   }
@@ -82,17 +82,17 @@ void __dump_stack(uintptr_t ustack)
 
 void invalid_tss_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
-    kprintf( "  [!!] #Invalid TSS exception raised !\n" );
+    kprintf_fault( "  [!!] #Invalid TSS exception raised !\n" );
 }
 
 void stack_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
-    kprintf( "  [!!] #Stack exception raised !\n" );
+    kprintf_fault( "  [!!] #Stack exception raised !\n" );
 }
 
 void segment_not_present_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
-    kprintf( "  [!!] #Segment not present exception raised !\n" );
+    kprintf_fault( "  [!!] #Segment not present exception raised !\n" );
 }
 
 static int __send_sigsegv_on_faults=0;
@@ -108,12 +108,12 @@ void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_fr
     goto kernel_fault;
   }
 
-  kprintf("[CPU %d] Unhandled user-mode GPF exception! Stopping CPU with error code=%d.\n\n",
+  kprintf_fault("[CPU %d] Unhandled user-mode GPF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
   goto stop_cpu;
 
 kernel_fault:
-  kprintf("[CPU %d] Unhandled kernel-mode GPF exception! Stopping CPU with error code=%d.\n\n",
+  kprintf_fault("[CPU %d] Unhandled kernel-mode GPF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
   stop_cpu:  
   fault_dump_regs(regs,stack_frame->rip);
@@ -130,12 +130,14 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
   uint64_t invalid_address,fixup;
   regs_t *regs=(regs_t *)(((uintptr_t)stack_frame)-sizeof(struct __gpr_regs)-8);
-  siginfo_t siginfo;
+  usiginfo_t siginfo;
   task_t *faulter=current_task();
 
   get_fault_address(invalid_address);
-  if(PFAULT_SVISOR(stack_frame->error_code))
+  if(PFAULT_SVISOR(stack_frame->error_code)) {
+    for (;;);
     goto kernel_fault;
+  }
   else {
     /*
      * PF in user-space. Try to find out correspondig VM range and handle the faut
@@ -143,7 +145,6 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
      */
 
     vmm_t *vmm = current_task()->task_mm;
-    vmrange_t *vmr;
     uint32_t errmask = 0;
     int ret = -EFAULT;
 
@@ -154,23 +155,19 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
     else
       errmask |= PFLT_NOT_PRESENT;
 
-    rwsem_down_read(&vmm->rwsem);
-    vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(invalid_address), invalid_address + PAGE_SIZE, NULL);
-    if (vmr)
-      ret = vmm_handle_page_fault(vmr, invalid_address, errmask);
-    
-    rwsem_up_read(&vmm->rwsem);
-    if (ret >= 0) {
+    ret = vmm_handle_page_fault(vmm, invalid_address, errmask);
+    if (!ret) {
       return;
     }
 
-    PREPARE_DEBUG_CONSOLE();
-    kprintf("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
+    vmranges_print_tree_dbg(vmm);
+    kprintf_fault("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
             cpu_id(), stack_frame->error_code);
   }
-  if( __send_sigsegv_on_faults )
+  if (current_task()->siginfo.handlers->actions[SIGSEGV].a.sa_sigaction != SIG_DFL)
     goto send_sigsegv;
-  goto stop_cpu;
+  if( __send_sigsegv_on_faults )
+    goto stop_cpu;
 
 kernel_fault:
   /* First, try to fix this exception. */
@@ -180,29 +177,29 @@ kernel_fault:
     return;
   }
 
-  PREPARE_DEBUG_CONSOLE();
-  kprintf("[CPU %d] Unhandled kernel-mode PF exception! Stopping CPU with error code=%d.\n\n",
-          cpu_id(), stack_frame->error_code);
+  kprintf_fault("[CPU %d] Unhandled kernel-mode PF exception! Stopping CPU with error code=%d.\n\n",
+          cpu_id(), stack_frame->error_code);  
 stop_cpu:
   fault_dump_regs(regs,stack_frame->rip);
-  kprintf( " Invalid address: %p\n", invalid_address );
-  show_stack_trace(stack_frame->old_rsp);
+  kprintf_fault( " Invalid address: %p\n", invalid_address );
 #ifdef CONFIG_DUMP_USTACK
-  if (!kernel_fault(stack_frame))
+  if( kernel_fault(stack_frame) ) {
+    show_stack_trace(stack_frame->old_rsp);
+  } else {
     __dump_user_stack(stack_frame->old_rsp);
+  }
 #endif /* CONFIG_DUMP_USTACK */
   interrupts_disable();
-  for (;;);
 
 send_sigsegv:
   /* Send user the SIGSEGV signal. */
-  INIT_SIGINFO_CURR(&siginfo);
+  INIT_USIGINFO_CURR(&siginfo);
   siginfo.si_signo=SIGSEGV;
   siginfo.si_code=SEGV_MAPERR;
   siginfo.si_addr=(void *)invalid_address;
 
-  kprintf( "[F]: Sending SIGSEGV.\n" );
-  send_task_siginfo(faulter,&siginfo,true);
-  kprintf( "[F]: Done !\n" );
+  kprintf_fault( "[F]: Sending SIGSEGV.\n" );
+  send_task_siginfo(faulter,&siginfo,true,NULL);
+  kprintf_fault( "[F]: Done !\n" );
 }
 

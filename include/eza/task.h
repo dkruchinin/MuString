@@ -182,7 +182,7 @@ typedef struct __tg_leader_private {
 typedef struct __task_struct {
   pid_t pid, ppid;
   tid_t tid;
-  uid_t uid;
+  uid_t uid,gid;
 
   /* Scheduler-related stuff. */
   cpu_id_t cpu;

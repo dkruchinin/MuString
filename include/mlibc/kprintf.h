@@ -24,6 +24,7 @@
 #define __KPRINTF_H__
 
 #include <config.h>
+#include <eza/kconsole.h>
 
 /* type of data, that will be printed (0 - 2 bits) */
 #define FMT_TNUM    0x00001 /* number */
@@ -93,7 +94,7 @@ typedef struct kbuffer {
  * @param ... - format arguments
  */
 void kprintf(const char *fmt, ...);
-
+void kprintf_fault(const char *fmt, ...);
 void sprintf(char *str, const char *fmt, ...);
 void snprintf(char *str, size_t size, const char *fmt, ...);
 
@@ -108,7 +109,7 @@ void snprintf(char *str, size_t size, const char *fmt, ...);
  * @param fmt - printf-like format
  * @param ap  - va_list containing format arguments
  */
-void vkprintf(const char *fmt, va_list ap);
+void vkprintf(kconsole_t *kcons, const char *fmt, va_list ap);
 
 /**
  * @fn size_t vsprintf(char *, const char *, va_list);

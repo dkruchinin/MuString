@@ -360,6 +360,9 @@ static int initialize_task_mm(task_t *orig, task_t *target,
     else {
       map_kernel_area(target->task_mm); /* FIXME DK: remove after debugging */
       ret = vm_mandmaps_roll(target->task_mm);
+#if 0
+      vmm_clone();
+#endif
     }
   }
 
@@ -465,6 +468,9 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   task->sched_data = NULL;
   task->flags = 0;
   task->priv = priv;
+
+  task->uid=parent->uid;
+  task->gid=parent->gid;
 
   __add_to_parent(task,parent,flags,priv);
 

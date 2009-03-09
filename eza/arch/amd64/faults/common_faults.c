@@ -33,10 +33,11 @@
 #include <eza/smp.h>
 #include <eza/kconsole.h>
 #include <eza/arch/cpu.h>
+#include <eza/arch/assert.h>
 
 void bound_range_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
-    kprintf( "  [!!] #Bound range exception raised !\n" );
+    kprintf_fault( "  [!!] #Bound range exception raised !\n" );
     for(;;);
 }
 
@@ -44,8 +45,15 @@ void invalid_opcode_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
   regs_t *regs = (regs_t *)(((uintptr_t)stack_frame)-sizeof(struct __gpr_regs)-8);
   
-  PREPARE_DEBUG_CONSOLE();
-  kprintf("Invalid opcode exception!!!\n");
+  if (regs->rax == ASSERT_MAGIC) {
+    kprintf_fault((char *)regs->gpr_regs.r10, (char *)regs->gpr_regs.r11,
+            (char *)regs->gpr_regs.r12, (int)regs->gpr_regs.r13);
+    goto out;
+  }
+  
+  kprintf_fault("Invalid opcode exception!!!\n");
+
+  out:
   fault_dump_regs(regs, stack_frame->rip);
   show_stack_trace(stack_frame->old_rsp);
   for(;;);
@@ -53,66 +61,69 @@ void invalid_opcode_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 
 void device_not_available_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
-    kprintf( "  [!!] #Dev not available exception raised !\n" );
+    kprintf_fault( "  [!!] #Dev not available exception raised !\n" );
     for(;;);
 }
 
 void breakpoint_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
-  kprintf( "  [!!] #Breakpoint exception raised !\n" );
+  kprintf_fault( "  [!!] #Breakpoint exception raised !\n" );
   for(;;);
 }
 
 void debug_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
-  kprintf( "  [!!] #Debug exception raised !\n" );
+  kprintf_fault( "  [!!] #Debug exception raised !\n" );
   for(;;);
 }
 
 void alignment_check_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
-    kprintf( "  [!!] #Alignment check exception raised !\n" );
+    kprintf_fault( "  [!!] #Alignment check exception raised !\n" );
     for(;;);
 }
 
 void machine_check_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
-    kprintf( "  [!!] #Machine check exception raised !\n" );
+    kprintf_fault( "  [!!] #Machine check exception raised !\n" );
     for(;;);
 }
 
 void security_exception_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
-    kprintf( "  [!!] #Security exception raised !\n" );
+    kprintf_fault( "  [!!] #Security exception raised !\n" );
     for(;;);
 }
 
 void reserved_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
-  kprintf( "  [!!] #Reserved fault exception raised !\n" );  
+  kprintf_fault( "  [!!] #Reserved fault exception raised !\n" );  
   for(;;);
 }
 
 void nmi_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
-  kprintf( "  [!!] #NMI exception raised !\n" );
+  kprintf_fault( "  [!!] #NMI exception raised !\n" );
   for(;;);
 }
 
 void doublefault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 { 
-  char b[128];
+  //char b[512];
+  uintptr_t inval_addr;
 
-  get_fault_console()->init();
-  PREPARE_DEBUG_CONSOLE();
-
-  sprintf(b, "[!!] Fatal double fault exception! RIP=%p. CPU stopped.\n",
-          stack_frame->rip);
-  get_fault_console()->display_string(b);
+  __asm__ __volatile__("movq %%cr2, %0" : "=r"(inval_addr));
+  kprintf_fault("[!!] Fatal double fault exception! RIP=%p. (Inval addr = %p) CPU stopped.\n",
+          stack_frame->rip, inval_addr);  
+  //sprintf(b, "[!!] Fatal double fault exception! RIP=%p. CPU stopped.\n",
+  //        stack_frame->rip);
+  //kprintf_fault("%s\n", b);
+  for (;;);
+  //get_fault_console()->display_string(b);
 }
 
 void reserved_exception_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
-    kprintf( "  [!!] #Reserved exception raised !\n" );
+    kprintf_fault( "  [!!] #Reserved exception raised !\n" );
     for(;;);
 }
