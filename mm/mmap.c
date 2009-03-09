@@ -45,7 +45,7 @@ static LIST_DEFINE(__mandmaps_lst);
 static int __num_mandmaps = 0;
 
 #ifdef CONFIG_DEBUG_MM
-static bool __vmm_verbose = true;
+static bool __vmm_verbose = false;
 static SPINLOCK_DEFINE(__vmm_verb_lock);
 
 #define VMM_VERBOSE(fmt, args...)               \
@@ -203,18 +203,6 @@ static void fix_vmrange_holes(vmm_t *vmm, vmrange_t *vmrange, ttree_cursor_t *cu
   }
 }
 
-/*static int __map_phys_pages(vmm_t *vmm, uintptr_t va, uintptr_t phys,
-                            page_idx_t npages, kmap_flags_t flags)
-{
-  page_frame_iterator_t pfi;
-  ITERATOR_CTX(page_frame, PF_ITER_INDEX) index_ctx;
-
-  pfi_index_init(&pfi, &index_ctx, phys >> PAGE_WIDTH,
-                 (phys >> PAGE_WIDTH) + npages - 1);  
-  iter_first(&pfi);
-  return __mmap_core(&vmm->rpd, va, npages, &pfi, flags);
-}*/
-
 void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name)
 {
 #ifndef CONFIG_TEST
@@ -284,28 +272,96 @@ vmm_t *vmm_create(void)
 
   return vmm;
 }
-#if 0
-int vmm_clone(vmm_t *dst, vmm_t *src)
+
+int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
 {
   ttree_node_t *tnode;
-  int i = 0;
-  vmrange_t *vmr;
+  int i = 0, ret = 0;
+  vmrange_t *vmr, *new_vmr;
+  uintptr_t addr;
+  pde_t *pde;
+  page_idx_t pidx;
+  vmrange_flags_t new_vmr_flags;
   
   ASSERT(dst != src);
   rwsem_down_write(&src->rwsem);
+  pagetable_lock(&src->rpd);
   tnode = ttree_tnode_leftmost(src->vmranges_tree.root);
   ASSERT(tnode != NULL);
+  
   while (tnode) {
     tnode_for_each_index(tnode, i) {
       vmr = ttree_key2item(&src->vmranges_tree, tnode_key(tnode, i));
-      if (vmr->flags & VMR_WRITE) {
+      new_vmr_flags = vmr->flags;
+      if ((vmr->flags & VMR_SHARED) && !(flags & VMM_CLONE_SHARED)) {
+        new_vmr_flags &= ~VMR_SHARED;
+        new_vmr_flags |= VMR_PRIVATE;
+      }
+      else if ((vmr->flags & VMR_PHYS) && !(flags & VMM_CLONE_PHYS))
+        continue;
+      
+      new_vmr = create_vmrange(dst, vmr->bounds.space_start,
+                               (vmr->bounds.space_end - vmr->bounds.space_start) >> PAGE_WIDTH,
+                               new_vmr_flags);
+      if (!new_vmr) {
+        ret = -ENOMEM;
+        goto clone_failed;
+      }
+
+      ASSERT(!ttree_insert(&dst->vmranges_tree, new_vmr));
+      __attach_memobj_to_vmrange(new_vmr, vmr->memobj, vmr->offset);
+      for (addr = vmr->bounds.space_start; addr < vmr->bounds.space_end; addr += PAGE_SIZE) {
+        pidx = ptable_ops.vaddr2page_idx(&src->rpd, addr, &pde);
+        if (pidx == PAGE_IDX_INVAL) {
+          if (pde != NULL) {
+            pidx = pde_fetch_page_idx(pde);
+            ret = mmap_core(&dst->rpd, addr, pidx, 1, pde_get_flags(pde), false);
+            if (ret)
+              goto clone_failed;
+          }
+
+          continue;
+        }
+        if (!(vmr->flags & VMR_SHARED) && (vmr->flags & VMR_WRITE) && (flags & VMM_CLONE_COW)) {
+            ret = mmap_core(&src->rpd, addr, pidx, 1,
+                            ((vmr->flags & KMAP_FLAGS_MASK) & ~VMR_WRITE), false);
+            if (ret)
+              goto clone_failed;
+        }
+        if (((vmr->flags & VMR_SHARED) && !(flags & VMM_CLONE_SHARED)) ||
+            ((vmr->flags & VMR_WRITE) && (flags & VMM_POPULATE))) {
+          page_frame_t *page = alloc_page(AF_USER | AF_ZERO);
+
+          if (!page) {
+            ret = -ENOMEM;
+            goto clone_failed;
+          }
+
+          copy_page_frame(page, pframe_by_number(pidx));
+          pidx = pframe_number(page);
+        }
+
+        ret = mmap_core(&dst->rpd, addr, pidx, 1, pde_get_flags(pde), true);
+        if (ret)
+          goto clone_failed;
       }
     }
+
+    tnode = tnode->successor;
   }
-  
+
+  pagetable_unlock(&src->rpd);
   rwsem_up_write(&src->rwsem);
+  return ret;
+
+  clone_failed:
+  pagetable_unlock(&src->rpd);
+  rwsem_up_write(&src->rwsem);
+  vmm_destroy(dst);
+  
+  return ret;
 }
-#endif
+
 
 uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, ttree_cursor_t *cursor)
 {    
@@ -403,7 +459,8 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
       || !(flags & (VMR_PRIVATE | VMR_SHARED))
       || ((flags & (VMR_PRIVATE | VMR_SHARED)) == (VMR_PRIVATE | VMR_SHARED))
       || !npages
-      || ((flags & VMR_NONE) && ((flags & VMR_PROTO_MASK) != VMR_NONE))) {
+      || ((flags & VMR_NONE) && ((flags & VMR_PROTO_MASK) != VMR_NONE))
+      || (flags & (VMR_PHYS | VMR_SHARED)) == (VMR_PHYS_VMR_SHARED)) {
     err = -EINVAL;
     goto err;
   }

@@ -326,10 +326,10 @@ page_idx_t generic_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr, /* OUT */ pde_t *
   }
 
   pde = pde_fetch(cur_dir, pde_offset2idx(va, PTABLE_LEVEL_FIRST));
+  if (retpde)
+    *retpde = pde;  
   if (!pde_is_present(pde))
     return PAGE_IDX_INVAL;
-  if (retpde)
-    *retpde = pde;
     
   return pde_fetch_page_idx(pde);
 }

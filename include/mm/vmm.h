@@ -69,6 +69,13 @@ typedef vmrange_flags_t kmap_flags_t;
 #define KMAP_NOCACHE  VMR_NOCACHE
 #define KMAP_FLAGS_MASK (KMAP_KERN | KMAP_READ | KMAP_WRITE | KMAP_EXEC | KMAP_NOCACHE)
 
+enum {
+  VMM_CLONE_COW      = 0x01,
+  VMM_CLONE_POPULATE = 0x02,
+  VMM_CLONE_PHYS     = 0x04,
+  VMM_CLONE_SHARED   = 0x08,
+}
+
 struct __vmm;
 struct range_bounds {
   uintptr_t space_start;
