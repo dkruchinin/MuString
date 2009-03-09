@@ -45,7 +45,7 @@ static LIST_DEFINE(__mandmaps_lst);
 static int __num_mandmaps = 0;
 
 #ifdef CONFIG_DEBUG_MM
-static bool __vmm_verbose = false;
+static bool __vmm_verbose = true;
 static SPINLOCK_DEFINE(__vmm_verb_lock);
 
 #define VMM_VERBOSE(fmt, args...)               \
@@ -177,7 +177,7 @@ static void fix_vmrange_holes(vmm_t *vmm, vmrange_t *vmrange, ttree_cursor_t *cu
 {
   vmrange_t *vmr;
   ttree_cursor_t csr;
-  
+
   ttree_cursor_copy(&csr, cursor);
   if (!ttree_cursor_prev(&csr)) {
     vmr = ttree_item_from_cursor(&csr);
@@ -187,12 +187,12 @@ static void fix_vmrange_holes(vmm_t *vmm, vmrange_t *vmrange, ttree_cursor_t *cu
     vmr->hole_size = vmrange->bounds.space_start - vmr->bounds.space_end;
   }
 
-  ttree_cursor_copy(&csr, cursor);
+  ttree_cursor_copy(&csr, cursor);  
   if (!ttree_cursor_next(&csr)) {
+    vmr = ttree_item_from_cursor(&csr);
     VMM_VERBOSE("%s(N) [%p, %p): old hole size: %ld, new hole size: %ld\n",
                 vmm_get_name_dbg(vmm), vmrange->bounds.space_start, vmrange->bounds.space_end,
-                vmrange->hole_size, vmr->bounds.space_start - vmrange->bounds.space_end);
-    vmr = ttree_item_from_cursor(&csr);
+                vmrange->hole_size, vmr->bounds.space_start - vmrange->bounds.space_end);    
     vmrange->hole_size = vmr->bounds.space_start - vmrange->bounds.space_end;
   }
   else {
@@ -444,7 +444,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
     vmr = ttree_item_from_cursor(&csr_tmp);
     if (can_be_merged(vmr, memobj, flags) && (vmr->bounds.space_end == addr)) {
       VMM_VERBOSE("%s: Attach [%p, %p) to the top of [%p, %p)\n",
-                  vmm_get_name_dbg(vmm), addr, (npages << PAGE_WIDTH),
+                  vmm_get_name_dbg(vmm), addr, addr + (npages << PAGE_WIDTH),
                   vmr->bounds.space_start, vmr->bounds.space_end);
       vmr->hole_size -= (addr + (npages << PAGE_WIDTH) - vmr->bounds.space_end);
       vmr->bounds.space_end = addr + (npages << PAGE_WIDTH);
@@ -492,6 +492,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   if (!was_merged)
     fix_vmrange_holes(vmm, vmr, &cursor);
 
+  VMM_VERBOSE("Address: %p; VM range [%p, %p)\n", addr, vmr->bounds.space_start, vmr->bounds.space_end);
   return (!(flags & VMR_STACK) ? addr : (addr + (npages << PAGE_WIDTH)));
   
   err:
@@ -601,7 +602,7 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
 
   ASSERT(vmr->memobj != NULL);
   memobj = vmr->memobj;
-  kprintf("Handling PF: found range [%p, %p)\n", vmr->bounds.space_start, vmr->bounds.space_end);
+  kprintf("Handling PF: %p found range [%p, %p)\n", fault_addr, vmr->bounds.space_start, vmr->bounds.space_end);
   ret = memobj_method_call(memobj, handle_page_fault, vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
   out:
   rwsem_up_read(&vmm->rwsem);

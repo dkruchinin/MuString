@@ -104,8 +104,8 @@ void main_routine(void) /* this function called from boostrap assembler code */
   install_fault_handlers();
   initialize_irqs();
 
-  kcons->init();
-  kcons->enable();
+  kcons->init();  
+  kcons->enable();  
   kprintf("[MB] Modules: %d\n",init.c);
 
   mm_initialize();

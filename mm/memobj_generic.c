@@ -64,7 +64,9 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
 
     ret = mmap_core(&vmm->rpd, addr, pframe_number(pf),
                     1, vmr->flags & VMR_PROTO_MASK, true);
-    pagetable_unlock(&vmm->rpd);
+    /* FIXME DK: remove this assertion after debugging */
+    ASSERT(ptable_ops.vaddr2page_idx(&vmm->rpd, addr, NULL) == pframe_number(pf));
+    pagetable_unlock(&vmm->rpd);    
     if (ret)
       free_page(pf);
   }

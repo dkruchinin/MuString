@@ -87,19 +87,42 @@ endmenu
 
 endmenu
 
+menu   "Kernel consoles"
+choice 
+       prompt  "Kernel default console"
+       default DEFCONS_VGA
+
+config DEFCONS_VGA
+       bool "VGA"
+       help
+         Standard VGA console
+
+config DEFCONS_SERIAL
+       bool "Serial"
+       help
+         "Serial console"
+endchoice
+
+choice 
+      prompt "Kernel fault console"
+      default FAULTCONS_VGA
+
+config FAULTCONS_VGA
+      bool "VGA"
+      help
+        Output fault to VGA
+
+config FAULTCONS_SERIAL
+      bool "Serial"
+      help
+        Print faults information to serial console
+endchoice
+endmenu
+
 menu   "Debug options"
 
 config DEBUG
        bool "Enable general debugging."
-       default n
-
-config DEBUG_SERIAL_CONSOLE
-       bool "Serial console (good for debug purposes)."
-       default n
-
-config DEBUG_ERR_MESSAGES_TO_SERIAL_CONSOLE
-       bool "Print all kernel error messages (including faults) to serial console."
-       depends on DEBUG_SERIAL_CONSOLE
        default n
 
 config DEBUG_IRQ_ACTIVITY

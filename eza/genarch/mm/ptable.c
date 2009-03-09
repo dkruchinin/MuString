@@ -274,7 +274,7 @@ page_frame_t *generic_create_pagedir(void)
 
 void generic_ptable_unmap(rpd_t *rpd, uintptr_t va_from, page_idx_t npages, bool unpin_pages)
 {
-  do_ptable_unmap(RPD_PAGEDIR(rpd), va_from, va_from + (npages - 1 << PAGE_WIDTH), PTABLE_LEVEL_LAST, unpin_pages);
+  do_ptable_unmap(RPD_PAGEDIR(rpd), va_from, va_from + ((npages - 1) << PAGE_WIDTH), PTABLE_LEVEL_LAST, unpin_pages);
 }
 
 int generic_ptable_map(rpd_t *rpd, uintptr_t va_from, page_idx_t npages,
