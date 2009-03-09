@@ -89,14 +89,13 @@ typedef struct __vmrange {
   struct __vmm *parent_vmm;
   memobj_t *memobj;
   uintptr_t hole_size;
-  off_t offset;
+  pgoff_t offset;
   vmrange_flags_t flags;  
 } vmrange_t;
 
 typedef struct __vmm {
   ttree_t vmranges_tree;
-  vmrange_t *cached_vmr;
-  vmrange_t *lru_range;
+  vmrange_t *cached_vmr; /* TODO DK: use this stuff */
   atomic_t vmm_users;
   rpd_t rpd;
   rwsem_t rwsem;

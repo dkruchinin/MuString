@@ -284,6 +284,28 @@ vmm_t *vmm_create(void)
 
   return vmm;
 }
+#if 0
+int vmm_clone(vmm_t *dst, vmm_t *src)
+{
+  ttree_node_t *tnode;
+  int i = 0;
+  vmrange_t *vmr;
+  
+  ASSERT(dst != src);
+  rwsem_down_write(&src->rwsem);
+  tnode = ttree_tnode_leftmost(src->vmranges_tree.root);
+  ASSERT(tnode != NULL);
+  while (tnode) {
+    tnode_for_each_index(tnode, i) {
+      vmr = ttree_key2item(&src->vmranges_tree, tnode_key(tnode, i));
+      if (vmr->flags & VMR_WRITE) {
+      }
+    }
+  }
+  
+  rwsem_up_write(&src->rwsem);
+}
+#endif
 
 uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, ttree_cursor_t *cursor)
 {    

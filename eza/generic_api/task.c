@@ -360,6 +360,9 @@ static int initialize_task_mm(task_t *orig, task_t *target,
     else {
       map_kernel_area(target->task_mm); /* FIXME DK: remove after debugging */
       ret = vm_mandmaps_roll(target->task_mm);
+#if 0
+      vmm_clone();
+#endif
     }
   }
 
