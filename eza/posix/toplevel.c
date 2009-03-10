@@ -218,8 +218,8 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
             char b[128];
 
             deactivate_posix_timer(ptimer);
-            sprintf(b,"+d3: disarming %d\n",
-                    id);
+            sprintf(b,"+d3: disarming %d (time_x=%d)\n",
+                    id,ktimer->time_x);
             get_debug_console()->display_string(b);
             delete_timer(ktimer);
             get_debug_console()->display_string(" +d3:Done !\n");

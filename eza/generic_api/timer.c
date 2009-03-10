@@ -262,8 +262,8 @@ void process_timers(void)
       LOCK_SW_TIMERS_R(is);
 #ifndef CONFIG_TIMER_RBTREE
       list_del(&major_tick->list);
-      list_add2tail(&cached_major_ticks,&major_tick->list);
-      __num_cached_major_ticks++;
+//      list_add2tail(&cached_major_ticks,&major_tick->list);
+//     __num_cached_major_ticks++;
 #else
       list_add2tail(&expired_major_ticks,&major_tick->list);
 #endif
@@ -401,6 +401,8 @@ long modify_timer(ktimer_t *timer,ulong_t time_x)
   }
 
   TIMER_RESET_TIME(timer,time_x);
+  list_init_node(&timer->minor_tick.node);
+  list_init_head(&timer->minor_tick.actions);
   r=add_timer(timer);
   return r;
 }
@@ -426,7 +428,8 @@ long add_timer(ktimer_t *t)
   list_head_t *lh;
   list_node_t *ln;
   bool cache_used=false;
-
+  char buf[128];
+  
   if( !t->time_x || !t->minor_tick.time_x ) {
     return -EINVAL;
   }
@@ -511,6 +514,10 @@ long add_timer(ktimer_t *t)
     goto out_unlock_tick;
   }
 
+  sprintf(buf,"** add_timer() to %d (MT->time_x=%d)\n",
+          t->time_x,mt->time_x);
+  get_debug_console()->display_string(buf);
+
   lh=&mt->minor_ticks[(t->time_x-mtickv)/MINOR_TICK_GROUP_SIZE];
   if( !list_is_empty(lh) ) {
     list_for_each( lh,ln ) {
@@ -532,6 +539,10 @@ long add_timer(ktimer_t *t)
     }
   }
   /* By default - add this timer to the end of the list. */
+  get_debug_console()->display_string("------------------[add_timer(): TYPE C dump]------------ \n");
+  __dump_major_tick(mt);
+  get_debug_console()->display_string("----------------------------------------------------\n");
+
   list_add2tail(lh,&t->minor_tick.node);
   list_add2tail(&t->minor_tick.actions,&t->da.node);
   get_debug_console()->display_string("* TYPE C\n");
@@ -569,7 +580,6 @@ fire_expired_timer:
   if( cache_used && __num_cached_major_ticks < CONFIG_MIN_CACHED_MAJOR_TICKS ) {
     mt=memalloc(sizeof(*mt));
     if( mt ) {
-      MAJOR_TIMER_TICK_INIT(mt,0);
       LOCK_SW_TIMERS(is);
       list_add2tail(&cached_major_ticks,&mt->list);
       __num_cached_major_ticks++;
