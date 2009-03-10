@@ -190,6 +190,7 @@ stop_cpu:
   }
 #endif /* CONFIG_DUMP_USTACK */
   interrupts_disable();
+  for(;;);
 
 send_sigsegv:
   /* Send user the SIGSEGV signal. */
