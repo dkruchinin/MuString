@@ -308,7 +308,6 @@ void delete_timer(ktimer_t *timer)
       __num_cached_major_ticks++;
       list_add2tail(&cached_major_ticks,&mtt->list);
     }
-
     spinlock_unlock(&mtt->lock);
     spinlock_unlock(&sw_timers_lock);
     interrupts_restore(is);
@@ -316,18 +315,12 @@ void delete_timer(ktimer_t *timer)
     spinlock_unlock(&sw_timers_lock);
   }
 
-  get_debug_console()->display_string("---------------[delete_timer(): BEGIN----------------------\n");
-  __dump_major_tick(mtt);
-  get_debug_console()->display_string("--------------------------------------------------------\n");
-
   if( tt->time_x > __last_processed_timer_tick ) {
     /* Timer hasn't triggered yet. So remove it only from timer list.
      */
     if( !list_node_is_bound(&tt->node) ) {
       /* The simpliest case - only one timer in this tick, no rebalance. */
-      get_debug_console()->display_string("Timer removing 1\n");
       skiplist_del(&timer->da,deffered_irq_action_t,head,node);
-      get_debug_console()->display_string("Timer removed 1\n");
     } else {
       /* Need to rebalance the whole list associated with this timer. */
       ktimer_t *nt;
@@ -336,7 +329,6 @@ void delete_timer(ktimer_t *timer)
       if( lhn->next != &timer->da.node || lhn->prev != &timer->da.node
           || !list_is_empty(&timer->da.head) ) {
 
-        get_debug_console()->display_string("Timer removing 2\n");
         if( !list_is_empty(&timer->da.head) ) {
           deffered_irq_action_t *da=container_of(list_node_first(&timer->da.head),
                                                  deffered_irq_action_t,node);
@@ -355,8 +347,6 @@ void delete_timer(ktimer_t *timer)
         nt->minor_tick.actions.head.prev=tt->actions.head.prev;
         tt->actions.head.prev->next=&nt->minor_tick.actions.head;
         list_replace(&tt->node,&nt->minor_tick.node);
-
-        get_debug_console()->display_string("Timer removed 2\n");
       } else {
         list_del(&tt->node);
       }
@@ -365,27 +355,15 @@ void delete_timer(ktimer_t *timer)
     /* Bad luck - timer's action has properly been scheduled. So try
      * to remove it from the list of deferred actions.
      */
-    get_debug_console()->display_string("Timer removing 3\n");
     deschedule_deffered_action(&timer->da);
-    get_debug_console()->display_string("Timer removed 3\n");
   }
-  get_debug_console()->display_string("---------------[delete_timer(): END ----------------------\n");
-  __dump_major_tick(mtt);
-  get_debug_console()->display_string("---------------[delete_timer():  -------------------------\n");
-
   if( unlock ) {
     spinlock_unlock(&mtt->lock);
     interrupts_restore(is);
   }
-
-  if( in_atomic() ) {
-    get_debug_console()->display_string("BZZZZZZZZZZZZZZZZZZZZZZZZZZZ!\n");
-  }
 }
 
 int __timer_verbose=0;
-static char __b[128];
-
 
 long modify_timer(ktimer_t *timer,ulong_t time_x)
 {
@@ -428,7 +406,6 @@ long add_timer(ktimer_t *t)
   list_head_t *lh;
   list_node_t *ln;
   bool cache_used=false;
-  char buf[128];
   
   if( !t->time_x || !t->minor_tick.time_x ) {
     return -EINVAL;
@@ -514,23 +491,17 @@ long add_timer(ktimer_t *t)
     goto out_unlock_tick;
   }
 
-  sprintf(buf,"** add_timer() to %d (MT->time_x=%d)\n",
-          t->time_x,mt->time_x);
-  get_debug_console()->display_string(buf);
-
   lh=&mt->minor_ticks[(t->time_x-mtickv)/MINOR_TICK_GROUP_SIZE];
   if( !list_is_empty(lh) ) {
     list_for_each( lh,ln ) {
       timer_tick_t *tt=container_of(ln,timer_tick_t,node);
 
       if( tt->time_x == t->time_x ) {
-        get_debug_console()->display_string("* TYPE A\n");
         skiplist_add(&t->da,&tt->actions,deffered_irq_action_t,node,head,priority);
         goto out_insert;
       } else if( tt->time_x > t->time_x ) {
         list_insert_before(&t->minor_tick.node,ln);
         list_add2tail(&t->minor_tick.actions,&t->da.node);
-        get_debug_console()->display_string("* TYPE B\n");
         goto out_insert;
       }
       /* Fallthrough in case of the lowest tick value - it will be added to
@@ -539,20 +510,12 @@ long add_timer(ktimer_t *t)
     }
   }
   /* By default - add this timer to the end of the list. */
-  get_debug_console()->display_string("------------------[add_timer(): TYPE C dump]------------ \n");
-  __dump_major_tick(mt);
-  get_debug_console()->display_string("----------------------------------------------------\n");
-
   list_add2tail(lh,&t->minor_tick.node);
   list_add2tail(&t->minor_tick.actions,&t->da.node);
-  get_debug_console()->display_string("* TYPE C\n");
 out_insert:
   t->minor_tick.major_tick=mt;
   r=0;
 out_unlock_tick:
-  get_debug_console()->display_string("------------------[add_timer()]------------------- \n");
-  __dump_major_tick(mt);
-  get_debug_console()->display_string("----------------------------------------------------\n");
   UNLOCK_MAJOR_TIMER_TICK(mt,is);
 fire_expired_timer:
   if( r == -EAGAIN ) {
