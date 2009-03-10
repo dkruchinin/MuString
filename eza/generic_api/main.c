@@ -60,10 +60,9 @@ extern void initialize_timer(void);
 
 static void main_routine_stage1(void)
 {
-    /* Initialize PICs and setup common interrupt handlers. */
+  /* Initialize PICs and setup common interrupt handlers. */
   set_cpu_online(0,1);  /* We're online. */
   sched_add_cpu(0);
-
   initialize_ipc();
   initialize_signals();
   initialize_gc();
@@ -105,8 +104,8 @@ void main_routine(void) /* this function called from boostrap assembler code */
   install_fault_handlers();
   initialize_irqs();
 
-  kcons->init();
-  kcons->enable();
+  kcons->init();  
+  kcons->enable();  
   kprintf("[MB] Modules: %d\n",init.c);
 
   mm_initialize();

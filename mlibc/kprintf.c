@@ -82,7 +82,20 @@ void kprintf(const char *fmt, ...)
   va_list ap;
   
   va_start(ap, fmt);
-  vkprintf(fmt, ap);
+  vkprintf(default_console(), fmt, ap);
+  va_end(ap);
+}
+
+void kprintf_fault(const char *fmt, ...)
+{
+  va_list ap;
+  kconsole_t *fault_cons = fault_console();
+  
+  va_start(ap, fmt);
+  if (unlikely(!fault_cons->is_enabled))
+    fault_cons->enable();
+  
+  vkprintf(fault_cons, fmt, ap);
   va_end(ap);
 }
 
@@ -104,11 +117,10 @@ void snprintf(char *str, size_t size, const char *fmt, ...)
   va_end(ap);
 }
 
-void vkprintf(const char *fmt, va_list ap)
+void vkprintf(kconsole_t *kcons, const char *fmt, va_list ap)
 {
   char tmp_buf[TMPBUF_SIZE];
   size_t sl;
-  kconsole_t *kcons = default_console();
 
   memset(tmp_buf, '\0', TMPBUF_SIZE);  
   sl = vsprintf(tmp_buf, fmt, ap);
@@ -122,7 +134,6 @@ void vkprintf(const char *fmt, va_list ap)
     kcons->display_string("\n__kbuf error\n");
     return;
   }
-
   if (kcons->is_enabled)
     kcons->display_string(tmp_buf);
 }

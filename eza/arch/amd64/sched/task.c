@@ -154,7 +154,7 @@ void initialize_idle_tasks(void)
         pfi_index_init(&pfi, &pfi_index_ctx, pframe_number(pf), pframe_number(pf) + KERNEL_STACK_PAGES - 1);
         iter_first(&pfi);
         r = ptable_ops.mmap(&task->rpd, task->kernel_stack.low_address, KERNEL_STACK_PAGES,
-                            &pfi, PDE_RW | PDE_NX);
+                            &pfi, PDE_RW | PDE_NX, true);
         if( r != 0 ) {
             panic("Can't map kernel stack for idle task !");
         }

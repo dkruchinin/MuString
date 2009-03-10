@@ -25,6 +25,7 @@
 #define __ARCH_PTABLE_H__
 
 #include <mm/page.h>
+#include <eza/arch/spinlock.h>
 #include <eza/arch/types.h>
 
 typedef enum __ptable_flags {
@@ -57,6 +58,7 @@ typedef uint32_t pde_idx_t;
  */
 typedef struct __rpd {
   page_frame_t *pml4;
+  spinlock_t rpd_lock;
 } rpd_t;
 
 #define RPD_PAGEDIR(rpd) ((rpd)->pml4)

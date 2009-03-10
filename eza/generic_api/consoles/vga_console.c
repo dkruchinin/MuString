@@ -37,9 +37,7 @@ static void vga_cons_disable(void);
 static void vga_cons_display_string(const char *);
 static void vga_cons_display_char(const char);
 
-extern kconsole_t serial_console;
-
-static kconsole_t __vga_cons = {
+kconsole_t vga_console = {
   .init = vga_cons_init,
   .enable = vga_cons_enable,
   .clear = vga_cons_clear,
@@ -59,9 +57,9 @@ static void vga_cons_enable(void)
   vga_set_cursor_attrs(VGA_CRSR_LOW);
   vga_set_bg(KCONS_DEF_BG);
   vga_set_fg(KCONS_DEF_FG);
-  __vga_cons.is_enabled = true;
+  vga_console.is_enabled = true;
   vga_set_x(0);
-  spinlock_initialize(&__vga_cons.lock);
+  spinlock_initialize(&vga_console.lock);
 }
 
 static void vga_cons_clear(void)
@@ -71,7 +69,7 @@ static void vga_cons_clear(void)
 
 static void vga_cons_disable(void)
 {
-  __vga_cons.is_enabled = false;
+  vga_console.is_enabled = false;
 }
 
 static void vga_cons_display_string(const char *str)
@@ -79,18 +77,18 @@ static void vga_cons_display_string(const char *str)
   int i;
   bool int_on=is_interrupts_enabled();    
 
-  if (!__vga_cons.is_enabled)
+  if (!vga_console.is_enabled)
     return;
 
   interrupts_disable();
-  spinlock_lock(&__vga_cons.lock);
+  spinlock_lock(&vga_console.lock);
 
   for(i = 0; str[i] != '\0'; i++)
     vga_putch(str[i]);
 
   vga_update_cursor();
 
-  spinlock_unlock(&__vga_cons.lock);
+  spinlock_unlock(&vga_console.lock);
   if(int_on) {
     interrupts_enable();
   }
@@ -99,38 +97,17 @@ static void vga_cons_display_string(const char *str)
 static void vga_cons_display_char(const char c)
 {
   bool int_on=is_interrupts_enabled();
-  if (__vga_cons.is_enabled)
+  if (vga_console.is_enabled)
     return;
 
   interrupts_disable();
-  spinlock_lock(&__vga_cons.lock);
+  spinlock_lock(&vga_console.lock);
   vga_putch(c);
   vga_update_cursor();
-  spinlock_unlock(&__vga_cons.lock);
+  spinlock_unlock(&vga_console.lock);
 
   if(int_on) {
     interrupts_enable();
   }
-}
-
-static kconsole_t *__default_console=&__vga_cons;
-
-kconsole_t *default_console(void)
-{
-  return __default_console;
-}
-
-void set_default_console(kconsole_t *cons)
-{
-  __default_console=cons;
-}
-
-kconsole_t *get_fault_console(void)
-{
-#ifdef CONFIG_DEBUG_ERR_MESSAGES_TO_SERIAL_CONSOLE
-  return &serial_console;
-#else
-  return default_console();
-#endif
 }
 

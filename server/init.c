@@ -48,7 +48,6 @@ long initrd_start_page,initrd_num_pages;
 static int __create_task_mm(task_t *task, int num)
 {
   vmm_t *vmm = task->task_mm;
-  memobj_t *memobj = &null_memobj;
   uintptr_t code;
   size_t code_size,data_size,text_size,bss_size;
   ulong_t *pp;
@@ -150,34 +149,34 @@ static int __create_task_mm(task_t *task, int num)
   /*  kprintf("elf entry -> %p\n",ehead.e_entry); */
 
   /*remap pages*/
-  r = vmrange_map(memobj, vmm, USPACE_VA_BOTTOM, text_size, VMR_READ | VMR_EXEC | VMR_PRIVATE | VMR_FIXED, 0);
+  r = vmrange_map(generic_memobj, vmm, USPACE_VA_BOTTOM, text_size, VMR_READ | VMR_EXEC | VMR_PRIVATE | VMR_FIXED, 0);
   if (!PAGE_ALIGN(r))
     return r;
-  r = mmap_core(task_get_rpd(task), USPACE_VA_BOTTOM, code >> PAGE_WIDTH, text_size, KMAP_READ | KMAP_EXEC);
+  r = mmap_core(task_get_rpd(task), USPACE_VA_BOTTOM, code >> PAGE_WIDTH, text_size, KMAP_READ | KMAP_EXEC, true);
   if (r)
     return r;
 
   //kprintf("TEXT: %p -> %p\n", USPACE_VA_BOTTOM, USPACE_VA_BOTTOM + (text_size << PAGE_WIDTH));
   if (data_size) {
-    r = vmrange_map(memobj, vmm, real_data_offset, data_size, VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED, 0);
+    r = vmrange_map(generic_memobj, vmm, real_data_offset, data_size, VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED, 0);
     if (!PAGE_ALIGN(r))
       return r;
 
-    r = mmap_core(task_get_rpd(task), real_data_offset, data_bss >> PAGE_WIDTH, data_size, KMAP_READ | KMAP_WRITE);
+    r = mmap_core(task_get_rpd(task), real_data_offset, data_bss >> PAGE_WIDTH, data_size, KMAP_READ | KMAP_WRITE, true);
     if (r)
       return r;
   }
 
   if (bss_size) {
     /* Create a BSS area. */
-    r = vmrange_map(memobj, vmm, bss_virt, bss_size,
+    r = vmrange_map(generic_memobj, vmm, bss_virt, bss_size,
                     VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED | VMR_POPULATE, 0);
     if(!PAGE_ALIGN(r)) {
       return r;
     }
   }
 
-  r = vmrange_map(memobj, vmm, USPACE_VA_TOP - 0x40000, USER_STACK_SIZE,
+  r = vmrange_map(generic_memobj, vmm, USPACE_VA_TOP - 0x40000, USER_STACK_SIZE,
                   VMR_READ | VMR_WRITE | VMR_STACK | VMR_PRIVATE | VMR_POPULATE | VMR_FIXED, 0);
   /*r = mmap_core(task_get_rpd(task), USPACE_VA_TOP-0x40000, pframe_number(stack), USER_STACK_SIZE, KMAP_READ | KMAP_WRITE);*/
   if (!PAGE_ALIGN(r))
@@ -220,7 +219,8 @@ static void __server_task_runner(void *data)
   if( i > 0 ) {
     kprintf("[LAUNCHER] Starting %d servers with delay %d. First user (non-NS) PID is %d\n",
             i,delay,2*CONFIG_NRCPUS+3);
-    kconsole->disable();
+    if (kconsole == &vga_console)
+      kconsole->disable();
   }
 
   for(sn=0,a=0;a<i;a++) {

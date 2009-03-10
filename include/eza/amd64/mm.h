@@ -44,12 +44,12 @@ extern uintptr_t __kernel_va_base;
 #define __KERNEL_END_PHYS   ((uintptr_t)&_kernel_end)
 #define KERNEL_END_PHYS     (PAGE_ALIGN(__kernel_first_free_addr))
 #define IDENT_MAP_PAGES     (_mb2b(2) >> PAGE_WIDTH)
-#define USPACE_VA_TOP       (1UL << 40UL) /* 16 Terabytes */
+#define USPACE_VA_TOP       (16UL << 40UL) /* 16 Terabytes */
 #define USPACE_VA_BOTTOM    0x1001000UL
 #define INVALID_ADDRESS           (~0UL)
 #define KERNEL_INVALID_ADDRESS    0x100  /* Address that is never mapped. */
 
-#define USER_STACK_SIZE 4
+#define USER_STACK_SIZE 16
 
 static inline bool is_kernel_page(page_frame_t *page)
 {
@@ -70,8 +70,10 @@ static inline uintptr_t __allocate_vregion(ulong_t npages)
 
 static inline uintptr_t __reserve_uspace_vregion(ulong_t npages)
 {
+  uintptr_t ret = __uspace_top_vaddr;
+  
   __uspace_top_vaddr += (npages << PAGE_WIDTH);
-  return __uspace_top_vaddr;
+  return ret;
 }
 
 extern uintptr_t __utrampoline_virt;

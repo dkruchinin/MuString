@@ -41,6 +41,7 @@
 
 /* Common port flags. */
 #define IPC_PORT_SHUTDOWN     0x800 /**< Port is under shutdown. */
+#define IPC_PORT_ID_INVAL  (~0UL)
 
 #define INSUFFICIENT_MSG_ID  ~(unsigned long)0
 #define WAITQUEUE_MSG_ID     INSUFFICIENT_MSG_ID 

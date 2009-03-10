@@ -360,7 +360,7 @@ long sys_thread_kill(pid_t process,tid_t tid,int sig)
     return -ESRCH;
   }
 
-  if( target->pid != process ) {
+  if( process && (target->pid != process) ) {
     r=-ESRCH;
     goto out;
   }

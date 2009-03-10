@@ -152,7 +152,9 @@ static inline void write_cr3(long val)
                    :: "r" (val));
 }
 
-static inline void load_cr3(pde_t *pde)
+struct __pde;
+
+static inline void load_cr3(struct __pde *pde)
 {
   write_cr3(k2p(pde));
 }

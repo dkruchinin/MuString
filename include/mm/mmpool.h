@@ -30,6 +30,7 @@
 #include <mm/page.h>
 #include <mm/pfalloc.h>
 #include <eza/spinlock.h>
+#include <mlibc/kprintf.h>
 #include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 
