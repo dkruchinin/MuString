@@ -8,6 +8,7 @@
 #include <eza/mutex.h>
 #include <ds/list.h>
 #include <eza/arch/atomic.h>
+#include <eza/arch/bitwise.h>
 #include <eza/timer.h>
 
 typedef long posixid_t;
@@ -32,15 +33,25 @@ typedef enum __posix_obj_type {
 typedef struct __posix_kern_obj {
   posix_obj_type_t type;
   list_node_t l;
-  int objid;
   atomic_t use_counter;
+  int objid,flags;
 } posix_kern_obj_t;
 
 typedef struct __posix_timer {
-  posix_kern_obj_t kpo;
+  posix_kern_obj_t kpo;  /* Must be first ! */
   ktimer_t ktimer;
   ulong_t interval,overrun;
 } posix_timer_t;
+
+#define __POSIX_OBJ_ACTIVE_BIT  0  /**< Target object is in active state */
+
+#define posix_kobj_active(o)      (arch_bit_test(&((posix_kern_obj_t *)(o))->flags,__POSIX_OBJ_ACTIVE_BIT))
+#define activate_posix_kobj(o)    (arch_bit_set(&((posix_kern_obj_t *)(o))->flags,__POSIX_OBJ_ACTIVE_BIT))
+#define deactivate_posix_kobj(o)  (arch_bit_clear(&((posix_kern_obj_t *)(o))->flags,__POSIX_OBJ_ACTIVE_BIT))
+
+#define posix_timer_active(t)      (posix_kobj_active((t))) 
+#define deactivate_posix_timer(t)  deactivate_posix_kobj((t))
+#define activate_posix_timer(t)    activate_posix_kobj((t))
 
 #define LOCK_POSIX_STUFF_W(p)
 #define UNLOCK_POSIX_STUFF_W(p)

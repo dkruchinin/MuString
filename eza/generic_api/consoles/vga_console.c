@@ -110,4 +110,3 @@ static void vga_cons_display_char(const char c)
     interrupts_enable();
   }
 }
-

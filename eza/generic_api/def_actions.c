@@ -33,6 +33,7 @@
 #include <eza/arch/bits.h>
 #include <ds/skiplist.h>
 #include <eza/process.h>
+#include <eza/kconsole.h>
 #include <config.h>
 
 static percpu_def_actions_t cpu_actions[CONFIG_NRCPUS];
@@ -200,7 +201,6 @@ void fire_deffered_actions(void)
     if( !list_is_empty(&acts->pending_actions) ) {
       action=container_of(list_node_first(&acts->pending_actions),
                           deffered_irq_action_t,node);
-
       if( current_task()->priority >= action->priority ) {
         action->__host=NULL;
         skiplist_del(action,deffered_irq_action_t,head,node);

@@ -31,6 +31,7 @@
 #include <eza/security.h>
 #include <eza/usercopy.h>
 #include <eza/posix.h>
+#include <eza/kconsole.h>
 
 static memcache_t *sigq_cache;
 
@@ -111,7 +112,8 @@ static int __send_task_siginfo(task_t *task,usiginfo_t *info,
   }
 
   /* Make sure only one instance of a non-RT signal is present. */
-  if( !rt_signal(sig) && signal_matches(&task->siginfo.pending,sig) ) {
+  if( !rt_signal(sig) &&
+      (signal_matches(&task->siginfo.pending,sig) && !kern_priv)) {
     return 0;
   }
 
@@ -546,15 +548,17 @@ void process_sigitem_private(sigq_item_t *sigitem)
     /* Calculate overrun for this timer,if any. */
     if( next_tick <= system_ticks ) {
       overrun=(system_ticks-ptimer->ktimer.time_x)/ptimer->interval;
-      next_tick=system_ticks%ptimer->interval+ptimer->interval;
+      next_tick=system_ticks+ptimer->interval;
     } else {
       overrun=0;
     }
 
-    /* Rearm this timer. */
+    /* Rearm this timer. We take only active timers into account. */
     ptimer->overrun=overrun;
-    TIMER_RESET_TIME(&ptimer->ktimer,next_tick);
-    add_timer(&ptimer->ktimer);
+
+    if( posix_timer_active(ptimer) ) {
+      modify_timer(&ptimer->ktimer,next_tick);
+    }
   }
   UNLOCK_POSIX_STUFF_W(stuff);
 }

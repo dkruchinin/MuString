@@ -70,6 +70,7 @@ typedef struct __kconsole_type {
   bool is_enabled;
 } kconsole_t;
 
+
 #ifdef CONFIG_DEFCONS_VGA
 #define default_console() (&vga_console)
 #elif defined(CONFIG_DEFCONS_SERIAL)
