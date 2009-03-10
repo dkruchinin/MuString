@@ -47,6 +47,7 @@
 #define EIDRM         40  /**< Identifier removed. */
 #define ENOTSUP       41  /**< Not supported */
 #define ECANCELED     42  /**< Operation canceled. */
+#define EOVERFLOW     43  /**< Value too large to be stored in data type. */
 
 #endif
 

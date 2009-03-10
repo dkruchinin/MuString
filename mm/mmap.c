@@ -127,6 +127,7 @@ static void destroy_vmrange(vmrange_t *vmr)
   memfree(vmr);
 }
 
+
 static vmrange_t *merge_vmranges(vmrange_t *prev_vmr, vmrange_t *next_vmr)
 {
   ASSERT(prev_vmr->parent_vmm == next_vmr->parent_vmm);
@@ -329,7 +330,7 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
               goto clone_failed;
         }
         if (((vmr->flags & VMR_SHARED) && !(flags & VMM_CLONE_SHARED)) ||
-            ((vmr->flags & VMR_WRITE) && (flags & VMM_POPULATE))) {
+            ((vmr->flags & VMR_WRITE) && (flags & VMM_CLONE_POPULATE))) {
           page_frame_t *page = alloc_page(AF_USER | AF_ZERO);
 
           if (!page) {
@@ -357,7 +358,7 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
   clone_failed:
   pagetable_unlock(&src->rpd);
   rwsem_up_write(&src->rwsem);
-  vmm_destroy(dst);
+  //vmm_destroy(dst);
   
   return ret;
 }
@@ -396,8 +397,9 @@ uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, ttree_cursor_t *cursor
     tnode = tnode->successor;
   }
 
-  VMM_VERBOSE("%s: Failed to find free VM range with size = %d pages (%d)\n",
-              vmm_get_name_dbg(vmm), length << PAGE_WIDTH, length);
+  VMM_VERBOSE("%s: Failed to find free VM range with size = %d pages\n",
+              vmm_get_name_dbg(vmm), length);
+  vmranges_print_tree_dbg(vmm);
   return INVALID_ADDRESS;
   
   found:
@@ -452,44 +454,46 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   int err = 0;
   bool was_merged = false;
 
+  kprintf("ADDR: %p, p: %d\n", addr, npages);
   vmr = NULL;
   ASSERT(memobj != NULL);
   ttree_cursor_init(&vmm->vmranges_tree, &cursor);
-  if (!(flags & VMR_PROTO_MASK)
-      || !(flags & (VMR_PRIVATE | VMR_SHARED))
-      || ((flags & (VMR_PRIVATE | VMR_SHARED)) == (VMR_PRIVATE | VMR_SHARED))
-      || !npages
-      || ((flags & VMR_NONE) && ((flags & VMR_PROTO_MASK) != VMR_NONE))
-      || (flags & (VMR_PHYS | VMR_SHARED)) == (VMR_PHYS_VMR_SHARED)) {
+
+  /* general checking */
+  if (!(flags & VMR_PROTO_MASK) /* protocol must be set */
+      || !(flags & (VMR_PRIVATE | VMR_SHARED)) /* private *or* shared flags must be set */
+      || ((flags & (VMR_PRIVATE | VMR_SHARED)) == (VMR_PRIVATE | VMR_SHARED)) /* but they mustn't be set together */
+      || !npages /* npages must not be zero */
+      || ((flags & VMR_NONE) && ((flags & VMR_PROTO_MASK) != VMR_NONE)) /* VMR_NONE must not be set with VMR_SHARED or VMR_PRIVATE */
+      || (flags & (VMR_PHYS | VMR_SHARED)) == (VMR_PHYS | VMR_SHARED)   /* VMR_SHARED can not coexist with VMR_PHYS */
+      || ((flags & VMR_FIXED) && !addr)) /* VMR_FIXED expects that address is specified */
+  {
     err = -EINVAL;
     goto err;
   }
+
+  /* If corresponding memory object doesn't support shared memory facility, return an error. */
   if ((flags & VMR_SHARED) && (memobj->flags & MMO_FLG_NOSHARED)) {
     err = -ENOTSUP;
     goto err;
   }
-  if ((offset + (npages << PAGE_WIDTH)) >= memobj->size) {
-    err = -ENXIO;
-    goto err;
-  }
   if (flags & VMR_PHYS) {
-    flags |= VMR_NOCACHE;
-    if (!trusted_task(current_task())) {
+    flags |= VMR_NOCACHE; /* physical pages must not be cached */
+    if (!trusted_task(current_task())) { /* and task taht maps them must be trusted */
       err = -EPERM;
       goto err;
     }
-    if (!memobj_is_generic(memobj)) {
-      err = -EINVAL;
+
+    /* only generic memory object supports physical mappings */
+    if (memobj->id != GENERIC_MEMOBJ_ID) {
+      err = -ENOTSUP;
       goto err;
     }
   }
   if (addr) {
-    if (!(flags & VMR_PHYS) &&
-        !valid_user_address_range(addr, (npages << PAGE_WIDTH))) {
-      if (flags & VMR_FIXED) {
-        err = -ENOMEM;
-        goto err;
-      }
+    if (!valid_user_address_range(addr, (npages << PAGE_WIDTH)) && (flags & VMR_FIXED)) {
+      err = -ENOMEM;
+      goto err;
     }
 
     vmr = vmrange_find(vmm, addr, addr + (npages << PAGE_WIDTH), &cursor);
@@ -517,11 +521,18 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   }
 
   create_vmrange:
+  if ((memobj->id == GENERIC_MEMOBJ_ID) && !(flags & VMR_PHYS))
+    offset = addr >> PAGE_WIDTH;
+  if ((offset + npages) >= memobj->size) {
+    err = -EOVERFLOW;
+    goto err;
+  }
+
   ttree_cursor_copy(&csr_tmp, &cursor);
-  vmr = NULL;
   if (!ttree_cursor_prev(&csr_tmp)) {
     vmr = ttree_item_from_cursor(&csr_tmp);
-    if (can_be_merged(vmr, memobj, flags) && (vmr->bounds.space_end == addr)) {
+    if (can_be_merged(vmr, memobj, flags) && (vmr->bounds.space_end == addr) &&
+        ((offset - npages) == vmr->offset)) {
       VMM_VERBOSE("%s: Attach [%p, %p) to the top of [%p, %p)\n",
                   vmm_get_name_dbg(vmm), addr, addr + (npages << PAGE_WIDTH),
                   vmr->bounds.space_start, vmr->bounds.space_end);
@@ -537,18 +548,21 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
 
     vmr = ttree_item_from_cursor(&csr_tmp);
     if (can_be_merged(vmr, memobj, flags)) {
-      if (!was_merged && (vmr->bounds.space_start == (addr + (npages << PAGE_WIDTH)))) {
+      if (!was_merged && (vmr->bounds.space_start == (addr + (npages << PAGE_WIDTH))) &&
+          ((offset + npages) == vmr->offset)) {
         VMM_VERBOSE("%s: Attach [%p, %p) to the bottom of [%p, %p)\n",
                     vmm_get_name_dbg(vmm), addr, addr + (npages << PAGE_WIDTH),
                     vmr->bounds.space_start, vmr->bounds.space_end);
-        vmr->offset = addr2pgoff(vmr, addr);
+        vmr->offset = offset;
         vmr->bounds.space_start = addr;
         was_merged = true;
         if (prev)
           prev->hole_size = vmr->bounds.space_start - prev->bounds.space_end;
       }
-      else if (was_merged && (prev->bounds.space_end == vmr->bounds.space_start))
+      if (was_merged && (prev->bounds.space_end == vmr->bounds.space_start) &&
+          (addr2pgoff(prev, prev->bounds.space_end) == vmr->offset)) {
         vmr = merge_vmranges(prev, vmr);
+      }
     }
   }
   if (!was_merged) {
@@ -563,6 +577,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   }
   
   if (flags & (VMR_PHYS | VMR_POPULATE)) {
+    kprintf("I'm here!\n");
     err = memobj_method_call(memobj, populate_pages, vmr, addr, npages);
     if (err) {
       goto err;
@@ -570,7 +585,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   }
   if (!was_merged)
     fix_vmrange_holes(vmm, vmr, &cursor);
-
+  
   VMM_VERBOSE("Address: %p; VM range [%p, %p)\n", addr, vmr->bounds.space_start, vmr->bounds.space_end);
   return (!(flags & VMR_STACK) ? addr : (addr + (npages << PAGE_WIDTH)));
   
@@ -580,6 +595,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
     destroy_vmrange(vmr);
   }
 
+  kprintf("RET ==> %d\n", err);
   return err;
 }
 
@@ -695,6 +711,9 @@ long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, memobj_id_t memo
   long ret;
   vmrange_flags_t vmrflags = (prot & VMR_PROTO_MASK) | (flags << VMR_FLAGS_OFFS);
 
+  vmm_enable_verbose_dbg();
+  kprintf("mmap fucking(%#lx, %#lx) %p of %d (:o %p), PHYS: %d\n", current_task()->pid, current_task()->tid,
+          addr, size, offset, vmrflags & VMR_PHYS);
   if ((offset & PAGE_MASK)
       || ((vmrflags & VMR_FIXED) && (addr & PAGE_MASK))
       || !size) {
@@ -719,6 +738,7 @@ long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, memobj_id_t memo
   rwsem_up_write(&vmm->rwsem);
   
   out:
+  vmm_disable_verbose_dbg();
   if (memobj)
     unpin_memobj(memobj);
   
@@ -788,4 +808,5 @@ void vmranges_print_tree_dbg(vmm_t *vmm)
 {
   ttree_print(&vmm->vmranges_tree, __print_tnode);
 }
+
 #endif /* CONFIG_DEBUG_MM */

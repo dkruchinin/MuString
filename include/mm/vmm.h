@@ -74,7 +74,7 @@ enum {
   VMM_CLONE_POPULATE = 0x02,
   VMM_CLONE_PHYS     = 0x04,
   VMM_CLONE_SHARED   = 0x08,
-}
+};
 
 struct __vmm;
 struct range_bounds {

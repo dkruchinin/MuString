@@ -107,17 +107,23 @@ static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npa
   pgoff_t offs;
   
   if (!(vmr->flags & VMR_PHYS)) {
+    kprintf("WTF?!\n");
     ITERATOR_CTX(page_frame, PF_ITER_LIST) list_ctx;
     
     pages = alloc_pages(npages, AF_ZERO | AF_USER);
     if (!pages)
       return -ENOMEM;
 
-    pfi_list_init(&pfi, &list_ctx, &pages->chain_node, pages->chain_node.prev);    
+    pfi_list_init(&pfi, &list_ctx, &pages->chain_node, pages->chain_node.prev);
   }
   else {
+    page_idx_t idx;
     ITERATOR_CTX(page_frame, PF_ITER_INDEX) index_ctx;
-    pfi_index_init(&pfi, &index_ctx, vmr->offset, vmr->offset + npages - 1);
+
+    idx = addr2pgoff(vmr, addr);
+    kprintf("FI: %d, LI: %d\n", idx, idx + npages - 1);
+    kprintf("mmap to addr: %p -> %p\n", addr, addr + (npages << PAGE_WIDTH));
+    pfi_index_init(&pfi, &index_ctx, idx, idx + npages - 1);
   }
 
   offs = vmr->offset;
@@ -174,7 +180,6 @@ int generic_memobj_initialize(memobj_t *memobj, uint32_t flags)
   ASSERT(memobj->id == GENERIC_MEMOBJ_ID);
   generic_memobj = memobj;
   memobj->mops = &generic_memobj_ops;
-  memobj->size = (USPACE_VA_TOP - USPACE_VA_BOTTOM) >> PAGE_WIDTH;
   atomic_set(&memobj->users_count, 2); /* Generic memobject is immortal */
   memobj->flags = MMO_FLG_NOSHARED | MMO_FLG_IMMORTAL;
 
