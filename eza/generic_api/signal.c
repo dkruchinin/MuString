@@ -529,10 +529,6 @@ void schedule_user_deferred_action(task_t *target,gc_action_t *a,bool force)
   UNLOCK_TASK_SIGNALS_INT(target,is);
 }
 
-extern int __timer_verbose;                     \
-
-int __scount=0;
-
 void process_sigitem_private(sigq_item_t *sigitem)
 {
   if( !sigitem->kern_priv ) {
@@ -561,24 +557,7 @@ void process_sigitem_private(sigq_item_t *sigitem)
     ptimer->overrun=overrun;
 
     if( posix_timer_active(ptimer) ) {
-      char b[192];
-
-      if( !__scount ) {
-        next_tick=system_ticks;
-      }
-
-      __scount++;
-      sprintf(b,"<<<<<<<<<<<<<<< Rearming timer N %d (fired at %d) to %d, INTERVAL=%d , S: %d>>>>>>>>>>>>>>>>>>>>\n",
-              ptimer->kpo.objid,ptimer->ktimer.time_x,next_tick,
-              ptimer->interval,__scount);
-      get_debug_console()->display_string(b);
-      __timer_verbose=1;
-
       modify_timer(&ptimer->ktimer,next_tick);
-      __timer_verbose=0;
-      sprintf(b,"<<<<<<<<<<<<<<< Timer N %d rearmed >>>>>>>>>>>>>>>>>>>>\n",
-              ptimer->kpo.objid);
-      get_debug_console()->display_string(b);
     }
   }
   UNLOCK_POSIX_STUFF_W(stuff);

@@ -293,7 +293,6 @@ void delete_timer(ktimer_t *timer)
     spinlock_unlock(&mtt->lock);
     spinlock_unlock(&sw_timers_lock);
     interrupts_restore(is);
-    get_debug_console()->display_string(" Bad boy !\n");
     return;
   }
 
