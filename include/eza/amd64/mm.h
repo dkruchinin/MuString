@@ -49,7 +49,7 @@ extern uintptr_t __kernel_va_base;
 #define INVALID_ADDRESS           (~0UL)
 #define KERNEL_INVALID_ADDRESS    0x100  /* Address that is never mapped. */
 
-#define USER_STACK_SIZE 4
+#define USER_STACK_SIZE 16
 
 static inline bool is_kernel_page(page_frame_t *page)
 {

@@ -91,7 +91,7 @@ static eza_sched_taskdata_t *__allocate_task_sched_data(void)
 }
 
 int sched_verbose=0;
- 
+
 static eza_sched_cpudata_t *__allocate_cpu_sched_data(cpu_id_t cpu) {
   /* TODO: [mt] Allocate memory via slabs !!!  */
   page_frame_t *page = alloc_pages(16, 0);
@@ -490,7 +490,7 @@ static int __change_task_state(task_t *task,task_state_t new_state,
         }
         break;
       case TASK_STATE_SLEEPING:
-        if( deliverable_signals_present(&task->siginfo) ) {
+        if( task_was_interrupted(task) ) {
           r=-EINTR;
           break;
         }

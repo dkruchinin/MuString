@@ -30,6 +30,12 @@ config TRACE_CURRENT
        By turning this option on kernel stores TID of the currently executed task
        in a special array variable defined as follows:
             tid_t __current_cpu_task[CONFIG_NRCPUS]
+
+config THREADS_PER_PROCESS
+       int "Maximum number of threads for a userspace process."
+       range 4  128
+       default 64
+
 endmenu
 
 menu "Realtime timers"

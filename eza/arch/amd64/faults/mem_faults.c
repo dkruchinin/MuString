@@ -160,7 +160,7 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
       return;
     }
 
-    vmranges_print_tree_dbg(vmm);
+//    vmranges_print_tree_dbg(vmm);
     kprintf_fault("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
             cpu_id(), stack_frame->error_code);
   }
@@ -190,6 +190,7 @@ stop_cpu:
   }
 #endif /* CONFIG_DUMP_USTACK */
   interrupts_disable();
+  for(;;);
 
 send_sigsegv:
   /* Send user the SIGSEGV signal. */

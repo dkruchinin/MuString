@@ -282,14 +282,13 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
               reason,retcode,
               current->pid,current->tid,
               kstack);
-  kprintf_dbg("[UWORKS]: UWORKS=0x%X\n",
-              uworks);
+  kprintf_dbg("[UWORKS]: UWORKS=0x%X\n",uworks);
 
   /* First, check for pending disintegration requests. */
   if( uworks & ARCH_CTX_UWORKS_DISINT_REQ_MASK ) {
-    if( current->uworks_data.cancellation_pending ) {
-      /* Cancellation request.
-       */
+    if( current->uworks_data.flags | DAF_EXIT_PENDING ) {
+      do_exit(current->uworks_data.exit_value,0,0);
+    } else if( current->uworks_data.flags & DAF_CANCELLATION_PENDING ) {
       __handle_cancellation_request(reason,kstack);
       clear_task_disintegration_request(current);
     } else {
