@@ -86,7 +86,8 @@
 #define SAVE_MM \
   mov %rsp, %r12;                               \
   sub $512,%rsp;                                \
-  and $0xfffffffffffffff0, %rsp;                \
+  movq $0xfffffffffffffff0, %r14;               \
+  andq %r14,%rsp;                               \
   fxsave (%rsp);                                \
   pushq %r12
 

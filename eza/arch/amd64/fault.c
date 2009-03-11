@@ -89,8 +89,8 @@ void install_fault_handlers(void)
 
   /* Install all known fault handlers. */
   while( fd->handler ) {
-    r = install_trap_gate(fd->slot,(uintptr_t)fd->handler,
-                          PROT_RING_0,fd->ist);
+    r = install_interrupt_gate(fd->slot,(uintptr_t)fd->handler,
+                               PROT_RING_0,fd->ist);
     if( r != 0 ) {
       panic( "Can't install fault handler #%d", fd->slot );
     }
