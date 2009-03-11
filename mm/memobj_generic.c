@@ -121,8 +121,8 @@ static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npa
     ITERATOR_CTX(page_frame, PF_ITER_INDEX) index_ctx;
 
     idx = addr2pgoff(vmr, addr);
-    kprintf("FI: %d, LI: %d\n", idx, idx + npages - 1);
-    kprintf("mmap to addr: %p -> %p\n", addr, addr + (npages << PAGE_WIDTH));
+    //kprintf("FI: %d, LI: %d\n", idx, idx + npages - 1);
+    //kprintf("mmap to addr: %p -> %p\n", addr, addr + (npages << PAGE_WIDTH));
     pfi_index_init(&pfi, &index_ctx, idx, idx + npages - 1);
   }
 
