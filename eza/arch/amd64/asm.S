@@ -283,6 +283,12 @@ divide_by_zero_fault_handler:
   pushq %rax
   movl $0x0,%eax
 common_exception_path:
+  /* Since %rax is on the stack, we must add 8 bytes. */
+  cmp $KERNEL_SELECTOR(KTEXT_DES),8+INT_STACK_FRAME_CS_OFFT(%rsp)
+  je common_exception_path_kern
+  swapgs
+common_exception_path_kern:
+  sti
   SAVE_ALL
   /* No we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to
@@ -292,9 +298,29 @@ common_exception_path:
   mov %r12, %rdi;
   add $SAVED_GPR_SIZE + 8, %rdi
 
-  /* Now we call call the handler. */
+  /* Now we can call the handler. */
   call *hi_level_fault_handlers(,%rax,8)
+
+  /* Now let's see if we need to check for userspace works. */
+  mov (%rsp), %rbx
+  add $INT_FULL_OFFSET_TO_CS,%rbx
+  cmp $KERNEL_SELECTOR(KTEXT_DES),(%rbx)
+  je dont_check_common_exception_uworks
+
+  /* Process deferred userspace-related works */
+  movq $__XCPT_ERR_UWORK, %rdi
+  xorq %rsi, %rsi
+  movq %rsp, %rdx
+  call handle_uworks
+
+dont_check_common_exception_uworks:
   RESTORE_ALL
+  cli
+  cmp $KERNEL_SELECTOR(KTEXT_DES),8+INT_STACK_FRAME_CS_OFFT(%rsp)
+  je common_exception_path_kern_ret
+  swapgs
+common_exception_path_kern_ret:
+  sti
   popq %rax
   iretq
 
