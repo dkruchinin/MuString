@@ -496,7 +496,6 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   int err = 0;
   bool was_merged = false;
 
-  kprintf("MMAP: %p, %d, %p, ph: %d\n", addr, offset, npages, flags & VMR_PHYS);
   vmr = NULL;
   ASSERT(memobj != NULL);
   ttree_cursor_init(&vmm->vmranges_tree, &cursor);
@@ -673,13 +672,26 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
 
   ASSERT(!(va_from & PAGE_MASK));
   ttree_cursor_init(&vmm->vmranges_tree, &cursor);
-  vmr = vmrange_find(vmm, va_from, va_from + PAGE_SIZE, &cursor);
-  if (!vmr) {
+
+  /*
+   * At first try to find a diapason containing range [va_from, va_from + PAGE_SIZE),
+   * i.e. minimum starting range. If it wasn't found, try get the next one in the tree
+   * using T*-tree cursor. Due its nature it will return the next item in the tree(if exists)
+   * after position where [va_from, va_from + PAGE_SIZE) could be. If such item is found and
+   * if it has appropriate bounds, it is the very first VM range covered by given diapason.
+   */
+  vmr = vmrange_find(vmm, va_from, va_to, &cursor);
+  if (!vmr) {    
     if (!ttree_cursor_next(&cursor))
       vmr = ttree_item_from_cursor(&cursor);
     else
       return 0;
   }
+
+  /*
+   * If munmapped range is fully covered by a given one,
+   * we have to split it.
+   */
   if ((vmr->bounds.space_start < va_from) &&
       (vmr->bounds.space_end > va_to)) {
     if (!split_vmrange(vmr, va_from, va_to)) {
@@ -688,17 +700,27 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
       return -ENOMEM;
     }
 
+    pagetable_lock(&vmm->rpd);
     munmap_core(&vmm->rpd, va_from, npages, true);
-    return 0;
+    pagetable_unlock(&vmm->rpd);
+    
+    return 0; /* done */
   }
   else if (va_from > vmr->bounds.space_start) {
     uintptr_t new_end = va_from;
-    
+
+    /*
+     * va_from may be greater than the bottom virtual address of
+     * given range. If so, range's top address must be decreased 
+     * regarding the new top address.
+     */
+    pagetable_lock(&vmm->rpd);
     munmap_core(&vmm->rpd, va_from,
                 (vmr->bounds.space_end - va_from) >> PAGE_WIDTH, true);
+    pagetable_unlock(&vmm->rpd);
     va_from = vmr->bounds.space_end;
     vmr->bounds.space_end = new_end;
-    vmr_prev = vmr;
+    vmr_prev = vmr; /* Remember this VM range as a previous. Later we'll fix its hole size. */
     if (ttree_cursor_next(&cursor) < 0) {
       vmr = NULL;
       goto out;
@@ -706,7 +728,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
 
     vmr = ttree_item_from_cursor(&cursor);
   }
-  else {
+  else { /* previous VM range isn't defined */
     ttree_cursor_t csr_prev;
 
     ttree_cursor_copy(&csr_prev, &cursor);
@@ -717,6 +739,13 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
     if (va_from >= va_to)
       break;
 
+    /*
+     * va_to could be less than the top address of given VM range.
+     * This means that
+     * a) Given VM range is the last one
+     * b) The range's bottom virtual address must be decreased and become
+     *    equal to va_to value.
+     */
     if (unlikely(va_to < vmr->bounds.space_end)) {      
       vmr->offset = addr2pgoff(vmr, va_to);
       vmr->bounds.space_start = va_to;
@@ -724,22 +753,34 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
       break;
     }
 
-    munmap_core(&vmm->rpd, va_from, (vmr->bounds.space_end - va_from) >> PAGE_WIDTH, true);        
+    pagetable_lock(&vmm->rpd);
+    munmap_core(&vmm->rpd, va_from, (vmr->bounds.space_end - va_from) >> PAGE_WIDTH, true);
+    pagetable_unlock(&vmm->rpd);
     ttree_delete_placeful(&cursor);
     destroy_vmrange(vmr);
     vmr = NULL;
     if (cursor.state != TT_CSR_TIED)
       break;
-    
+
+    /*
+     * Due the nature of T*-tree, after deletion by the cursor is done,
+     * the cursor points to the next item in a tree(if exists).
+     * So we can safely fetch an item from the cursor(cursor validation was done above).
+     */
     vmr = ttree_item_from_cursor(&cursor);
     va_from = vmr->bounds.space_start;
   }
 
   out:
-  if (!vmr && (cursor.state == TT_CSR_TIED))
+  if (!vmr && (cursor.state == TT_CSR_TIED)) {
+    /*
+     * If the next VM range(next after just removed) is not defined,
+     * try to fetch it out.
+     */
     vmr = ttree_item_from_cursor(&cursor);
+  }
   if (likely(vmr_prev != NULL)) {
-    if (unlikely(vmr == NULL))
+    if (unlikely(vmr == NULL)) /* vmr_prev is highest VM range in an address space */
       vmr_prev->hole_size = USPACE_VA_TOP - vmr_prev->bounds.space_end;
     else
       vmr_prev->hole_size = vmr->bounds.space_start - vmr_prev->bounds.space_end;
@@ -774,6 +815,11 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
     ret = -EFAULT;
     goto out;
   }
+
+  /*
+   * If fault was caused by write attemption and VM range that was found
+   * has VMR_WRITE flag unset or VMR_NONE flag set, fault can not be handled.
+   */
   if (((pfmask & PFLT_WRITE) &&
        ((vmr->flags & (VMR_READ | VMR_WRITE)) == VMR_READ))
       || (vmr->flags & VMR_NONE)) {
@@ -784,6 +830,7 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
   ASSERT(vmr->memobj != NULL);
   memobj = vmr->memobj;
   ret = memobj_method_call(memobj, handle_page_fault, vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
+  
   out:
   rwsem_up_read(&vmm->rwsem);
   return ret;
@@ -796,6 +843,12 @@ long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, memobj_id_t memo
   long ret;
   vmrange_flags_t vmrflags = (prot & VMR_PROTO_MASK) | (flags << VMR_FLAGS_OFFS);
 
+  /*
+   * Basic rules:
+   * 1) offset must be page aligned
+   * 2) if VMR_FIXED is set, address must be page aligned
+   * 3) size mustn't be zero.
+   */
   if ((offset & PAGE_MASK)
       || ((vmrflags & VMR_FIXED) && (addr & PAGE_MASK))
       || !size) {
@@ -831,6 +884,7 @@ int sys_munmap(uintptr_t addr, size_t length)
   vmm_t *vmm = current_task()->task_mm;
   int ret;
 
+  /* address must be page aligned and length must be specified */
   if (!length || (addr & PAGE_MASK))
     return -EINVAL;
   
