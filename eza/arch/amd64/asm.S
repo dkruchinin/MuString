@@ -306,7 +306,7 @@ error_code_exception_path:
   je error_code_exception_path_kern
   swapgs
 error_code_exception_path_kern:
-  sti
+  sti  
   SAVE_ALL
   /* Now we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to
