@@ -29,6 +29,7 @@
 #include <eza/arch/page.h>
 #include <eza/arch/interrupt.h>
 #include <eza/arch/context.h>
+#include <eza/task.h>
 
 enum __fault_ids {
   DE_FAULT = 0, /* Divide-by-Zero-Error */
@@ -82,6 +83,21 @@ extern void security_exception_fault_handler(void);
 void install_fault_handlers(void);
 void fault_dump_regs(regs_t *r, ulong_t rip);
 void show_stack_trace(uintptr_t stack);
+
+static inline struct __int_stackframe *arch_get_userspace_stackframe(task_t *task)
+{
+  return (struct __int_stackframe*)(task->kernel_stack.high_address-sizeof(struct __int_stackframe));
+}
+
+static inline long get_userspace_stack(task_t *task)
+{
+  return arch_get_userspace_stackframe(task)->old_rsp;
+}
+
+static inline long get_userspace_ip(task_t *task)
+{
+  return arch_get_userspace_stackframe(task)->rip;
+}
 
 #define kernel_fault(stack_frame) \
     (stack_frame->cs == gdtselector(KTEXT_DES))
