@@ -135,7 +135,6 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 
   get_fault_address(invalid_address);
   if(PFAULT_SVISOR(stack_frame->error_code)) {
-    for (;;);
     goto kernel_fault;
   }
   else {
@@ -159,14 +158,15 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
     if (!ret) {
       return;
     }
-    
-    kprintf_fault("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
-            cpu_id(), stack_frame->error_code);
   }
   if (current_task()->siginfo.handlers->actions[SIGSEGV].a.sa_sigaction != SIG_DFL)
     goto send_sigsegv;
   if( __send_sigsegv_on_faults )
     goto stop_cpu;
+
+  kprintf_fault("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
+                cpu_id(), stack_frame->error_code);
+  goto stop_cpu;
 
 kernel_fault:
   /* First, try to fix this exception. */
@@ -198,8 +198,6 @@ send_sigsegv:
   siginfo.si_code=SEGV_MAPERR;
   siginfo.si_addr=(void *)invalid_address;
 
-  kprintf_fault( "[F]: Sending SIGSEGV.\n" );
   send_task_siginfo(faulter,&siginfo,true,NULL);
-  kprintf_fault( "[F]: Done !\n" );
 }
 
