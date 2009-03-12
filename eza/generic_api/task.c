@@ -37,6 +37,7 @@
 #include <eza/sigqueue.h>
 #include <eza/posix.h>
 #include <eza/arch/scheduler.h>
+#include <eza/security.h>
 #include <mlibc/types.h>
 #include <eza/process.h>
 #include <config.h>
@@ -346,8 +347,8 @@ static long __setup_posix(task_t *task,task_t *parent,
   }
 }
 
-static int __initialize_task_mm(task_t *orig, task_t *target,
-                                task_creation_flags_t flags, task_privelege_t priv)
+static int __initialize_task_mm(task_t *orig, task_t *target, task_creation_flags_t flags,
+                                task_privelege_t priv, task_creation_attrs_t *attrs)
 {
   int ret = 0;
   
@@ -364,12 +365,31 @@ static int __initialize_task_mm(task_t *orig, task_t *target,
     else {
       map_kernel_area(target->task_mm); /* FIXME DK: remove after debugging */
       ret = vm_mandmaps_roll(target->task_mm);
-#if 0
-      vmm_clone();
-#endif
+      if (ret) {
+        memfree(target->task_mm);
+        goto out;
+      }
+      if (orig->priv != TPL_KERNEL) {
+        ret = vmm_clone(target->task_mm, orig->task_mm, (flags >> TASK_MMCLONE_SHIFT) & VMM_CLONE_MASK);
+        if (ret) {
+          memfree(target->task_mm);
+          goto out;
+        }
+        if (attrs) {
+          if (!attrs->exec_attrs.stack) {
+            attrs->exec_attrs.stack = orig->ustack;
+            target->ustack = orig->ustack;
+          }
+          if (!attrs->exec_attrs.per_task_data) {
+            attrs->exec_attrs.per_task_data = orig->ptd;
+            target->ptd = orig->ptd;
+          }
+        }
+      }
     }
   }
 
+  out:
   return ret;
 }
 
@@ -383,10 +403,14 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   tid_t tid;
   task_limits_t *limits;
 
-  if( flags && !parent ) {
+  if ((flags && !parent) ||
+      ((flags & CLONE_MM) && (flags & (CLONE_COW | CLONE_POPULATE))) ||
+      ((flags & (CLONE_COW | CLONE_POPULATE)) == (CLONE_COW | CLONE_POPULATE))) {
     return -EINVAL;
   }
-
+  if ((flags & CLONE_PHYS) && parent && !trusted_task(parent))
+    return -EPERM;
+  
   /* TODO: [mt] Add memory limit check. */
   /* goto task_create_fault; */
   r=__alloc_pid_and_tid(parent,flags,&pid,&tid,priv);
@@ -408,7 +432,7 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
     goto free_task;
   }
 
-  r = __initialize_task_mm(parent,task,flags,priv);
+  r = __initialize_task_mm(parent, task, flags, priv, attrs);
   if( r != 0 ) {
     goto free_stack;
   }

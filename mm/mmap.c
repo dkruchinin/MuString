@@ -75,7 +75,7 @@ static int __vmranges_cmp(void *r1, void *r2)
   if ((long)(range2->space_start - range1->space_end) < 0) {
     if ((long)(range1->space_start - range2->space_end) >= 0)
       return 1;
-     
+
     return 0;
   }
   else
@@ -115,10 +115,10 @@ static vmrange_t *create_vmrange(vmm_t *parent_vmm, memobj_t *memobj,  uintptr_t
   vmr->memobj = memobj;
   vmr->hole_size = 0;
   vmr->offset = offset;
-  
-  parent_vmm->num_vmrs++;  
+
+  parent_vmm->num_vmrs++;
   pin_memobj(memobj);
-  
+
   return vmr;
 }
 
@@ -184,7 +184,7 @@ static vmrange_t *split_vmrange(vmrange_t *vmrange, uintptr_t va_from, uintptr_t
               vmm_get_name_dbg(vmrange->parent_vmm), vmrange->bounds.space_start,
               vmrange->bounds.space_end, vmrange->bounds.space_start,
               va_from, va_to, vmrange->bounds.space_end);
-  
+
   vmrange->bounds.space_end = va_from;
 
   /* fix holes size regarding the changes */
@@ -212,7 +212,7 @@ static void fix_vmrange_holes_after_insertion(vmm_t *vmm, vmrange_t *vmrange, tt
     vmr->hole_size = vmrange->bounds.space_start - vmr->bounds.space_end;
   }
 
-  ttree_cursor_copy(&csr, cursor);  
+  ttree_cursor_copy(&csr, cursor);
   if (!ttree_cursor_next(&csr)) {
     vmr = ttree_item_from_cursor(&csr);
     VMM_VERBOSE("%s(N) [%p, %p): old hole size: %ld, new hole size: %ld\n",
@@ -225,7 +225,7 @@ static void fix_vmrange_holes_after_insertion(vmm_t *vmm, vmrange_t *vmrange, tt
      * If next VM range doensn't exist, calculate hole size from user-space
      * top virtual address.
      */
-    
+
     VMM_VERBOSE("%s(L) [%p, %p): old hole size: %ld, new hole size: %ld\n",
                 vmm_get_name_dbg(vmm), vmrange->bounds.space_start, vmrange->bounds.space_end,
                 vmrange->hole_size, USPACE_VA_TOP - vmrange->bounds.space_end);
@@ -238,7 +238,7 @@ void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name)
 #ifndef CONFIG_TEST
   ASSERT(!valid_user_address_range(mandmap->virt_addr, mandmap->num_pages << PAGE_WIDTH));
 #endif /* CONFIG_TEST */
-  
+
   mandmap->name = (char *)mandmap_name;
   mandmap->flags &= KMAP_FLAGS_MASK;
   list_add2tail(&__mandmaps_lst, &mandmap->node);
@@ -311,13 +311,13 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
   pde_t *pde;
   page_idx_t pidx;
   vmrange_flags_t new_vmr_flags;
-  
+
   ASSERT(dst != src);
   rwsem_down_write(&src->rwsem);
   pagetable_lock(&src->rpd);
   tnode = ttree_tnode_leftmost(src->vmranges_tree.root);
   ASSERT(tnode != NULL);
-  
+
   while (tnode) {
     tnode_for_each_index(tnode, i) {
       vmr = ttree_key2item(&src->vmranges_tree, tnode_key(tnode, i));
@@ -328,7 +328,7 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
       }
       else if ((vmr->flags & VMR_PHYS) && !(flags & VMM_CLONE_PHYS))
         continue;
-      
+
       new_vmr = create_vmrange(dst, vmr->memobj, vmr->bounds.space_start,
                                (vmr->bounds.space_end - vmr->bounds.space_start) >> PAGE_WIDTH,
                                vmr->offset, new_vmr_flags);
@@ -368,8 +368,14 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
           copy_page_frame(page, pframe_by_number(pidx));
           pidx = pframe_number(page);
         }
+        else if (!(vmr->flags & VMR_SHARED) && (flags & VMM_CLONE_COW) && (vmr->flags & VMR_WRITE)) {
+          page_frame_t *page = pframe_by_number(pidx);
 
-        ret = mmap_core(&dst->rpd, addr, pidx, 1, pde_get_flags(pde), true);
+          new_vmr_flags &= ~VMR_WRITE;
+          page->flags |= PF_COW;
+        }
+
+        ret = mmap_core(&dst->rpd, addr, pidx, 1, new_vmr_flags & KMAP_FLAGS_MASK, true);
         if (ret)
           goto clone_failed;
       }
@@ -386,18 +392,18 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
   pagetable_unlock(&src->rpd);
   rwsem_up_write(&src->rwsem);
   //vmm_destroy(dst);
-  
+
   return ret;
 }
 
 /* Find room for VM range with length "length". */
 uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, ttree_cursor_t *cursor)
-{    
+{
   uintptr_t start = USPACE_VA_BOTTOM;
   vmrange_t *vmr;
   ttree_node_t *tnode = NULL;
   int i = 0;
-  
+
   tnode = ttree_tnode_leftmost(vmm->vmranges_tree.root);
   if (unlikely(tnode == NULL))
     goto found;
@@ -405,7 +411,7 @@ uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, ttree_cursor_t *cursor
   /*
    * At first check if there is enough space between
    * the start of the very first vmrange and the bottom
-   * user-space virtual address. If so, we're really lucky guys ;)   
+   * user-space virtual address. If so, we're really lucky guys ;)
    */
   vmr = ttree_key2item(&vmm->vmranges_tree, tnode_key_min(tnode));
   if ((start - vmr->bounds.space_start) >= length) {
@@ -417,7 +423,7 @@ uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, ttree_cursor_t *cursor
    * Otherwise browse through all VM ranges in the tree starting from the
    * lefmost range until a big enough room is found.
    */
-  while (tnode) {    
+  while (tnode) {
     tnode_for_each_index(tnode, i) {
       vmr = ttree_key2item(&vmm->vmranges_tree, tnode_key(tnode, i));
       if (vmr->hole_size >= length) {
@@ -432,7 +438,7 @@ uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, ttree_cursor_t *cursor
   VMM_VERBOSE("%s: Failed to find free VM range with size = %d pages\n",
               vmm_get_name_dbg(vmm), length);
   return INVALID_ADDRESS; /* Woops, nothing was found. */
-  
+
   found:
   if (cursor) {
     ttree_cursor_init(&vmm->vmranges_tree, cursor);
@@ -443,7 +449,7 @@ uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, ttree_cursor_t *cursor
        * by, must point to the next position after the one that was found.
        * Moreover, the cursor must be in pending state.
        */
-      
+
       cursor->tnode = tnode;
       cursor->idx = i;
       cursor->side = TNODE_BOUND;
@@ -576,7 +582,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
    * specified by the user.
    */
   if ((memobj->id == GENERIC_MEMOBJ_ID) && !(flags & VMR_PHYS))
-    offset = addr >> PAGE_WIDTH;  
+    offset = addr >> PAGE_WIDTH;
   if ((offset + npages) >= memobj->size) {
     err = -EOVERFLOW;
     goto err;
@@ -637,10 +643,10 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
       err = -ENOMEM;
       goto err;
     }
-    
+
     ttree_insert_placeful(&cursor, vmr);
     fix_vmrange_holes_after_insertion(vmm, vmr, &cursor);
-  }  
+  }
   if (flags & (VMR_PHYS | VMR_POPULATE)) {
     err = memobj_method_call(memobj, populate_pages, vmr, addr, npages);
     if (err) {
@@ -653,7 +659,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
    * the top address of the VM range.
    */
   return (!(flags & VMR_STACK) ? addr : (addr + (npages << PAGE_WIDTH)));
-  
+
   err:
   if (vmr) {
     ttree_delete_placeful(&cursor);
@@ -681,7 +687,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
    * if it has appropriate bounds, it is the very first VM range covered by given diapason.
    */
   vmr = vmrange_find(vmm, va_from, va_to, &cursor);
-  if (!vmr) {    
+  if (!vmr) {
     if (!ttree_cursor_next(&cursor))
       vmr = ttree_item_from_cursor(&cursor);
     else
@@ -703,7 +709,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
     pagetable_lock(&vmm->rpd);
     munmap_core(&vmm->rpd, va_from, npages, true);
     pagetable_unlock(&vmm->rpd);
-    
+
     return 0; /* done */
   }
   else if (va_from > vmr->bounds.space_start) {
@@ -735,7 +741,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
     if (!ttree_cursor_prev(&csr_prev))
       vmr_prev = ttree_item_from_cursor(&csr_prev);
   }
-  for (;;) {    
+  for (;;) {
     if (va_from >= va_to)
       break;
 
@@ -746,7 +752,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
      * b) The range's bottom virtual address must be decreased and become
      *    equal to va_to value.
      */
-    if (unlikely(va_to < vmr->bounds.space_end)) {      
+    if (unlikely(va_to < vmr->bounds.space_end)) {
       vmr->offset = addr2pgoff(vmr, va_to);
       vmr->bounds.space_start = va_to;
       munmap_core(&vmm->rpd, va_from, ((va_to - va_from) >> PAGE_WIDTH), true);
@@ -785,7 +791,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
     else
       vmr_prev->hole_size = vmr->bounds.space_start - vmr_prev->bounds.space_end;
   }
-  
+
   return 0;
 }
 
@@ -808,7 +814,7 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
   vmrange_t *vmr;
   int ret;
   memobj_t *memobj;
-  
+
   rwsem_down_read(&vmm->rwsem);
   vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(fault_addr), fault_addr + PAGE_SIZE, NULL);
   if (!vmr) {
@@ -830,7 +836,7 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
   ASSERT(vmr->memobj != NULL);
   memobj = vmr->memobj;
   ret = memobj_method_call(memobj, handle_page_fault, vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
-  
+
   out:
   rwsem_up_read(&vmm->rwsem);
   return ret;
@@ -857,7 +863,7 @@ long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, memobj_id_t memo
   }
   if ((vmrflags & VMR_ANON) || (memobj_id == GENERIC_MEMOBJ_ID)) {
     memobj = memobj_pin_by_id(GENERIC_MEMOBJ_ID);
-    ASSERT(memobj != NULL);    
+    ASSERT(memobj != NULL);
   }
   else {
     memobj = memobj_pin_by_id(memobj_id);
@@ -866,16 +872,16 @@ long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, memobj_id_t memo
       goto out;
     }
   }
-  
+
   rwsem_down_write(&vmm->rwsem);
   ret = vmrange_map(memobj, vmm, addr, PAGE_ALIGN(size) >> PAGE_WIDTH,
                     vmrflags, PAGE_ALIGN(offset) >> PAGE_WIDTH);
   rwsem_up_write(&vmm->rwsem);
-  
+
   out:
   if (memobj)
     unpin_memobj(memobj);
-  
+
   return ret;
 }
 
@@ -887,7 +893,7 @@ int sys_munmap(uintptr_t addr, size_t length)
   /* address must be page aligned and length must be specified */
   if (!length || (addr & PAGE_MASK))
     return -EINVAL;
-  
+
   length = PAGE_ALIGN(length);
   if (!valid_user_address_range(addr, length))
     return -EINVAL;
@@ -906,8 +912,8 @@ void vmm_set_name_from_pid_dbg(vmm_t *vmm, unsigned long pid)
 {
   if (is_tid(pid))
     pid = TID_TO_PIDBASE(pid);
-  
-  memset(vmm->name_dbg, 0, VMM_DBG_NAME_LEN);  
+
+  memset(vmm->name_dbg, 0, VMM_DBG_NAME_LEN);
   snprintf(vmm->name_dbg, VMM_DBG_NAME_LEN, "VMM [PID: %ld]", pid);
 }
 

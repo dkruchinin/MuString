@@ -43,8 +43,10 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
     page_frame_t *pf;
 
     pf = alloc_page(AF_USER | AF_ZERO);
-    if (!pf)
-      return -ENOMEM;
+    if (!pf) {
+      ret = -ENOMEM;
+      goto out;
+    }
 
     /*
      * Simple "not-present" fault is handled by allocating a new page and
@@ -59,41 +61,49 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
        */
       pagetable_unlock(&vmm->rpd);
       free_page(pf);
-      return 0;
+      goto out;
     }
 
     ret = mmap_core(&vmm->rpd, addr, pframe_number(pf),
-                    1, vmr->flags & VMR_PROTO_MASK, true);
-    /* FIXME DK: remove this assertion after debugging */
-    ASSERT(ptable_ops.vaddr2page_idx(&vmm->rpd, addr, NULL) == pframe_number(pf));
+                    1, vmr->flags & KMAP_FLAGS_MASK, true);
     pagetable_unlock(&vmm->rpd);    
     if (ret)
       free_page(pf);
   }
-  else  { /* protection fault */
-    ret = -ENOTSUP;
-#if 0 /* FIXME DK: implement this stuff properly */
-    pde_t *pde = NULL;
-
-    /*
-     * FIXME DK: do I really need handle the cases when RW page was mapped
-     * with RO priviledges? And what about COW?
-     */
-    ASSERT(!(pfmask & PFLT_WRITE)); /* Debug */
+  else  {
+    pde_t *pde;
+    page_frame_t *page;
+    page_idx_t pidx;
+    
     pagetable_lock(&vmm->rpd);
-    ptable_ops.vaddr2page_idx(&vmm->rpd, addr, &pde);
-    ASSERT(pde != NULL);
-    if (unlikely(ptable_to_kmap_flags(pde->flags) & VMR_WRITE)) {
+    pidx = ptable_ops.vaddr2page_idx(&vmm->rpd, addr, &pde);
+    ASSERT(pidx != PAGE_IDX_INVAL);
+    if (unlikely(ptable_to_kmap_flags(pde_get_flags(pde)) & KMAP_WRITE)) {
       pagetable_unlock(&vmm->rpd);
-      return 0;
+      goto out;
     }
 
-    /* TODO DK: ... and what about caching, a? */
-    ret = mmap_core(&vmm->rpd, addr, idx, 1, vmr->flags & VMR_PROTO_MASK, true);
-    pagetable_unlock();
-#endif /* DEAD CODE */
+    page = pframe_by_number(pidx);
+    if (page->flags & PF_COW) {
+      page_frame_t *new_page = alloc_page(AF_USER);
+
+      if (!new_page) {
+        pagetable_unlock(&vmm->rpd);
+        ret = -ENOMEM;
+        goto out;
+      }
+
+      copy_page_frame(new_page, page);
+      unpin_page_frame(page);
+      page = new_page;
+    }
+
+    ret = mmap_core(&vmm->rpd, addr, pframe_number(page), 1,
+                    vmr->flags & KMAP_FLAGS_MASK, true);
+    pagetable_unlock(&vmm->rpd);
   }
 
+  out:
   return ret;
 }
 
@@ -107,7 +117,6 @@ static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npa
   pgoff_t offs;
   
   if (!(vmr->flags & VMR_PHYS)) {
-    kprintf("WTF?!\n");
     ITERATOR_CTX(page_frame, PF_ITER_LIST) list_ctx;
     
     pages = alloc_pages(npages, AF_ZERO | AF_USER);
@@ -121,8 +130,6 @@ static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npa
     ITERATOR_CTX(page_frame, PF_ITER_INDEX) index_ctx;
 
     idx = addr2pgoff(vmr, addr);
-    //kprintf("FI: %d, LI: %d\n", idx, idx + npages - 1);
-    //kprintf("mmap to addr: %p -> %p\n", addr, addr + (npages << PAGE_WIDTH));
     pfi_index_init(&pfi, &index_ctx, idx, idx + npages - 1);
   }
 
