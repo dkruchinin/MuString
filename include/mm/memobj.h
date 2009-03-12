@@ -1,3 +1,26 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
+ *
+ * include/mm/memobj.h - Memory objects API.
+ *
+ */
+
 #ifndef __MEMOBJ_H__
 #define __MEMOBJ_H__
 
@@ -5,24 +28,14 @@
 #include <ds/ttree.h>
 #include <ds/list.h>
 #include <mm/page.h>
+#include <mm/mman.h>
 #include <mlibc/types.h>
 
 #ifndef CONFIG_MEMOBJS_MAX
 #define CONFIG_MEMOBJS_MAX (PAGE_SIZE << 4)
 #endif /* CONFIG_MEMOBJS_MAX */
 
-typedef unsigned long memobj_id_t;
-
-typedef enum __memobj_nature {
-  MMO_NTR_GENERIC = 1,
-  MMO_NTR_COW,
-  MMO_NTR_SRV,
-  MMO_NTR_PAGECACHE,
-  MMO_NTR_PROXY,
-  MMO_NTR_STATIC,  
-} memobj_nature_t;
-
-enum { /* memory object flags */
+typedef enum __memobj_flags { /* memory object flags */
   MMO_FLG_SPIRIT     = 0x01,
   MMO_FLG_STICKY     = 0x02,
   MMO_FLG_LEECH      = 0x04,
@@ -31,9 +44,11 @@ enum { /* memory object flags */
   MMO_FLG_BACKENDED  = 0x20,
   MMO_FLG_NOSHARED   = 0x40,
   MMO_FLG_INACTIVE   = 0x80,
-};
+} memobj_flags_t;
 
-#define MMO_LIVE_MASK (MMO_FLG_SPIRIT | MMO_FLG_STICKY | MMO_FLG_LEECH | MMO_FLG_IMMORTAL)
+#define MMO_LIFE_MASK   (MMO_FLG_SPIRIT | MMO_FLG_STICKY | MMO_FLG_LEECH | MMO_FLG_IMMORTAL)
+#define MMO_FLAGS_MASK  (MMO_FLG_DPC | MMO_FLG_NOSHARED | MMO_FLG_BACKEND)
+#define MMO_FLAGS_SHIFT 4
 
 struct __memobj;
 struct __vmrange;
@@ -102,6 +117,7 @@ void memobj_release_backend(memobj_backend_t *backend);
 int memobj_prepare_page_raw(memobj_t *memobj, page_frame_t **page);
 int memobj_prepare_page_backended(memobj_t *memobj, page_frame_t **page);
 bool __try_destroy_memobj(memobj_t *memobj);
+memobj_id_t sys_memobj_create();
 
 static inline void pin_memobj(memobj_t *memobj)
 {

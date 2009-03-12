@@ -28,6 +28,7 @@
 #include <mm/pfalloc.h>
 #include <mm/slab.h>
 #include <mm/memobj.h>
+#include <mm/mman.h>
 #include <mm/pfi.h>
 #include <ipc/port.h>
 #include <mlibc/kprintf.h>
@@ -40,14 +41,14 @@ static memcache_t *memobjs_memcache = NULL;
 static ttree_t memobjs_tree;
 static RW_SPINLOCK_DEFINE(memobjs_lock);
 
-static inline memobj_t *__find_by_id_core(memobj_id_t id)
-{
-  return ttree_lookup(&memobjs_tree, &id, NULL);
-}
-
 static int __memobjs_cmp_func(void *k1, void *k2)
 {
   return (*(long *)k1 - *(long *)k2);
+}
+
+static inline memobj_t *__find_by_id_core(memobj_id_t id)
+{
+  return ttree_lookup(&memobjs_tree, &id, NULL);
 }
 
 static void __init_kernel_memobjs(void)
@@ -221,4 +222,36 @@ int memobj_prepare_page_backended(memobj_t *memobj, page_frame_t **page)
 {
   *page = NULL;
   return -ENOTSUP;
+}
+
+int sys_memobj_create(struct memobj_info *user_mmo_info)
+{
+  struct memobj_info mmo_info;
+  int ret = 0;
+  uint32_t memobj_flags;
+  memobj_t *memobj = NULL;
+  
+  if (copy_from_user(&mmo_info, user_mmo_info, sizeof(mmo_info)))
+    return -EFAULT;
+
+  /* Validate memory object nature */
+  if ((mmo_info.nature > 0) && (mmo_info.nature <= MMO_NTR_SRV))
+    return -EPERM;
+  else if ((mmo_info.nature > MMO_NTR_PROXY) || (mmo_info.nature < 0))
+    return -EINVAL;
+
+  /* Compose memory object flags */
+  memobj_flags = (1 << pow2(mmo_info.lifetype)) & MMO_LIFE_MASK;
+  memobj_flags |= (mmo_info.flags << MMO_FLAGS_SHIFT) & MMO_FLAGS_MASK;
+  if (!(memobj_flags & MMO_LIFE_MASK) || (mmo_info.size & PAGE_MASK))
+    return -EINVAL;
+
+  ret = memobj_create(mmo_info.nature, memobj_flags, mmo_info.size >> PAGE_WIDTH, &memobj);
+  if (ret)
+    return ret;
+
+  mmo_info.flags = (memobj->flags & MMO_FLAGS_MASK) >> MMO_FLAGS_SHIFT;
+  mmo_info.id = memobj->id;
+  
+  return 0;
 }
