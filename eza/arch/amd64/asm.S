@@ -320,7 +320,6 @@ dont_check_common_exception_uworks:
   je common_exception_path_kern_ret
   swapgs
 common_exception_path_kern_ret:
-  sti
   popq %rax
   iretq
 
@@ -370,8 +369,6 @@ dont_check_err_exception_uworks:
   je error_code_exception_path_kern_ret
   swapgs
 error_code_exception_path_kern_ret:
-  sti
-
   popq %rax
   /* We have the error code on the top of stack, so remove it before
    * returning.
@@ -380,43 +377,36 @@ error_code_exception_path_kern_ret:
   iretq
 
 debug_fault_handler:
-	cli
   push %rax
   movl $0x1,%eax
   jmp common_exception_path
 
 nmi_fault_handler:
-	cli
   push %rax
   movl $0x2,%eax
   jmp common_exception_path
 
 breakpoint_fault_handler:
-	cli
   push %rax
   movl $0x3,%eax
   jmp common_exception_path
 
 overflow_fault_handler:
-	cli
   push %rax
   movl $0x4,%eax
   jmp common_exception_path
 
 bound_range_fault_handler:
-	cli
   push %rax
   movl $0x5,%eax
   jmp common_exception_path
 
 invalid_opcode_fault_handler:
-	cli
   push %rax
   movl $0x6,%eax
   jmp common_exception_path
 
 device_not_available_fault_handler:
-	cli
   push %rax
   movl $0x7,%eax
   jmp common_exception_path
@@ -425,68 +415,57 @@ doublefault_fault_handler:
   /* Double-fault is a one-way journey, so don't enable interrupts
    * and invoke handler directly.
    */
-  cli
   movq %rsp,%rdi
   call doublefault_fault_handler_impl
 1:
   jmp 1b /* Spin forever. */
 
 invalid_tss_fault_handler:
-	cli
   push %rax
   movl $10,%eax
   jmp common_exception_path
 
 segment_not_present_fault_handler:
-	cli
   push %rax
   movl $11,%eax
   jmp common_exception_path
 
 stack_fault_handler:
-	cli
   push %rax
   movl $12,%eax
   jmp common_exception_path
 
 general_protection_fault_handler:
-  cli
   push %rax
   movl $13,%eax
   jmp error_code_exception_path
 
 page_fault_fault_handler:
-  cli
   push %rax
   movl $14,%eax
   jmp error_code_exception_path
 
 fpu_fault_handler:
-	cli
   push %rax
   movl $16,%eax
   jmp common_exception_path
 
 alignment_check_fault_handler:
-	cli
   push %rax
   movl $17,%eax
   jmp common_exception_path
 
 machine_check_fault_handler:
-	cli
   push %rax
   movl $18,%eax
   jmp common_exception_path
 
 simd_fault_handler:
-	cli
   push %rax
   movl $19,%eax
   jmp common_exception_path
 
 security_exception_fault_handler:
-	cli
   push %rax
   movl $30,%eax
   jmp common_exception_path 

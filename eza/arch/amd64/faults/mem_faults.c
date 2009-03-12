@@ -162,7 +162,7 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 
 //    vmranges_print_tree_dbg(vmm);
     kprintf_fault("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
-            cpu_id(), stack_frame->error_code);
+                  cpu_id(), stack_frame->error_code);
   }
   if (current_task()->siginfo.handlers->actions[SIGSEGV].a.sa_sigaction != SIG_DFL)
     goto send_sigsegv;
