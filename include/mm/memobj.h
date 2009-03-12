@@ -58,13 +58,19 @@ typedef struct __memobj {
   memobj_id_t id;
   memobj_ops_t *mops;
   pgoff_t size;
-  list_head_t pagelist;
   list_node_t mmo_node;  
   memobj_backend_t *backend;
   void *private;
   atomic_t users_count;
   memobj_nature_t nature;
   uint32_t flags;
+  struct {
+    uid_t owner_uid;
+    gid_t owner_gid;
+    uid_t manager_uid;
+    gid_t manager_gid;
+    mode_t acc_mode;
+  } acc;
 } memobj_t;
 
 #define NUM_RSRV_MEMOBJ_IDS 3
