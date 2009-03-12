@@ -209,6 +209,7 @@ int create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
     *newtask = new_task;
   }
 
+  kprintf("RETURN => %d\n", r);
   return r;
 }
 
@@ -364,8 +365,13 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
         return -EFAULT;
       }
       if( target->state == TASK_STATE_JUST_BORN ) {
-        return arch_process_context_control(target,cmd,arg);
+        r = arch_process_context_control(target,cmd,arg);
+        if (likely(r == 0))
+          target->ustack = arg;
+
+        return r;
       }
+
       break;
     case SYS_PR_CTL_GET_ENTRYPOINT:
     case SYS_PR_CTL_GET_STACK:
@@ -383,8 +389,12 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       if( !valid_user_address(arg) ) {
         return -EFAULT;
       }
-      return arch_process_context_control(target,SYS_PR_CTL_SET_PERTASK_DATA,
-                                          arg);
+      r = arch_process_context_control(target,SYS_PR_CTL_SET_PERTASK_DATA,
+                                       arg);
+      if (likely(r == 0))
+        target->ptd = arg;
+
+      return r;
     case SYS_PR_CTL_DISINTEGRATE_TASK:
       if( target == current_task() ) {
         return -EWOULDBLOCK;
@@ -527,6 +537,7 @@ long sys_create_task(ulong_t flags,task_creation_attrs_t *a)
       r=task->pid;
     }
   }
+
   return r;
 }
 
@@ -534,6 +545,8 @@ extern ulong_t syscall_counter;
 
 long sys_get_pid(void)
 {
+  /* FIXME DK: remove kprintf after COW debugging */
+  kprintf("GETPID ==> %d\n", current_task()->pid);
   return current_task()->pid;
 }
 

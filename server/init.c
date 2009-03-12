@@ -45,7 +45,7 @@ long initrd_start_page,initrd_num_pages;
 
 #ifndef CONFIG_TEST
 
-static int __create_task_mm(task_t *task, int num)
+static void __create_task_mm(task_t *task, int num)
 {
   vmm_t *vmm = task->task_mm;
   uintptr_t code;
@@ -151,20 +151,21 @@ static int __create_task_mm(task_t *task, int num)
   /*remap pages*/
   r = vmrange_map(generic_memobj, vmm, USPACE_VA_BOTTOM, text_size, VMR_READ | VMR_EXEC | VMR_PRIVATE | VMR_FIXED, 0);
   if (!PAGE_ALIGN(r))
-    return r;
+    panic("Server [#%d]: Failed to create VM range for \"text\" section. (ERR = %d)", num, r);
+  
   r = mmap_core(task_get_rpd(task), USPACE_VA_BOTTOM, code >> PAGE_WIDTH, text_size, KMAP_READ | KMAP_EXEC, true);
   if (r)
-    return r;
+    panic("Server [#%d]: Failed to map \"text\" section. (ERR = %d)", num, r);
 
   //kprintf("TEXT: %p -> %p\n", USPACE_VA_BOTTOM, USPACE_VA_BOTTOM + (text_size << PAGE_WIDTH));
   if (data_size) {
     r = vmrange_map(generic_memobj, vmm, real_data_offset, data_size, VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED, 0);
     if (!PAGE_ALIGN(r))
-      return r;
+      panic("Server [#%d]: Failed to create VM range for \"data\" section. (ERR = %d)", num, r);
 
     r = mmap_core(task_get_rpd(task), real_data_offset, data_bss >> PAGE_WIDTH, data_size, KMAP_READ | KMAP_WRITE, true);
     if (r)
-      return r;
+      panic("Server [#%d]: Failed to map \"data\" section. (ERR = %d)", num, r);
   }
 
   if (bss_size) {
@@ -172,7 +173,7 @@ static int __create_task_mm(task_t *task, int num)
     r = vmrange_map(generic_memobj, vmm, bss_virt, bss_size,
                     VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED | VMR_POPULATE, 0);
     if(!PAGE_ALIGN(r)) {
-      return r;
+      panic("Server [#%d]: Failed to create VM range for \"BSS\" section. (ERR = %d)", num, r);
     }
   }
 
@@ -180,32 +181,30 @@ static int __create_task_mm(task_t *task, int num)
                   VMR_READ | VMR_WRITE | VMR_STACK | VMR_PRIVATE | VMR_POPULATE | VMR_FIXED, 0);
   /*r = mmap_core(task_get_rpd(task), USPACE_VA_TOP-0x40000, pframe_number(stack), USER_STACK_SIZE, KMAP_READ | KMAP_WRITE);*/
   if (!PAGE_ALIGN(r))
-    return r;  
+    panic("Server [#%d]: Failed to create VM range for stack. (ERR = %d)", num, r);
   /* Now allocate stack space for per-task user data. */
   ustack_top=USPACE_VA_TOP-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH);
   ustack_top-=PER_TASK_DATA_SIZE;
   ptd=user_to_kernel_vaddr(task_get_rpd(task),ustack_top);
   if( !ptd ) {
-    return -1;
+    panic("Server [#%d]: Invalid address: %p", num, ustack_top);
   }
+  
   ptd->ptd_addr=(uintptr_t)ustack_top;
-
   r=do_task_control(task,SYS_PR_CTL_SET_PERTASK_DATA,(uintptr_t)ustack_top);
-  if( r ) {
-    return r;
+  if(r < 0) {
+    panic("Server [#%d]: Failed to set pertask data(%p). (ERR = %d)", num, ustack_top, r);
   }
 
   /* Insufficient return address to prevent task from returning to void. */
   ustack_top-=sizeof(uintptr_t);
   r=do_task_control(task,SYS_PR_CTL_SET_ENTRYPOINT,ehead.e_entry);
-  r|=do_task_control(task,SYS_PR_CTL_SET_STACK,ustack_top);
-
-  if (r)
-    return r;
-
-  /*  kprintf("Grub module: %p\n size: %ld\n",init.server[num].addr,init.server[num].size);*/
-
-  return 0;
+  if (r < 0)
+    panic("Server [#%d]: Failed to set task's entry point(%p). (ERR = %d)", num, ehead.e_entry, r);
+  
+  r=do_task_control(task,SYS_PR_CTL_SET_STACK,ustack_top);
+  if (r < 0)
+    panic("Server [#%d]: Failed to set task's stack(%p). (ERR = %d)", num, ustack_top, r);  
 }
 
 static void __server_task_runner(void *data)
@@ -250,11 +249,7 @@ static void __server_task_runner(void *data)
         }
       }
 
-      r=__create_task_mm(server,a);
-      if( r ) {
-        panic( "server_run_tasks(): Can't create memory space for core task N %d\n",
-               a+1);
-      }
+      __create_task_mm(server,a);
 
 #ifdef CONFIG_CORESERVERS_PERCPU_LAUNCH
       t=sn % CONFIG_NRCPUS;

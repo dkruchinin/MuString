@@ -54,7 +54,7 @@ static void __init_kernel_memobjs(void)
 {
   int ret;
 
-  ret = memobj_create(MMO_NTR_GENERIC, 0, USPACE_VA_TOP >> PAGE_WIDTH, NULL);
+  ret = memobj_create(MMO_NTR_GENERIC, 0, USPACE_VA_TOP >> PAGE_WIDTH, NULL);  
   if (ret)
     panic("Can't create generic memory object: [ERROR %d]", ret);
 }

@@ -105,11 +105,16 @@ typedef struct __task_events {
 } task_events_t;
 
 typedef enum __task_creation_flag_t {
-  CLONE_MM=0x1,
-  CLONE_IPC=0x2,
-  CLONE_SIGINFO=0x4,
+  CLONE_MM       = 0x01,
+  CLONE_IPC      = 0x02,
+  CLONE_SIGINFO  = 0x04,
+  CLONE_COW      = 0x08,
+  CLONE_POPULATE = 0x10,
+  CLONE_SHMEM    = 0x20,
+  CLONE_PHYS     = 0x40,
 } task_creation_flags_t;
 
+#define TASK_MMCLONE_SHIFT 3
 #define TASK_FLAG_UNDER_STATE_CHANGE  0x1
 
 typedef uint32_t priority_t;
@@ -199,7 +204,9 @@ typedef struct __task_struct {
   cpu_array_t cpu_affinity_mask;
   priority_t static_priority, priority, orig_priority;
   kernel_stack_t kernel_stack;
-
+  uintptr_t ustack;
+  uintptr_t ptd;
+  
   union {
     rpd_t rpd;
     vmm_t *task_mm;
