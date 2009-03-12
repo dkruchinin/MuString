@@ -244,7 +244,7 @@ int pagecache_memobj_initialize(memobj_t *memobj, uint32_t flags)
   struct pcache_private *priv = NULL;
   int ret = 0;
   
-  if (!(flags & MMO_LIVE_MASK) || !is_powerof2(flags & MMO_LIVE_MASK))
+  if (!(flags & MMO_LIFE_MASK) || !is_powerof2(flags & MMO_LIFE_MASK))
     return -EINVAL;
 
   memobj->flags = flags;

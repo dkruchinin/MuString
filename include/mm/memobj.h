@@ -47,7 +47,7 @@ typedef enum __memobj_flags { /* memory object flags */
 } memobj_flags_t;
 
 #define MMO_LIFE_MASK   (MMO_FLG_SPIRIT | MMO_FLG_STICKY | MMO_FLG_LEECH | MMO_FLG_IMMORTAL)
-#define MMO_FLAGS_MASK  (MMO_FLG_DPC | MMO_FLG_NOSHARED | MMO_FLG_BACKEND)
+#define MMO_FLAGS_MASK  (MMO_FLG_DPC | MMO_FLG_NOSHARED | MMO_FLG_BACKENDED)
 #define MMO_FLAGS_SHIFT 4
 
 struct __memobj;
@@ -117,7 +117,7 @@ void memobj_release_backend(memobj_backend_t *backend);
 int memobj_prepare_page_raw(memobj_t *memobj, page_frame_t **page);
 int memobj_prepare_page_backended(memobj_t *memobj, page_frame_t **page);
 bool __try_destroy_memobj(memobj_t *memobj);
-memobj_id_t sys_memobj_create();
+int sys_memobj_create(struct memobj_info *user_mmo_info);
 
 static inline void pin_memobj(memobj_t *memobj)
 {

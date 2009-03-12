@@ -34,6 +34,7 @@
 #include <mlibc/kprintf.h>
 #include <mlibc/types.h>
 #include <eza/spinlock.h>
+#include <eza/usercopy.h>
 #include <eza/arch/mm.h>
 
 static idx_allocator_t memobjs_ida;
@@ -252,6 +253,10 @@ int sys_memobj_create(struct memobj_info *user_mmo_info)
 
   mmo_info.flags = (memobj->flags & MMO_FLAGS_MASK) >> MMO_FLAGS_SHIFT;
   mmo_info.id = memobj->id;
+  if (copy_to_user(user_mmo_info, &mmo_info, sizeof(mmo_info))) {
+    __try_destroy_memobj(memobj);
+    return -EFAULT;
+  }
   
   return 0;
 }

@@ -38,7 +38,6 @@
 #include <eza/arch/atomic.h>
 
 typedef uint32_t time_slice_t;
-typedef uint16_t uid_t;
 
 
 #define INVALID_PID  ((pid_t)~0) 
