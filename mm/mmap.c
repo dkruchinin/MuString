@@ -437,6 +437,7 @@ uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, ttree_cursor_t *cursor
 
   VMM_VERBOSE("%s: Failed to find free VM range with size = %d pages\n",
               vmm_get_name_dbg(vmm), length);
+
   return INVALID_ADDRESS; /* Woops, nothing was found. */
 
   found:
