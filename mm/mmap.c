@@ -318,6 +318,7 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
 
   ASSERT(dst != src);
   ASSERT((flags & (VMM_CLONE_POPULATE | VMM_CLONE_COW)) != (VMM_CLONE_POPULATE | VMM_CLONE_COW));
+  
   rwsem_down_write(&src->rwsem);
   pagetable_lock(&src->rpd);
   tnode = ttree_tnode_leftmost(src->vmranges_tree.root);
@@ -391,7 +392,9 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
         else if ((flags & VMM_CLONE_POPULATE) &&
                  ((((vmr->flags & VMR_SHARED) && !(flags & VMM_CLONE_SHARED))) || (vmr->flags & VMR_WRITE))) {
           /*
-           * There are two possible situations when we have to allocate new page and 
+           * There are two possible situations when we have to explicitely allocate new page and copy
+           * the content of the current page into it in order to map it to the dst's page table later:
+           *  1) VMM_CLONE_POPULATE clone policy was specified and 
            */
           page_frame_t *page = alloc_page(AF_USER | AF_ZERO);
 
@@ -550,6 +553,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
 
   /* If corresponding memory object doesn't support shared memory facility, return an error. */
   if ((flags & VMR_SHARED) && (memobj->flags & MMO_FLG_NOSHARED)) {
+    kprintf("WTF? id = %d\n", memobj->id);
     err = -ENOTSUP;
     goto err;
   }

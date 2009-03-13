@@ -184,11 +184,17 @@ memobj_t *generic_memobj = NULL;
 int generic_memobj_initialize(memobj_t *memobj, uint32_t flags)
 {
   ASSERT(!generic_memobj);
+  kprintf("111\n");  
   ASSERT(memobj->id == GENERIC_MEMOBJ_ID);
+  kprintf("211\n");  
   generic_memobj = memobj;
+  kprintf("311\n");  
   memobj->mops = &generic_memobj_ops;
+  kprintf("411\n");  
   atomic_set(&memobj->users_count, 2); /* Generic memobject is immortal */
+  kprintf("511\n");  
   memobj->flags = MMO_FLG_NOSHARED | MMO_FLG_IMMORTAL;
+  kprintf("611\n");  
 
   return 0;
 }

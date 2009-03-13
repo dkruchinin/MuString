@@ -87,7 +87,7 @@ void hat_initialize(hat_t *hat)
     }
   }
   
-  hat->tree_heigh = 0;
+  hat->tree_heigh = -1;
   hat->root_bucket = NULL;
 }
 

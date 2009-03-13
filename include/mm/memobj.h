@@ -88,13 +88,13 @@ typedef struct __memobj {
   } acc;
 } memobj_t;
 
-#define NUM_RSRV_MEMOBJ_IDS 3
+#define NUM_RSRV_MEMOBJ_IDS 2
 #define GENERIC_MEMOBJ_ID   0
 #define COW_MEMOBJ_ID       1
 #define SRV_MEMOBJ_ID       2
 
 #define memobj_kernel_nature(ntr) ((ntr) < NUM_RSRV_MEMOBJ_IDS)
-#define memobj_kernel_nature2id(ntr) (ntr)
+#define memobj_kernel_nature2id(ntr) ((ntr) - 1)
 #define memobj_is_generic(memobj) ((memobj) == generic_memobj)
 
 extern memobj_t *generic_memobj;
