@@ -79,6 +79,7 @@
 #define SC_TIMER_DELETE        40
 #define SC_SIGWAIT             41
 #define SC_SCHED_YIELD         42
+#define SC_FORK                43
 
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */

@@ -62,6 +62,7 @@
 
 .global kthread_fork_path
 .global user_fork_path
+.global user_fork_path_test
 
 arch_delay_loop:
 0:	dec %rdi
@@ -86,7 +87,10 @@ kthread_fork_path:
     pop %rax
     iretq
 
+user_fork_path_test:
+    xorq %rax,%rax
 user_fork_path:
+    xorq %rax,%rax
 resume_userspace:
     RESTORE_ALL
     jmp userspace_ret_from_int

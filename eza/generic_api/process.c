@@ -545,8 +545,6 @@ extern ulong_t syscall_counter;
 
 long sys_get_pid(void)
 {
-  /* FIXME DK: remove kprintf after COW debugging */
-  kprintf("GETPID ==> %d\n", current_task()->pid);
   return current_task()->pid;
 }
 
@@ -554,3 +552,24 @@ long sys_get_tid(void)
 {
   return current_task()->tid;
 }
+
+long sys_fork(void)
+{
+  task_t *new,*caller=current_task();
+  long r;
+  task_creation_attrs_t tca;
+
+  memset(&tca,0,sizeof(tca));
+
+  tca.exec_attrs.stack=0;
+  tca.exec_attrs.destructor=caller->uworks_data.destructor;
+  tca.exec_attrs.per_task_data=caller->ptd;
+
+  r=create_task(current_task(),CLONE_COW | CLONE_REPL_IPC,
+                TPL_USER,&new,&tca);
+  if( !r ) {
+    r=new->pid;
+  }
+  return r;
+}
+

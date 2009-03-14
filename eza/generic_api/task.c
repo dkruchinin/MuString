@@ -271,7 +271,7 @@ static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags,
       dup_task_ipc_resources(task->ipc);
     }
   } else {
-    if( attrs && attrs->exec_attrs.flags & __EXEC_ATTRS_COPY_IPC ) {
+    if( flags & CLONE_REPL_IPC ) {
       r=replicate_ipc(parent->ipc,task);
     } else {
       r=setup_task_ipc(task);

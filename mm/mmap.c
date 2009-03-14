@@ -351,8 +351,9 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
           continue;
         }
         if (!(vmr->flags & VMR_SHARED) && (vmr->flags & VMR_WRITE) && (flags & VMM_CLONE_COW)) {
+          kprintf_fault("Parent remaps page by address %p\n", addr);
             ret = mmap_core(&src->rpd, addr, pidx, 1,
-                            ((vmr->flags & KMAP_FLAGS_MASK) & ~VMR_WRITE), false);
+                            ((vmr->flags & ~VMR_WRITE) & KMAP_FLAGS_MASK), false);
             if (ret)
               goto clone_failed;
         }

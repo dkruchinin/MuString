@@ -112,6 +112,7 @@ typedef enum __task_creation_flag_t {
   CLONE_POPULATE = 0x10,
   CLONE_SHMEM    = 0x20,
   CLONE_PHYS     = 0x40,
+  CLONE_REPL_IPC = 0x80, /* Replicate IPC, not reference. */
 } task_creation_flags_t;
 
 #define TASK_MMCLONE_SHIFT 3
@@ -281,9 +282,6 @@ typedef struct __task_struct {
 typedef struct __task_attrs {
   uint8_t run_immediately;
 } task_attrs_t;
-
-#define __EXEC_ATTRS_COW       0x1
-#define __EXEC_ATTRS_COPY_IPC  0x2
 
 typedef struct __exec_attrs {
   uintptr_t stack,entrypoint,destructor,arg1,arg2;
