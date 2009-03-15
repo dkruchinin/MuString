@@ -481,10 +481,13 @@ recv_cycle:
         r = -EWOULDBLOCK;
       }
     } else {
-      /* Got something ! */
       msg=port->msg_ops->extract_message(port,flags);
       if( msg ) {
         msg->state=MSG_STATE_RECEIVED;
+
+        if( (port->flags & IPC_AUTOREF) && msg->sender ) {
+          grab_task_struct(msg->sender);
+        }
       }
     }
   }
@@ -679,6 +682,9 @@ int ipc_port_send_iov(struct __ipc_gen_port *port,
            * so we should remove message in port-specific way.
            */
           msg_ops->dequeue_message(port,msg);
+          if( port->flags & IPC_AUTOREF ) {
+            __release_task_struct(sender);
+          }
           break;
         case MSG_STATE_REPLY_BEGIN:
         case MSG_STATE_DATA_UNDER_ACCESS:
@@ -754,6 +760,10 @@ int ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
 
   if( !r ) {
     r=__transfer_reply_data_iov(msg,reply_iov,numvecs,true,reply_len);
+
+    if( (port->flags & IPC_AUTOREF) && msg->sender ) {
+      release_task_struct(msg->sender);
+    }
 
     /* Update message state and wakeup client. */
     msg->state=MSG_STATE_REPLIED;

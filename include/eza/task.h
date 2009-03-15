@@ -441,6 +441,7 @@ void exit_task_events(struct __task_struct *target);
 #define __UNUSABLE_PTR (void *)0x007  /* Target pointer is not usable now. */
 
 #define grab_task_struct(t) atomic_inc(&(t)->refcount)
+#define __release_task_struct(t) atomic_dec(&(t)->refcount)
 
 void release_task_struct(struct __task_struct *t);
 
