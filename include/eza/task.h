@@ -73,10 +73,8 @@ typedef uint16_t uid_t;
 #define TASK_EVENT_TERMINATION  0x1
 #define NUM_TASK_EVENTS  1
 #define ALL_TASK_EVENTS_MASK  ((1<<NUM_TASK_EVENTS)-1)
-#define LOCK_TASK_EVENTS_R(t)
-#define UNLOCK_TASK_EVENTS_R(t)
-#define LOCK_TASK_EVENTS_W(t)
-#define UNLOCK_TASK_EVENTS_W(t)
+#define LOCK_TASK_EVENTS(t)
+#define UNLOCK_TASK_EVENTS(t)
 
 typedef struct __task_event_ctl_arg {
   ulong_t ev_mask;
@@ -93,7 +91,7 @@ struct __ipc_gen_port;
 
 typedef struct __task_event_listener {
   struct __ipc_gen_port *port;
-  struct __task_struct *listener;
+  struct __task_struct *listener,*target;
   list_node_t owner_list;
   list_node_t llist;
   ulong_t events;
@@ -116,6 +114,8 @@ typedef enum __task_creation_flag_t {
 
 #define TASK_MMCLONE_SHIFT 3
 #define TASK_FLAG_UNDER_STATE_CHANGE  0x1
+
+#define TASK_INITIAL_REFCOUNT 2
 
 typedef uint32_t priority_t;
 typedef uint32_t cpu_array_t;
@@ -402,6 +402,8 @@ void task_event_notify(ulong_t events);
 int task_event_attach(struct __task_struct *target,
                       struct __task_struct *listener,
                            task_event_ctl_arg *ctl_arg);
+int task_event_detach(pid_t target,
+                      struct __task_struct *listener);
 void exit_task_events(struct __task_struct *target);
 
 /* Default kernel threads flags. */
