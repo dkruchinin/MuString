@@ -27,79 +27,119 @@
 #include <ipc/ipc.h>
 #include <mm/pfalloc.h>
 #include <mm/vmm.h>
-#include <eza/arch/page.h>
 #include <mm/page.h>
 #include <mlibc/stddef.h>
 #include <ipc/port.h>
+#include <ipc/channel.h>
 #include <eza/usercopy.h>
 
-#define LOCK_TASK_VM(x)
-#define UNLOCK_TASK_VM(x)
+#define LOCK_TASK_VM(t)                         \
+  do {                                          \
+    if (likely(!is_kernel_thread(t)))           \
+      rwsem_down_read(&(t)->rwsem);             \
+  } while (0)
 
-int ipc_setup_buffer_pages(task_t *owner,iovec_t *iovecs,ulong_t numvecs,
-                                uintptr_t *addr_array,ipc_user_buffer_t *bufs)
+#define UNLOCK_TASK_VM(t)                       \
+  do {                                          \
+    if (likely(!is_kernel_thread(t)))           \
+      rwsem_up_read(&(t)->rwsem);               \
+  } while (0)
+  
+
+static int get_iovec_page(ipc_channel_t *channel, uintptr_t addr, page_frame_t **page)
 {
-  rpd_t *rpd = task_get_rpd(owner);
-  page_idx_t idx;
+  task_t *owner = current_task();
+  int ret = 0;
+
+  if (!is_kernel_thread(owner)) {
+    if (!(channel->flags & IPC_KERNEL_SIDE))
+      ret = fault_in_user_page(owner->vmm, addr, page);
+    else
+      *page = virt_to_pframe(addr);
+  }
+  else {
+    rpd_t *rpd = task_get_rpd(owner);
+    page_idx_t *pidx;
+    
+    pagetable_lock(rpd);
+    pidx = ptable_ops.vaddr2page_idx(rpd, addr, NULL);
+    pagetable_unlock(rpd);
+    if (pidx == PAGE_IDX_INVAL)
+      ret = -EFAULT;
+    else
+      *page = pframe_by_number(pidx);
+  }
+
+  return ret;
+}
+
+struct setup_buf_helper {
   ulong_t chunk_num;
+  uintptr_t *pchunk;
+};
+
+static void __save_pfns_in_buffer(vmrange_t *unused, page_frame_t *page, void *helper)
+{
+  struct setup_buf_helper *buf_data = helper;
+
+  pin_page(page);
+  *(page_idx_t *)(buf_data->pchunk) = pframe_number(page);
+  buf_data->pchunk++;
+  buf_data->chunk_num++;
+}
+
+int ipc_setup_buffer_pages(ipc_channel_t *channel,iovec_t *iovecs,ulong_t numvecs,
+                           uintptr_t *addr_array,ipc_user_buffer_t *bufs)
+{
   int r=-EFAULT;
-  uintptr_t adr,*pchunk;
-
+  struct setup_buf_helper buf_data;
+  ipc_user_buffer_t *buf;
+  ulong_t first;
+  
+  buf_data.chunk_num = 0;
+  buf_data.pchunk = NULL;
+  
   LOCK_TASK_VM(owner);
-
   for(;numvecs;numvecs--,iovecs++,bufs++) {
-    ipc_user_buffer_t *buf=bufs;
-    uintptr_t start_addr=(uintptr_t)iovecs->iov_base;
-    ulong_t first,size=iovecs->iov_len;
+    buf=bufs;    
 
     buf->chunks=addr_array;
-
-    /* Process the first chunk. */
-    idx=ptable_ops.vaddr2page_idx(rpd,start_addr, NULL);
-    if( idx == PAGE_IDX_INVAL ) {
-      goto out;
+    buf_data.pchunk = buf->chunks;
+    if (likely(!(channel->flags & IPC_KERNEL_SIDE))) {
+      r = fault_in_user_pages(owner->vmm, (uintptr_t)iovecs->iov_base, size, PFLT_READ,
+                              __save_pfns_in_buffer, &buf_data);
+      if (r)
+        goto out;
     }
+    else {      
+      uintptr_t vaddr_start, vaddr_end;
 
-    pchunk=buf->chunks;
+      vaddr_start = PAGE_ALIGN_DOWN(iovecs->iov_base);
+      vaddr_end = PAGE_ALIGN((uintptr_t)iovecs->iov_base + iovecs->iov_len);
+      while (vaddr_start < vaddr_end) {
+        *(page_idx_t *)buf_data.pchunk = virt_to_pframe_id(vaddr_start);
+        buf_data.pchunk++;
+        buf_data.chunk_num++;
+      }
+    }
+    /* Process the first chunk. */
 
-    adr=(start_addr+PAGE_SIZE) & ~PAGE_MASK;
-    first=adr-start_addr;
-    if( size <= first ) {
-      first = size;
+    first =(((uintptr_t)iovecs->iov_base + PAGE_SIZE) & ~PAGE_MASK) - (uintptr_t)iovecs->iov_base;
+    if(iovecs->iov_len <= first) {
+      first = iovecs->iov_len;
     }
 
     buf->first=first;
-    *pchunk=(uintptr_t)pframe_id_to_virt(idx)+(start_addr & PAGE_MASK);
+    //*pchunk=(uintptr_t)pframe_to_virt(page)+(start_addr & PAGE_MASK);
 
-    size-=first;
-    start_addr+=first;
-    chunk_num=1;
-
-    /* Process the rest of chunks. */
-    while( size ) {
-      idx=ptable_ops.vaddr2page_idx(rpd, start_addr, NULL);
-      if(idx == PAGE_IDX_INVAL) {
-        goto out;
-      }
-      pchunk++;
-      chunk_num++;
-
-      if(size<=PAGE_SIZE) {
-        size=0;
-      } else {
-        size-=PAGE_SIZE;
-      }
-
-      *pchunk=(uintptr_t)pframe_id_to_virt(idx);
-      start_addr+=PAGE_SIZE;
-    }
-
-    buf->num_chunks=chunk_num;
+    buf->num_chunks=buf_data.chunk_num;
     buf->length=iovecs->iov_len;
-    addr_array+=chunk_num;
+    addr_array+=buf_data.chunk_num;
   }
+  
   r = 0;
 out:
+  /* TODO DK: Unpin all pages if any was pinned earlier */
   UNLOCK_TASK_VM(owner);
   return r;
 }
@@ -150,13 +190,13 @@ int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
     bufs=start_buf;
     if( buf_offset < bufs->first ) {
       chunk=bufs->chunks;
-      dest_kaddr=(char *)*chunk;
+      dest_kaddr=(char *)pframe_id_to_virt(*(page_idx_t *)chunk) + (PAGE_SIZE - bufs->first);
       page_end=dest_kaddr+bufs->first;
       dest_kaddr+=buf_offset;
     } else {
       chunk=bufs->chunks+(((buf_offset-bufs->first) >> PAGE_WIDTH)+1);
-      page_end=(char *)*chunk+PAGE_SIZE;
-      dest_kaddr=(char *)*chunk+((buf_offset-bufs->first) & PAGE_MASK);
+      page_end=(char *)pframe_id_to_virt(*(page_idx_t *)chunk)+PAGE_SIZE;
+      dest_kaddr = (page_end - PAGE_SIZE) + ((buf_offset-bufs->first) & PAGE_MASK);
 
       if( (page_end - dest_kaddr) > bufs->length-buf_offset ) {
         page_end=dest_kaddr+(bufs->length-buf_offset);
@@ -197,7 +237,7 @@ int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
 
       if( bufsize && (dest_kaddr >= page_end) ) {
         chunk++;
-        dest_kaddr=(char *)*chunk;
+        dest_kaddr=(char *)pframe_id_to_virt(*(page_idx_t *)chunk);
         page_end=dest_kaddr+PAGE_SIZE;
       }
 
@@ -217,7 +257,7 @@ int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
   copy_iteration:
     chunk=bufs->chunks;
     bufsize=bufs->length;
-    dest_kaddr=(char *)*chunk;
+    dest_kaddr=(char *)pframe_id_to_virt(*(page_idx_t *)chunk) + PAGE_SIZE - bufs->first;
     page_end=dest_kaddr+bufs->first;
   }
   return 0;

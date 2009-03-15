@@ -9,8 +9,6 @@
 #include <ipc/port.h>
 #include <ds/list.h>
 
-struct __task_ipc;
-
 #define IPC_CHANNEL_FLAG_BLOCKED_MODE  0x1
 
 typedef struct __ipc_channel {
@@ -19,18 +17,17 @@ typedef struct __ipc_channel {
   spinlock_t lock;
   ipc_gen_port_t *server_port;
   list_node_t ch_list;
-  struct __task_ipc *ipc;
+  task_t *owner;
 } ipc_channel_t;
 
 ipc_channel_t *ipc_allocate_channel(void);
 ipc_channel_t *ipc_get_channel(task_t *task,ulong_t ch_id);
 void ipc_unref_channel(ipc_channel_t *channel,ulong_t count);
 void ipc_shutdown_channel(ipc_channel_t *channel);
-int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
-                          ulong_t flags);
+int ipc_open_channel(task_t *owner,task_t *server,ulong_t port, ulong_t flags);
+int ipc_open_channel_raw(ipc_gen_port_t *server_port, ulong_t flags, ipc_channel_t **out_channel);
 int ipc_close_channel(task_t *owner,ulong_t ch_id);
-int ipc_channel_control(task_t *caller,int channel,ulong_t cmd,
-                             ulong_t arg);
+int ipc_channel_control(task_t *caller,int channel,ulong_t cmd, ulong_t arg);
 
 #define LOCK_CHANNEL(c) spinlock_lock(&c->lock)
 #define UNLOCK_CHANNEL(c) spinlock_unlock(&c->lock)

@@ -121,13 +121,43 @@ int __check_port_flags( ipc_gen_port_t *port,ulong_t flags)
   return r;
 }
 
+int ipc_open_channel_raw(ipc_gen_port_t *server_port, ulong_t flags, ipc_channel_t **out_channel)
+{
+  ipc_channel_t *channel = NULL;
+  int ret = 0;  
+
+  if(__check_port_flags(server_port, flags)) {
+    ret = -EINVAL;
+    goto out;
+  }
+  if (unlikely(is_kernel_thread(current_task())))
+    flags |= IPC_KERNEL_SIDE;
+  
+  channel = __allocate_channel(server_port, flags);
+  if (!channel) {
+    ret = -ENOMEM;
+    goto out;
+  }
+
+  ASSERT(out_channel != NULL);
+  channel->owner = current_task();
+  *out_channel = channel;
+  return ret;
+  
+  out:
+  if (channel)
+    __shutdown_channel(channel);
+
+  return ret;
+}
+
 int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
                      ulong_t flags)
 {
   task_ipc_t *ipc=get_task_ipc(owner);
   int r;
   ulong_t id;
-  ipc_channel_t *channel;
+  ipc_channel_t *channel = NULL;
   ipc_gen_port_t *server_port;
 
   if( !ipc ) {
@@ -146,10 +176,9 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
     goto out_unlock;
   }
 
-  if( __check_port_flags(server_port,flags) ) {
-    r=-EINVAL;
-    goto out_unlock;
-  }
+  r = ipc_open_channel_raw(server_port, flags, &channel);
+  if (r)
+    goto out_put_port;
 
   if( !ipc->channels ) { /* First channel opened ? */
     r = -ENOMEM;
@@ -169,12 +198,6 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
     goto out_put_port;
   }
 
-  channel=__allocate_channel(server_port,flags);
-  if( !channel ) {
-    r=-ENOMEM;
-    goto free_id;
-  }
-
   channel->id=id;
   channel->ipc=ipc;
 
@@ -191,8 +214,12 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
   goto out_unlock;
 free_id:
   idx_free(&ipc->channel_array,id);
+  
 out_put_port:
   ipc_put_port(server_port);
+  if (channel)
+    __shutdown_channel(channel);
+  
 out_unlock:
   UNLOCK_IPC(ipc);
   release_task_ipc(ipc);

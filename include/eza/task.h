@@ -295,9 +295,14 @@ typedef struct __task_creation_attrs {
   exec_attrs_t exec_attrs;
 } task_creation_attrs_t;
 
+static inline bool is_kernel_thread(task_t *task)
+{
+  return (task->priv == TPL_KERNEL);
+}
+
 static inline rpd_t *task_get_rpd(task_t *task)
 {
-  if (likely(task->priv != TPL_KERNEL))
+  if (likely(!is_kernel_thread(task)))
     return &task->task_mm->rpd;
 
   return &task->rpd;

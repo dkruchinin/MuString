@@ -26,6 +26,7 @@
 
 #include <eza/arch/types.h>
 #include <eza/task.h>
+#include <ipc/channel.h>
 #include <eza/arch/atomic.h>
 
 typedef struct __ipc_user_buffer {
@@ -34,8 +35,8 @@ typedef struct __ipc_user_buffer {
 } ipc_user_buffer_t;
 
 struct __iovec;
-int ipc_setup_buffer_pages(task_t *owner,struct __iovec *iovecs,ulong_t numvecs,
-                           uintptr_t *addr_array,ipc_user_buffer_t *bufs);
+int ipc_setup_buffer_pages(ipc_channel_t *channel,struct __iovec *iovecs,ulong_t numvecs,
+                           uintptr_t *addr_array,ipc_user_buffer_t *bufs, bool is_snd_buf);
 int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
                                  struct __iovec *iovecs,ulong_t numvecs,
                                  ulong_t offset,bool to_buffer);

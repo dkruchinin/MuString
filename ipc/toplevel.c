@@ -34,6 +34,7 @@
 #include <ipc/port.h>
 #include <ipc/channel.h>
 
+
 /* TODO: [mt] Implement security checks for port-related syscalls ! */
 long sys_open_channel(pid_t pid,ulong_t port,ulong_t flags)
 {
@@ -155,69 +156,20 @@ size_t sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
   return r;
 }
 
-static int __send_iov_v(ulong_t channel,
-                        iovec_t snd_kiovecs[],ulong_t snd_numvecs,
-                        iovec_t rcv_kiovecs[],ulong_t rcv_numvecs)
+static inline int __send_iov_v(ulong_t channel,
+                               iovec_t snd_kiovecs[],ulong_t snd_numvecs,
+                               iovec_t rcv_kiovecs[],ulong_t rcv_numvecs)
 {
   ipc_channel_t *c;
-  ipc_gen_port_t *port;
-  ipc_port_message_t *msg;
-  ipc_user_buffer_t snd_bufs[MAX_IOVECS],rcv_bufs[MAX_IOVECS];
-  ulong_t i,msg_size,rcv_size;
-  int r;
-
-  /* Check send buffer. */
-  for(msg_size=0,i=0;i<snd_numvecs;i++) {
-    if( !valid_user_address_range((uintptr_t)snd_kiovecs[i].iov_base,
-                                  snd_kiovecs[i].iov_len) ) {
-      return -EFAULT;
-    }
-
-    msg_size += snd_kiovecs[i].iov_len;
-    if( msg_size > MAX_PORT_MSG_LENGTH ) {
-      return -EINVAL;
-    }
-  }
-
-  /* Check receive buffer. */
-  for(rcv_size=0,i=0;i<rcv_numvecs;i++) {
-    if( !valid_user_address_range((uintptr_t)rcv_kiovecs[i].iov_base,
-                                  rcv_kiovecs[i].iov_len) ) {
-      return -EFAULT;
-    }
-
-    rcv_size += rcv_kiovecs[i].iov_len;
-    if( rcv_size > MAX_PORT_MSG_LENGTH ) {
-      return -EINVAL;
-    }
-  }
+  int ret;
 
   c=ipc_get_channel(current_task(),channel);
-  if( !c ) {
+  if (!c)
     return -EINVAL;
-  }
 
-  r=ipc_get_channel_port(c,&port);
-  if( r ) {
-    goto put_channel;
-  }
-
-  msg=ipc_create_port_message_iov_v(snd_kiovecs,snd_numvecs,
-                                    msg_size,channel_in_blocked_mode(c),
-                                    rcv_kiovecs,rcv_numvecs,
-                                    snd_bufs,rcv_bufs,rcv_size);
-  if( !msg ) {
-    r=-ENOMEM;
-  } else {
-    r=ipc_port_send_iov(port,msg,channel_in_blocked_mode(c),
-                        rcv_kiovecs,rcv_numvecs,rcv_size);
-
-  }
-
-  ipc_put_port(port);
-put_channel:
+  ret = ipc_port_send_iov(c, snd_kiovecs, snd_numvecs, rcv_kiovrcs, rcv_numvecs);
   ipc_put_channel(c);
-  return r;
+  return ret;
 }
 
 long sys_port_send_iov_v(ulong_t channel,
@@ -276,6 +228,7 @@ long sys_port_send_iov(ulong_t channel,iovec_t iov[],ulong_t numvecs,
   rcv_kiovec.iov_base=(void *)rcv_buf;
   rcv_kiovec.iov_len=rcv_size;
 
+  
   return __send_iov_v(channel,kiovecs,numvecs,&rcv_kiovec,1);
 }
 

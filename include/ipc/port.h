@@ -84,6 +84,7 @@ typedef struct __port_msg_info {
 } port_msg_info_t;
 
 struct __ipc_gen_port;
+struct __ipc_channel;
 
 typedef struct __ipc_port_msg_ops {
   ipc_port_message_t *(*lookup_message)(struct __ipc_gen_port *port,
@@ -150,22 +151,26 @@ ipc_port_message_t *ipc_create_port_message_iov_v(struct __iovec *snd_kiovecs,ul
 int ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
                        struct __iovec *reply_iov,ulong_t numvecs,
                        ulong_t reply_size);
-int ipc_port_send_iov(struct __ipc_gen_port *port,
-                      ipc_port_message_t *msg,bool sync_send,
-                      struct __iovec *iovecs,ulong_t numvecs,
-                      ulong_t reply_len);
+int ipc_port_send_iov(struct __ipc_channel *channel, struct __iovec snd_kiovecs[], ulong_t snd_numvecs,
+                      struct __iovec rcv_kiovecs[], ulong_t rcv_numvecs);
+int ipc_port_send_iov_core(struct __ipc_gen_port *port,
+                           ipc_port_message_t *msg,bool sync_send,
+                           struct __iovec *iovecs,ulong_t numvecs,
+                           ulong_t reply_len);
 long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
                        struct __iovec *rcv_iov,ulong_t numvecs,ulong_t offset);
+bool ipc_port_iovec_is_valid(struct __iovec iovecs[], ulong_t numvecs, bool is_user_iovecs);
 ipc_gen_port_t *ipc_clone_port(ipc_gen_port_t *p);
 
 #define IPC_NB_MESSAGE_MAXLEN  (512-sizeof(ipc_port_message_t))
 
-#define IPC_RESET_MESSAGE(m,t)   do {           \
-    list_init_node(&(m)->l);                    \
-    list_init_node(&(m)->messages_list);        \
-    event_initialize(&(m)->event);              \
-    event_set_task(&(m)->event,(t));            \
-    (m)->state=MSG_STATE_NOT_PROCESSED;         \
+#define IPC_RESET_MESSAGE(m,t)                  \
+    do {                                        \
+      list_init_node(&(m)->l);                  \
+      list_init_node(&(m)->messages_list);      \
+      event_initialize(&(m)->event);            \
+      event_set_task(&(m)->event,(t));          \
+      (m)->state=MSG_STATE_NOT_PROCESSED;       \
   } while(0)
 
 #define put_ipc_port_message(m)  memfree((m))

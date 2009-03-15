@@ -28,7 +28,8 @@
 #include <ds/ttree.h>
 #include <ds/list.h>
 #include <mm/page.h>
-#include <mm/mman.h>
+#include <mm/memobjctl.h>
+#include <ipc/channel.h>
 #include <mlibc/types.h>
 
 #ifndef CONFIG_MEMOBJS_MAX
@@ -58,23 +59,20 @@ typedef struct __memobj_ops {
   int (*populate_pages)(struct __vmrange *vmr, uintptr_t addr, page_idx_t npages);
   int (*put_page)(struct __memobj *memobj, pgoff_t offset, page_frame_t *page);
   int (*get_page)(struct __memobj *memobj, pgoff_t offset, page_frame_t **page);
+  int (*truncate)(struct __memobj *memobj, pgoff_t new_offset);
   void (*cleanup)(struct __memobj *memobj);
 } memobj_ops_t;
 
 struct __task_struct;
-
-typedef struct __memobj_backend {
-  ulong_t port_id;
-  struct __task_struct *server;
-} memobj_backend_t;
 
 /* FIXME DK: and what about backend? */
 typedef struct __memobj {
   memobj_id_t id;
   memobj_ops_t *mops;
   pgoff_t size;
-  list_node_t mmo_node;  
-  memobj_backend_t *backend;
+  list_node_t mmo_node;
+  ipc_channel_t *backend;
+  spinlock_t members_lock;
   void *private;
   atomic_t users_count;
   memobj_nature_t nature;
@@ -112,7 +110,7 @@ void memobj_subsystem_initialize(void);
 int memobj_create(memobj_nature_t mmo_nature, uint32_t flags, pgoff_t size, /* OUT */ memobj_t **out_memobj);
 memobj_t *memobj_find_by_id(memobj_id_t memobj_id);
 memobj_t *memobj_pin_by_id(memobj_id_t memobj_id);
-memobj_backend_t *memobj_create_backend(void);
+int memobj_create_backend(memobj_t *memobj,  struct __task_struct *server_task, ulong_t port_id);
 void memobj_release_backend(memobj_backend_t *backend);
 int memobj_prepare_page_raw(memobj_t *memobj, page_frame_t **page);
 int memobj_prepare_page_backended(memobj_t *memobj, page_frame_t **page);

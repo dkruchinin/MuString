@@ -11,7 +11,8 @@
 #include <ipc/port.h>
 
 /* Blocking mode */
-#define IPC_BLOCKED_ACCESS  0x1
+#define IPC_BLOCKED_ACCESS  0x01
+#define IPC_KERNEL_SIDE     0x02
 
 /**< Maximum numbers of vectors for I/O operations. */
 #define MAX_IOVECS  8
