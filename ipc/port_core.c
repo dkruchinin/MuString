@@ -637,10 +637,11 @@ int ipc_port_send_iov(ipc_channel_t *channel, iovec_t snd_kiovecs[], ulong_t snd
   ret = __calc_msg_length(channel, snd_kiovecs, snd_numvecs, &msg_size);
   if (ret)
     return ret;
-
-  ret = __calc_msg_length(channel, rcv_kiovecs, rcv_numvecs, &rcv_size);
-  if (ret)
-    return ret;
+  if (rcv_kiovecs) {
+    ret = __calc_msg_length(channel, rcv_kiovecs, rcv_numvecs, &rcv_size);
+    if (ret)
+      return ret;
+  }
   
   ret = ipc_get_channel_port(channel, &port);
   if (ret)
@@ -652,9 +653,11 @@ int ipc_port_send_iov(ipc_channel_t *channel, iovec_t snd_kiovecs[], ulong_t snd
     ret = -ENOMEM;
     goto out;
   }
-
-  ret = ipc_port_send_iov_core(port, msg, channel_in_blocked_mode(channel),
-                               rcv_kiovecs, rcv_numvecs, rcv_size);
+  if (rcv_kiovecs) {
+    ret = ipc_port_send_iov_core(port, msg, channel_in_blocked_mode(channel),
+                                 rcv_kiovecs, rcv_numvecs, rcv_size);
+  }
+  
   out:
   if (port)
     ipc_put_port(port);
