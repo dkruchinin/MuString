@@ -29,6 +29,7 @@ int ipc_open_channel_raw(ipc_gen_port_t *server_port, ulong_t flags, ipc_channel
 int ipc_close_channel(task_t *owner,ulong_t ch_id);
 int ipc_channel_control(task_t *caller,int channel,ulong_t cmd, ulong_t arg);
 ipc_channel_t *ipc_clone_channel(ipc_channel_t *target);
+void ipc_destroy_channel(ipc_channel_t *channel);
 
 #define LOCK_CHANNEL(c) spinlock_lock(&c->lock)
 #define UNLOCK_CHANNEL(c) spinlock_unlock(&c->lock)
@@ -55,6 +56,17 @@ static inline int ipc_get_channel_port(ipc_channel_t *c,
 
   *outport=p;
   return r;
+}
+
+static inline void ipc_pin_channel(ipc_channel_t *channel)
+{
+  atomic_inc(&channel->use_count);
+}
+
+static inline void ipc_unpin_channel(ipc_channel_t *channel)
+{
+  if (atomic_dec_and_test(&channel->use_count))
+    ipc_destroy_channel(channel);
 }
 
 static inline void ipc_put_channel(ipc_channel_t *channel)

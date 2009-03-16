@@ -253,22 +253,22 @@ static int __disintegrate_task(task_t *target,ulong_t pnum)
     goto put_port;  
   if( port->flags & IPC_BLOCKED_ACCESS ) {
     r=-EINVAL;
-    ipc_put_channel(channel);
-    goto put_port;
+    ipc_unpin_channel(channel);
+    goto out;
   }
 
   descr=memalloc(sizeof(*descr));
   if( !descr ) {
     r=-ENOMEM;
-    ipc_put_channel(channel);
-    goto put_port;
+    ipc_unpin_channel(channel);
+    goto out;
   }
 
   iov.iov_base=&drp;
   iov.iov_len=sizeof(drp);
 
-  descr->port=port;
-  descr->msg=ipc_create_port_message_iov_v(channel, &iov, 1, sizeof(drp), false, NULL, 0 NULL, NULL, 0);
+  descr->channel=channel;
+  descr->msg=ipc_create_port_message_iov_v(channel, &iov, 1, sizeof(drp), NULL, 0, NULL, NULL, 0);
   if (!descr->msg) {
     r = -ENOMEM;
     ipc_put_channel(channel);
@@ -304,6 +304,7 @@ free_descr:
   memfree(descr);
 put_port:
   ipc_put_port(port);
+out:
   return r;
 }
 

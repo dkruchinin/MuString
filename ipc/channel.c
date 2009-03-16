@@ -29,6 +29,22 @@ static ipc_channel_t *__allocate_channel(ipc_gen_port_t *port,ulong_t flags)
   return channel;
 }
 
+int __check_port_flags( ipc_gen_port_t *port,ulong_t flags)
+{
+  int i,r=0;
+
+  IPC_LOCK_PORT_W(port);
+  /* 1: Check blocking access. */
+  i=(port->flags & IPC_BLOCKED_ACCESS) | (flags & IPC_CHANNEL_FLAG_BLOCKED_MODE);
+  if( i ) {
+    if( !((port->flags & IPC_BLOCKED_ACCESS) && (flags & IPC_CHANNEL_FLAG_BLOCKED_MODE)) ) {
+      r=-EINVAL;
+    }
+  }
+  IPC_UNLOCK_PORT_W(port);
+  return r;
+}
+
 ipc_channel_t *ipc_get_channel(task_t *task,ulong_t ch_id)
 {
   ipc_channel_t *c=NULL;
@@ -40,7 +56,7 @@ ipc_channel_t *ipc_get_channel(task_t *task,ulong_t ch_id)
       if(ch_id < task->limits->limits[LIMIT_IPC_MAX_CHANNELS] &&
          ipc->channels[ch_id] != NULL) {
         c=ipc->channels[ch_id];
-        atomic_inc(&c->use_count);
+        ipc_pin_channel(c);
       }
       IPC_UNLOCK_CHANNELS(ipc);
     }
@@ -50,10 +66,39 @@ ipc_channel_t *ipc_get_channel(task_t *task,ulong_t ch_id)
   return c;
 }
 
-static void __shutdown_channel(ipc_channel_t *channel)
+void ipc_destroy_channel(ipc_channel_t *channel)
 {
   ipc_put_port(channel->server_port);
   memfree(channel);
+}
+
+int ipc_open_channel_raw(ipc_gen_port_t *server_port, ulong_t flags, ipc_channel_t **out_channel)
+{
+  ipc_channel_t *channel = NULL;
+  int ret = 0;  
+
+  if(__check_port_flags(server_port, flags)) {
+    ret = -EINVAL;
+    goto out;
+  }
+  if (unlikely(is_kernel_thread(current_task())))
+    flags |= IPC_KERNEL_SIDE;
+  
+  channel = __allocate_channel(server_port, flags);
+  if (!channel) {
+    ret = -ENOMEM;
+    goto out;
+  }
+
+  ASSERT(out_channel != NULL);
+  *out_channel = channel;
+  return ret;
+  
+  out:
+  if (channel)
+   ipc_destroy_channel(channel);
+
+  return ret;
 }
 
 void ipc_unref_channel(ipc_channel_t *channel,ulong_t c)
@@ -75,7 +120,7 @@ void ipc_unref_channel(ipc_channel_t *channel,ulong_t c)
   IPC_UNLOCK_CHANNELS(channel->ipc);
 
   if( shutdown ) {
-    __shutdown_channel(channel);
+    ipc_destroy_channel(channel);
   }
 }
 
@@ -103,52 +148,6 @@ int ipc_close_channel(task_t *owner,ulong_t ch_id)
   UNLOCK_IPC(ipc);
   release_task_ipc(ipc);
   return r;
-}
-
-int __check_port_flags( ipc_gen_port_t *port,ulong_t flags)
-{
-  int i,r=0;
-
-  IPC_LOCK_PORT_W(port);
-  /* 1: Check blocking access. */
-  i=(port->flags & IPC_BLOCKED_ACCESS) | (flags & IPC_CHANNEL_FLAG_BLOCKED_MODE);
-  if( i ) {
-    if( !((port->flags & IPC_BLOCKED_ACCESS) && (flags & IPC_CHANNEL_FLAG_BLOCKED_MODE)) ) {
-      r=-EINVAL;
-    }
-  }
-  IPC_UNLOCK_PORT_W(port);
-  return r;
-}
-
-int ipc_open_channel_raw(ipc_gen_port_t *server_port, ulong_t flags, ipc_channel_t **out_channel)
-{
-  ipc_channel_t *channel = NULL;
-  int ret = 0;  
-
-  if(__check_port_flags(server_port, flags)) {
-    ret = -EINVAL;
-    goto out;
-  }
-  if (unlikely(is_kernel_thread(current_task())))
-    flags |= IPC_KERNEL_SIDE;
-  
-  channel = __allocate_channel(server_port, flags);
-  if (!channel) {
-    ret = -ENOMEM;
-    goto out;
-  }
-
-  ASSERT(out_channel != NULL);
-  channel->owner = current_task();
-  *out_channel = channel;
-  return ret;
-  
-  out:
-  if (channel)
-    __shutdown_channel(channel);
-
-  return ret;
 }
 
 int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
@@ -212,13 +211,11 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
 
   r=id;
   goto out_unlock;
-free_id:
-  idx_free(&ipc->channel_array,id);
   
 out_put_port:
   ipc_put_port(server_port);
   if (channel)
-    __shutdown_channel(channel);
+    ipc_destroy_channel(channel);
   
 out_unlock:
   UNLOCK_IPC(ipc);

@@ -86,10 +86,10 @@ typedef struct __task_event_descr {
   ulong_t ev_mask;
 } task_event_descr_t;
 
-struct __ipc_gen_port;
+struct __ipc_channel;
 
 typedef struct __task_event_listener {
-  struct __ipc_gen_port *port;
+  struct __ipc_channel *channel;
   struct __task_struct *listener,*target;
   list_node_t owner_list;
   list_node_t llist;

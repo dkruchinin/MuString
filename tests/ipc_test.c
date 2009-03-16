@@ -977,7 +977,7 @@ static void __ipc_buffer_test(void *ctx)
   snd_iovecs[2].iov_base=snd_iovecs[1].iov_base+snd_iovecs[1].iov_len;
   snd_iovecs[2].iov_len=sizeof(message_tail_t);
 
-  ipc_setup_buffer_pages(current_task(),rcv_iovecs,1,__buf_pages,bufs);
+  ipc_setup_buffer_pages(NULL,rcv_iovecs,1,__buf_pages,bufs, true);
 
   ipc_transfer_buffer_data_iov(bufs,1,snd_iovecs,6,0,true);
   if( __validate_vectored_message(__vectored_msg_server_rcv_buf,4,tf) ) {
@@ -1002,7 +1002,7 @@ static void __ipc_buffer_test(void *ctx)
   snd_iovecs[2].iov_len=sizeof(message_tail_t);
 
   tf->printf(SERVER_THREAD"Setting up buffer pages ... " );
-  ipc_setup_buffer_pages(current_task(),rcv_iovecs,1,__buf_pages,bufs);
+  ipc_setup_buffer_pages(NULL,rcv_iovecs,1,__buf_pages,bufs, false);
   tf->printf(" Done !\n" );
 
   tf->printf(SERVER_THREAD"Transferring data to the buffers ... " );
@@ -1028,7 +1028,7 @@ static void __ipc_buffer_test(void *ctx)
   rcv_iovecs[1].iov_len=6*sizeof(message_part_t)+sizeof(message_tail_t);
 
   tf->printf("Setting up buffer pages ... " );
-  ipc_setup_buffer_pages(current_task(),rcv_iovecs,2,__buf_pages,bufs);
+  ipc_setup_buffer_pages(NULL,rcv_iovecs,2,__buf_pages,bufs, false);
   tf->printf("Done !\n" );
 
   tf->printf("Transferring data to the buffer (PATTERN=0x%X) ... ",
@@ -1055,7 +1055,7 @@ static void __ipc_buffer_test(void *ctx)
   snd_iovecs[2].iov_base=snd_iovecs[1].iov_base+snd_iovecs[1].iov_len;
   snd_iovecs[2].iov_len=sizeof(__zbuffer_snd)- snd_iovecs[0].iov_len- snd_iovecs[1].iov_len;
 
-  r=ipc_setup_buffer_pages(current_task(),snd_iovecs,3,__buf_pages,bufs);
+  r=ipc_setup_buffer_pages(NULL,snd_iovecs,3,__buf_pages,bufs, true);
   if( r ) {
     tf->printf("Can't create buffers for offset reading !\n");
     tf->abort();

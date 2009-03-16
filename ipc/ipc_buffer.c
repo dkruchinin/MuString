@@ -77,7 +77,7 @@ int ipc_setup_buffer_pages(ipc_channel_t *channel,iovec_t *iovecs,ulong_t numvec
 
     buf->chunks=addr_array;
     buf_data.pchunk = buf->chunks;
-    if (likely(!(channel->flags & IPC_KERNEL_SIDE))) {
+    if (channel && likely(!(channel->flags & IPC_KERNEL_SIDE))) {
       uint32_t pfmask = PFLT_READ;
 
       if (!is_snd_buf)

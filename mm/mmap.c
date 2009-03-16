@@ -36,6 +36,7 @@
 #include <eza/rwsem.h>
 #include <eza/spinlock.h>
 #include <eza/security.h>
+#include <eza/usercopy.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/types.h>
 
