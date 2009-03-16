@@ -381,10 +381,12 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       }
       break;
     case SYS_PR_CTL_ADD_EVENT_LISTENER:
-        if(copy_from_user(&te_ctl,(void *)arg,sizeof(te_ctl) ) ) {
+      if(copy_from_user(&te_ctl,(void *)arg,sizeof(te_ctl) ) ) {
         return -EFAULT;
       }
       return task_event_attach(target,current_task(),&te_ctl);
+    case SYS_PR_CTL_DEL_EVENT_LISTENER:
+      return task_event_detach(arg,current_task());
     case SYS_PR_CTL_SET_PERTASK_DATA:
       if( !valid_user_address(arg) ) {
         return -EFAULT;
@@ -490,6 +492,10 @@ int sys_task_control(pid_t pid, ulong_t cmd, ulong_t arg)
   /* Only reincarnation can target zombies. */
   if( cmd == SYS_PR_CTL_REINCARNATE_TASK ) {
     lookup_flags |= LOOKUP_ZOMBIES;
+  }
+
+  if( !pid ) {
+    pid=current_task()->pid;
   }
 
   if( (task=lookup_task(pid,lookup_flags)) == NULL ) {
