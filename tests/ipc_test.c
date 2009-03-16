@@ -587,7 +587,7 @@ static void __process_events_test(void *ctx)
   DECLARE_TEST_CONTEXT;
   int port=sys_create_port(0,0);
   task_t *task;
-  int r;
+  int r,refcount;
   task_event_ctl_arg te_ctl;
   task_event_descr_t ev_descr;
   port_msg_info_t msg_info;
@@ -601,12 +601,49 @@ static void __process_events_test(void *ctx)
     tf->abort();
   }
 
+  refcount=atomic_get(&task->refcount);
+
   te_ctl.ev_mask=TASK_EVENT_TERMINATION;
   te_ctl.port=port;
   r=sys_task_control(task->pid,SYS_PR_CTL_ADD_EVENT_LISTENER,
                      (ulong_t)&te_ctl);
   if( r ) {
     tf->printf("Can't set event listener: %d\n",r);
+    tf->failed();
+  }
+
+  if( atomic_get(&task->refcount) != refcount+1) {
+    tf->printf("Insuficient task refcount after adding a listener ! %d instead of %d\n",
+               atomic_get(&task->refcount),refcount+1);
+    tf->failed();
+  }
+
+  tf->printf("Now remove just installed event listener.\n");
+  r=sys_task_control(0,SYS_PR_CTL_DEL_EVENT_LISTENER,task->pid);
+  if( r ) {
+    tf->printf("Can't remove event listener: %d\n",r);
+    tf->failed();
+  }
+
+  if( atomic_get(&task->refcount) != TASK_INITIAL_REFCOUNT ) {
+    tf->printf("Insuficient task refcount after deleting a listener ! %d instead of %d\n",
+               atomic_get(&task->refcount),TASK_INITIAL_REFCOUNT);
+    tf->failed();
+  }
+
+  tf->printf("Re-install listener for target task.\n");
+  te_ctl.ev_mask=TASK_EVENT_TERMINATION;
+  te_ctl.port=port;
+  r=sys_task_control(task->pid,SYS_PR_CTL_ADD_EVENT_LISTENER,
+                     (ulong_t)&te_ctl);
+  if( r ) {
+    tf->printf("Can't set event listener: %d\n",r);
+    tf->failed();
+  }
+
+  if( atomic_get(&task->refcount) != refcount+1) {
+    tf->printf("Insuficient task refcount after re-adding a listener ! %d instead of %d\n",
+               atomic_get(&task->refcount),refcount+1);
     tf->failed();
   }
 
@@ -635,6 +672,27 @@ static void __process_events_test(void *ctx)
       !(ev_descr.ev_mask & te_ctl.ev_mask) ) {
     tf->printf( "Improper notification message received: PID: %d, TID: %d, EVENT: 0x%X\n",
                 ev_descr.pid,ev_descr.tid,ev_descr.ev_mask);
+    tf->failed();
+  }
+
+  tf->printf("Now remove our event listener.\n");
+  r=sys_task_control(0,SYS_PR_CTL_DEL_EVENT_LISTENER,task->pid);
+  if( r ) {
+    tf->printf("Can't remove event listener: %d\n",r);
+    tf->failed();
+  }
+
+  tf->printf("Now try to remove not-attached listeners.\n");
+  r=sys_task_control(0,SYS_PR_CTL_DEL_EVENT_LISTENER,task->pid);
+  if( r != -EINVAL ) {
+    tf->printf("How did I manage to remove insufficient listener ?\n");
+    tf->failed();
+  }
+
+  sleep(100);
+  if( atomic_get(&task->refcount) != TASK_INITIAL_REFCOUNT-1 ) {
+    tf->printf("Insuficient task refcount after deleting a listener ! %d instead of %d\n",
+               atomic_get(&task->refcount),TASK_INITIAL_REFCOUNT-1);
     tf->failed();
   }
 

@@ -28,11 +28,13 @@
 #include <mm/pfalloc.h>
 #include <mm/slab.h>
 #include <mm/memobj.h>
+#include <mm/mman.h>
 #include <mm/pfi.h>
 #include <ipc/port.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/types.h>
 #include <eza/spinlock.h>
+#include <eza/usercopy.h>
 #include <eza/arch/mm.h>
 
 static idx_allocator_t memobjs_ida;
@@ -40,14 +42,14 @@ static memcache_t *memobjs_memcache = NULL;
 static ttree_t memobjs_tree;
 static RW_SPINLOCK_DEFINE(memobjs_lock);
 
-static inline memobj_t *__find_by_id_core(memobj_id_t id)
-{
-  return ttree_lookup(&memobjs_tree, &id, NULL);
-}
-
 static int __memobjs_cmp_func(void *k1, void *k2)
 {
   return (*(long *)k1 - *(long *)k2);
+}
+
+static inline memobj_t *__find_by_id_core(memobj_id_t id)
+{
+  return ttree_lookup(&memobjs_tree, &id, NULL);
 }
 
 static void __init_kernel_memobjs(void)
@@ -87,9 +89,14 @@ int memobj_create(memobj_nature_t nature, uint32_t flags, pgoff_t size, /* OUT *
     ret = -ENOMEM;
     goto error;
   }
+
+  kprintf("==> %p\n", memobj);
+  memset(memobj, 0, sizeof(*memobj));
+  kprintf("==> %p\n", memobj);
   if (likely(!memobj_kernel_nature(nature))) {
     spinlock_lock_write(&memobjs_lock);
     memobj->id = idx_allocate(&memobjs_ida);
+    kprintf("IDX allocator returned id = %d\n", memobj->id);
     if (likely(memobj->id != IDX_INVAL))
       ASSERT(!ttree_insert(&memobjs_tree, &memobj->id));
     else {
@@ -106,15 +113,19 @@ int memobj_create(memobj_nature_t nature, uint32_t flags, pgoff_t size, /* OUT *
     ASSERT(!ttree_insert(&memobjs_tree, &memobj->id));
     spinlock_unlock_write(&memobjs_lock);
   }
-  
-  memset(memobj, 0, sizeof(*memobj));
+    
   memobj->size = size;
   switch (nature) {
       case MMO_NTR_GENERIC:
+        kprintf("zzz\n");
+        kprintf("one-> %d\n", memobj->id);
         ret = generic_memobj_initialize(memobj, flags);
+        kprintf("two\n");
         break;
       case MMO_NTR_PAGECACHE:
+        kprintf("1) ID = %d", memobj->id);
         ret = pagecache_memobj_initialize(memobj, flags);
+        kprintf("2) ID = %d", memobj->id);
         break;
       default:
         ret = -EINVAL;
@@ -126,8 +137,15 @@ int memobj_create(memobj_nature_t nature, uint32_t flags, pgoff_t size, /* OUT *
   return ret;
   
   error:
-  if (memobj)
+  if (memobj) {
+    spinlock_lock_write(&memobjs_lock);
+    ttree_delete(&memobjs_tree, &memobj->id);
+    if (likely(!memobj_kernel_nature(nature)))
+      idx_free(&memobjs_ida, memobj->id);
+
+    spinlock_unlock_write(&memobjs_lock);
     memfree(memobj);
+  }
 
   return ret;
 }
@@ -221,4 +239,42 @@ int memobj_prepare_page_backended(memobj_t *memobj, page_frame_t **page)
 {
   *page = NULL;
   return -ENOTSUP;
+}
+
+int sys_memobj_create(struct memobj_info *user_mmo_info)
+{
+  struct memobj_info mmo_info;
+  int ret = 0;
+  uint32_t memobj_flags;
+  memobj_t *memobj = NULL;
+  
+  if (copy_from_user(&mmo_info, user_mmo_info, sizeof(mmo_info)))
+    return -EFAULT;
+
+  /* Validate memory object nature */
+  kprintf("NATURE: %d\n", mmo_info.nature);
+  if ((mmo_info.nature > 0) && (mmo_info.nature <= MMO_NTR_SRV))
+    return -EPERM;
+  else if ((mmo_info.nature > MMO_NTR_PROXY) || (mmo_info.nature < 0))
+    return -EINVAL;
+
+  /* Compose memory object flags */
+  memobj_flags = (1 << pow2(mmo_info.lifetype)) & MMO_LIFE_MASK;
+  memobj_flags |= (mmo_info.flags << MMO_FLAGS_SHIFT) & MMO_FLAGS_MASK;
+  if (!(memobj_flags & MMO_LIFE_MASK) || (mmo_info.size & PAGE_MASK) || !mmo_info.size)
+    return -EINVAL;
+
+  ret = memobj_create(mmo_info.nature, memobj_flags, mmo_info.size >> PAGE_WIDTH, &memobj);
+  if (ret)
+    return ret;
+
+  mmo_info.flags = (memobj->flags & MMO_FLAGS_MASK) >> MMO_FLAGS_SHIFT;
+  kprintf("New memobj id = %d\n", memobj->id);
+  mmo_info.id = memobj->id;
+  if (copy_to_user(user_mmo_info, &mmo_info, sizeof(mmo_info))) {
+    __try_destroy_memobj(memobj);
+    return -EFAULT;
+  }
+  
+  return 0;
 }

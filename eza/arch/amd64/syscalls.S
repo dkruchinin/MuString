@@ -47,7 +47,7 @@ syscall_table:
 	.quad	sys_free_ioports
 	.quad   sys_create_irq_counter_array	/* 10 */
 	.quad   sys_wait_on_irq_array
-        .quad   sys_ipc_port_poll
+    .quad   sys_ipc_port_poll
 	.quad   sys_nanosleep
 	.quad   sys_scheduler_control
 	.quad   sys_get_tid                     /* 15  */
@@ -79,6 +79,7 @@ syscall_table:
 	.quad   sys_sigwait
 	.quad   sys_sched_yield
 	.quad   sys_fork
+        .quad   sys_memobj_create
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

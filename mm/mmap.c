@@ -302,6 +302,10 @@ vmm_t *vmm_create(void)
   return vmm;
 }
 
+/*
+ * Clone all VM ranges in "src" to "dst" and map them into dst's root
+ * page directory regarding the policy specified by the "flags".
+ */
 int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
 {
   ttree_node_t *tnode;
@@ -313,15 +317,24 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
   vmrange_flags_t new_vmr_flags;
 
   ASSERT(dst != src);
+  ASSERT((flags & (VMM_CLONE_POPULATE | VMM_CLONE_COW)) != (VMM_CLONE_POPULATE | VMM_CLONE_COW));
+  
   rwsem_down_write(&src->rwsem);
   pagetable_lock(&src->rpd);
   tnode = ttree_tnode_leftmost(src->vmranges_tree.root);
   ASSERT(tnode != NULL);
 
+  /* Browse throug each VM range in src and copy its content into the dst's VM ranges tree */
   while (tnode) {
     tnode_for_each_index(tnode, i) {
       vmr = ttree_key2item(&src->vmranges_tree, tnode_key(tnode, i));
       new_vmr_flags = vmr->flags;
+
+      /*
+       * If current VM range is shared and VMM_CLONE shared wasn't specified, pages
+       * in src's VM range would be copied to the dst's address space. To do this properly
+       * we have to change VMR_SHARED to VMR_PRIVATE.
+       */
       if ((vmr->flags & VMR_SHARED) && !(flags & VMM_CLONE_SHARED)) {
         new_vmr_flags &= ~VMR_SHARED;
         new_vmr_flags |= VMR_PRIVATE;
@@ -337,9 +350,18 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
         goto clone_failed;
       }
 
+      new_vmr->hole_size = vmr->hole_size;
       ASSERT(!ttree_insert(&dst->vmranges_tree, new_vmr));
+
+      /* Handle each mapped page in given range regarding the specified clone policy */
       for (addr = vmr->bounds.space_start; addr < vmr->bounds.space_end; addr += PAGE_SIZE) {
         pidx = ptable_ops.vaddr2page_idx(&src->rpd, addr, &pde);
+        
+        /*
+         * In some situations page may not be present in src's page table because it was
+         * swapped before vmm_clone is called. In this case, we make a copy of the lowest
+         * level PDE into the dst's page table.
+         */
         if (pidx == PAGE_IDX_INVAL) {
           if (pde != NULL) {
             pidx = pde_fetch_page_idx(pde);
@@ -351,14 +373,29 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
           continue;
         }
         if (!(vmr->flags & VMR_SHARED) && (vmr->flags & VMR_WRITE) && (flags & VMM_CLONE_COW)) {
-          kprintf_fault("Parent remaps page by address %p\n", addr);
-            ret = mmap_core(&src->rpd, addr, pidx, 1,
-                            ((vmr->flags & ~VMR_WRITE) & KMAP_FLAGS_MASK), false);
-            if (ret)
-              goto clone_failed;
+        /*
+         * If copy-on-write clone policy was specified and current cloned VM range is writable and
+         * not shared, we have to remap it with read-only access policy in both src and dst.
+         * After page fault is occured, the page will be copied into another one and unpined.
+         */
+          page_frame_t *page = pframe_by_number(pidx);
+
+          new_vmr_flags &= ~VMR_WRITE;
+          page->flags |= PF_COW; /* PF_COW flag tells memory object about nature of the fault */
+
+          /* Remap page to read-only in src */
+          ret = mmap_core(&src->rpd, addr, pidx, 1,
+                          ((vmr->flags & KMAP_FLAGS_MASK) & ~VMR_WRITE), false);
+          if (ret)
+            goto clone_failed;
         }
-        if (((vmr->flags & VMR_SHARED) && !(flags & VMM_CLONE_SHARED)) ||
-            ((vmr->flags & VMR_WRITE) && (flags & VMM_CLONE_POPULATE))) {
+        else if ((flags & VMM_CLONE_POPULATE) &&
+                 ((((vmr->flags & VMR_SHARED) && !(flags & VMM_CLONE_SHARED))) || (vmr->flags & VMR_WRITE))) {
+          /*
+           * There are two possible situations when we have to explicitely allocate new page and copy
+           * the content of the current page into it in order to map it to the dst's page table later:
+           *  1) VMM_CLONE_POPULATE clone policy was specified and 
+           */
           page_frame_t *page = alloc_page(AF_USER | AF_ZERO);
 
           if (!page) {
@@ -368,12 +405,6 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
 
           copy_page_frame(page, pframe_by_number(pidx));
           pidx = pframe_number(page);
-        }
-        else if (!(vmr->flags & VMR_SHARED) && (flags & VMM_CLONE_COW) && (vmr->flags & VMR_WRITE)) {
-          page_frame_t *page = pframe_by_number(pidx);
-
-          new_vmr_flags &= ~VMR_WRITE;
-          page->flags |= PF_COW;
         }
 
         ret = mmap_core(&dst->rpd, addr, pidx, 1, new_vmr_flags & KMAP_FLAGS_MASK, true);
@@ -438,7 +469,6 @@ uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length, ttree_cursor_t *cursor
 
   VMM_VERBOSE("%s: Failed to find free VM range with size = %d pages\n",
               vmm_get_name_dbg(vmm), length);
-
   return INVALID_ADDRESS; /* Woops, nothing was found. */
 
   found:
@@ -523,6 +553,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
 
   /* If corresponding memory object doesn't support shared memory facility, return an error. */
   if ((flags & VMR_SHARED) && (memobj->flags & MMO_FLG_NOSHARED)) {
+    kprintf("WTF? id = %d\n", memobj->id);
     err = -ENOTSUP;
     goto err;
   }

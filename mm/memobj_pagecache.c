@@ -94,7 +94,8 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
         return ret;
 
       page->offset = offset;
-      atomic_set(&page->refcount, 1);      
+      kprintf("OFFSET = %d\n", offset);
+      atomic_set(&page->refcount, 2);
       if (unlikely(vmr->flags & VMR_PRIVATE)) {
         /*
          * Ok, it was a private mapping, so we don't need to put
@@ -151,7 +152,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
   else {
     page_frame_t *cpage;
 
-    ASSERT(vmr->flags & VMR_PRIVATE); /* FIXME DK: Implement write-faults with VMR_PRIVATE mappings */
+    ASSERT(!(vmr->flags & VMR_PRIVATE)); /* FIXME DK: Implement write-faults with VMR_PRIVATE mappings */
     ASSERT(pfmask & PFLT_WRITE);
     pagetable_lock(&vmm->rpd);
     idx = ptable_ops.vaddr2page_idx(&vmm->rpd, addr, NULL);
@@ -196,13 +197,14 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
   pagetable_lock(&vmm->rpd);
   if (pfmask & PFLT_NOT_PRESENT) {
     idx = ptable_ops.vaddr2page_idx(&vmm->rpd, addr, NULL);
-    if (unlikely(idx == PAGE_IDX_INVAL)) {
+    if (unlikely(idx != PAGE_IDX_INVAL)) {
       ret = 0;
       unpin_page_frame(page);
       goto out;
     }
   }
 
+  kprintf("%d: map %#x with offset %d\n", current_task()->pid, pframe_number(page), page->offset);
   ret = mmap_core(&vmm->rpd, addr, pframe_number(page), 1, mmap_flags, false);
   pagetable_unlock(&vmm->rpd);
   
@@ -244,7 +246,7 @@ int pagecache_memobj_initialize(memobj_t *memobj, uint32_t flags)
   struct pcache_private *priv = NULL;
   int ret = 0;
   
-  if (!(flags & MMO_LIVE_MASK) || !is_powerof2(flags & MMO_LIVE_MASK))
+  if (!(flags & MMO_LIFE_MASK) || !is_powerof2(flags & MMO_LIFE_MASK))
     return -EINVAL;
 
   memobj->flags = flags;

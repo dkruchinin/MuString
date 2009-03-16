@@ -61,7 +61,7 @@ typedef uint8_t page_flags_t;
 #define PF_DIRTY      0x08
 #define PF_COW        0x10
 
-#define PF_MMPOOL_MASK (PF_MMP_BMEM | PF_MMP_GEN | PF_MMP_DMA)
+#define PF_CLEAR_MASK (PF_COW | PF_DIRTY | PF_SYNCING)
 
 /* page fault flags */
 #define PFLT_NOT_PRESENT 0x01
@@ -159,9 +159,15 @@ static inline page_idx_t virt_to_pframe_id(void *virt)
   return ((uintptr_t)virt - KERNEL_BASE) >> PAGE_WIDTH;
 }
 
-static inline page_frame_t *virt_to_pframe( void *addr )
+static inline page_frame_t *virt_to_pframe(void *addr)
 {
   return pframe_by_number(virt_to_pframe_id(addr));
+}
+
+static inline void clear_page_frame(page_frame_t *page)
+{
+  page->flags &= ~PF_CLEAR_MASK;
+  atomic_set(&page->refcount, 0);
 }
 
 #define pframe_memnull(page) pframes_memnull(page, 1)
