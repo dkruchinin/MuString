@@ -209,7 +209,6 @@ int create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
     *newtask = new_task;
   }
 
-  kprintf("RETURN => %d\n", r);
   return r;
 }
 
