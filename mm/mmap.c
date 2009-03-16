@@ -955,10 +955,14 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
   long ret;
   struct mmap_args margs;
   vmrange_flags_t vmrflags;
-  
-  victim_task = pid_to_task(victim);
-  if (!victim_task)
-    return -ESRCH;
+
+  if (likely(!victim))
+    victim_task = current_task();
+  else {
+    victim_task = pid_to_task(victim);
+    if (!victim_task)
+      return -ESRCH;
+  }
 
   vmm = victim_task->task_mm;
   if (copy_from_user(&margs, uargs, sizeof(margs)))
@@ -1007,9 +1011,13 @@ int sys_munmap(pid_t victim, uintptr_t addr, size_t length)
   vmm_t *vmm;
   int ret;
 
-  victim_task = pid_to_task(victim);
-  if (!victim_task)
-    return -ESRCH;
+  if (likely(!victim))
+    victim_task = current_task();
+  else {
+    victim_task = pid_to_task(victim);
+    if (!victim_task)
+      return -ESRCH;
+  }
 
   vmm = victim_task->task_mm;
   
