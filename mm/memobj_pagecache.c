@@ -63,7 +63,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
   kmap_flags_t mmap_flags = vmr->flags & KMAP_FLAGS_MASK;
   page_frame_t *page = NULL;
   page_idx_t idx;
-  
+ 
   if (unlikely(offset >= memobj->size))
     return -ENXIO;
   if (unlikely((memobj->flags & MMO_FLG_BACKENDED) && (memobj->backend == NULL)))
@@ -264,11 +264,4 @@ int pagecache_memobj_initialize(memobj_t *memobj, uint32_t flags)
   memobj->private = priv;
 
   return ret;  
-  error:
-  if (priv)
-    memfree(priv);
-  if (memobj->backend)
-    memobj_release_backend(memobj->backend);
-
-  return ret;
 }

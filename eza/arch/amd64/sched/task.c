@@ -47,6 +47,7 @@
 /* Located on 'amd64/asm.S' */
 extern void kthread_fork_path(void);
 extern void user_fork_path(void);
+extern void user_fork_path_test(void);
 
 /* Bytes enough to store our arch-specific context. */
 #define ARCH_CONTEXT_BUF_SIZE  1256
@@ -293,8 +294,8 @@ static void __apply_task_exec_attrs(regs_t *regs,exec_attrs_t *exec_attrs,
 }
 
 int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
-                                 task_privelege_t priv,task_t *parent,
-                                 task_creation_attrs_t *attrs)
+                            task_privelege_t priv,task_t *parent,
+                            task_creation_attrs_t *attrs)
 {
   uintptr_t fsave = newtask->kernel_stack.high_address;
   uint64_t delta, reg_size;
@@ -329,7 +330,11 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   if( priv == TPL_KERNEL ) {
     *((uint64_t *)fsave) = (uint64_t)kthread_fork_path;
   } else {
-    *((uint64_t *)fsave) = (uint64_t)user_fork_path;
+    if( cflags & CLONE_COW ) {
+      *((uint64_t *)fsave) = (uint64_t)user_fork_path_test;
+    } else {
+      *((uint64_t *)fsave) = (uint64_t)user_fork_path;
+    }
   }
 
   /* Now setup CR3 and _current_ value of new thread's stack. */
@@ -348,18 +353,27 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
     task_ctx->ldt=(uintptr_t)memalloc(task_ctx->ldt_limit);
 
     if( !task_ctx->ldt ) {
-      kprintf("** Can't allocate LDT for task %d/%d !\n",
-              newtask->pid,newtask->tid);
       return -ENOMEM;
     }
     __setup_user_ldt(task_ctx->ldt);
   }
 
-  /* Process attributes, if any. */
   if( attrs ) {
     __apply_task_exec_attrs(regs,&attrs->exec_attrs,task_ctx);
   }
 
+  /* In case of COW, i.e. fork(), child continues execution from the same point
+   * as its parent.
+   */
+  if( cflags & CLONE_COW ) {
+    regs_t *pregs=(regs_t *)(parent->kernel_stack.high_address - sizeof(regs_t));
+
+    regs->int_frame.rip=pregs->int_frame.rip;
+    regs->int_frame.old_rsp=pregs->int_frame.old_rsp;
+    kprintf_fault("***** NEW TASK RSP: %p, ON TOP OF THE STAK: %p\n",
+                  regs->int_frame.old_rsp,
+                  *(long *)regs->int_frame.old_rsp);
+  }
   return 0;
 }
 

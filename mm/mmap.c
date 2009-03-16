@@ -31,6 +31,7 @@
 #include <mm/memobj.h>
 #include <mm/vmm.h>
 #include <mm/pfi.h>
+#include <mm/mman.h>
 #include <eza/mutex.h>
 #include <eza/rwsem.h>
 #include <eza/spinlock.h>
@@ -946,22 +947,37 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
   return ret;
 }
 
-long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, memobj_id_t memobj_id, off_t offset)
+long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
 {
+  task_t *victim_task;
   memobj_t *memobj = NULL;
-  vmm_t *vmm = current_task()->task_mm;
+  vmm_t *vmm;
   long ret;
-  vmrange_flags_t vmrflags = (prot & VMR_PROTO_MASK) | (flags << VMR_FLAGS_OFFS);
+  struct mmap_args margs;
+  vmrange_flags_t vmrflags;
 
+  if (likely(!victim))
+    victim_task = current_task();
+  else {
+    victim_task = pid_to_task(victim);
+    if (!victim_task)
+      return -ESRCH;
+  }
+
+  vmm = victim_task->task_mm;
+  if (copy_from_user(&margs, uargs, sizeof(margs)))
+    return -EFAULT;
+
+  vmrflags = (margs.prot & VMR_PROTO_MASK) | (margs.flags << VMR_FLAGS_OFFS);
   /*
    * Basic rules:
    * 1) offset must be page aligned
    * 2) if VMR_FIXED is set, address must be page aligned
    * 3) size mustn't be zero.
    */
-  if ((offset & PAGE_MASK)
-      || ((vmrflags & VMR_FIXED) && (addr & PAGE_MASK))
-      || !size) {
+  if ((margs.offset & PAGE_MASK)
+      || ((vmrflags & VMR_FIXED) && (margs.addr & PAGE_MASK))
+      || !margs.size) {
     ret = -EINVAL;
     goto out;
   }
@@ -978,8 +994,8 @@ long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, memobj_id_t memo
   }
 
   rwsem_down_write(&vmm->rwsem);
-  ret = vmrange_map(memobj, vmm, addr, PAGE_ALIGN(size) >> PAGE_WIDTH,
-                    vmrflags, PAGE_ALIGN(offset) >> PAGE_WIDTH);
+  ret = vmrange_map(memobj, vmm, margs.addr, PAGE_ALIGN(margs.size) >> PAGE_WIDTH,
+                    vmrflags, PAGE_ALIGN(margs.offset) >> PAGE_WIDTH);
   rwsem_up_write(&vmm->rwsem);
 
   out:
@@ -989,11 +1005,22 @@ long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, memobj_id_t memo
   return ret;
 }
 
-int sys_munmap(uintptr_t addr, size_t length)
+int sys_munmap(pid_t victim, uintptr_t addr, size_t length)
 {
-  vmm_t *vmm = current_task()->task_mm;
+  task_t *victim_task;
+  vmm_t *vmm;
   int ret;
 
+  if (likely(!victim))
+    victim_task = current_task();
+  else {
+    victim_task = pid_to_task(victim);
+    if (!victim_task)
+      return -ESRCH;
+  }
+
+  vmm = victim_task->task_mm;
+  
   /* address must be page aligned and length must be specified */
   if (!length || (addr & PAGE_MASK))
     return -EINVAL;

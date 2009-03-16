@@ -77,8 +77,9 @@ syscall_table:
 	.quad   sys_kernel_control
 	.quad   sys_timer_delete                /* 40 */
 	.quad   sys_sigwait
-	.quad   sys_sched_yield
+	.quad   sys_sched_yield	
     .quad   sys_memobj_create
+    .quad   sys_fork
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

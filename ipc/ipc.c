@@ -145,12 +145,7 @@ void *allocate_ipc_memory(long size)
       memset(addr,0,size);
     }
   } else {
-    int pages=size >> PAGE_WIDTH;
-
-    if( size & PAGE_MASK ) {
-      pages++;
-    }
-    addr=alloc_pages_addr(pages,AF_ZERO);
+    addr=alloc_pages_addr(PAGE_ALIGN(size)>>PAGE_WIDTH,AF_ZERO);
   }
   return addr;
 }
@@ -211,6 +206,8 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
     }
 
     tipc=rcpt->ipc;
+    kprintf_fault("* OLD IPC: %p, NEW IPC: %p\n",
+                  ipc,tipc);
     LOCK_IPC(ipc);
     if( ipc->ports ) { /* Duplicate all open ports. */
       tipc->ports=allocate_ipc_memory(ipc->allocated_ports*sizeof(ipc_gen_port_t *));
@@ -220,7 +217,9 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
       tipc->allocated_ports=ipc->allocated_ports;
       tipc->max_port_num=ipc->max_port_num;
 
-      for(i=0;i<=ipc->max_port_num;i++) {
+      kprintf_fault("[P]: max=%d, alloc=%d\n",
+                    ipc->max_port_num,ipc->allocated_ports);
+      for(i=0;i<ipc->allocated_ports;i++) {
         if( ipc->ports[i] ) {
           tipc->ports[i]=ipc_clone_port(ipc->ports[i]);
           if( !tipc->ports[i] ) {
@@ -240,10 +239,17 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
       tipc->allocated_channels=ipc->allocated_channels;
       tipc->max_channel_num=ipc->max_channel_num;
 
-      for(i=0;i<=ipc->max_channel_num;i++) {
+      kprintf_fault("[C]: max=%d, alloc=%d, SIZE: %d, ADDR: %p, SLABMAXSIZE: %d\n",
+                    ipc->max_channel_num,ipc->allocated_channels,
+                    ipc->allocated_channels*sizeof(ipc_channel_t *),
+                    tipc->channels,SLAB_OBJECT_MAX_SIZE);
+
+      for(i=0;i<ipc->allocated_channels;i++) {
         if( ipc->channels[i] ) {
-          tipc->channels[i]=ipc_clone_channel(ipc->channels[i]);
+          kprintf_fault("   [Clonig %d to %p]\n",i,&tipc->channels[i]);
+          tipc->channels[i]=memalloc(64);//ipc_clone_channel(ipc->channels[i]);
           if( !tipc->channels[i] ) {
+            kprintf_fault("ZZZZZZZZZZZzz !\n");
             UNLOCK_IPC(ipc);
             goto put_channels;
           }

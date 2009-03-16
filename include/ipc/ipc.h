@@ -13,6 +13,7 @@
 /* Blocking mode */
 #define IPC_BLOCKED_ACCESS  0x01
 #define IPC_KERNEL_SIDE     0x02
+#define IPC_AUTOREF         0x04
 
 /**< Maximum numbers of vectors for I/O operations. */
 #define MAX_IOVECS  8

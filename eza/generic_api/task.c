@@ -197,6 +197,7 @@ void cleanup_thread_data(gc_action_t *action)
    * be probably processed via 'waitpid()' functionality
    */
   free_kernel_stack(task->kernel_stack.id);
+  release_task_struct(task);
 }
 
 static tg_leader_private_t *__allocate_tg_data(task_privelege_t priv)
@@ -243,7 +244,7 @@ static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
     spinlock_initialize(&task->child_lock);
     spinlock_initialize(&task->member_lock);
 
-    atomic_set(&task->refcount,2); /* One extra ref is for 'wait()' */
+    atomic_set(&task->refcount,TASK_INITIAL_REFCOUNT); /* One extra ref is for 'wait()' */
     task->flags = 0;
     task->group_leader=task;
     task->cpu_affinity_mask=ONLINE_CPUS_MASK;
@@ -271,7 +272,7 @@ static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags,
       dup_task_ipc_resources(task->ipc);
     }
   } else {
-    if( attrs && attrs->exec_attrs.flags & __EXEC_ATTRS_COPY_IPC ) {
+    if( flags & CLONE_REPL_IPC ) {
       r=replicate_ipc(parent->ipc,task);
     } else {
       r=setup_task_ipc(task);

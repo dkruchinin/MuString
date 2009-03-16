@@ -49,7 +49,7 @@
 #define REF_PORT(p)  atomic_inc(&p->use_count)
 #define UNREF_PORT(p)  atomic_dec(&p->use_count)
 
-#define IPC_PORT_DIRECT_FLAGS  (IPC_BLOCKED_ACCESS)
+#define IPC_PORT_DIRECT_FLAGS  (IPC_BLOCKED_ACCESS | IPC_AUTOREF)
 #define __MSG_WAS_DEQUEUED  (ipc_port_message_t *)0x007
 
 typedef enum __ipc_msg_state {
