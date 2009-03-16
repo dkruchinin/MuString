@@ -8,6 +8,8 @@
 #define true  1
 #define false 0
 
+typedef int32_t pid_t;
+typedef uint64_t tid_t;
 typedef unsigned char uchar_t;
 typedef unsigned int uint_t;
 typedef unsigned long ulong_t;

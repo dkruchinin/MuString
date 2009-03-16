@@ -28,9 +28,10 @@
 #include <mm/pfalloc.h>
 #include <mm/slab.h>
 #include <mm/memobj.h>
-#include <mm/mman.h>
+#include <mm/memobjctl.h>
 #include <mm/pfi.h>
-#include <ipc/port.h>
+#include <ipc/ipc.h>
+#include <ipc/channel.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/types.h>
 #include <eza/spinlock.h>
@@ -90,13 +91,11 @@ int memobj_create(memobj_nature_t nature, uint32_t flags, pgoff_t size, /* OUT *
     goto error;
   }
 
-  kprintf("==> %p\n", memobj);
   memset(memobj, 0, sizeof(*memobj));
-  kprintf("==> %p\n", memobj);
+  spinlock_initialize(&memobj->members_lock);
   if (likely(!memobj_kernel_nature(nature))) {
     spinlock_lock_write(&memobjs_lock);
     memobj->id = idx_allocate(&memobjs_ida);
-    kprintf("IDX allocator returned id = %d\n", memobj->id);
     if (likely(memobj->id != IDX_INVAL))
       ASSERT(!ttree_insert(&memobjs_tree, &memobj->id));
     else {
@@ -117,15 +116,10 @@ int memobj_create(memobj_nature_t nature, uint32_t flags, pgoff_t size, /* OUT *
   memobj->size = size;
   switch (nature) {
       case MMO_NTR_GENERIC:
-        kprintf("zzz\n");
-        kprintf("one-> %d\n", memobj->id);
         ret = generic_memobj_initialize(memobj, flags);
-        kprintf("two\n");
         break;
       case MMO_NTR_PAGECACHE:
-        kprintf("1) ID = %d", memobj->id);
         ret = pagecache_memobj_initialize(memobj, flags);
-        kprintf("2) ID = %d", memobj->id);
         break;
       default:
         ret = -EINVAL;
@@ -196,25 +190,28 @@ bool __try_destroy_memobj(memobj_t *memobj)
   return ret;
 }
 
-memobj_backend_t *memobj_create_backend(void)
+int memobj_create_backend(memobj_t *memobj, task_t *server_task, ulong_t port_id)
 {
-  memobj_backend_t *backend = memalloc(sizeof(*backend));
+  ipc_gen_port_t *server_port;
+  int ret;
+  
+  if (memobj->backend)
+    return -EALREADY;
+  if (!(memobj->flags & MMO_FLG_BACKENDED))
+    return -ENOTSUP;
 
-  if (backend) {
-    backend->server = NULL;
-    backend->port_id = IPC_PORT_ID_INVAL;
-  }
+  server_port = ipc_get_port(server_task, port_id);
+  if (!server_port)
+    return -EBADF;
 
-  return backend;
-}
-
-void memobj_release_backend(memobj_backend_t *backend)
-{
-  /*
-   * FIXME DK: may be it has a sence to report the server
-   * abount memobject releasing?
-   */
-  memfree(backend);
+  spinlock_lock(&memobj->members_lock);
+  /*ret = ipc_open_channel_raw(server_port, IPC_BLOCKED_ACCESS | IPC_KERNEL_SIDE, &memobj->backend);
+  if (ret) {
+    memobj->backend = NULL;
+    ipc_put_port(server_port);
+    }*/
+  spinlock_unlock(&memobj->members_lock);
+  return ret;
 }
 
 int memobj_prepare_page_raw(memobj_t *memobj, page_frame_t **page)
@@ -235,9 +232,19 @@ int memobj_prepare_page_raw(memobj_t *memobj, page_frame_t **page)
   return ret;
 }
 
-int memobj_prepare_page_backended(memobj_t *memobj, page_frame_t **page)
+int memobj_prepare_page_backended(memobj_t *memobj, pgoff_t offset, page_frame_t **page)
 {
-  *page = NULL;
+  /* TODO DK: implement */
+  /*struct memobj_rem_request req;
+  uintptr_t repl_addr;
+  long ret;
+  
+  ASSERT((memobj->flags & MMO_FLG_BACKENDED) && (memobj->backend != NULL));
+  memset(&req, 0, sizeof(req));
+  req.type = MREQ_TYPE_GETPAGE;
+  req.pg_offset = offset;
+
+  ret = sys_port_send(memobj->backend)*/
   return -ENOTSUP;
 }
 
@@ -252,7 +259,6 @@ int sys_memobj_create(struct memobj_info *user_mmo_info)
     return -EFAULT;
 
   /* Validate memory object nature */
-  kprintf("NATURE: %d\n", mmo_info.nature);
   if ((mmo_info.nature > 0) && (mmo_info.nature <= MMO_NTR_SRV))
     return -EPERM;
   else if ((mmo_info.nature > MMO_NTR_PROXY) || (mmo_info.nature < 0))
@@ -269,7 +275,6 @@ int sys_memobj_create(struct memobj_info *user_mmo_info)
     return ret;
 
   mmo_info.flags = (memobj->flags & MMO_FLAGS_MASK) >> MMO_FLAGS_SHIFT;
-  kprintf("New memobj id = %d\n", memobj->id);
   mmo_info.id = memobj->id;
   if (copy_to_user(user_mmo_info, &mmo_info, sizeof(mmo_info))) {
     __try_destroy_memobj(memobj);
@@ -277,4 +282,70 @@ int sys_memobj_create(struct memobj_info *user_mmo_info)
   }
   
   return 0;
+}
+
+int sys_memobj_control(memobj_id_t memobj_id, int cmd, long uarg)
+{
+  memobj_t *memobj = NULL;
+  int ret = 0;
+
+  memobj = memobj_pin_by_id(memobj_id);
+  if (!memobj) {
+    ret = -ENOENT;
+    goto out;
+  }
+
+  switch (cmd) {
+      case MEMOBJ_CTL_CHANGE_INFO:
+        ret = -ENOTSUP;
+        goto out;
+      case MEMOBJ_CTL_GET_INFO:
+      {
+        struct memobj_info mmo_info;
+
+        if (copy_from_user(&mmo_info, (void *)uarg, sizeof(mmo_info))) {
+          ret = -EFAULT;
+          goto out;
+        }
+
+        ret = -ENOTSUP;
+        goto out;
+      }
+      case MEMOBJ_CTL_TRUNC:
+        ret = -ENOTSUP;
+        goto out;
+      case MEMOBJ_CTL_PUT_PAGE:
+        ret = -ENOTSUP;
+        goto out;
+      case MEMOBJ_CTL_SET_BACKEND:
+      {
+        struct memobj_backend_info backend_info;
+        task_t *server_task;
+
+        /*if (copy_from_user(&backend_info, (void *)uarg, sizeof(backend_info))) {
+          ret = -EFAULT;
+          goto out;
+        }
+
+        server_task = pid_to_task(backend_info.server_pid);
+        if (!server_task) {
+          ret = -ESRCH;
+          goto out;
+        }
+
+        ret = memobj_create_backend(memobj, server_task, backend_info.port_id);*/
+        goto out;
+      }
+      case MEMOBJ_CTL_GET_BACKEND:
+        ret = -ENOTSUP;
+        goto out;
+      default:
+        ret = -EINVAL;
+  }
+
+  out:
+  if (memobj)
+    unpin_memobj(memobj);
+  
+  return ret;  
 }

@@ -221,6 +221,8 @@ static inline uintptr_t pgoff2addr(vmrange_t *vmr, pgoff_t offset)
           ((uintptr_t)(offset - vmr->offset) << PAGE_WIDTH));
 }
 
+struct mmap_args;
+
 /**
  * @fn status_t sys_mmap(uintptr_t addr,size_t size,uint32_t flags,shm_id_t fd,uintptr_t offset);
  * @brief mmap (shared) memory *
@@ -231,7 +233,7 @@ static inline uintptr_t pgoff2addr(vmrange_t *vmr, pgoff_t offset)
  * @param offset - offset of the shared area to map
  *
  */
-long sys_mmap(pid_t victim, uintptr_t addr, size_t size, int prot, int flags, memobj_id_t memobj_id, off_t offset);
+long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs);
 int sys_munmap(pid_t victim, uintptr_t addr, size_t length);
 
 #ifdef CONFIG_DEBUG_MM

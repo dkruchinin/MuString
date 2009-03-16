@@ -63,9 +63,11 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
   kmap_flags_t mmap_flags = vmr->flags & KMAP_FLAGS_MASK;
   page_frame_t *page = NULL;
   page_idx_t idx;
-  
+ 
   if (unlikely(offset >= memobj->size))
     return -ENXIO;
+  if (unlikely((memobj->flags & MMO_FLG_BACKENDED) && (memobj->backend == NULL)))
+    return -EINVAL;
 
   ASSERT(!(vmr->flags & VMR_NONE));
   ASSERT(!(vmr->flags & VMR_PHYS));
@@ -89,12 +91,11 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
       if (!(memobj->flags & MMO_FLG_BACKENDED))
         ret = memobj_prepare_page_raw(memobj, &page);
       else
-        ret = memobj_prepare_page_backended(memobj, &page);      
+        ret = memobj_prepare_page_backended(memobj, offset, &page);      
       if (ret)
         return ret;
 
       page->offset = offset;
-      kprintf("OFFSET = %d\n", offset);
       atomic_set(&page->refcount, 2);
       if (unlikely(vmr->flags & VMR_PRIVATE)) {
         /*
@@ -254,13 +255,6 @@ int pagecache_memobj_initialize(memobj_t *memobj, uint32_t flags)
   priv = memalloc(sizeof(*priv));
   if (!priv)
     return -ENOMEM;
-  if (flags & MMO_FLG_BACKENDED) {
-    memobj->backend = memobj_create_backend();
-    if (!memobj->backend) {
-      ret = -ENOMEM;
-      goto error;
-    }
-  }
   
   atomic_set(&memobj->users_count, 1);
   hat_initialize(&priv->pagecache);
@@ -270,11 +264,4 @@ int pagecache_memobj_initialize(memobj_t *memobj, uint32_t flags)
   memobj->private = priv;
 
   return ret;  
-  error:
-  if (priv)
-    memfree(priv);
-  if (memobj->backend)
-    memobj_release_backend(memobj->backend);
-
-  return ret;
 }
