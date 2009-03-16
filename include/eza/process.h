@@ -28,6 +28,7 @@
 #include <eza/arch/types.h>
 #include <kernel/syscalls.h>
 #include <ipc/port.h>
+#include <ipc/channel.h>
 #include <eza/wait.h>
 
 #define SYS_PR_CTL_SET_ENTRYPOINT      0x0
@@ -51,7 +52,7 @@
 #define LOOKUP_ZOMBIES  0x1  /* Should we lookup zombies ? */
 
 typedef struct __disintegration_descr_t {
-  ipc_gen_port_t *port;
+  ipc_channel_t *channel;
   ipc_port_message_t *msg;
 } disintegration_descr_t;
 

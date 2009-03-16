@@ -83,6 +83,7 @@ static int __notify_disintegration_done(disintegration_descr_t *dreq,
 {
   int r=-EINVAL;
   disintegration_req_packet_t *p;
+  ipc_gen_port_t *port;
 
   if( dreq ) {
     p=ipc_message_data(dreq->msg);
@@ -90,11 +91,18 @@ static int __notify_disintegration_done(disintegration_descr_t *dreq,
     p->pid=current_task()->pid;
     p->status=status;
 
-    r=ipc_port_send_iov_core(dreq->port,dreq->msg,false,NULL,0,0);
-    ipc_put_port(dreq->port);
+    r = ipc_get_channel_port(dreq->channel, &port);
+    if (r)
+      goto out;
+    
+    r=ipc_port_send_iov_core(port,dreq->msg,false,NULL,0,0);
+    ipc_put_port(port);
+    ipc_put_channel(dreq->channel);
     memfree(dreq);
   }
-  return r > 0 ? 0 : r;
+
+  out:
+  return (r > 0) ? 0 : r;
 }
 
 static void __flush_pending_uworks(task_t *exiter)

@@ -28,11 +28,10 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port, ulong_t flags);
 int ipc_open_channel_raw(ipc_gen_port_t *server_port, ulong_t flags, ipc_channel_t **out_channel);
 int ipc_close_channel(task_t *owner,ulong_t ch_id);
 int ipc_channel_control(task_t *caller,int channel,ulong_t cmd, ulong_t arg);
+ipc_channel_t *ipc_clone_channel(ipc_channel_t *target);
 
 #define LOCK_CHANNEL(c) spinlock_lock(&c->lock)
 #define UNLOCK_CHANNEL(c) spinlock_unlock(&c->lock)
-
-#define ipc_put_channel(c)  ipc_unref_channel(c,1)
 
 static inline int ipc_get_channel_port(ipc_channel_t *c,
                                        ipc_gen_port_t **outport) {
@@ -58,7 +57,10 @@ static inline int ipc_get_channel_port(ipc_channel_t *c,
   return r;
 }
 
-ipc_channel_t *ipc_clone_channel(ipc_channel_t *target);
+static inline void ipc_put_channel(ipc_channel_t *channel)
+{
+  ipc_unref_channel(channel, 1);
+}
 
 #define IPC_CHANNEL_DIRECT_OP_FLAGS  1
 #define IPC_CHANNEL_DIRECT_OP_MASK  ((1<<(IPC_CHANNEL_DIRECT_OP_FLAGS))-1)

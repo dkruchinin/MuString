@@ -653,11 +653,9 @@ int ipc_port_send_iov(ipc_channel_t *channel, iovec_t snd_kiovecs[], ulong_t snd
     ret = -ENOMEM;
     goto out;
   }
-  if (rcv_kiovecs) {
-    ret = ipc_port_send_iov_core(port, msg, channel_in_blocked_mode(channel),
-                                 rcv_kiovecs, rcv_numvecs, rcv_size);
-  }
-  
+
+  ret = ipc_port_send_iov_core(port, msg, channel_in_blocked_mode(channel),
+                               rcv_kiovecs, rcv_numvecs, rcv_size);  
   out:
   if (port)
     ipc_put_port(port);
