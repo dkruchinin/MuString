@@ -5,19 +5,19 @@
 #include <eza/task.h>
 #include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
-#include <eza/task.h>
 #include <ipc/port.h>
 #include <ds/list.h>
 
 #define IPC_CHANNEL_FLAG_BLOCKED_MODE  0x1
 
+struct __task_ipc;
 typedef struct __ipc_channel {
   atomic_t use_count;
   ulong_t flags,id;
   spinlock_t lock;
   ipc_gen_port_t *server_port;
   list_node_t ch_list;
-  task_t *owner;
+  struct __task_ipc *ipc;
 } ipc_channel_t;
 
 ipc_channel_t *ipc_allocate_channel(void);

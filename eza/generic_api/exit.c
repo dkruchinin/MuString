@@ -90,7 +90,7 @@ static int __notify_disintegration_done(disintegration_descr_t *dreq,
     p->pid=current_task()->pid;
     p->status=status;
 
-    r=ipc_port_send_iov(dreq->port,dreq->msg,false,NULL,0,0);
+    r=ipc_port_send_iov_core(dreq->port,dreq->msg,false,NULL,0,0);
     ipc_put_port(dreq->port);
     memfree(dreq);
   }

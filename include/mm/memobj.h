@@ -29,8 +29,8 @@
 #include <ds/list.h>
 #include <mm/page.h>
 #include <mm/memobjctl.h>
-#include <ipc/channel.h>
 #include <mlibc/types.h>
+#include <eza/spinlock.h>
 
 #ifndef CONFIG_MEMOBJS_MAX
 #define CONFIG_MEMOBJS_MAX (PAGE_SIZE << 4)
@@ -53,6 +53,7 @@ typedef enum __memobj_flags { /* memory object flags */
 
 struct __memobj;
 struct __vmrange;
+struct __ipc_channel;
 
 typedef struct __memobj_ops {
   int (*handle_page_fault)(struct __vmrange *vmr, uintptr_t addr, uint32_t pfmask);
@@ -71,7 +72,7 @@ typedef struct __memobj {
   memobj_ops_t *mops;
   pgoff_t size;
   list_node_t mmo_node;
-  ipc_channel_t *backend;
+  struct __ipc_channel *backend;
   spinlock_t members_lock;
   void *private;
   atomic_t users_count;
@@ -111,9 +112,9 @@ int memobj_create(memobj_nature_t mmo_nature, uint32_t flags, pgoff_t size, /* O
 memobj_t *memobj_find_by_id(memobj_id_t memobj_id);
 memobj_t *memobj_pin_by_id(memobj_id_t memobj_id);
 int memobj_create_backend(memobj_t *memobj,  struct __task_struct *server_task, ulong_t port_id);
-void memobj_release_backend(memobj_backend_t *backend);
+void memobj_release_backend(struct __ipc_channel *backend);
 int memobj_prepare_page_raw(memobj_t *memobj, page_frame_t **page);
-int memobj_prepare_page_backended(memobj_t *memobj, page_frame_t **page);
+int memobj_prepare_page_backended(memobj_t *memobj, pgoff_t offset, page_frame_t **page);
 bool __try_destroy_memobj(memobj_t *memobj);
 int sys_memobj_create(struct memobj_info *user_mmo_info);
 

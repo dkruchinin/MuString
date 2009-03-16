@@ -34,8 +34,6 @@
 #include <eza/arch/preempt.h>
 
 struct __task_struct;
-typedef int32_t pid_t;
-typedef uint64_t tid_t;
 
 #define SCHED_PRIO_MAX 128
 

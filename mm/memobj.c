@@ -30,7 +30,8 @@
 #include <mm/memobj.h>
 #include <mm/memobjctl.h>
 #include <mm/pfi.h>
-#include <ipc/port.h>
+#include <ipc/ipc.h>
+#include <ipc/channel.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/types.h>
 #include <eza/spinlock.h>
@@ -204,23 +205,14 @@ int memobj_create_backend(memobj_t *memobj, task_t *server_task, ulong_t port_id
     return -EBADF;
 
   spinlock_lock(&memobj->members_lock);
-  ret = ipc_open_channel_raw(server_port, IPC_BLOCKED_ACCESS, &memobj->backend);
+  ret = ipc_open_channel_raw(server_port, IPC_BLOCKED_ACCESS | IPC_KERNEL_SIDE, &memobj->backend);
   if (ret) {
-    memobj->channel = NULL;
+    memobj->backend = NULL;
     ipc_put_port(server_port);
   }
 
   spinlock_unlock(&memobj->members_lock);
   return ret;
-}
-
-void memobj_release_backend(memobj_backend_t *backend)
-{
-  /*
-   * FIXME DK: may be it has a sence to report the server
-   * abount memobject releasing?
-   */
-  memfree(backend);
 }
 
 int memobj_prepare_page_raw(memobj_t *memobj, page_frame_t **page)
@@ -243,7 +235,8 @@ int memobj_prepare_page_raw(memobj_t *memobj, page_frame_t **page)
 
 int memobj_prepare_page_backended(memobj_t *memobj, pgoff_t offset, page_frame_t **page)
 {
-  struct memobj_rem_request req;
+  /* TODO DK: implement */
+  /*struct memobj_rem_request req;
   uintptr_t repl_addr;
   long ret;
   
@@ -252,7 +245,8 @@ int memobj_prepare_page_backended(memobj_t *memobj, pgoff_t offset, page_frame_t
   req.type = MREQ_TYPE_GETPAGE;
   req.pg_offset = offset;
 
-  ret = sys_port_send(memobj->backend)
+  ret = sys_port_send(memobj->backend)*/
+  return -ENOTSUP;
 }
 
 int sys_memobj_create(struct memobj_info *user_mmo_info)
@@ -312,7 +306,7 @@ int sys_memobj_control(memobj_id_t memobj_id, int cmd, long uarg)
 
         if (copy_from_user(&mmo_info, (void *)uarg, sizeof(mmo_info))) {
           ret = -EFAULT;
-          goto err;
+          goto out;
         }
 
         ret = -ENOTSUP;
@@ -329,7 +323,7 @@ int sys_memobj_control(memobj_id_t memobj_id, int cmd, long uarg)
         struct memobj_backend_info backend_info;
         task_t *server_task;
 
-        if (copy_from_user(&backend_info, (void *)uarg, sizeof(backend_info))) {
+        /*if (copy_from_user(&backend_info, (void *)uarg, sizeof(backend_info))) {
           ret = -EFAULT;
           goto out;
         }
@@ -340,7 +334,7 @@ int sys_memobj_control(memobj_id_t memobj_id, int cmd, long uarg)
           goto out;
         }
 
-        ret = memobj_create_backend(memobj, server_task, backend_info.port_id);
+        ret = memobj_create_backend(memobj, server_task, backend_info.port_id);*/
         goto out;
       }
       case MEMOBJ_CTL_GET_BACKEND:

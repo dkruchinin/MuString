@@ -142,8 +142,9 @@ poll_event_t ipc_port_check_events(ipc_gen_port_t *port,wqueue_task_t *w,
 void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w);
 
 void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w);
-ipc_port_message_t *ipc_create_port_message_iov_v(struct __iovec *snd_kiovecs,ulong_t snd_numvecs,
-                                                  ulong_t data_len,bool blocked,
+ipc_port_message_t *ipc_create_port_message_iov_v(struct __ipc_channel *channel,
+                                                  struct __iovec *snd_kiovecs,ulong_t snd_numvecs,
+                                                  ulong_t data_len,
                                                   struct __iovec *rcv_kiovecs,ulong_t rcv_numvecs,
                                                   ipc_user_buffer_t *snd_bufs,
                                                   ipc_user_buffer_t *rcv_bufs,
@@ -151,15 +152,14 @@ ipc_port_message_t *ipc_create_port_message_iov_v(struct __iovec *snd_kiovecs,ul
 int ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
                        struct __iovec *reply_iov,ulong_t numvecs,
                        ulong_t reply_size);
-int ipc_port_send_iov(struct __ipc_channel *channel, struct __iovec snd_kiovecs[], ulong_t snd_numvecs,
-                      struct __iovec rcv_kiovecs[], ulong_t rcv_numvecs);
+int ipc_port_send_iov(struct __ipc_channel *channel, struct __iovec *snd_kiovecs, ulong_t snd_numvecs,
+                      struct __iovec *rcv_kiovecs, ulong_t rcv_numvecs);
 int ipc_port_send_iov_core(struct __ipc_gen_port *port,
                            ipc_port_message_t *msg,bool sync_send,
                            struct __iovec *iovecs,ulong_t numvecs,
                            ulong_t reply_len);
 long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
                        struct __iovec *rcv_iov,ulong_t numvecs,ulong_t offset);
-bool ipc_port_iovec_is_valid(struct __iovec iovecs[], ulong_t numvecs, bool is_user_iovecs);
 ipc_gen_port_t *ipc_clone_port(ipc_gen_port_t *p);
 
 #define IPC_NB_MESSAGE_MAXLEN  (512-sizeof(ipc_port_message_t))

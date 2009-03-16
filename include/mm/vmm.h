@@ -192,7 +192,7 @@ void vmranges_find_covered(vmm_t *vmm, uintptr_t va_from, uintptr_t va_to, vmran
 int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page,
               page_idx_t npages, kmap_flags_t flags, bool pin_pages);
 int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t pfmask,
-                        void (*callback)(vmrange_t *vmr, page_frame_t *page), void *data);
+                        void (*callback)(vmrange_t *vmr, page_frame_t *page, void *data), void *data);
 
 static inline void vmrange_set_next(vmrange_set_t *vmrs)
 {

@@ -25,8 +25,6 @@
 #define  __IPC_BUFFER__
 
 #include <eza/arch/types.h>
-#include <eza/task.h>
-#include <ipc/channel.h>
 #include <eza/arch/atomic.h>
 
 typedef struct __ipc_user_buffer {
@@ -35,7 +33,8 @@ typedef struct __ipc_user_buffer {
 } ipc_user_buffer_t;
 
 struct __iovec;
-int ipc_setup_buffer_pages(ipc_channel_t *channel,struct __iovec *iovecs,ulong_t numvecs,
+struct __ipc_channel;
+int ipc_setup_buffer_pages(struct __ipc_channel *channel,struct __iovec *iovecs,ulong_t numvecs,
                            uintptr_t *addr_array,ipc_user_buffer_t *bufs, bool is_snd_buf);
 int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
                                  struct __iovec *iovecs,ulong_t numvecs,

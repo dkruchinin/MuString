@@ -167,7 +167,7 @@ static inline int __send_iov_v(ulong_t channel,
   if (!c)
     return -EINVAL;
 
-  ret = ipc_port_send_iov(c, snd_kiovecs, snd_numvecs, rcv_kiovrcs, rcv_numvecs);
+  ret = ipc_port_send_iov(c, snd_kiovecs, snd_numvecs, rcv_kiovecs, rcv_numvecs);
   ipc_put_channel(c);
   return ret;
 }

@@ -240,28 +240,6 @@ static void fix_vmrange_holes_after_insertion(vmm_t *vmm, vmrange_t *vmrange, tt
   }
 }
 
-static int __handle_page_fault(vmm_t *vmm, uintptr_t addr, uint32_t pfmask)
-{
-  vmrange_t *vmr;
-  memobj_t *memobj;
-
-  vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(fault_addr), fault_addr, NULL);
-  if (!vmr) {
-    return -EFAULT;
-  }
-
-  /*
-   * If fault was caused by write attemption and VM range that was found
-   * has VMR_WRITE flag unset or VMR_NONE flag set, fault can not be handled.
-   */
-  if (!__valid_vmr_rights(vmr, pfmask))
-    return -EACCES;
-
-  ASSERT(vmr->memobj != NULL);
-  memobj = vmr->memobj;
-  return memobj_method_call(memobj, handle_page_fault, vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
-}
-
 void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name)
 {
 #ifndef CONFIG_TEST
@@ -910,7 +888,7 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
         return -EACCES;
     }
     
-    pagetable_lock(&vmm->prd);
+    pagetable_lock(&vmm->rpd);
     pidx = ptable_ops.vaddr2page_idx(&vmm->rpd, va, &pde);
     if (pidx != PAGE_IDX_INVAL) {
       if ((ptable_to_kmap_flags(pde_get_flags(pde)) & vmr_mask) == vmr_mask) {
@@ -922,7 +900,7 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
       pfmask |= PFLT_NOT_PRESENT;
     
     pagetable_unlock(&vmm->rpd);
-    ret = memobj_method_call(memobj, handle_page_fault, vmr, va, pfmask);
+    ret = memobj_method_call(vmr->memobj, handle_page_fault, vmr, va, pfmask);
     if (ret)
       return ret;
 
@@ -944,9 +922,25 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
 int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
 {
   int ret;
+  vmrange_t *vmr;
+  memobj_t *memobj;
 
   rwsem_down_read(&vmm->rwsem);
-  ret = __handle_page_fault(vmm, fault_addr, pfmask);
+  vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(fault_addr), fault_addr, NULL);
+  if (!vmr) {
+    return -EFAULT;
+  }
+
+  /*
+   * If fault was caused by write attemption and VM range that was found
+   * has VMR_WRITE flag unset or VMR_NONE flag set, fault can not be handled.
+   */
+  if (!__valid_vmr_rights(vmr, pfmask))
+    return -EACCES;
+
+  ASSERT(vmr->memobj != NULL);
+  memobj = vmr->memobj;
+  ret = memobj_method_call(memobj, handle_page_fault, vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
   rwsem_up_read(&vmm->rwsem);
   
   return ret;

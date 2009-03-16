@@ -74,7 +74,7 @@ void task_event_notify(ulong_t events)
         ipc_port_message_t *msg=ipc_create_port_message_iov_v(&iov,1,sizeof(e),false,
                                                               NULL,0,NULL,NULL,0);
         if( msg ) {
-          ipc_port_send_iov(l->port,msg,false,NULL,0,0);
+          ipc_port_send_iov_core(l->port,msg,false,NULL,0,0);
         }
       }
     }

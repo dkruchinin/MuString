@@ -36,43 +36,15 @@
 #define LOCK_TASK_VM(t)                         \
   do {                                          \
     if (likely(!is_kernel_thread(t)))           \
-      rwsem_down_read(&(t)->rwsem);             \
+      rwsem_down_read(&(t)->task_mm->rwsem);    \
   } while (0)
 
 #define UNLOCK_TASK_VM(t)                       \
   do {                                          \
     if (likely(!is_kernel_thread(t)))           \
-      rwsem_up_read(&(t)->rwsem);               \
+      rwsem_up_read(&(t)->task_mm->rwsem);      \
   } while (0)
   
-
-static int get_iovec_page(ipc_channel_t *channel, uintptr_t addr, page_frame_t **page)
-{
-  task_t *owner = current_task();
-  int ret = 0;
-
-  if (!is_kernel_thread(owner)) {
-    if (!(channel->flags & IPC_KERNEL_SIDE))
-      ret = fault_in_user_page(owner->vmm, addr, page);
-    else
-      *page = virt_to_pframe(addr);
-  }
-  else {
-    rpd_t *rpd = task_get_rpd(owner);
-    page_idx_t *pidx;
-    
-    pagetable_lock(rpd);
-    pidx = ptable_ops.vaddr2page_idx(rpd, addr, NULL);
-    pagetable_unlock(rpd);
-    if (pidx == PAGE_IDX_INVAL)
-      ret = -EFAULT;
-    else
-      *page = pframe_by_number(pidx);
-  }
-
-  return ret;
-}
-
 struct setup_buf_helper {
   ulong_t chunk_num;
   uintptr_t *pchunk;
@@ -82,14 +54,14 @@ static void __save_pfns_in_buffer(vmrange_t *unused, page_frame_t *page, void *h
 {
   struct setup_buf_helper *buf_data = helper;
 
-  pin_page(page);
+  pin_page_frame(page);
   *(page_idx_t *)(buf_data->pchunk) = pframe_number(page);
   buf_data->pchunk++;
   buf_data->chunk_num++;
 }
 
 int ipc_setup_buffer_pages(ipc_channel_t *channel,iovec_t *iovecs,ulong_t numvecs,
-                           uintptr_t *addr_array,ipc_user_buffer_t *bufs)
+                           uintptr_t *addr_array,ipc_user_buffer_t *bufs, bool is_snd_buf)
 {
   int r=-EFAULT;
   struct setup_buf_helper buf_data;
@@ -99,15 +71,20 @@ int ipc_setup_buffer_pages(ipc_channel_t *channel,iovec_t *iovecs,ulong_t numvec
   buf_data.chunk_num = 0;
   buf_data.pchunk = NULL;
   
-  LOCK_TASK_VM(owner);
+  LOCK_TASK_VM(current_task());
   for(;numvecs;numvecs--,iovecs++,bufs++) {
     buf=bufs;    
 
     buf->chunks=addr_array;
     buf_data.pchunk = buf->chunks;
     if (likely(!(channel->flags & IPC_KERNEL_SIDE))) {
-      r = fault_in_user_pages(owner->vmm, (uintptr_t)iovecs->iov_base, size, PFLT_READ,
-                              __save_pfns_in_buffer, &buf_data);
+      uint32_t pfmask = PFLT_READ;
+
+      if (!is_snd_buf)
+        pfmask |= PFLT_WRITE;
+      
+      r = fault_in_user_pages(current_task()->task_mm, (uintptr_t)iovecs->iov_base, iovecs->iov_len,
+                              pfmask, __save_pfns_in_buffer, &buf_data);
       if (r)
         goto out;
     }
@@ -117,7 +94,7 @@ int ipc_setup_buffer_pages(ipc_channel_t *channel,iovec_t *iovecs,ulong_t numvec
       vaddr_start = PAGE_ALIGN_DOWN(iovecs->iov_base);
       vaddr_end = PAGE_ALIGN((uintptr_t)iovecs->iov_base + iovecs->iov_len);
       while (vaddr_start < vaddr_end) {
-        *(page_idx_t *)buf_data.pchunk = virt_to_pframe_id(vaddr_start);
+        *(page_idx_t *)buf_data.pchunk = virt_to_pframe_id((void *)vaddr_start);
         buf_data.pchunk++;
         buf_data.chunk_num++;
       }
@@ -140,7 +117,7 @@ int ipc_setup_buffer_pages(ipc_channel_t *channel,iovec_t *iovecs,ulong_t numvec
   r = 0;
 out:
   /* TODO DK: Unpin all pages if any was pinned earlier */
-  UNLOCK_TASK_VM(owner);
+  UNLOCK_TASK_VM(current_task());
   return r;
 }
 
