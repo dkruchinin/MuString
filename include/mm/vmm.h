@@ -231,8 +231,8 @@ static inline uintptr_t pgoff2addr(vmrange_t *vmr, pgoff_t offset)
  * @param offset - offset of the shared area to map
  *
  */
-long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, memobj_id_t memobj_id, off_t offset);
-int sys_munmap(uintptr_t addr, size_t length);
+long sys_mmap(pid_t victim, uintptr_t addr, size_t size, int prot, int flags, memobj_id_t memobj_id, off_t offset);
+int sys_munmap(pid_t victim, uintptr_t addr, size_t length);
 
 #ifdef CONFIG_DEBUG_MM
 static inline char *vmm_get_name_dbg(vmm_t *vmm)

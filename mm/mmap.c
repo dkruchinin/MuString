@@ -60,6 +60,13 @@ static SPINLOCK_DEFINE(__vmm_verb_lock);
 #define VMM_VERBOSE(fmt, args...)
 #endif /* CONFING_DEBUG_MM */
 
+static inline bool __valid_vmr_rights(vmrange_t *vmr, uint32_t pfmask)
+{
+  return !(((pfmask & PFLT_WRITE) &&
+            ((vmr->flags & (VMR_READ | VMR_WRITE)) == VMR_READ))
+           || (vmr->flags & VMR_NONE));
+}
+
 /*
  * Function for comparing VM ranges by their keys.
  * The key of VM range is a diapason [start_address, end_address).
@@ -842,46 +849,117 @@ int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page,
   return __mmap_core(rpd, va, npages, &pfi, flags, pin_pages);
 }
 
+int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t pfmask,
+                        void (*callback)(vmrange_t *vmr, page_frame_t *page, void *data), void *data)
+{
+  page_idx_t pidx;
+  int ret = 0;
+  pde_t *pde;
+  vmrange_flags_t vmr_mask = VMR_READ;
+  uintptr_t va;
+  pgoff_t npages, i = 0;
+  vmrange_t *vmr;
+  ttree_cursor_t cursor;
+
+  va = PAGE_ALIGN(address + length);
+  npages = (va - PAGE_ALIGN_DOWN(address)) >> PAGE_WIDTH;
+  va = PAGE_ALIGN_DOWN(address);
+  
+  if (!valid_user_address_range(va, va + (npages << PAGE_WIDTH)))
+    return -EFAULT;
+  if (pfmask & PFLT_WRITE)
+    vmr_mask |= VMR_WRITE;
+
+  vmr = vmrange_find(vmm, va, address, &cursor);
+  if (!vmr)
+    return -EFAULT;
+  if (!__valid_vmr_rights(vmr, pfmask))
+    return -EACCES;
+  
+  while (i < npages) {
+    if (unlikely(va >= vmr->bounds.space_end)) {
+      if (ttree_cursor_next(&cursor) < 0)
+        return -EFAULT;
+
+      vmr = ttree_item_from_cursor(&cursor);
+      if (va < vmr->bounds.space_start)
+        return -EFAULT;
+      if (!__valid_vmr_rights(vmr, pfmask))
+        return -EACCES;
+    }
+    
+    pagetable_lock(&vmm->rpd);
+    pidx = ptable_ops.vaddr2page_idx(&vmm->rpd, va, &pde);
+    if (pidx != PAGE_IDX_INVAL) {
+      if ((ptable_to_kmap_flags(pde_get_flags(pde)) & vmr_mask) == vmr_mask) {
+        pagetable_unlock(&vmm->rpd);
+        goto eof_fault;
+      }      
+    }
+    else
+      pfmask |= PFLT_NOT_PRESENT;
+    
+    pagetable_unlock(&vmm->rpd);
+    ret = memobj_method_call(vmr->memobj, handle_page_fault, vmr, va, pfmask);
+    if (ret)
+      return ret;
+
+    pidx = ptable_ops.vaddr2page_idx(&vmm->rpd, va, &pde);
+    ASSERT(pidx != PAGE_IDX_INVAL);
+    
+    eof_fault:
+    if (callback)
+      callback(vmr, pframe_by_number(pidx), data);
+
+    va += PAGE_SIZE;
+    i++;
+    pfmask &= ~PFLT_NOT_PRESENT;
+  }
+
+  return 0;
+}
+
 int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
 {
-  vmrange_t *vmr;
   int ret;
+  vmrange_t *vmr;
   memobj_t *memobj;
 
   rwsem_down_read(&vmm->rwsem);
-  vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(fault_addr), fault_addr + PAGE_SIZE, NULL);
+  vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(fault_addr), fault_addr, NULL);
   if (!vmr) {
-    ret = -EFAULT;
-    goto out;
+    return -EFAULT;
   }
 
   /*
    * If fault was caused by write attemption and VM range that was found
    * has VMR_WRITE flag unset or VMR_NONE flag set, fault can not be handled.
    */
-  if (((pfmask & PFLT_WRITE) &&
-       ((vmr->flags & (VMR_READ | VMR_WRITE)) == VMR_READ))
-      || (vmr->flags & VMR_NONE)) {
-    ret = -EACCES;
-    goto out;
-  }
+  if (!__valid_vmr_rights(vmr, pfmask))
+    return -EACCES;
 
   ASSERT(vmr->memobj != NULL);
   memobj = vmr->memobj;
   ret = memobj_method_call(memobj, handle_page_fault, vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
-
-  out:
   rwsem_up_read(&vmm->rwsem);
+  
   return ret;
 }
 
-long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, memobj_id_t memobj_id, off_t offset)
+long sys_mmap(pid_t victim, uintptr_t addr, size_t size, int prot, int flags, memobj_id_t memobj_id, off_t offset)
 {
+  task_t *victim_task;
   memobj_t *memobj = NULL;
-  vmm_t *vmm = current_task()->task_mm;
+  vmm_t *vmm;
   long ret;
   vmrange_flags_t vmrflags = (prot & VMR_PROTO_MASK) | (flags << VMR_FLAGS_OFFS);
 
+  victim_task = pid_to_task(victim);
+  if (!victim_task)
+    return -ESRCH;
+
+  vmm = victim_task->task_mm;
+  
   /*
    * Basic rules:
    * 1) offset must be page aligned
@@ -918,11 +996,18 @@ long sys_mmap(uintptr_t addr, size_t size, int prot, int flags, memobj_id_t memo
   return ret;
 }
 
-int sys_munmap(uintptr_t addr, size_t length)
+int sys_munmap(pid_t victim, uintptr_t addr, size_t length)
 {
-  vmm_t *vmm = current_task()->task_mm;
+  task_t *victim_task;
+  vmm_t *vmm;
   int ret;
 
+  victim_task = pid_to_task(victim);
+  if (!victim_task)
+    return -ESRCH;
+
+  vmm = victim_task->task_mm;
+  
   /* address must be page aligned and length must be specified */
   if (!length || (addr & PAGE_MASK))
     return -EINVAL;
