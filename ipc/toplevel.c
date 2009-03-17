@@ -33,6 +33,18 @@
 #include <ipc/port.h>
 #include <ipc/channel.h>
 
+static inline bool __valid_iovecs(iovec_t *iovecs, uint32_t num_vecs)
+{
+  int i;
+
+  for (i = 0; i < num_vecs; i++) {
+    if (unlikely(!valid_user_address_range((uintptr_t)iovecs[i].iov_base, iovecs[i].iov_len))) {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 /* TODO: [mt] Implement security checks for port-related syscalls ! */
 long sys_open_channel(pid_t pid,ulong_t port,ulong_t flags)
@@ -40,7 +52,7 @@ long sys_open_channel(pid_t pid,ulong_t port,ulong_t flags)
   task_t *task = pid_to_task(pid);
   long r;
 
-  if( task == NULL ) {
+  if (task == NULL) {
     return -ESRCH;
   }
 
@@ -80,7 +92,10 @@ static inline long __reply_iov(ulong_t port, ulong_t msg_id,
   if (!p) {
     return -EINVAL;
   }
-
+  if (!__valid_iovecs(reply_iov, numvecs)) {
+    return -EFAULT;
+  }
+  
   r = ipc_port_reply_iov(p, msg_id, reply_iov, numvecs);
   ipc_put_port(p);
   return r;
@@ -122,6 +137,10 @@ long sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
   if (recv_buf | recv_len) {
     iovec.iov_base = (void *)recv_buf;
     iovec.iov_len = recv_len;
+    if (!__valid_iovecs(&iovec, 1)) {
+      return -EFAULT;
+    }
+    
     piovec = &iovec;
   }
   else {
@@ -149,6 +168,12 @@ static inline int __send_iov_v(ulong_t channel,
   if (!c) {
     return -EINVAL;
   }
+  if (!__valid_iovecs(snd_kiovecs, rcv_numvecs)) {
+    return -EFAULT;
+  }
+  if (rcv_kiovecs && !__valid_iovecs(rcv_kiovecs, rcv_numvecs)) {
+    return -EFAULT;
+  }
 
   ret = ipc_port_send_iov(c, snd_kiovecs, snd_numvecs, rcv_kiovecs, rcv_numvecs);
   ipc_put_channel(c);
@@ -161,8 +186,6 @@ long sys_port_send_iov_v(ulong_t channel,
 {
   iovec_t snd_kiovecs[MAX_IOVECS];
   iovec_t rcv_kiovecs[MAX_IOVECS];
-  ipc_channel_t *c;
-  int ret;
 
   if (!snd_iov || !snd_numvecs || snd_numvecs > MAX_IOVECS ||
       !rcv_iov || !rcv_numvecs || rcv_numvecs > MAX_IOVECS) {
@@ -176,14 +199,7 @@ long sys_port_send_iov_v(ulong_t channel,
     return -EFAULT;
   }
 
-  c = ipc_get_channel(current_task(), channel);
-  if (!c) {
-    return -ESRCH;
-  }
-  
-  ret = ipc_port_send_iov(c, snd_kiovecs, snd_numvecs, rcv_kiovecs, rcv_numvecs);
-  ipc_put_channel(c);
-  return ret;
+  return __send_iov_v(channel, snd_iov, snd_numvecs, rcv_iov, rcv_numvecs);
 }
 
 long sys_port_send(ulong_t channel,
@@ -239,7 +255,10 @@ long sys_port_msg_read(ulong_t port, ulong_t msg_id, uintptr_t recv_buf,
 
   iovec.iov_base = (void *)recv_buf;
   iovec.iov_len = recv_len;
-
+  if (!__valid_iovecs(&iovec, 1)) {
+    return -EFAULT;
+  }
+  
   r = ipc_port_msg_read(p, msg_id, &iovec, 1, offset);
   ipc_put_port(p);
   return r;

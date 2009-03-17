@@ -92,6 +92,7 @@ static ipc_port_message_t *__ipc_create_nb_port_message(ipc_channel_t *channel,u
       msg->data_size=snd_size;
       msg->reply_size=0;
       msg->sender=current_task();
+      msg->blocked_mode = false;
 
       if( copy_data ) {
         if( !copy_from_user(msg->send_buffer,(void *)snd_buf,snd_size) ) {
@@ -105,6 +106,21 @@ static ipc_port_message_t *__ipc_create_nb_port_message(ipc_channel_t *channel,u
     }
   }
   return NULL;
+}
+
+void put_ipc_port_message(ipc_port_message_t *msg)
+{
+  if (msg->blocked_mode) {
+    if (msg->send_buffer && (msg->data_size > IPC_BUFFERED_PORT_LENGTH)) {
+      ipc_release_buffer_pages(msg->snd_buf, msg->num_send_bufs);
+    }
+    if (msg->rcv_buf && (msg->reply_size > IPC_BUFFERED_PORT_LENGTH)) {
+      ipc_release_buffer_pages(msg->rcv_buf, msg->num_recv_buffers);
+    }
+  }
+  else {
+    memfree(msg);
+  }
 }
 
 ipc_port_message_t *ipc_create_port_message_iov_v(ipc_channel_t *channel, iovec_t *snd_kiovecs, uint32_t snd_numvecs,
@@ -132,6 +148,7 @@ ipc_port_message_t *ipc_create_port_message_iov_v(ipc_channel_t *channel, iovec_
     msg = &owner->ipc_priv->cached_data.cached_port_message;
     IPC_RESET_MESSAGE(msg, owner);
 
+    msg->blocked_mode = true;
     msg->data_size = data_len;
     msg->reply_size = rcv_size;
     msg->sender = owner;
@@ -144,8 +161,8 @@ ipc_port_message_t *ipc_create_port_message_iov_v(ipc_channel_t *channel, iovec_
     else {
       /* Well, need to setup user buffers. */
       r = ipc_setup_buffer_pages(snd_kiovecs, snd_numvecs,
-                               (page_idx_t *)ipc_priv->cached_data.cached_page1,
-                               snd_bufs, true);
+                                 (page_idx_t *)ipc_priv->cached_data.cached_page1,
+                                 snd_bufs, true);
       if (r) {
         goto free_message;
       }
@@ -171,7 +188,7 @@ ipc_port_message_t *ipc_create_port_message_iov_v(ipc_channel_t *channel, iovec_
         
         msg->rcv_buf = rcv_bufs;
         msg->num_recv_buffers = rcv_numvecs;
-        /* Fallthrough. */
+        /* , Fallthrough. */
       }
     }
   }
@@ -191,10 +208,7 @@ ipc_port_message_t *ipc_create_port_message_iov_v(ipc_channel_t *channel, iovec_
   
   return msg;
 free_message:
-  if (!channel_in_blocked_mode(channel)) {
-    put_ipc_port_message(msg);
-  }
-  
+  put_ipc_port_message(msg);
   return NULL;
 }
 
@@ -573,7 +587,6 @@ recv_cycle:
 out:
   if( msg != NULL ) {
     r=__transfer_message_data_to_receiver(msg,iovec,numvec,msg_info,0);
-    bool free;
 
     /* OK, message was successfully transferred, so remove it from the port
      * in case it is a non-blocking transfer.
@@ -582,17 +595,14 @@ out:
     if( !(port->flags & IPC_PORT_SHUTDOWN) &&
         !(port->flags & IPC_BLOCKED_ACCESS) ) {
       port->msg_ops->remove_message(port,msg);
-      free=true;
-    } else {
-      free=false;
-    }
-    IPC_UNLOCK_PORT_W(port);
-
-    if( free ) {
-      put_ipc_port_message(msg);
-    } else {
+    } 
+    IPC_UNLOCK_PORT_W(port);      
+    
+    if (msg->blocked_mode) {
       POST_MESSAGE_DATA_ACCESS_STEP(port,msg,r,true);
     }
+    
+    put_ipc_port_message(msg);
   }
   return r;
 }
@@ -664,8 +674,8 @@ long ipc_port_send_iov(ipc_channel_t *channel, iovec_t snd_kiovecs[], ulong_t sn
   }
 
   ret = ipc_port_send_iov_core(port, msg, channel_in_blocked_mode(channel),
-                               rcv_kiovecs, rcv_numvecs, rcv_size);  
-  out:
+                               rcv_kiovecs, rcv_numvecs, rcv_size);
+out:
   if (port) {
     ipc_put_port(port);
   }

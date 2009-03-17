@@ -1,10 +1,11 @@
 #include <eza/usercopy.h>
+#include <mm/vmm.h>
 #include <mlibc/string.h>
 
 int copy_user(void *dest,void *src,ulong_t size)
 {
   int r;
-
+  
   __asm__ __volatile__(
     "0: cmp $0,%5\n"                                  \
     "jz 50f\n"                                        \
@@ -142,10 +143,16 @@ int copy_user(void *dest,void *src,ulong_t size)
 
 int copy_to_user(void *dest,void *src,ulong_t size)
 {
-    return copy_user(dest,src,size);
+  if (!valid_user_address_range((uintptr_t)dest, size))
+    return -EFAULT;
+    
+  return copy_user(dest,src,size);
 }
 
 int copy_from_user(void *dest,void *src,ulong_t size)
 {
+  if (!valid_user_address_range((uintptr_t)src, size))
+    return -EFAULT;
+
   return copy_user(dest,src,size);
 }

@@ -72,10 +72,11 @@ typedef struct __ipc_port_message_t {
   ulong_t num_send_bufs,num_recv_buffers;
   task_t *sender;
   ipc_msg_state_t state;
+  bool blocked_mode;
 } ipc_port_message_t;
 
 typedef struct __port_msg_info {
-  uint16_t msg_id;
+  uint16_t msg_id;  
   pid_t sender_pid;
   uint32_t msg_len;
   tid_t sender_tid;
@@ -157,11 +158,13 @@ long ipc_port_send_iov_core(ipc_gen_port_t *port,
 long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
                        struct __iovec *rcv_iov,ulong_t numvecs,ulong_t offset);
 ipc_gen_port_t *ipc_clone_port(ipc_gen_port_t *p);
+void put_ipc_port_message(ipc_port_message_t *msg);
 
 #define IPC_NB_MESSAGE_MAXLEN  (512-sizeof(ipc_port_message_t))
 
 #define IPC_RESET_MESSAGE(m,t)                  \
     do {                                        \
+      memset(m, 0, sizeof(*(m)));               \
       list_init_node(&(m)->l);                  \
       list_init_node(&(m)->messages_list);      \
       event_initialize(&(m)->event);            \
@@ -169,7 +172,6 @@ ipc_gen_port_t *ipc_clone_port(ipc_gen_port_t *p);
       (m)->state=MSG_STATE_NOT_PROCESSED;       \
   } while(0)
 
-#define put_ipc_port_message(m)  memfree((m))
 #define ipc_message_data(m) ((m)->data_size <= IPC_NB_MESSAGE_MAXLEN ? (void *)(m)->send_buffer : NULL )
 
 #endif
