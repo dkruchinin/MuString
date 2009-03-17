@@ -24,19 +24,21 @@
 #ifndef __IPC_BUFFER__
 #define  __IPC_BUFFER__
 
+#include <mm/page.h>
 #include <eza/arch/types.h>
 #include <eza/arch/atomic.h>
 
-typedef struct __ipc_user_buffer {
-  ulong_t length,num_chunks,first;
-  uintptr_t *chunks;
-} ipc_user_buffer_t;
+typedef struct __ipc_buffer {
+  page_idx_t *chunks;
+  size_t length;
+  uint32_t offset;
+  uint32_t num_chunks;
+} ipc_buffer_t;
 
 struct __iovec;
-struct __ipc_channel;
-int ipc_setup_buffer_pages(struct __ipc_channel *channel,struct __iovec *iovecs,ulong_t numvecs,
-                           uintptr_t *addr_array,ipc_user_buffer_t *bufs, bool is_snd_buf);
-int ipc_transfer_buffer_data_iov(ipc_user_buffer_t *bufs,ulong_t numbufs,
-                                 struct __iovec *iovecs,ulong_t numvecs,
-                                 ulong_t offset,bool to_buffer);
+int ipc_setup_buffer_pages(struct __iovec *iovecs, uint32_t numvecs,
+                           page_idx_t *idx_array, ipc_buffer_t *bufs, bool is_sender_buffer);
+int ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs,
+                                 struct __iovec *iovecs, uint32_t numvecs,
+                                 ulong_t offset, bool to_buffer);
 #endif

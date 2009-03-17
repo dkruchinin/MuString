@@ -26,7 +26,6 @@
 #include <ipc/buffer.h>
 #include <eza/task.h>
 #include <eza/smp.h>
-#include <kernel/syscalls.h>
 #include <eza/errno.h>
 #include <eza/process.h>
 #include <eza/security.h>
@@ -50,7 +49,7 @@ long sys_open_channel(pid_t pid,ulong_t port,ulong_t flags)
   return r;
 }
 
-long sys_close_channel(ulong_t channel)
+int sys_close_channel(ulong_t channel)
 {
   return ipc_close_channel(current_task(),channel);
 }
@@ -59,63 +58,52 @@ long sys_create_port( ulong_t flags, ulong_t queue_size )
 {
   task_t *caller=current_task();
 
-  if( !trusted_task(caller) ) {
+  if(!trusted_task(caller)) {
     flags |= IPC_BLOCKED_ACCESS;
   }
 
-  return ipc_create_port(caller,flags,queue_size);
+  return ipc_create_port(caller, flags, queue_size);
 }
 
-long sys_close_port(ulong_t port)
+int sys_close_port(ulong_t port)
 {
   return ipc_close_port(current_task(),port);
 }
 
-static long __reply_iov(ulong_t port,ulong_t msg_id,
-                            iovec_t reply_iov[],ulong_t numvecs)
+static inline long __reply_iov(ulong_t port, ulong_t msg_id,
+                               iovec_t reply_iov[], uint32_t numvecs)
 {
   ipc_gen_port_t *p;
-  int i,reply_size;
   long r;
 
-  for(reply_size=0,i=0;i<numvecs;i++) {
-    if( !valid_user_address_range((uintptr_t)reply_iov[i].iov_base,
-                                  reply_iov[i].iov_len) ) {
-      return -EFAULT;
-    }
-
-    reply_size += reply_iov[i].iov_len;
-    if( reply_size > MAX_PORT_MSG_LENGTH ) {
-      return -EINVAL;
-    }
-  }
-
-  p=ipc_get_port(current_task(),port);
-  if( !p ) {
+  p = ipc_get_port(current_task(), port);
+  if (!p) {
     return -EINVAL;
   }
 
-  r=ipc_port_reply_iov(p,msg_id,reply_iov,numvecs,reply_size);
+  r = ipc_port_reply_iov(p, msg_id, reply_iov, numvecs);
   ipc_put_port(p);
   return r;
 }
 
-long sys_port_reply_iov(ulong_t port,ulong_t msg_id,
-                            iovec_t reply_iov[],ulong_t numvecs) {
+long sys_port_reply_iov(ulong_t port, ulong_t msg_id,
+                        iovec_t reply_iov[], uint32_t numvecs)
+{
   iovec_t iovecs[MAX_IOVECS];
 
-  if( !reply_iov || !numvecs || numvecs > MAX_IOVECS ) {
+  if (!reply_iov || !numvecs || numvecs > MAX_IOVECS) {
     return -EINVAL;
   }
-
-  if( copy_from_user(iovecs,reply_iov,numvecs*sizeof(iovec_t)) ) {
+  if (copy_from_user(iovecs, reply_iov, numvecs * sizeof(iovec_t))) {
     return -EFAULT;
   }
-  return __reply_iov(port,msg_id,iovecs,numvecs);
+  
+  return __reply_iov(port, msg_id, iovecs, numvecs);
 }
 
-size_t sys_port_reply(ulong_t port,ulong_t msg_id,ulong_t reply_buf,
-                      ulong_t reply_len) {
+size_t sys_port_reply(ulong_t port,ulong_t msg_id, ulong_t reply_buf,
+                      size_t reply_len)
+{
   iovec_t iv;
 
   iv.iov_base=(void *)reply_buf;
@@ -124,48 +112,43 @@ size_t sys_port_reply(ulong_t port,ulong_t msg_id,ulong_t reply_buf,
   return __reply_iov(port,msg_id,&iv,1);
 }
 
-size_t sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
-                        ulong_t recv_len,port_msg_info_t *msg_info)
+long sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
+                      size_t recv_len, port_msg_info_t *msg_info)
 {
   ipc_gen_port_t *p;
-  size_t r;
+  long r;
   iovec_t iovec,*piovec;
 
-  if( !valid_user_address_range((ulong_t)msg_info,sizeof(*msg_info)) ) {
-    return -EFAULT;
+  if (recv_buf | recv_len) {
+    iovec.iov_base = (void *)recv_buf;
+    iovec.iov_len = recv_len;
+    piovec = &iovec;
+  }
+  else {
+    piovec = NULL;
   }
 
-  if( recv_buf | recv_len ) {
-    if( !valid_user_address_range(recv_buf,recv_len) ) {
-      return -EFAULT;
-    }
-    iovec.iov_base=(void *)recv_buf;
-    iovec.iov_len=recv_len;
-    piovec=&iovec;
-  } else {
-    piovec=NULL;
-  }
-
-  p=ipc_get_port(current_task(),port);
-  if( !p ) {
+  p = ipc_get_port(current_task(), port);
+  if (!p) {
     return -EINVAL;
   }
 
-  r=ipc_port_receive(p,flags,piovec,1,msg_info);
+  r = ipc_port_receive(p, flags, piovec, 1, msg_info);
   ipc_put_port(p);
   return r;
 }
 
 static inline int __send_iov_v(ulong_t channel,
-                               iovec_t snd_kiovecs[],ulong_t snd_numvecs,
-                               iovec_t rcv_kiovecs[],ulong_t rcv_numvecs)
+                               iovec_t snd_kiovecs[], uint32_t snd_numvecs,
+                               iovec_t rcv_kiovecs[], uint32_t rcv_numvecs)
 {
   ipc_channel_t *c;
   int ret;
 
-  c=ipc_get_channel(current_task(),channel);
-  if (!c)
+  c = ipc_get_channel(current_task(), channel);
+  if (!c) {
     return -EINVAL;
+  }
 
   ret = ipc_port_send_iov(c, snd_kiovecs, snd_numvecs, rcv_kiovecs, rcv_numvecs);
   ipc_put_channel(c);
@@ -173,90 +156,91 @@ static inline int __send_iov_v(ulong_t channel,
 }
 
 long sys_port_send_iov_v(ulong_t channel,
-                             iovec_t snd_iov[],ulong_t snd_numvecs,
-                             iovec_t rcv_iov[],ulong_t rcv_numvecs)
+                         iovec_t snd_iov[],ulong_t snd_numvecs,
+                         iovec_t rcv_iov[],ulong_t rcv_numvecs)
 {
   iovec_t snd_kiovecs[MAX_IOVECS];
   iovec_t rcv_kiovecs[MAX_IOVECS];
+  ipc_channel_t *c;
+  int ret;
 
-  if( !snd_iov || !snd_numvecs || snd_numvecs > MAX_IOVECS ||
-      !rcv_iov || !rcv_numvecs || rcv_numvecs > MAX_IOVECS ) {
+  if (!snd_iov || !snd_numvecs || snd_numvecs > MAX_IOVECS ||
+      !rcv_iov || !rcv_numvecs || rcv_numvecs > MAX_IOVECS) {
     return -EINVAL;
   }
 
-  if( copy_from_user( &snd_kiovecs,snd_iov,snd_numvecs*sizeof(iovec_t)) ) {
+  if (copy_from_user(&snd_kiovecs, snd_iov, snd_numvecs * sizeof(iovec_t))) {
+    return -EFAULT;
+  }
+  if (copy_from_user(&rcv_kiovecs, rcv_iov, rcv_numvecs * sizeof(iovec_t))) {
     return -EFAULT;
   }
 
-  if( copy_from_user( &rcv_kiovecs,rcv_iov,rcv_numvecs*sizeof(iovec_t)) ) {
-    return -EFAULT;
+  c = ipc_get_channel(current_task(),channel);
+  if (!c) {
+    return -ESRCH;
   }
-
-  return __send_iov_v(channel,snd_kiovecs,snd_numvecs,
-                      rcv_kiovecs,rcv_numvecs);
-}
-
-size_t sys_port_send(ulong_t channel,
-                       uintptr_t snd_buf,ulong_t snd_size,
-                       uintptr_t rcv_buf,ulong_t rcv_size)
-{
-  iovec_t snd_kiovec,rcv_kiovec;
-
-  snd_kiovec.iov_base=(void *)snd_buf;
-  snd_kiovec.iov_len=snd_size;
-
-  rcv_kiovec.iov_base=(void *)rcv_buf;
-  rcv_kiovec.iov_len=rcv_size;
-
-  return __send_iov_v(channel,&snd_kiovec,1,
-                      &rcv_kiovec,1);
-}
-
-long sys_port_send_iov(ulong_t channel,iovec_t iov[],ulong_t numvecs,
-                       uintptr_t rcv_buf,ulong_t rcv_size)
-{
-  iovec_t kiovecs[MAX_IOVECS],rcv_kiovec;
-
-  if( !iov || !numvecs || numvecs > MAX_IOVECS ) {
-    return -EINVAL;
-  }
-
-  if( copy_from_user(kiovecs,iov,numvecs*sizeof(iovec_t)) ) {
-    return -EFAULT;
-  }
-
-  rcv_kiovec.iov_base=(void *)rcv_buf;
-  rcv_kiovec.iov_len=rcv_size;
-
   
-  return __send_iov_v(channel,kiovecs,numvecs,&rcv_kiovec,1);
+  ret = ipc_port_send_iov(c, snd_kiovecs, snd_numvecs, rcv_kiovecs, rcv_numvecs);
+  ipc_put_channel(c);
+  return ret;
 }
 
-long sys_control_channel(ulong_t channel,ulong_t cmd,ulong_t arg)
+long sys_port_send(ulong_t channel,
+                   uintptr_t snd_buf, size_t snd_size,
+                   uintptr_t rcv_buf, size_t rcv_size)
+{
+  iovec_t snd_kiovec, rcv_kiovec;
+
+  snd_kiovec.iov_base = (void *)snd_buf;
+  snd_kiovec.iov_len = snd_size;
+
+  rcv_kiovec.iov_base = (void *)rcv_buf;
+  rcv_kiovec.iov_len = rcv_size;
+
+  return __send_iov_v(channel, &snd_kiovec, 1, &rcv_kiovec, 1);
+}
+
+long sys_port_send_iov(ulong_t channel, iovec_t iov[], uint32_t numvecs,
+                       uintptr_t rcv_buf, size_t rcv_size)
+{
+  iovec_t kiovecs[MAX_IOVECS], rcv_kiovec;
+
+  if (!iov || !numvecs || numvecs > MAX_IOVECS) {
+    return -EINVAL;
+  }
+
+  if (copy_from_user(kiovecs, iov, numvecs * sizeof(iovec_t))) {
+    return -EFAULT;
+  }
+  
+  rcv_kiovec.iov_base = (void *)rcv_buf;
+  rcv_kiovec.iov_len = rcv_size;
+
+  return __send_iov_v(channel, kiovecs, numvecs, &rcv_kiovec, 1);
+}
+
+long sys_control_channel(ulong_t channel, ulong_t cmd, ulong_t arg)
 {
   return ipc_channel_control(current_task(),channel,cmd,arg);
 }
 
-long sys_port_msg_read(ulong_t port,ulong_t msg_id,uintptr_t recv_buf,
-                       ulong_t recv_len,ulong_t offset)
+long sys_port_msg_read(ulong_t port, ulong_t msg_id, uintptr_t recv_buf,
+                       size_t recv_len, off_t offset)
 {
   ipc_gen_port_t *p;
   long r;
   iovec_t iovec;
 
-  if( !valid_user_address_range(recv_buf,recv_len) ) {
-    return -EFAULT;
-  }
-
-  p=ipc_get_port(current_task(),port);
-  if( !p ) {
+  p = ipc_get_port(current_task(), port);
+  if (!p) {
     return -EINVAL;
   }
 
-  iovec.iov_base=(void *)recv_buf;
-  iovec.iov_len=recv_len;
+  iovec.iov_base = (void *)recv_buf;
+  iovec.iov_len = recv_len;
 
-  r=ipc_port_msg_read(p,msg_id,&iovec,1,offset);
+  r = ipc_port_msg_read(p, msg_id, &iovec, 1, offset);
   ipc_put_port(p);
   return r;
 }

@@ -68,7 +68,7 @@ typedef struct __ipc_port_message_t {
   list_node_t l,messages_list;
   list_head_t h;  /* For implementing skiplists. */
   event_t event;
-  ipc_user_buffer_t *snd_buf, *rcv_buf;
+  ipc_buffer_t *snd_buf, *rcv_buf;
   ulong_t num_send_bufs,num_recv_buffers;
   task_t *sender;
   ipc_msg_state_t state;
@@ -116,10 +116,10 @@ typedef struct __ipc_gen_port {
   list_head_t channels;  
 } ipc_gen_port_t;
 
-int ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size);
-int ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
-                     struct __iovec *iovec,ulong_t numvec,
-                     port_msg_info_t *msg_info);
+long ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size);
+long ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
+                      struct __iovec *iovec, uint32_t numvec,
+                      port_msg_info_t *msg_info);
 ipc_gen_port_t *ipc_get_port(task_t *task,ulong_t port);
 void ipc_put_port(ipc_gen_port_t *p);
 int ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
@@ -142,22 +142,18 @@ poll_event_t ipc_port_check_events(ipc_gen_port_t *port,wqueue_task_t *w,
 void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w);
 
 void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w);
-ipc_port_message_t *ipc_create_port_message_iov_v(struct __ipc_channel *channel,
-                                                  struct __iovec *snd_kiovecs,ulong_t snd_numvecs,
-                                                  ulong_t data_len,
-                                                  struct __iovec *rcv_kiovecs,ulong_t rcv_numvecs,
-                                                  ipc_user_buffer_t *snd_bufs,
-                                                  ipc_user_buffer_t *rcv_bufs,
-                                                  ulong_t rcv_size);
-int ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
-                       struct __iovec *reply_iov,ulong_t numvecs,
-                       ulong_t reply_size);
-int ipc_port_send_iov(struct __ipc_channel *channel, struct __iovec *snd_kiovecs, ulong_t snd_numvecs,
-                      struct __iovec *rcv_kiovecs, ulong_t rcv_numvecs);
-int ipc_port_send_iov_core(struct __ipc_gen_port *port,
-                           ipc_port_message_t *msg,bool sync_send,
-                           struct __iovec *iovecs,ulong_t numvecs,
-                           ulong_t reply_len);
+ipc_port_message_t *ipc_create_port_message_iov_v(struct __ipc_channel *channel, struct __iovec *snd_kiovecs,
+                                                  uint32_t snd_numvecs, size_t data_len,
+                                                  struct __iovec *rcv_kiovecs, uint32_t rcv_numvecs,
+                                                  ipc_buffer_t *snd_bufs, ipc_buffer_t *rcv_bufs, size_t rcv_size);
+long ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
+                        struct __iovec *reply_iov, uint32_t numvecs);
+long ipc_port_send_iov(struct __ipc_channel *channel, struct __iovec *snd_kiovecs, ulong_t snd_numvecs,
+                       struct __iovec *rcv_kiovecs, ulong_t rcv_numvecs);
+long ipc_port_send_iov_core(ipc_gen_port_t *port,
+                            ipc_port_message_t *msg,bool sync_send,
+                            struct __iovec *iovecs,ulong_t numvecs,
+                            ulong_t reply_len);
 long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
                        struct __iovec *rcv_iov,ulong_t numvecs,ulong_t offset);
 ipc_gen_port_t *ipc_clone_port(ipc_gen_port_t *p);

@@ -131,12 +131,8 @@ extern rpd_t kernel_rpd;
 
 static inline bool valid_user_address_range(uintptr_t va_start, uintptr_t length)
 {
-#ifndef CONFIG_TEST
-  return ((va_start >= USPACE_VA_BOTTOM) &&
-          ((va_start + length) <= USPACE_VA_TOP));
-#else
-  return true;
-#endif /* CONFIG_TEST */
+    return ((va_start >= USPACE_VA_BOTTOM) &&
+            ((va_start + length) <= USPACE_VA_TOP));
 }
 
 static inline void *user_to_kernel_vaddr(rpd_t *rpd, uintptr_t addr)
@@ -189,10 +185,10 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
 int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages);
 vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, ttree_cursor_t *cursor);
 void vmranges_find_covered(vmm_t *vmm, uintptr_t va_from, uintptr_t va_to, vmrange_set_t *vmrs);
-int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page,
-              page_idx_t npages, kmap_flags_t flags, bool pin_pages);
 int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t pfmask,
                         void (*callback)(vmrange_t *vmr, page_frame_t *page, void *data), void *data);
+int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page,
+              page_idx_t npages, kmap_flags_t flags, bool pin_pages);
 
 static inline void vmrange_set_next(vmrange_set_t *vmrs)
 {
