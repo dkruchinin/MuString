@@ -370,9 +370,6 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
 
     regs->int_frame.rip=pregs->int_frame.rip;
     regs->int_frame.old_rsp=pregs->int_frame.old_rsp;
-    kprintf_fault("***** NEW TASK RSP: %p, ON TOP OF THE STAK: %p\n",
-                  regs->int_frame.old_rsp,
-                  *(long *)regs->int_frame.old_rsp);
   }
   return 0;
 }
