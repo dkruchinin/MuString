@@ -69,6 +69,17 @@ static void __save_pfns_in_buffer(vmrange_t *unused, page_frame_t *page, void *h
   buf_data->chunk_num++;
 }
 
+void ipc_release_buffer_pages(ipc_buffer_t *bufs, uint32_t numbufs)
+{
+  int i, j;
+
+  for (i = 0; i < numbufs; i++) {
+    for (j = 0; j < bufs[i].num_chunks; j++) {
+      unpin_page_frame(pframe_by_number(bufs[i].chunks[j]));
+    }
+  }
+}
+
 int ipc_setup_buffer_pages(iovec_t *iovecs, uint32_t numvecs, page_idx_t *idx_array,
                            ipc_buffer_t *bufs, bool is_sender_buffer)
 {
@@ -76,9 +87,11 @@ int ipc_setup_buffer_pages(iovec_t *iovecs, uint32_t numvecs, page_idx_t *idx_ar
   struct setup_buf_helper buf_data;
   ipc_buffer_t *buf;
   task_t *owner = current_task();
+  int i;
+  iovec_t *iovs;
   
   LOCK_TASK_VM(owner);
-  for (buf = bufs; numvecs; numvecs--, iovecs++, buf++) {
+  for (buf = bufs, i = 0, iovs = iovecs; i < numvecs; i++, iovs++, buf++) {
     buf->chunks = idx_array;
     buf_data.pchunk = buf->chunks;
     buf_data.chunk_num = 0;
@@ -88,7 +101,7 @@ int ipc_setup_buffer_pages(iovec_t *iovecs, uint32_t numvecs, page_idx_t *idx_ar
      * So if iovec's address range is not belong to user-space, then the buffer is
      * in kernel and we don't need to fault and pin each iovec page.
      */
-    if (likely(valid_user_address_range((uintptr_t)iovecs->iov_base, iovecs->iov_len))) {
+    if (likely(valid_user_address_range((uintptr_t)iovs->iov_base, iovs->iov_len))) {
       uint32_t pfmask = PFLT_READ;
 
       ASSERT(!is_kernel_thread(owner));
@@ -103,17 +116,17 @@ int ipc_setup_buffer_pages(iovec_t *iovecs, uint32_t numvecs, page_idx_t *idx_ar
        * We don't want that pages be unmapped from the owner's address space or simply swapped out
        * while we are resolving their indices.
        */
-      r = fault_in_user_pages(owner->task_mm, (uintptr_t)iovecs->iov_base, iovecs->iov_len,
+      r = fault_in_user_pages(owner->task_mm, (uintptr_t)iovs->iov_base, iovs->iov_len,
                               pfmask, __save_pfns_in_buffer, &buf_data);
       if (r) {
-        goto out;
+        goto outerror;
       }
     }
     else {      
       uintptr_t vaddr_start, vaddr_end;
 
       vaddr_start = PAGE_ALIGN_DOWN(iovecs->iov_base);
-      vaddr_end = PAGE_ALIGN((uintptr_t)iovecs->iov_base + iovecs->iov_len);
+      vaddr_end = PAGE_ALIGN((uintptr_t)iovs->iov_base + iovs->iov_len);
       while (vaddr_start < vaddr_end) {
         *buf_data.pchunk = virt_to_pframe_id((void *)vaddr_start);
         buf_data.pchunk++;
@@ -123,18 +136,30 @@ int ipc_setup_buffer_pages(iovec_t *iovecs, uint32_t numvecs, page_idx_t *idx_ar
     }
 
     /* Offset from very first page to iov_base will be saved in buf->offset */
-    buf->offset = (uintptr_t)iovecs->iov_base - PAGE_ALIGN_DOWN(iovecs->iov_base);
-
-    //*pchunk=(uintptr_t)pframe_to_virt(page)+(start_addr & PAGE_MASK);
+    buf->offset = (uintptr_t)iovs->iov_base - PAGE_ALIGN_DOWN(iovs->iov_base);
 
     buf->num_chunks = buf_data.chunk_num;
-    buf->length = iovecs->iov_len;
+    buf->length = iovs->iov_len;
     idx_array += buf_data.chunk_num;
   }
+
+  UNLOCK_TASK_VM(owner);
+  return 0;
   
-  r = 0;
-out:
-  /* TODO DK: Unpin all pages if any was pinned earlier */
+outerror:
+  while (i >= 0) {
+    for (; buf_data.chunk_num; buf_data.pchunk--, buf_data.chunk_num--) {
+      unpin_page_frame(pframe_by_number(*buf_data.pchunk));
+    }
+
+    buf--;
+    i--;
+    if (i >= 0) {
+      buf_data.chunk_num = buf->num_chunks;
+      buf_data.pchunk = buf->chunks + buf->num_chunks - 1;
+    }
+  }
+  
   UNLOCK_TASK_VM(owner);
   return r;
 }

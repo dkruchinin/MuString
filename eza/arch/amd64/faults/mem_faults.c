@@ -134,13 +134,14 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
   task_t *faulter=current_task();
 
   get_fault_address(invalid_address);
-  if(PFAULT_SVISOR(stack_frame->error_code)) {
+  fixup = fixup_fault_address(stack_frame->rip);
+  if(PFAULT_SVISOR(stack_frame->error_code) && (fixup != 0)) {
     goto kernel_fault;
   }
   else {
     /*
-     * PF in user-space. Try to find out correspondig VM range and handle the faut
-     * using range's memory object.
+     * PF in user-space or "fixuped" fault in kernel.
+     * Try to find out correspondig VM range and handle the faut using range's memory object.
      */
 
     vmm_t *vmm = current_task()->task_mm;
@@ -158,6 +159,9 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
     if (!ret) {
       return;
     }
+    if (fixup != 0) {
+      goto kernel_fault;
+    }
   }
   if (current_task()->siginfo.handlers->actions[SIGSEGV].a.sa_sigaction != SIG_DFL)
     goto send_sigsegv;
@@ -170,7 +174,6 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 
 kernel_fault:
   /* First, try to fix this exception. */
-  fixup=fixup_fault_address(stack_frame->rip);
   if( fixup != 0 ) {
     stack_frame->rip=fixup;
     return;

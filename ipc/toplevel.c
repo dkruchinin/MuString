@@ -95,7 +95,7 @@ static inline long __reply_iov(ulong_t port, ulong_t msg_id,
   if (!__valid_iovecs(reply_iov, numvecs)) {
     return -EFAULT;
   }
-
+  
   r = ipc_port_reply_iov(p, msg_id, reply_iov, numvecs);
   ipc_put_port(p);
   return r;
@@ -140,7 +140,6 @@ long sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
     if (!__valid_iovecs(&iovec, 1)) {
       return -EFAULT;
     }
-
     piovec = &iovec;
   }
   else {

@@ -108,12 +108,10 @@ static ipc_port_message_t *__ipc_create_nb_port_message(ipc_channel_t *channel,u
   return NULL;
 }
 
-/* FIXME DK: implement ipc_release_buffer_pages */
-#define ipc_release_buffer_pages(a, b)
 void put_ipc_port_message(ipc_port_message_t *msg)
 {
   if (msg->blocked_mode) {
-    if (msg->send_buffer && (msg->data_size > IPC_BUFFERED_PORT_LENGTH)) {
+    if (msg->snd_buf && (msg->data_size > IPC_BUFFERED_PORT_LENGTH)) {
       ipc_release_buffer_pages(msg->snd_buf, msg->num_send_bufs);
     }
     if (msg->rcv_buf && (msg->reply_size > IPC_BUFFERED_PORT_LENGTH)) {

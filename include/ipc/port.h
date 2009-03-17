@@ -76,7 +76,7 @@ typedef struct __ipc_port_message_t {
 } ipc_port_message_t;
 
 typedef struct __port_msg_info {
-  uint16_t msg_id;
+  uint16_t msg_id;  
   pid_t sender_pid;
   uint32_t msg_len;
   tid_t sender_tid;
@@ -164,6 +164,7 @@ void put_ipc_port_message(ipc_port_message_t *msg);
 
 #define IPC_RESET_MESSAGE(m,t)                  \
     do {                                        \
+      memset(m, 0, sizeof(*(m)));               \
       list_init_node(&(m)->l);                  \
       list_init_node(&(m)->messages_list);      \
       event_initialize(&(m)->event);            \
