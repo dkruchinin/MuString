@@ -169,9 +169,8 @@ static void __client_thread(void *ctx)
   int i;
   int channels[SERVER_NUM_PORTS];
   int r;
-  iovec_t iovecs[MAX_IOVECS], tmpvec;
+  iovec_t iovecs[MAX_IOVECS];
   ulong_t numvecs;
-  ipc_channel_t *chan;
   
   tf->printf(CLIENT_THREAD "Opening %d channels.\n",SERVER_NUM_PORTS );
   for(i=0;i<SERVER_NUM_PORTS;i++) {
@@ -221,15 +220,9 @@ static void __client_thread(void *ctx)
    ****************************************************************/
   tf->printf(CLIENT_THREAD "Sending messages in blocking mode.\n" );  
   for(i=0;i<TEST_ROUNDS;i++) {
-    ipc_channel_t *c;
-    iovec_t snd_v, rcv_v;
-    c = ipc_get_channel(current_task(), channels[i]);
-    snd_v.iov_base = (void *)patterns[i];
-    snd_v.iov_len = strlen(patterns[i])+1;
-    rcv_v.iov_base = (void *)__client_rcv_buf;
-    rcv_v.iov_len = MAX_TEST_MESSAGE_SIZE;
-    r = ipc_port_send_iov(c, &snd_v, 1, &rcv_v, 1);
-    ipc_put_channel(c);
+    r=sys_port_send(channels[i],
+                    (ulong_t)patterns[i],strlen(patterns[i])+1,
+                    (ulong_t)__client_rcv_buf,MAX_TEST_MESSAGE_SIZE);
     if( r < 0 ) {
       tf->printf(CLIENT_THREAD "Error while sending data over channel N%d : %d\n",
                  channels[i],r);
@@ -258,11 +251,9 @@ static void __client_thread(void *ctx)
   tf->printf(CLIENT_THREAD "Sending a big message in blocking mode via I/O vectors.\n" );
   __setup_iovectors(BIG_MSG_ID,iovecs,&numvecs);
 
-  chan = ipc_get_channel(current_task(), channels[BIG_MESSAGE_PORT_ID]);
-  tmpvec.iov_base = (void *)__big_message_client_buf;
-  tmpvec.iov_len = BIG_MESSAGE_SIZE;
-  r = ipc_port_send_iov(chan, iovecs, numvecs, &tmpvec, 1);
-  ipc_put_channel(chan);
+  r=sys_port_send_iov(channels[BIG_MESSAGE_PORT_ID],
+                      iovecs,numvecs,
+                      (ulong_t)__big_message_client_buf,BIG_MESSAGE_SIZE);
   if( r < 0 ) {
     tf->printf(CLIENT_THREAD "Error while sending a big message over channel N%d : %d\n",
                channels[BIG_MESSAGE_PORT_ID],r);
@@ -596,12 +587,10 @@ static void __process_events_test(void *ctx)
   DECLARE_TEST_CONTEXT;
   int port=sys_create_port(0,0);
   task_t *task;
-  int r,refcount;
+  int r;
   task_event_ctl_arg te_ctl;
   task_event_descr_t ev_descr;
   port_msg_info_t msg_info;
-  iovec_t iovec;
-  ipc_gen_port_t *p;
 
   if( port < 0 ) {
     tf->printf( "Can't create a port !\n" );
@@ -612,49 +601,12 @@ static void __process_events_test(void *ctx)
     tf->abort();
   }
 
-  refcount=atomic_get(&task->refcount);
-
   te_ctl.ev_mask=TASK_EVENT_TERMINATION;
   te_ctl.port=port;
   r=sys_task_control(task->pid,SYS_PR_CTL_ADD_EVENT_LISTENER,
                      (ulong_t)&te_ctl);
   if( r ) {
     tf->printf("Can't set event listener: %d\n",r);
-    tf->failed();
-  }
-
-  if( atomic_get(&task->refcount) != refcount+1) {
-    tf->printf("Insuficient task refcount after adding a listener ! %d instead of %d\n",
-               atomic_get(&task->refcount),refcount+1);
-    tf->failed();
-  }
-
-  tf->printf("Now remove just installed event listener.\n");
-  r=sys_task_control(0,SYS_PR_CTL_DEL_EVENT_LISTENER,task->pid);
-  if( r ) {
-    tf->printf("Can't remove event listener: %d\n",r);
-    tf->failed();
-  }
-
-  if( atomic_get(&task->refcount) != TASK_INITIAL_REFCOUNT ) {
-    tf->printf("Insuficient task refcount after deleting a listener ! %d instead of %d\n",
-               atomic_get(&task->refcount),TASK_INITIAL_REFCOUNT);
-    tf->failed();
-  }
-
-  tf->printf("Re-install listener for target task.\n");
-  te_ctl.ev_mask=TASK_EVENT_TERMINATION;
-  te_ctl.port=port;
-  r=sys_task_control(task->pid,SYS_PR_CTL_ADD_EVENT_LISTENER,
-                     (ulong_t)&te_ctl);
-  if( r ) {
-    tf->printf("Can't set event listener: %d\n",r);
-    tf->failed();
-  }
-
-  if( atomic_get(&task->refcount) != refcount+1) {
-    tf->printf("Insuficient task refcount after re-adding a listener ! %d instead of %d\n",
-               atomic_get(&task->refcount),refcount+1);
     tf->failed();
   }
 
@@ -671,16 +623,8 @@ static void __process_events_test(void *ctx)
   }
 
   memset(&ev_descr,0,sizeof(ev_descr));
-  p = ipc_get_port(current_task(), port);
-  if (!p) {
-    tf->printf("Can't get port %d of task %#x\n", port, current_task()->pid);
-    tf->failed();
-  }
-
-  iovec.iov_base = (void *)&ev_descr;
-  iovec.iov_len = sizeof(ev_descr);
-  r = ipc_port_receive(p, IPC_BLOCKED_ACCESS, &iovec, 1, &msg_info);
-  ipc_put_port(p);
+  r=sys_port_receive(port,IPC_BLOCKED_ACCESS,(ulong_t)&ev_descr,
+                     sizeof(ev_descr),&msg_info);
   if( r ) {
     tf->printf("Error occured while waiting for task's events: %d !\n",
                r);
@@ -691,27 +635,6 @@ static void __process_events_test(void *ctx)
       !(ev_descr.ev_mask & te_ctl.ev_mask) ) {
     tf->printf( "Improper notification message received: PID: %d, TID: %d, EVENT: 0x%X\n",
                 ev_descr.pid,ev_descr.tid,ev_descr.ev_mask);
-    tf->failed();
-  }
-
-  tf->printf("Now remove our event listener.\n");
-  r=sys_task_control(0,SYS_PR_CTL_DEL_EVENT_LISTENER,task->pid);
-  if( r ) {
-    tf->printf("Can't remove event listener: %d\n",r);
-    tf->failed();
-  }
-
-  tf->printf("Now try to remove not-attached listeners.\n");
-  r=sys_task_control(0,SYS_PR_CTL_DEL_EVENT_LISTENER,task->pid);
-  if( r != -EINVAL ) {
-    tf->printf("How did I manage to remove insufficient listener ?\n");
-    tf->failed();
-  }
-
-  sleep(100);
-  if( atomic_get(&task->refcount) != TASK_INITIAL_REFCOUNT-1 ) {
-    tf->printf("Insuficient task refcount after deleting a listener ! %d instead of %d\n",
-               atomic_get(&task->refcount),TASK_INITIAL_REFCOUNT-1);
     tf->failed();
   }
 
@@ -957,7 +880,7 @@ static void __validate_retval(int r,int expected,
 }
 
 #define READ_LONGS  15500
-static uintptr_t __buf_pages[512];
+static page_idx_t __buf_pages[512];
 static long __bufzone[32];
 static long __zbuffer_snd[READ_LONGS];
 static long __zbuffer_rcv[READ_LONGS];
@@ -996,7 +919,8 @@ static void __ipc_buffer_test(void *ctx)
   snd_iovecs[2].iov_base=snd_iovecs[1].iov_base+snd_iovecs[1].iov_len;
   snd_iovecs[2].iov_len=sizeof(message_tail_t);
 
-  ipc_setup_buffer_pages(rcv_iovecs,1,__buf_pages,bufs,false);
+  ipc_setup_buffer_pages(rcv_iovecs,1,__buf_pages,bufs, false);
+
   ipc_transfer_buffer_data_iov(bufs,1,snd_iovecs,6,0,true);
   if( __validate_vectored_message(__vectored_msg_server_rcv_buf,4,tf) ) {
     tf->passed();
@@ -1132,7 +1056,6 @@ static void __message_read_test(void *ctx)
   int r,i;
   port_msg_info_t msg_info;
   message_header_t *hdr;
-  ipc_gen_port_t *p;
   message_tail_t *tail;
 
   if( port < 0 ) {
@@ -1151,7 +1074,6 @@ static void __message_read_test(void *ctx)
     ulong_t *watchline;
     ulong_t size;
     int j;
-    iovec_t iov;
 
     memset(__zbuffer_rcv,0,sizeof(__zbuffer_rcv));
     size=sizeof(message_header_t);
@@ -1160,11 +1082,8 @@ static void __message_read_test(void *ctx)
 
     tf->printf(SERVER_THREAD"RCV a message that has %d parts. SIZE=%d, NULL RCV buffer\n",
                parts,size);
-    p = ipc_get_port(current_task(), port);
-    iov.iov_base = (void *)__zbuffer_rcv;
-    iov.iov_len = sizeof(message_header_t);
-    r = ipc_port_receive(p, IPC_BLOCKED_ACCESS, &iov, 1, &msg_info);
-    ipc_put_port(p);
+    r=sys_port_receive(port,IPC_BLOCKED_ACCESS,(uintptr_t)__zbuffer_rcv,
+                       sizeof(message_header_t),&msg_info);
     if( r ) {
       tf->printf(SERVER_THREAD"Error during receive ! %d.\n",r);
       tf->failed();
@@ -1491,21 +1410,15 @@ static void __stack_overflow_client(void *ctx)
   unsigned char *p4=&e[sizeof(e)-1];
 
   iovec_t s_vec,r_vec[2];
-  ipc_channel_t *channel;
+  long channel;
   int i;
-  ulong_t c;
-  task_t *task;
 
-  task = pid_to_task(__server_pid);
-  kprintf("one\n");
-  c = ipc_open_channel(current_task(), task, __vectored_port, IPC_BLOCKED_ACCESS | IPC_KERNEL_SIDE);  
-  if( !c < 0 ) {
+  channel=sys_open_channel(__server_pid,__vectored_port,IPC_BLOCKED_ACCESS);
+  if( channel < 0 ) {
     tf->printf("[OVF TESTER]: Can't open a channel !\n" );
     tf->abort();
   }
-  kprintf("two\n");
-  release_task_struct(task);
-  channel = ipc_get_channel(current_task(), c);
+
   tf->printf("[OVF TESTER]: Sending message ...\n" );
 
   *p1=__CP;
@@ -1522,18 +1435,15 @@ static void __stack_overflow_client(void *ctx)
   r_vec[1].iov_base=ovf_data;
   r_vec[1].iov_len=sizeof(*ovf_data);
 
-  kprintf("two zzzzz\n");
-  r = ipc_port_send_iov(channel, &s_vec, 1, r_vec, 2);
+  r=sys_port_send_iov_v(channel,&s_vec,1,r_vec,2);
   tf->printf("[OVF TESTER]: Got a response: %d bytes\n",
              r);
-  ipc_put_channel(channel);
   if( r < 0 || r != (r_vec[0].iov_len + r_vec[1].iov_len ) ) {
     tf->printf("[OVF TESTER]: Message had to be %d bytes length.\n",
                r_vec[0].iov_len + r_vec[1].iov_len);
     tf->failed();
   }
 
-  kprintf("ffff two\n");
   if( *p1 != __CP ) {
     kprintf("[!!] P1 mismatch ! %p instead of %p\n",
             *p1,__CP);
@@ -1587,8 +1497,6 @@ static void __stack_overflow_test(void *ctx)
   unsigned char *p2=&d[sizeof(d)-1];
   int to_copy=p2-p1-1;  
   port_msg_info_t msg_info;
-  ipc_gen_port_t *port;
-  iovec_t iovec;
   iovec_t iov[2];
   ovf_header_t header=__header_ovf,i_header;
   ovf_data_t o_data;
@@ -1613,7 +1521,7 @@ static void __stack_overflow_test(void *ctx)
   }
 
   kprintf( "** Raw usercopy tests finished !\n" );
-  __ovf_port = ipc_create_port(current_task(), IPC_BLOCKED_ACCESS, 0);
+  __ovf_port=sys_create_port(IPC_BLOCKED_ACCESS,0);
   if( __ovf_port < 0 ) {
     tf->printf(SERVER_THREAD"Can't create a port for stack overflow tests !\n");
     tf->abort();
@@ -1625,12 +1533,10 @@ static void __stack_overflow_test(void *ctx)
   }
 
   tf->printf("[OVF TEST]: Waiting for incoming messages ...\n");
-  port = ipc_get_port(current_task(), __ovf_port);
-  iovec.iov_base = (void *)&i_header;
-  iovec.iov_len = sizeof(i_header);
-  r = ipc_port_receive(port, IPC_BLOCKED_ACCESS, &iovec, 1, &msg_info);
+  r=sys_port_receive(__ovf_port,IPC_BLOCKED_ACCESS,(ulong_t)&i_header,
+                     sizeof(i_header),&msg_info);
   if( r < 0 ) {
-    tf->printf("[OVF TEST]: Error during receiving a message ! %d\n",
+    tf->printf("[OVF TEST]: Error wuring receiving a message ! %d\n",
                r);
     tf->abort();
   }

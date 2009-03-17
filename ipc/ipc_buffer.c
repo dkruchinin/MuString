@@ -91,7 +91,6 @@ int ipc_setup_buffer_pages(iovec_t *iovecs, uint32_t numvecs, page_idx_t *idx_ar
     if (likely(valid_user_address_range((uintptr_t)iovecs->iov_base, iovecs->iov_len))) {
       uint32_t pfmask = PFLT_READ;
 
-      kprintf("Am I here?\n");
       ASSERT(!is_kernel_thread(owner));
       if (!is_sender_buffer) { /* buffer for reveibing must be writable */
         pfmask |= PFLT_WRITE;
@@ -115,9 +114,7 @@ int ipc_setup_buffer_pages(iovec_t *iovecs, uint32_t numvecs, page_idx_t *idx_ar
 
       vaddr_start = PAGE_ALIGN_DOWN(iovecs->iov_base);
       vaddr_end = PAGE_ALIGN((uintptr_t)iovecs->iov_base + iovecs->iov_len);
-      kprintf("S: %p; E: %p\n", vaddr_start, vaddr_end);
       while (vaddr_start < vaddr_end) {
-        kprintf("(%d) Save ID: %#x\n", numvecs, virt_to_pframe_id((void *)vaddr_start));
         *buf_data.pchunk = virt_to_pframe_id((void *)vaddr_start);
         buf_data.pchunk++;
         buf_data.chunk_num++;
@@ -128,7 +125,6 @@ int ipc_setup_buffer_pages(iovec_t *iovecs, uint32_t numvecs, page_idx_t *idx_ar
     /* Offset from very first page to iov_base will be saved in buf->offset */
     buf->offset = (uintptr_t)iovecs->iov_base - PAGE_ALIGN_DOWN(iovecs->iov_base);
 
-    kprintf("(%d) SND: first addr: %p -> %p\n", numvecs, iovecs->iov_base, (char *)iovecs->iov_base + (PAGE_SIZE - buf->offset));
     //*pchunk=(uintptr_t)pframe_to_virt(page)+(start_addr & PAGE_MASK);
 
     buf->num_chunks = buf_data.chunk_num;
@@ -195,7 +191,6 @@ int ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs, iovec_t *
         page_end = dest_kaddr + bufs->length;
       }
       
-      kprintf("1 [RD]: First address %p (id = %#x)\n", dest_kaddr, *chunk);
       dest_kaddr += buf_offset;
     }
     else {
@@ -205,7 +200,6 @@ int ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs, iovec_t *
       dest_kaddr = (char *)pframe_id_to_virt(*chunk);
       page_end = dest_kaddr + PAGE_SIZE;
       dest_kaddr += offs & PAGE_MASK;
-      kprintf("2 [RD]: First address %p (id = %#x)\n", dest_kaddr, *chunk);
       if ((page_end - dest_kaddr) > (bufs->length - buf_offset)) {
         page_end = dest_kaddr + (bufs->length - buf_offset);
       }
@@ -246,7 +240,6 @@ int ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs, iovec_t *
       if (bufsize && (dest_kaddr >= page_end)) {
         chunk++;
         dest_kaddr = (char *)pframe_id_to_virt(*chunk);
-        kprintf("[RD]: %#x\n", *(page_idx_t *)chunk);
         page_end = dest_kaddr + PAGE_SIZE;
       }
       if (data_size) {
@@ -267,14 +260,11 @@ int ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs, iovec_t *
     bufsize = bufs->length;
     dest_kaddr = (char *)pframe_id_to_virt(*chunk) + bufs->offset;
     if (bufs->length >= (PAGE_SIZE - bufs->offset)) {
-      kprintf("OFFSET: %#x\n", bufs->offset);
       page_end = dest_kaddr + (PAGE_SIZE - bufs->offset);
     }
     else {
       page_end = dest_kaddr + PAGE_SIZE;
     }
-
-    kprintf("[RD] first addr %p (%#x) (%p)\n", dest_kaddr, *(page_idx_t *)chunk, page_end);
   }
   
   return 0;

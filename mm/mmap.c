@@ -957,8 +957,9 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
   struct mmap_args margs;
   vmrange_flags_t vmrflags;
 
-  if (likely(!victim))
+  if (likely(!victim)) {
     victim_task = current_task();
+  }
   else {
     victim_task = pid_to_task(victim);
     if (!victim_task)

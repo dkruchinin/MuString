@@ -176,7 +176,7 @@ long sys_port_send_iov_v(ulong_t channel,
     return -EFAULT;
   }
 
-  c = ipc_get_channel(current_task(),channel);
+  c = ipc_get_channel(current_task(), channel);
   if (!c) {
     return -ESRCH;
   }
