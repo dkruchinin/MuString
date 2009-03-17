@@ -157,12 +157,12 @@ long sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
   return r;
 }
 
-static inline int __send_iov_v(ulong_t channel,
-                               iovec_t snd_kiovecs[], uint32_t snd_numvecs,
-                               iovec_t rcv_kiovecs[], uint32_t rcv_numvecs)
+static inline long __send_iov_v(ulong_t channel,
+                                iovec_t snd_kiovecs[], uint32_t snd_numvecs,
+                                iovec_t rcv_kiovecs[], uint32_t rcv_numvecs)
 {
   ipc_channel_t *c;
-  int ret;
+  long ret;
 
   c = ipc_get_channel(current_task(), channel);
   if (!c) {

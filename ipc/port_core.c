@@ -139,6 +139,7 @@ ipc_port_message_t *ipc_create_port_message_iov_v(ipc_channel_t *channel, iovec_
       return NULL;
     }
 
+    kprintf("[%d] NON BLOCKING MESSAGE!\n", current_task()->pid);
     msg= __ipc_create_nb_port_message(channel, 0, data_len, false);
     if (!msg) {
       return NULL;
@@ -585,7 +586,7 @@ recv_cycle:
   IPC_UNLOCK_PORT_W(port);
 
 out:
-  if( msg != NULL ) {
+  if( msg != NULL ) {    
     r=__transfer_message_data_to_receiver(msg,iovec,numvec,msg_info,0);
 
     /* OK, message was successfully transferred, so remove it from the port
@@ -599,6 +600,7 @@ out:
     IPC_UNLOCK_PORT_W(port);      
     
     if (msg->blocked_mode) {
+      kprintf("[%d] Sending reply to %d\n", current_task()->pid, msg->sender->pid);
       POST_MESSAGE_DATA_ACCESS_STEP(port,msg,r,true);
     }
     
@@ -734,7 +736,8 @@ long ipc_port_send_iov_core(ipc_gen_port_t *port,
     bool b;
     int ir=0;
 
-  wait_for_reply:
+    wait_for_reply:
+    kprintf("[%d] Sending message\n", current_task()->pid);
     r=event_yield(&msg->event);
     if( task_was_interrupted(sender) ) {
       /* No luck: we were interrupted asynchronously.
@@ -790,6 +793,7 @@ long ipc_port_send_iov_core(ipc_gen_port_t *port,
     } else {
       r=msg->replied_size;
       if( r > 0 ) {
+        kprintf("[%d] waked up\n", current_task()->pid);
         r=__transfer_reply_data_iov(msg,iovecs,numvecs,false,reply_len);
         if( !r ) {
           r=msg->replied_size;
