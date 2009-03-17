@@ -81,7 +81,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
     pagetable_lock(&vmm->rpd);
     pidx = ptable_ops.vaddr2page_idx(&vmm->rpd, addr, &pde);
     ASSERT(pidx != PAGE_IDX_INVAL);
-    kprintf_fault("[%d] COW ADDR: %p(%#x)\n", current_task()->pid, addr, pidx);
+    //kprintf_fault("[%d] COW ADDR: %p(%#x)\n", current_task()->pid, addr, pidx);
     if (unlikely(ptable_to_kmap_flags(pde_get_flags(pde)) & KMAP_WRITE)) {
       pagetable_unlock(&vmm->rpd);
       goto out;
@@ -102,7 +102,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
       page = new_page;
     }
 
-    kprintf_fault("[%d] MAP page %#x to %p\n", current_task()->pid, pframe_number(page), addr);
+    //kprintf_fault("[%d] MAP page %#x to %p\n", current_task()->pid, pframe_number(page), addr);
     ret = mmap_core(&vmm->rpd, addr, pframe_number(page), 1,
                     vmr->flags & KMAP_FLAGS_MASK, true);
     pagetable_unlock(&vmm->rpd);

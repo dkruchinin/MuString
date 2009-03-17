@@ -211,7 +211,6 @@ static int __send_iov_v(ulong_t channel,
   } else {
     r=ipc_port_send_iov(port,msg,channel_in_blocked_mode(c),
                         rcv_kiovecs,rcv_numvecs,rcv_size);
-
   }
 
   ipc_put_port(port);

@@ -201,11 +201,11 @@ out_unlock:
 
 ipc_channel_t *ipc_clone_channel(ipc_channel_t *target)
 {
-  ipc_channel_t *c=memalloc(sizeof(*c));
-    //__allocate_channel(target->server_port,target->flags);
+  ipc_channel_t *c=__allocate_channel(target->server_port,target->flags);
 
   if( c ) {
-    c->server_port=target->server_port;
+    c->id=target->id;
+    c->ipc=target->ipc;
     REF_PORT(c->server_port);
   }
   return c;

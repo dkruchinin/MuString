@@ -206,8 +206,8 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
     }
 
     tipc=rcpt->ipc;
-    kprintf_fault("* OLD IPC: %p, NEW IPC: %p\n",
-                  ipc,tipc);
+    kprintf_fault("REPLICATED IPC: %p, PORTS: %d, CHANNELS: %d\n",
+                  tipc,ipc->max_port_num,ipc->max_channel_num);
     LOCK_IPC(ipc);
     if( ipc->ports ) { /* Duplicate all open ports. */
       tipc->ports=allocate_ipc_memory(ipc->allocated_ports*sizeof(ipc_gen_port_t *));
@@ -217,15 +217,14 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
       tipc->allocated_ports=ipc->allocated_ports;
       tipc->max_port_num=ipc->max_port_num;
 
-      kprintf_fault("[P]: max=%d, alloc=%d\n",
-                    ipc->max_port_num,ipc->allocated_ports);
-      for(i=0;i<ipc->allocated_ports;i++) {
+      for(i=0;i<=ipc->max_port_num;i++) {
         if( ipc->ports[i] ) {
           tipc->ports[i]=ipc_clone_port(ipc->ports[i]);
           if( !tipc->ports[i] ) {
             UNLOCK_IPC(ipc);
             goto put_ports;
           }
+          idx_reserve(&tipc->ports_array,i);
         }
       }
     }
@@ -239,20 +238,14 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
       tipc->allocated_channels=ipc->allocated_channels;
       tipc->max_channel_num=ipc->max_channel_num;
 
-      kprintf_fault("[C]: max=%d, alloc=%d, SIZE: %d, ADDR: %p, SLABMAXSIZE: %d\n",
-                    ipc->max_channel_num,ipc->allocated_channels,
-                    ipc->allocated_channels*sizeof(ipc_channel_t *),
-                    tipc->channels,SLAB_OBJECT_MAX_SIZE);
-
-      for(i=0;i<ipc->allocated_channels;i++) {
+      for(i=0;i<=ipc->max_channel_num;i++) {
         if( ipc->channels[i] ) {
-          kprintf_fault("   [Clonig %d to %p]\n",i,&tipc->channels[i]);
-          tipc->channels[i]=memalloc(64);//ipc_clone_channel(ipc->channels[i]);
+          tipc->channels[i]=ipc_clone_channel(ipc->channels[i]);
           if( !tipc->channels[i] ) {
-            kprintf_fault("ZZZZZZZZZZZzz !\n");
             UNLOCK_IPC(ipc);
             goto put_channels;
           }
+          idx_reserve(&tipc->channel_array,i);
         }
       }
     }
