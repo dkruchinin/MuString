@@ -206,8 +206,6 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
     }
 
     tipc=rcpt->ipc;
-    kprintf_fault("REPLICATED IPC: %p, PORTS: %d, CHANNELS: %d\n",
-                  tipc,ipc->max_port_num,ipc->max_channel_num);
     LOCK_IPC(ipc);
     if( ipc->ports ) { /* Duplicate all open ports. */
       tipc->ports=allocate_ipc_memory(ipc->allocated_ports*sizeof(ipc_gen_port_t *));
@@ -240,7 +238,7 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
 
       for(i=0;i<=ipc->max_channel_num;i++) {
         if( ipc->channels[i] ) {
-          tipc->channels[i]=ipc_clone_channel(ipc->channels[i]);
+          tipc->channels[i]=ipc_clone_channel(ipc->channels[i],tipc);
           if( !tipc->channels[i] ) {
             UNLOCK_IPC(ipc);
             goto put_channels;

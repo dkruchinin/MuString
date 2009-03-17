@@ -61,7 +61,7 @@ static inline int ipc_get_channel_port(ipc_channel_t *c,
   return r;
 }
 
-ipc_channel_t *ipc_clone_channel(ipc_channel_t *target);
+ipc_channel_t *ipc_clone_channel(ipc_channel_t *target,struct __task_ipc *newipc);
 
 #define IPC_CHANNEL_DIRECT_OP_FLAGS  1
 #define IPC_CHANNEL_DIRECT_OP_MASK  ((1<<(IPC_CHANNEL_DIRECT_OP_FLAGS))-1)

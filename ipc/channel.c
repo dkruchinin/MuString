@@ -199,13 +199,13 @@ out_unlock:
   return r;
 }
 
-ipc_channel_t *ipc_clone_channel(ipc_channel_t *target)
+ipc_channel_t *ipc_clone_channel(ipc_channel_t *target,struct __task_ipc *newipc)
 {
   ipc_channel_t *c=__allocate_channel(target->server_port,target->flags);
 
   if( c ) {
     c->id=target->id;
-    c->ipc=target->ipc;
+    c->ipc=newipc;
     REF_PORT(c->server_port);
   }
   return c;
