@@ -36,6 +36,7 @@
 #include <eza/rwsem.h>
 #include <eza/spinlock.h>
 #include <eza/security.h>
+#include <eza/usercopy.h>
 #include <mlibc/kprintf.h>
 #include <mlibc/types.h>
 
@@ -865,28 +866,36 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
   va = PAGE_ALIGN(address + length);
   npages = (va - PAGE_ALIGN_DOWN(address)) >> PAGE_WIDTH;
   va = PAGE_ALIGN_DOWN(address);
-  
-  if (!valid_user_address_range(va, va + (npages << PAGE_WIDTH)))
+
+  /* don't fuck with me */
+  if (!valid_user_address_range(va, va + (npages << PAGE_WIDTH))) {
     return -EFAULT;
-  if (pfmask & PFLT_WRITE)
-    vmr_mask |= VMR_WRITE;
+  }
+  if (pfmask & PFLT_WRITE) {
+    vmr_mask |= VMR_WRITE; /* VM range must have write access */
+  }
 
   vmr = vmrange_find(vmm, va, address, &cursor);
-  if (!vmr)
+  if (!vmr) {
     return -EFAULT;
-  if (!__valid_vmr_rights(vmr, pfmask))
+  }
+  if (!__valid_vmr_rights(vmr, pfmask) || ((vmr->flags & vmr_mask) != vmr_mask)) {
     return -EACCES;
+  }
   
   while (i < npages) {
     if (unlikely(va >= vmr->bounds.space_end)) {
-      if (ttree_cursor_next(&cursor) < 0)
+      if (ttree_cursor_next(&cursor) < 0) {
         return -EFAULT;
+      }
 
       vmr = ttree_item_from_cursor(&cursor);
-      if (va < vmr->bounds.space_start)
+      if (va < vmr->bounds.space_start) {
         return -EFAULT;
-      if (!__valid_vmr_rights(vmr, pfmask))
+      }
+      if (!__valid_vmr_rights(vmr, pfmask)) {
         return -EACCES;
+      }
     }
     
     pagetable_lock(&vmm->rpd);
@@ -956,8 +965,9 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
   struct mmap_args margs;
   vmrange_flags_t vmrflags;
 
-  if (likely(!victim))
+  if (likely(!victim)) {
     victim_task = current_task();
+  }
   else {
     victim_task = pid_to_task(victim);
     if (!victim_task)

@@ -162,107 +162,6 @@ long sys_create_task(ulong_t flags,task_creation_attrs_t *a);
 int sys_task_control( pid_t pid, ulong_t cmd, ulong_t arg);
 
 
-/**
- * @fn status_t sys_create_port( ulong_t flags, ulong_t queue_size )
- * @brief Create an IPC port.
- *
- * This system call creates new IPC port for the calling process using
- * target flags. The port will have queue size equal to the @a queue_size.
- * After a new port have been successfully created, it can be used for
- * receiving data.
- *
- * @param flags - Flags that control properties of a new port.
- *    Currently no flags supported et all, so this parameter is ignored.
- * @queue_size - size of the message queue for the port. If this value
- *    exceeds the maximum port queue size allowed for the calling process,
- *    this function will fail. Passing zero as queue size tells the kernel
- *    to use the default port queue size.
- *
- * @return If a new port was successfully created this function returns
- * its descriptor (a small positive/zero number). In case of failure,
- * negations of the following error codes are returned:
- *    EMFILE - calling process has reached the maximum number of allowed
- *             IPC ports.
- *    ENOMEM - memory allocation error occured during port allocation.
- *    ERERM  - calling process wasn't allowed to create a new IPC port.
- *    EINVAL - insufficient flags passed.
- */
-long sys_create_port( ulong_t flags, ulong_t queue_size );
-
-/**
- * @fn status_t sys_port_send(pid_t pid,ulong_t port,uintptr_t snd_buf,
- *                            ulong_t snd_size,uintptr_t rcv_buf,ulong_t rcv_size)
- * @brief Synchronously send data to target port.
- *
- * This system call sends data to target port over the channel.
- *
- * @param channel Identificator of the channel.
- * @param snd_buf Pointer to the buffer that contains data to be sent.
- * @param snd_size Number of bytes to be sent.
- * @param rcv_buf Pointer to buffer that will contain reply data.
- * @param rcv_size Size of the receive buffer.
- *
- * @return After successful data transfer, this function returns amount
- * of bytes in the server reply message. Otherwise, negations of
- * the following errors are returned:
- *    ESRCH - Insufficient pid was used.
- *    EFAULT - Insufficient memory address was passed.
- *    EBUSY  - No free space in target port for storing this request.
- *    ENOMEM - Memory allocation error occured while processing this
- *             request.
- *    DEADLOCK - Sender is trying to send message to itself.
- *    EINVAL - This return is returned upon the following conditions:
- *             a) insufficient port number was provided;
- *             b) message had insufficient size (currently only up to 2MB
- *                can be transferred via ports).
- */
-size_t sys_port_send(ulong_t channel,
-                     uintptr_t snd_buf,ulong_t snd_size,
-                     uintptr_t rcv_buf,ulong_t rcv_size);
-
-/**
- * @fn status_t sys_port_receive( ulong_t port, ulong_t flags, ulong_t recv_buf,
- *                                ulong_t recv_len)
- * @brief Receives data from target port.
- *
- * This system call receives data from target port and stores it to target
- * buffer. This function won't put the calling process into sleep
- * (until available messages appear) unless a special flag is specified.
- *
- * @param port Target port that belongs to the calling process.
- * @param recv Output buffer where to put received data.
- * @param recv_len Size of output buffer.
- * @param msg_info Structure that will contain message details.
- *
- * @return Upon successful reception of a new message, this function
- *  returns zero and fills in the structure.
- *  Otherwise, negations of the following errors are returned:
- *     EINVAL - insufficient port number, or NULL buffer address,
- *              or zero receive buffer length was provided.
- *     EFAULT - Insufficient memory address was passed.
- *     EWOULDBLOCK - Non-blocking access was requested and there are
- *                   no messages available in the queue.
- */
-size_t sys_port_receive( ulong_t port, ulong_t flags, ulong_t recv_buf,
-                         ulong_t recv_len,port_msg_info_t *msg_info);
-
-/**
- * @fn status_t sys_port_reply(ulong_t port, ulong_t msg_id,ulong_t reply_buf,
- *                             ulong_t reply_len)
- * @brief Reply to port message.
- *
- * This system call replies to target port message which means the following:
- *   a) copy reply data to the sender (i.e. the process, that has sent
- *      the message);
- *   b) wake up the sender;
- *
- * @param port The port used for message reception.
- * @param msg_id Message ID.
- * @param reply_buf Buffer that contains data to reply.
- * @param reply_len Number of bytes to send.
- */
-size_t sys_port_reply(ulong_t port, ulong_t msg_id,ulong_t reply_buf,
-                      ulong_t reply_len);
 
 /**
  * @fn status_t sys_allocate_ioports(ulong_t first_port,ulong_t num_ports)
@@ -436,17 +335,6 @@ long sys_get_tid(void);
  */
 void sys_exit(int code);
 
-long sys_open_channel(pid_t pid,ulong_t port,ulong_t flags);
-
-long sys_close_channel(ulong_t channel);
-
-long sys_close_port(ulong_t port);
-
-long sys_control_channel(ulong_t channel,ulong_t cmd,ulong_t arg);
-
-long sys_port_send_iov(ulong_t channel,
-                           iovec_t iov[],ulong_t numvecs,
-                           uintptr_t rcv_buf,ulong_t rcv_size);
 
 long sys_sync_create_object(sync_object_type_t obj_type,
                                 void *uobj,uint8_t *attrs,
@@ -454,12 +342,6 @@ long sys_sync_create_object(sync_object_type_t obj_type,
 
 long sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg);
 
-long sys_port_send_iov_v(ulong_t channel,
-                             iovec_t snd_iov[],ulong_t snd_numvecs,
-                             iovec_t rcv_iov[],ulong_t rcv_numvecs);
-
-long sys_port_reply_iov(ulong_t port,ulong_t msg_id,
-                            iovec_t reply_iov[],ulong_t numvecs);
 
 long sys_thread_kill(pid_t prcess,tid_t tid,int sig);
 
@@ -467,8 +349,6 @@ long sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset);
 
 long sys_thread_wait(tid_t tid,void **value_ptr);
 
-long sys_port_msg_read(ulong_t port,ulong_t msg_id,uintptr_t recv_buf,
-                       ulong_t recv_len,ulong_t offset);
 
 long sys_kernel_control(kcontrol_args_t *arg);
 

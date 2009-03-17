@@ -587,7 +587,7 @@ static void __process_events_test(void *ctx)
   DECLARE_TEST_CONTEXT;
   int port=sys_create_port(0,0);
   task_t *task;
-  int r,refcount;
+  int r;
   task_event_ctl_arg te_ctl;
   task_event_descr_t ev_descr;
   port_msg_info_t msg_info;
@@ -601,49 +601,12 @@ static void __process_events_test(void *ctx)
     tf->abort();
   }
 
-  refcount=atomic_get(&task->refcount);
-
   te_ctl.ev_mask=TASK_EVENT_TERMINATION;
   te_ctl.port=port;
   r=sys_task_control(task->pid,SYS_PR_CTL_ADD_EVENT_LISTENER,
                      (ulong_t)&te_ctl);
   if( r ) {
     tf->printf("Can't set event listener: %d\n",r);
-    tf->failed();
-  }
-
-  if( atomic_get(&task->refcount) != refcount+1) {
-    tf->printf("Insuficient task refcount after adding a listener ! %d instead of %d\n",
-               atomic_get(&task->refcount),refcount+1);
-    tf->failed();
-  }
-
-  tf->printf("Now remove just installed event listener.\n");
-  r=sys_task_control(0,SYS_PR_CTL_DEL_EVENT_LISTENER,task->pid);
-  if( r ) {
-    tf->printf("Can't remove event listener: %d\n",r);
-    tf->failed();
-  }
-
-  if( atomic_get(&task->refcount) != TASK_INITIAL_REFCOUNT ) {
-    tf->printf("Insuficient task refcount after deleting a listener ! %d instead of %d\n",
-               atomic_get(&task->refcount),TASK_INITIAL_REFCOUNT);
-    tf->failed();
-  }
-
-  tf->printf("Re-install listener for target task.\n");
-  te_ctl.ev_mask=TASK_EVENT_TERMINATION;
-  te_ctl.port=port;
-  r=sys_task_control(task->pid,SYS_PR_CTL_ADD_EVENT_LISTENER,
-                     (ulong_t)&te_ctl);
-  if( r ) {
-    tf->printf("Can't set event listener: %d\n",r);
-    tf->failed();
-  }
-
-  if( atomic_get(&task->refcount) != refcount+1) {
-    tf->printf("Insuficient task refcount after re-adding a listener ! %d instead of %d\n",
-               atomic_get(&task->refcount),refcount+1);
     tf->failed();
   }
 
@@ -672,27 +635,6 @@ static void __process_events_test(void *ctx)
       !(ev_descr.ev_mask & te_ctl.ev_mask) ) {
     tf->printf( "Improper notification message received: PID: %d, TID: %d, EVENT: 0x%X\n",
                 ev_descr.pid,ev_descr.tid,ev_descr.ev_mask);
-    tf->failed();
-  }
-
-  tf->printf("Now remove our event listener.\n");
-  r=sys_task_control(0,SYS_PR_CTL_DEL_EVENT_LISTENER,task->pid);
-  if( r ) {
-    tf->printf("Can't remove event listener: %d\n",r);
-    tf->failed();
-  }
-
-  tf->printf("Now try to remove not-attached listeners.\n");
-  r=sys_task_control(0,SYS_PR_CTL_DEL_EVENT_LISTENER,task->pid);
-  if( r != -EINVAL ) {
-    tf->printf("How did I manage to remove insufficient listener ?\n");
-    tf->failed();
-  }
-
-  sleep(100);
-  if( atomic_get(&task->refcount) != TASK_INITIAL_REFCOUNT-1 ) {
-    tf->printf("Insuficient task refcount after deleting a listener ! %d instead of %d\n",
-               atomic_get(&task->refcount),TASK_INITIAL_REFCOUNT-1);
     tf->failed();
   }
 
@@ -938,7 +880,7 @@ static void __validate_retval(int r,int expected,
 }
 
 #define READ_LONGS  15500
-static uintptr_t __buf_pages[512];
+static page_idx_t __buf_pages[512];
 static long __bufzone[32];
 static long __zbuffer_snd[READ_LONGS];
 static long __zbuffer_rcv[READ_LONGS];
@@ -951,7 +893,7 @@ static void __ipc_buffer_test(void *ctx)
 {
   DECLARE_TEST_CONTEXT;
   iovec_t snd_iovecs[MAX_IOVECS],rcv_iovecs[MAX_IOVECS];
-  ipc_user_buffer_t bufs[MAX_IOVECS];
+  ipc_buffer_t bufs[MAX_IOVECS];
   ulong_t __parts;
   unsigned char *p;
   int i,r,__offset;
@@ -977,7 +919,7 @@ static void __ipc_buffer_test(void *ctx)
   snd_iovecs[2].iov_base=snd_iovecs[1].iov_base+snd_iovecs[1].iov_len;
   snd_iovecs[2].iov_len=sizeof(message_tail_t);
 
-  ipc_setup_buffer_pages(current_task(),rcv_iovecs,1,__buf_pages,bufs);
+  ipc_setup_buffer_pages(rcv_iovecs,1,__buf_pages,bufs, false);
 
   ipc_transfer_buffer_data_iov(bufs,1,snd_iovecs,6,0,true);
   if( __validate_vectored_message(__vectored_msg_server_rcv_buf,4,tf) ) {
@@ -1002,7 +944,7 @@ static void __ipc_buffer_test(void *ctx)
   snd_iovecs[2].iov_len=sizeof(message_tail_t);
 
   tf->printf(SERVER_THREAD"Setting up buffer pages ... " );
-  ipc_setup_buffer_pages(current_task(),rcv_iovecs,1,__buf_pages,bufs);
+  ipc_setup_buffer_pages(rcv_iovecs,1,__buf_pages,bufs, false);
   tf->printf(" Done !\n" );
 
   tf->printf(SERVER_THREAD"Transferring data to the buffers ... " );
@@ -1028,7 +970,7 @@ static void __ipc_buffer_test(void *ctx)
   rcv_iovecs[1].iov_len=6*sizeof(message_part_t)+sizeof(message_tail_t);
 
   tf->printf("Setting up buffer pages ... " );
-  ipc_setup_buffer_pages(current_task(),rcv_iovecs,2,__buf_pages,bufs);
+  ipc_setup_buffer_pages(rcv_iovecs,2,__buf_pages,bufs, false);
   tf->printf("Done !\n" );
 
   tf->printf("Transferring data to the buffer (PATTERN=0x%X) ... ",
@@ -1055,7 +997,7 @@ static void __ipc_buffer_test(void *ctx)
   snd_iovecs[2].iov_base=snd_iovecs[1].iov_base+snd_iovecs[1].iov_len;
   snd_iovecs[2].iov_len=sizeof(__zbuffer_snd)- snd_iovecs[0].iov_len- snd_iovecs[1].iov_len;
 
-  r=ipc_setup_buffer_pages(current_task(),snd_iovecs,3,__buf_pages,bufs);
+  r=ipc_setup_buffer_pages(snd_iovecs,3,__buf_pages,bufs, true);
   if( r ) {
     tf->printf("Can't create buffers for offset reading !\n");
     tf->abort();
