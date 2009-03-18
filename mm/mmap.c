@@ -868,7 +868,7 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
   va = PAGE_ALIGN_DOWN(address);
 
   /* don't fuck with me */
-  if (!valid_user_address_range(va, va + (npages << PAGE_WIDTH))) {
+  if (!valid_user_address_range(va, (npages << PAGE_WIDTH))) {
     return -EFAULT;
   }
   if (pfmask & PFLT_WRITE) {
