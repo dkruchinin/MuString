@@ -879,11 +879,18 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
   if (!vmr) {
     return -EFAULT;
   }
+
+  /* check if protection attributes are ok */
   if (!__valid_vmr_rights(vmr, pfmask) || ((vmr->flags & vmr_mask) != vmr_mask)) {
     return -EACCES;
   }
   
   while (i < npages) {
+    /*
+     * If va crosses the end of current VM range, try get the next VM range
+     * from the T*-tree cursor. If va fits in next VM range's bounds, iteration
+     * can be continued.
+     */
     if (unlikely(va >= vmr->bounds.space_end)) {
       if (ttree_cursor_next(&cursor) < 0) {
         return -EFAULT;
@@ -901,10 +908,14 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
     pagetable_lock(&vmm->rpd);
     pidx = ptable_ops.vaddr2page_idx(&vmm->rpd, va, &pde);
     if (pidx != PAGE_IDX_INVAL) {
+      /*
+       * If page by given address is already mapped with valid protection attributes,
+       * we don't need emulate PF on it.
+       */
       if ((ptable_to_kmap_flags(pde_get_flags(pde)) & vmr_mask) == vmr_mask) {
         pagetable_unlock(&vmm->rpd);
         goto eof_fault;
-      }      
+      }
     }
     else
       pfmask |= PFLT_NOT_PRESENT;
@@ -914,6 +925,13 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
     if (ret)
       return ret;
 
+    /*
+     * After fault is handled and tied with VM range memory object doesn't return an error,
+     * page index of mapped page may be easily fetched from the page table of the proccess.
+     * Note, here we don't need to lock the table: fault_in_user_pages function is called with
+     * downed on read vmm semaphore, so after fault is handled and page is present in the table,
+     * it can not be unmapped while semaphore is downed/
+     */
     pidx = ptable_ops.vaddr2page_idx(&vmm->rpd, va, &pde);
     ASSERT(pidx != PAGE_IDX_INVAL);
     
@@ -958,7 +976,7 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
 
 long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
 {
-  task_t *victim_task;
+  task_t *victim_task = NULL;
   memobj_t *memobj = NULL;
   vmm_t *vmm;
   long ret;
@@ -975,8 +993,10 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
   }
 
   vmm = victim_task->task_mm;
-  if (copy_from_user(&margs, uargs, sizeof(margs)))
-    return -EFAULT;
+  if (copy_from_user(&margs, uargs, sizeof(margs))) {
+    ret = -EFAULT;
+    goto out;
+  }
 
   vmrflags = (margs.prot & VMR_PROTO_MASK) | (margs.flags << VMR_FLAGS_OFFS);
   /*
@@ -1009,6 +1029,8 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
   rwsem_up_write(&vmm->rwsem);
 
   out:
+  if (victim_task && victim)
+    release_task_struct(victim_task);
   if (memobj)
     unpin_memobj(memobj);
 
@@ -1017,7 +1039,7 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
 
 int sys_munmap(pid_t victim, uintptr_t addr, size_t length)
 {
-  task_t *victim_task;
+  task_t *victim_task = NULL;
   vmm_t *vmm;
   int ret;
 
@@ -1032,17 +1054,25 @@ int sys_munmap(pid_t victim, uintptr_t addr, size_t length)
   vmm = victim_task->task_mm;
   
   /* address must be page aligned and length must be specified */
-  if (!length || (addr & PAGE_MASK))
-    return -EINVAL;
+  if (!length || (addr & PAGE_MASK)) {
+    ret = -EINVAL;
+    goto out;
+  }
 
   length = PAGE_ALIGN(length);
-  if (!valid_user_address_range(addr, length))
-    return -EINVAL;
+  if (!valid_user_address_range(addr, length)) {
+    ret = -EINVAL;
+    goto out;
+  }
 
   rwsem_down_write(&vmm->rwsem);
   ret = unmap_vmranges(vmm, addr, length >> PAGE_WIDTH);
   rwsem_up_write(&vmm->rwsem);
 
+out:
+  if (victim_task && victim)
+    release_task_struct(victim_task);
+  
   return ret;
 }
 
