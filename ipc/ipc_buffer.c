@@ -89,7 +89,7 @@ int ipc_setup_buffer_pages(iovec_t *iovecs, uint32_t numvecs, page_idx_t *idx_ar
   task_t *owner = current_task();
   int i;
   iovec_t *iovs;
-  
+
   LOCK_TASK_VM(owner);
   for (buf = bufs, i = 0, iovs = iovecs; i < numvecs; i++, iovs++, buf++) {
     buf->chunks = idx_array;
@@ -122,7 +122,7 @@ int ipc_setup_buffer_pages(iovec_t *iovecs, uint32_t numvecs, page_idx_t *idx_ar
         goto outerror;
       }
     }
-    else {      
+    else {
       uintptr_t vaddr_start, vaddr_end;
 
       vaddr_start = PAGE_ALIGN_DOWN(iovecs->iov_base);
@@ -145,7 +145,7 @@ int ipc_setup_buffer_pages(iovec_t *iovecs, uint32_t numvecs, page_idx_t *idx_ar
 
   UNLOCK_TASK_VM(owner);
   return 0;
-  
+
 outerror:
   while (i >= 0) {
     for (; buf_data.chunk_num; buf_data.pchunk--, buf_data.chunk_num--) {
@@ -159,7 +159,7 @@ outerror:
       buf_data.pchunk = buf->chunks + buf->num_chunks - 1;
     }
   }
-  
+
   UNLOCK_TASK_VM(owner);
   return r;
 }
@@ -215,12 +215,12 @@ int ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs, iovec_t *
       else {
         page_end = dest_kaddr + bufs->length;
       }
-      
+
       dest_kaddr += buf_offset;
     }
     else {
       ulong_t offs = (buf_offset - (PAGE_SIZE - bufs->offset));
-      
+
       chunk = bufs->chunks + ((offs >> PAGE_WIDTH) + 1);
       dest_kaddr = (char *)pframe_id_to_virt(*chunk);
       page_end = dest_kaddr + PAGE_SIZE;
@@ -229,7 +229,7 @@ int ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs, iovec_t *
         page_end = dest_kaddr + (bufs->length - buf_offset);
       }
     }
-    
+
     bufsize = bufs->length - buf_offset;
   }
 
@@ -291,6 +291,6 @@ int ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs, iovec_t *
       page_end = dest_kaddr + PAGE_SIZE;
     }
   }
-  
+
   return 0;
 }

@@ -562,7 +562,6 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
 
   /* If corresponding memory object doesn't support shared memory facility, return an error. */
   if ((flags & VMR_SHARED) && (memobj->flags & MMO_FLG_NOSHARED)) {
-    kprintf("WTF? id = %d\n", memobj->id);
     err = -ENOTSUP;
     goto err;
   }
@@ -875,6 +874,7 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
     vmr_mask |= VMR_WRITE; /* VM range must have write access */
   }
 
+  vmr = vmrange_find(vmm, va, address, &cursor);
   if (!vmr) {
     return -EFAULT;
   }
