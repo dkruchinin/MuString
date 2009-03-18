@@ -525,7 +525,7 @@ void vmranges_find_covered(vmm_t *vmm, uintptr_t va_from, uintptr_t va_to, vmran
   vmrs->va_from = va_from;
   vmrs->va_to = va_to;
   ttree_cursor_init(&vmm->vmranges_tree, &vmrs->cursor);
-  vmrs->vmr = vmrange_find(vmm, va_from, va_from + PAGE_SIZE, &vmrs->cursor);
+  vmrs->vmr = vmrange_find(vmm, va_from, va_from + 1, &vmrs->cursor);
   if (!vmrs->vmr) {
     if (!ttree_cursor_next(&vmrs->cursor)) {
       vmrs->vmr = ttree_item_from_cursor(&vmrs->cursor);
@@ -919,7 +919,6 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
     vmr_mask |= VMR_WRITE; /* VM range must have write access */
   }
 
-  vmr = vmrange_find(vmm, va, address, &cursor);
   if (!vmr) {
     return -EFAULT;
   }
@@ -966,8 +965,9 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
     
     pagetable_unlock(&vmm->rpd);
     ret = memobj_method_call(vmr->memobj, handle_page_fault, vmr, va, pfmask);
-    if (ret)
+    if (ret) {
       return ret;
+    }
 
     /*
      * After fault is handled and tied with VM range memory object doesn't return an error,
@@ -979,7 +979,7 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
     pidx = ptable_ops.vaddr2page_idx(&vmm->rpd, va, &pde);
     ASSERT(pidx != PAGE_IDX_INVAL);
     
-    eof_fault:
+eof_fault:
     if (callback)
       callback(vmr, pframe_by_number(pidx), data);
 
@@ -998,7 +998,7 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
   memobj_t *memobj;
 
   rwsem_down_read(&vmm->rwsem);
-  vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(fault_addr), fault_addr, NULL);
+  vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(fault_addr), PAGE_ALIGN_DOWN(fault_addr) + 1, NULL);
   if (!vmr) {
     return -EFAULT;
   }
@@ -1011,7 +1011,7 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
     return -EACCES;
 
   ASSERT(vmr->memobj != NULL);
-  memobj = vmr->memobj;
+  memobj = vmr->memobj;  
   ret = memobj_method_call(memobj, handle_page_fault, vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
   rwsem_up_read(&vmm->rwsem);
   
