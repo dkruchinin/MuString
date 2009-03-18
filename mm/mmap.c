@@ -1076,6 +1076,26 @@ out:
   return ret;
 }
 
+int sys_grant_pages(uintptr_t va_from, size_t length, pid_t target_pid, uintptr_t target_addr)
+{
+  pgoff_t pages = PAGE_ALIGN(length);
+  task_t *target;
+  int ret;
+
+  /* TODO DK: add rights checking. */
+  if ((va_from & PAGE_MASK) || !length ||
+      !valid_user_address_range(va_from, length)) {
+    return -EINVAL;
+  }
+  if (!target_pid)
+    return -EPERM;
+  if (!valid_user_address_range())
+
+  target = pid_to_task(target_pid);
+  if (!target)
+    return -ESRCH;
+}
+
 #ifdef CONFIG_DEBUG_MM
 #include <eza/task.h>
 
