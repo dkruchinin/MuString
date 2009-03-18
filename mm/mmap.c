@@ -851,6 +851,50 @@ int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page,
   return __mmap_core(rpd, va, npages, &pfi, flags, pin_pages);
 }
 
+int grant_pages(vmm_t *src_vmm, uintptr_t src_va, pgoff_t npages, vmrange_t *dst_vmrane)
+{
+  vmrange_t *vmr;
+
+  ASSERT(dst_vmrange->parent_vmm != src_vmm);
+}
+
+page_idx_t fault_in_user_page(vmrange_t *vmrange, uintptr_t addr)
+{
+  pde_t *pde;
+  vmm_t *vmm = vmrange->parent_vmm;
+
+  pagetable_lock(&vmm->rpd);
+  pidx = ptable_ops.vaddr2page_idx(&vmm->rpd, va, &pde);
+  if (pidx != PAGE_IDX_INVAL) {
+    /*
+     * If page by given address is already mapped with valid protection attributes,
+     * we don't need emulate PF on it.
+     */
+    if ((ptable_to_kmap_flags(pde_get_flags(pde)) & vmr_mask) == vmr_mask) {
+      pagetable_unlock(&vmm->rpd);
+      goto out;
+    }
+  }
+  else
+    pfmask |= PFLT_NOT_PRESENT;
+    
+  pagetable_unlock(&vmm->rpd);
+  ret = memobj_method_call(vmr->memobj, handle_page_fault, vmr, va, pfmask);
+  if (ret)
+    return ret;
+  
+  /*
+   * After fault is handled and tied with VM range memory object doesn't return an error,
+   * page index of mapped page may be easily fetched from the page table of the proccess.
+   * Note, here we don't need to lock the table: fault_in_user_pages function is called with
+   * downed on read vmm semaphore, so after fault is handled and page is present in the table,
+   * it can not be unmapped while semaphore is downed/
+   */
+  pidx = ptable_ops.vaddr2page_idx(&vmm->rpd, va, &pde);
+  ASSERT(pidx != PAGE_IDX_INVAL);
+
+}
+
 int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t pfmask,
                         void (*callback)(vmrange_t *vmr, page_frame_t *page, void *data), void *data)
 {
