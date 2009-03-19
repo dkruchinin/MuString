@@ -874,7 +874,7 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
     vmr_mask |= VMR_WRITE; /* VM range must have write access */
   }
 
-  vmr = vmrange_find(vmm, va, address, &cursor);
+  vmr = vmrange_find(vmm, va, va + 1, &cursor);
   if (!vmr) {
     return -EFAULT;
   }
