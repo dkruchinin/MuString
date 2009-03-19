@@ -197,10 +197,13 @@ ipc_port_message_t *ipc_create_port_message_iov_v(ipc_channel_t *channel, iovec_
   if (data_len <= IPC_BUFFERED_PORT_LENGTH) {
     p = msg->send_buffer;
     for (i = 0; i < snd_numvecs; i++) {
-      if (copy_from_user(p, snd_kiovecs->iov_base, snd_kiovecs->iov_len)) {
-        goto free_message;
+      if( kernel_channel(channel) ) {
+        memcpy(p,snd_kiovecs->iov_base,snd_kiovecs->iov_len);
+      } else {
+        if (copy_from_user(p, snd_kiovecs->iov_base, snd_kiovecs->iov_len)) {
+          goto free_message;
+        }
       }
-      
       p += snd_kiovecs->iov_len;
       snd_kiovecs++;
     }

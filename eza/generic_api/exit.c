@@ -94,7 +94,7 @@ static int __notify_disintegration_done(disintegration_descr_t *dreq,
     r = ipc_get_channel_port(dreq->channel, &port);
     if (r)
       goto out;
-    
+
     r=ipc_port_send_iov_core(port,dreq->msg,false,NULL,0,0);
     ipc_put_port(port);
     ipc_put_channel(dreq->channel);

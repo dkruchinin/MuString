@@ -269,7 +269,7 @@ static int __disintegrate_task(task_t *target,ulong_t pnum)
     ipc_put_channel(channel);
     goto free_descr;
   }
-  
+
   LOCK_TASK_STRUCT(target);
   if( !check_task_flags(target,TF_EXITING)
       && !check_task_flags(target,TF_DISINTEGRATING) ) {

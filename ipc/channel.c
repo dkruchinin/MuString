@@ -106,21 +106,25 @@ void ipc_unref_channel(ipc_channel_t *channel,ulong_t c)
   bool shutdown;
   task_ipc_t *ipc=channel->ipc;
 
-  IPC_LOCK_CHANNELS(channel->ipc);
-  if(ipc->channels) {
-    if( atomic_sub_and_test(&channel->use_count,c) ) {
-      shutdown=true;
-      ipc->channels[channel->id]=NULL;
-      ipc->num_channels--;
-      idx_free(&ipc->channel_array,channel->id);
-    } else {
-      shutdown=false;
+  if( !channel->ipc ) {
+    ipc_unpin_channel(channel);
+  } else {
+    IPC_LOCK_CHANNELS(channel->ipc);
+    if(ipc->channels) {
+      if( atomic_sub_and_test(&channel->use_count,c) ) {
+        shutdown=true;
+        ipc->channels[channel->id]=NULL;
+        ipc->num_channels--;
+        idx_free(&ipc->channel_array,channel->id);
+      } else {
+        shutdown=false;
+      }
     }
-  }
-  IPC_UNLOCK_CHANNELS(channel->ipc);
+    IPC_UNLOCK_CHANNELS(channel->ipc);
 
-  if( shutdown ) {
-    ipc_destroy_channel(channel);
+    if( shutdown ) {
+      ipc_destroy_channel(channel);
+    }
   }
 }
 

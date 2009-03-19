@@ -34,6 +34,8 @@ ipc_channel_t *ipc_clone_channel(ipc_channel_t *target,struct __task_ipc *newipc
 #define LOCK_CHANNEL(c) spinlock_lock(&c->lock)
 #define UNLOCK_CHANNEL(c) spinlock_unlock(&c->lock)
 
+#define kernel_channel(c)  ((c)->ipc == NULL)
+
 static inline int ipc_get_channel_port(ipc_channel_t *c,
                                        ipc_gen_port_t **outport) {
   ipc_gen_port_t *p;
