@@ -40,7 +40,6 @@
 #include <eza/uinterrupt.h>
 #include <ipc/poll.h>
 #include <eza/gc.h>
-#include <ipc/gen_port.h>
 #include <ipc/channel.h>
 #include <test.h>
 #include <mm/slab.h>

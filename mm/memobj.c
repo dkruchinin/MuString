@@ -205,11 +205,12 @@ int memobj_create_backend(memobj_t *memobj, task_t *server_task, ulong_t port_id
     return -EBADF;
 
   spinlock_lock(&memobj->members_lock);
-  /*ret = ipc_open_channel_raw(server_port, IPC_BLOCKED_ACCESS | IPC_KERNEL_SIDE, &memobj->backend);
+  ret = ipc_open_channel_raw(server_port, IPC_BLOCKED_ACCESS | IPC_KERNEL_SIDE, &memobj->backend);
   if (ret) {
     memobj->backend = NULL;
     ipc_put_port(server_port);
-    }*/
+  }
+
   spinlock_unlock(&memobj->members_lock);
   return ret;
 }

@@ -421,7 +421,7 @@ int sched_move_task_to_cpu(task_t *task,cpu_id_t cpu)
   if( __move_task_to_cpu(task,cpu,false) ) {
     /* Task can't be moved right now, so schedule a deferred migration.
      */
-    a=gc_allocate_action(__self_move_gc_actor,(void *)cpu);
+      a=gc_allocate_action(__self_move_gc_actor,(void *)(long)cpu);
     schedule_user_deferred_action(task,a,false);
   }
 

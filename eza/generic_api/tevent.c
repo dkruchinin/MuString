@@ -39,7 +39,7 @@ static task_event_listener_t *__alloc_listener(void)
   if( l ) {
     list_init_node(&l->owner_list);
     list_init_node(&l->llist);
-    l->port=NULL;
+    l->channel=NULL;
   }
 
   return l;
@@ -47,7 +47,7 @@ static task_event_listener_t *__alloc_listener(void)
 
 static void __release_listener(task_event_listener_t *l)
 {
-  ipc_put_port(l->port);
+  ipc_unpin_channel(l->channel);
   __free_listener(l);
 }
 
@@ -77,11 +77,7 @@ void task_event_notify(ulong_t events)
         iov.iov_base=&e;
         iov.iov_len=sizeof(e);
 
-        ipc_port_message_t *msg=ipc_create_port_message_iov_v(&iov,1,sizeof(e),false,
-                                                              NULL,0,NULL,NULL,0);
-        if( msg ) {
-          ipc_port_send_iov(l->port,msg,false,NULL,0,0);
-        }
+        ipc_port_send_iov(l->channel, &iov, 1, NULL, 0);
       }
     }
   }
@@ -113,7 +109,12 @@ int task_event_attach(task_t *target,task_t *listener,
     goto put_port;
   }
 
-  l->port=port;
+  r = ipc_open_channel_raw(port, IPC_KERNEL_SIDE, &l->channel);
+  if (r) {
+    ipc_destroy_channel(l->channel);
+    goto out_free;
+  }
+  
   l->events=ctl_arg->ev_mask;
   l->listener=listener;
   l->target=target;
@@ -147,7 +148,7 @@ dont_add:
   /* Add this listener to our list. */
   list_add2tail(&listener->task_events.my_events,&l->owner_list);
 
-  return r;
+  return r;  
 put_port:
   ipc_put_port(port);
 out_free:
