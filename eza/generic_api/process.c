@@ -143,11 +143,6 @@ found_something:
       if( flags & LOOKUP_ZOMBIES ) {
         t=task;
       }
-    } else if( check_task_flags(task,TF_EXITING) ||
-               check_task_flags(task,TF_DISINTEGRATING) ) {
-      if( flags & LOOKUP_ZOMBIES ) {
-        t=task;
-      }
     } else {
       t=task;
     }
