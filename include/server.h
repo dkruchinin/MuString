@@ -26,7 +26,7 @@
 
 #include <mlibc/types.h>
 
-#define MAX_PRIVBOOT_SERVERS  16
+#define MAX_PRIVBOOT_SERVERS  24
 
 typedef struct __init_server {
   uintptr_t addr; /* start address of the server loaded via boot loader */
