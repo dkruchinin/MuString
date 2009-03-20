@@ -32,7 +32,7 @@
 #ifdef CONFIG_DEBUG
 #define ASSERT_DBG(cond) ASSERT(cond)
 #else
-#define ASSERT(cond)
+#define ASSERT_DBG(cond)
 #endif /* CONFIG_DEBUG */
 
 #define CT_ASSERT(cond) ((void)sizeof(char[1 - 2 * !(cond)]))
