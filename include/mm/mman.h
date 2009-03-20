@@ -12,14 +12,14 @@ enum mman_prot {
 };
 
 enum mman_flags {
-  MAP_FIXED    = 0x001,
-  MAP_ANON     = 0x002,
-  MAP_PRIVATE  = 0x004,
-  MAP_SHARED   = 0x008,
-  MAP_PHYS     = 0x010,
-  MAP_STACK    = 0x020,
-  MAP_POPULATE = 0x040,
-  MAP_GENERIC  = 0x080,
+  MAP_FIXED        = 0x001,
+  MAP_ANON         = 0x002,
+  MAP_PRIVATE      = 0x004,
+  MAP_SHARED       = 0x008,
+  MAP_PHYS         = 0x010,
+  MAP_STACK        = 0x020,
+  MAP_POPULATE     = 0x040,
+  MAP_CANRECPAGES  = 0x080,
 };
 
 struct mmap_args {

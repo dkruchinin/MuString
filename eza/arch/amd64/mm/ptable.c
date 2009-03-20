@@ -38,35 +38,33 @@
 #include <eza/arch/tlb.h>
 #include <eza/arch/mm.h>
 
-static int initialize_rpd(rpd_t *rpd)
+static int __initialize_rpd(rpd_t *rpd)
 {
-  rpd->pml4 = generic_create_pagedir();
-  if (!rpd->pml4)
+  rpd->root_dir = generic_create_pagedir();
+  if (!rpd->root_dir)
     return -ENOMEM;
 
-  spinlock_initialize(&rpd->rpd_lock);
   return 0;
 }
 
-static void deinitialize_rpd(rpd_t *rpd)
+static void __deinitialize_rpd(rpd_t *rpd)
 {
-  atomic_set(&rpd->pml4->refcount, 0);
-  free_page(rpd->pml4);
-  rpd->pml4 = NULL;
+  return;
 }
 
 static void clone_rpd(rpd_t *clone, rpd_t *src)
 {
-  clone->pml4 = src->pml4;
-  pin_page_frame(clone->pml4);
+  clone->root_dir = src->root_dir;
 }
 
 ptable_ops_t ptable_ops = {
-  .initialize_rpd = initialize_rpd,
-  .deinitialize_rpd = deinitialize_rpd,
+  .initialize_rpd = __initialize_rpd,
+  .deinitialize_rpd = __deinitialize_rpd,
   .clone_rpd = clone_rpd,
   .mmap = generic_ptable_map,
   .munmap = generic_ptable_unmap,
+  .mmap_one_page = generic_map_page,
+  .munmap_one_page = generic_unmap_page,
   .vaddr2page_idx = generic_vaddr2page_idx,
   .alloc_flags = AF_ZERO,
 };

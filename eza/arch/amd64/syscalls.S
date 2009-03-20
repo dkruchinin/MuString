@@ -35,51 +35,50 @@
  * the fourth parameter via %r10.
  */
 syscall_table:
-	.quad	sys_get_pid       		/* 0 */
-	.quad 	sys_create_task
+	.quad 	sys_create_task             /* 0 */
 	.quad 	sys_task_control
 	.quad   sys_mmap
 	.quad   sys_create_port
-	.quad   sys_port_send           	/* 5 */
-	.quad   sys_port_receive
+	.quad   sys_port_send           	
+	.quad   sys_port_receive            /* 5 */
 	.quad   sys_port_reply
 	.quad   sys_allocate_ioports
 	.quad	sys_free_ioports
-	.quad   sys_create_irq_counter_array	/* 10 */
-	.quad   sys_wait_on_irq_array
+	.quad   sys_create_irq_counter_array
+	.quad   sys_wait_on_irq_array           /* 10 */
     .quad   sys_ipc_port_poll
 	.quad   sys_nanosleep
 	.quad   sys_scheduler_control
-	.quad   sys_get_tid                     /* 15  */
 	.quad   sys_exit
-	.quad   sys_open_channel
+	.quad   sys_open_channel                /* 15 */
 	.quad   sys_close_channel
 	.quad   sys_close_port
-	.quad   sys_control_channel             /* 20  */
+	.quad   sys_control_channel
 	.quad   sys_port_send_iov
-	.quad   sys_sync_create_object
+	.quad   sys_sync_create_object          /* 20  */
 	.quad   sys_sync_control
 	.quad   sys_sync_destroy
-	.quad   sys_kill                        /* 25 */
+	.quad   sys_kill
 	.quad   sys_signal
-	.quad   sys_sigreturn
+	.quad   sys_sigreturn                   /* 25 */
 	.quad   sys_port_send_iov_v
 	.quad   sys_port_reply_iov
-	.quad   sys_sigaction                   /* 30 */
+	.quad   sys_sigaction
 	.quad   sys_thread_kill
-	.quad   sys_sigprocmask
+	.quad   sys_sigprocmask                 /* 30 */
 	.quad   sys_thread_exit
 	.quad   sys_timer_create
-	.quad   sys_timer_control               /* 35 */
+	.quad   sys_timer_control
 	.quad   sys_munmap
-	.quad   sys_thread_wait
+	.quad   sys_thread_wait                 /* 35 */
 	.quad   sys_port_msg_read
 	.quad   sys_kernel_control
-	.quad   sys_timer_delete                /* 40 */
+	.quad   sys_timer_delete
 	.quad   sys_sigwait
-	.quad   sys_sched_yield	
+	.quad   sys_sched_yield                 /* 40 */
     .quad   sys_memobj_create
     .quad   sys_fork
+    .quad   sys_grant_pages
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

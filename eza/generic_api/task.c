@@ -357,10 +357,9 @@ static int __initialize_task_mm(task_t *orig, task_t *target, task_creation_flag
     ptable_ops.clone_rpd(task_get_rpd(target), &kernel_rpd);
   else if (flags & CLONE_MM) {
     target->task_mm = orig->task_mm;
-    atomic_inc(&orig->task_mm->vmm_users);
   }
   else {    
-    target->task_mm = vmm_create();
+    target->task_mm = vmm_create(target);
     if (!target->task_mm)
       ret = -ENOMEM;
     else {

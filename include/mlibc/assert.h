@@ -29,6 +29,12 @@
 #include <eza/kernel.h>
 #include <eza/arch/assert.h>
 
+#ifdef CONFIG_DEBUG
+#define ASSERT_DBG(cond) ASSERT(cond)
+#else
+#define ASSERT(cond)
+#endif /* CONFIG_DEBUG */
+
 #define CT_ASSERT(cond) ((void)sizeof(char[1 - 2 * !(cond)]))
 #define ASSERT(cond)                                    \
   do {                                                  \

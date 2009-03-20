@@ -31,7 +31,6 @@
 
 static inline void __tlb_flush(void)
 {
-  kprintf("?????????????\n");
   write_cr3(read_cr3());
 }
 
@@ -43,13 +42,13 @@ static inline void __tlb_flush_entry(uintptr_t vaddr)
 
 static inline void tlb_flush(rpd_t *rpd)
 {
-  if (task_get_rpd(current_task()) == rpd)
+  if (rpd->vmm == current_task()->task_mm)
     __tlb_flush();
 }
 
 static inline void tlb_flush_entry(rpd_t *rpd, uintptr_t vaddr)
 {
-  if (task_get_rpd(current_task()) == rpd)
+  if (rpd->vmm == current_task()->task_mm)
     __tlb_flush_entry(vaddr);
 }
 

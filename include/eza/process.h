@@ -43,6 +43,9 @@
 #define SYS_PR_CTL_SET_CANCEL_STATE    0x9
 #define SYS_PR_CTL_SET_CANCEL_TYPE     0xA
 #define SYS_PR_CTL_DEL_EVENT_LISTENER  0xB
+#define SYS_PR_CTL_GETPID              0xC
+#define SYS_PR_CTL_GETPPID             0xD
+#define SYS_PR_CTL_GETTID              0xE
 
 #define PTHREAD_CANCEL_ENABLE   1
 #define PTHREAD_CANCEL_DISABLE  0

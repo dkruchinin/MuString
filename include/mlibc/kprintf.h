@@ -95,8 +95,8 @@ typedef struct kbuffer {
  */
 void kprintf(const char *fmt, ...);
 void kprintf_fault(const char *fmt, ...);
-void sprintf(char *str, const char *fmt, ...);
-void snprintf(char *str, size_t size, const char *fmt, ...);
+size_t sprintf(char *str, const char *fmt, ...);
+size_t snprintf(char *str, size_t size, const char *fmt, ...);
 
 /**
  * @fn vkprintf(const char *, va_list);
