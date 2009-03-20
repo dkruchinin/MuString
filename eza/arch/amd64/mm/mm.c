@@ -206,8 +206,8 @@ void map_kernel_area(vmm_t *vmm)
   pde_t *src_pml4, *dst_pml4;
   page_idx_t eidx = pde_offset2idx(KERNEL_BASE, PTABLE_LEVEL_LAST);
 
-  src_pml4 = pde_fetch(kernel_rpd.pml4, eidx);
-  dst_pml4 = pde_fetch(vmm->rpd.pml4, eidx);
+  src_pml4 = pde_fetch(RPD_PAGEDIR(&kernel_rpd), eidx);
+  dst_pml4 = pde_fetch(RPD_PAGEDIR(&vmm->rpd), eidx);
   *dst_pml4 = *src_pml4;
 }
 
@@ -257,7 +257,7 @@ void arch_mm_remap_pages(void)
 
 void arch_smp_mm_init(cpu_id_t cpu)
 {  
-  load_cr3(pde_fetch(kernel_rpd.pml4, 0));
+  load_cr3(pde_fetch(RPD_PAGEDIR(&kernel_rpd), 0));
 }
 
 long get_swks_virtual_address(void)

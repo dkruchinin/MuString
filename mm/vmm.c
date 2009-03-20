@@ -126,8 +126,8 @@ void mm_initialize(void)
 
   mmpool_activate(POOL_BOOTMEM());
   old_flags = ptable_ops.alloc_flags;
-  ptable_ops.alloc_flags = AF_BMEM | AF_ZERO;
-  if (ptable_ops.initialize_rpd(&kernel_rpd))
+  ptable_ops.alloc_flags = AF_BMEM | AF_ZERO;  
+  if (initialize_rpd(&kernel_rpd, NULL))
     panic("mm_init: Can't initialize kernel root page directory!");
 
   /* Now we can remap available memory */

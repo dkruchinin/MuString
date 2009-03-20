@@ -463,7 +463,28 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
         }
       }
       UNLOCK_TASK_STRUCT(target);
-      return 0;
+    case SYS_PR_CTL_GETPID:
+      if (target->pid != current_task()->pid) {
+        return -ESRCH;
+      }
+
+      return target->pid;
+
+    case SYS_PR_CTL_GETPPID:
+      if (target->pid != current_task()->pid) {
+        return -ESRCH;
+      }
+
+      return target->ppid;
+
+    case SYS_PR_CTL_GETTID:
+      if (target->pid != current_task()->pid) {
+        return -ESRCH;
+      }
+
+      return target->tid;
+
+    return 0;
   }
   return -EINVAL;
 }
@@ -486,7 +507,7 @@ int sys_task_control(pid_t pid, ulong_t cmd, ulong_t arg)
   task_t *task;
   ulong_t lookup_flags=0;
 
-  if( is_tid(pid) ) {
+  if(pid && is_tid(pid)) {
     if( cmd == SYS_PR_CTL_DISINTEGRATE_TASK ) {
       return -EINVAL;
     }
@@ -551,16 +572,6 @@ long sys_create_task(ulong_t flags,task_creation_attrs_t *a)
 }
 
 extern ulong_t syscall_counter;
-
-long sys_get_pid(void)
-{
-  return current_task()->pid;
-}
-
-long sys_get_tid(void)
-{
-  return current_task()->tid;
-}
 
 long sys_fork(void)
 {

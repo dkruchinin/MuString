@@ -99,22 +99,26 @@ void kprintf_fault(const char *fmt, ...)
   va_end(ap);
 }
 
-void sprintf(char *str, const char *fmt, ...)
+size_t sprintf(char *str, const char *fmt, ...)
 {
   va_list ap;
+  size_t len;
 
   va_start(ap, fmt);
-  vsprintf(str, fmt, ap);
+  len = vsprintf(str, fmt, ap);
   va_end(ap);
+  return len;
 }
 
-void snprintf(char *str, size_t size, const char *fmt, ...)
+size_t snprintf(char *str, size_t size, const char *fmt, ...)
 {
   va_list ap;
+  size_t len;  
 
   va_start(ap, fmt);
-  vsnprintf(str, size, fmt, ap);
+  len = vsnprintf(str, size, fmt, ap);
   va_end(ap);
+  return len;
 }
 
 void vkprintf(kconsole_t *kcons, const char *fmt, va_list ap)

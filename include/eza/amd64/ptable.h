@@ -56,12 +56,8 @@ typedef uint32_t pde_idx_t;
  * @struct rpd_t
  * @brief Root page directory structures (AMD64-specific)
  */
-typedef struct __rpd {
-  page_frame_t *pml4;
-  spinlock_t rpd_lock;
-} rpd_t;
 
-#define RPD_PAGEDIR(rpd) ((rpd)->pml4)
+#define RPD_PAGEDIR(rpd) ((page_frame_t *)(rpd)->root_dir)
 
 /**
  * @struct pde_t

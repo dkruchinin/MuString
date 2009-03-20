@@ -32,7 +32,6 @@
 #include <mm/vmm.h>
 #include <mm/pfi.h>
 #include <mm/mman.h>
-#include <eza/mutex.h>
 #include <eza/rwsem.h>
 #include <eza/spinlock.h>
 #include <eza/security.h>
@@ -91,13 +90,15 @@ static int __vmranges_cmp(void *r1, void *r2)
     return -1;
 }
 
-#define __VMR_CLEAR_MASK (VMR_FIXED | VMR_POPULATE)/* VMR_FIXED and VMR_POPULATE don't affect vmranges merging */
+/* VMR_FIXED and VMR_POPULATE don't affect vmranges merging */
+#define __VMR_CLEAR_MASK (VMR_FIXED | VMR_POPULATE)
 
 /*
  * returns true if VM range "vmr" can be merged with another VM range
  * having memory object "memobj" and flags = "flags"
  */
-static inline bool can_be_merged(const vmrange_t *vmr, const memobj_t *memobj, vmrange_flags_t flags)
+static inline bool can_be_merged(const vmrange_t *vmr,
+                                 const memobj_t *memobj, vmrange_flags_t flags)
 {
     return (((vmr->flags & ~__VMR_CLEAR_MASK) == (flags & ~__VMR_CLEAR_MASK))
           && ((vmr->memobj == memobj)));
@@ -108,8 +109,9 @@ static inline bool can_be_merged(const vmrange_t *vmr, const memobj_t *memobj, v
  * New range will be attached to memory object "memobj". Its space_start will be equal to "va_start",
  * and space_end will be equal to va_start + (npages << PAGE_WIDTH).
  */
-static vmrange_t *create_vmrange(vmm_t *parent_vmm, memobj_t *memobj,  uintptr_t va_start,
-                                 page_idx_t npages, pgoff_t offset, vmrange_flags_t flags)
+static vmrange_t *create_vmrange(vmm_t *parent_vmm, memobj_t *memobj,
+                                 uintptr_t va_start, page_idx_t npages,
+                                 pgoff_t offset, vmrange_flags_t flags)
 {
   vmrange_t *vmr;
 
@@ -168,14 +170,16 @@ static vmrange_t *merge_vmranges(vmrange_t *prev_vmr, vmrange_t *next_vmr)
  * Split VM range "vmrange" to two unique ranges by diapason [va_from, va_to).
  * Return newly created VM range started from va_to and ended with vmrange->bounds.space_end.
  */
-static vmrange_t *split_vmrange(vmrange_t *vmrange, uintptr_t va_from, uintptr_t va_to)
+static vmrange_t *split_vmrange(vmrange_t *vmrange,
+                                uintptr_t va_from, uintptr_t va_to)
 {
   vmrange_t *new_vmr;
   page_idx_t npages;
 
-  ASSERT(!(va_from & PAGE_MASK));
-  ASSERT(!(va_to & PAGE_MASK));
-  ASSERT((va_from > vmrange->bounds.space_start) && (va_to < vmrange->bounds.space_end));
+  ASSERT_DBG(!(va_from & PAGE_MASK));
+  ASSERT_DBG(!(va_to & PAGE_MASK));
+  ASSERT_DBG((va_from > vmrange->bounds.space_start) &&
+             (va_to < vmrange->bounds.space_end));
 
   /*
    * vmrange will be splitted to two unique ranges: both will have the same
@@ -190,7 +194,8 @@ static vmrange_t *split_vmrange(vmrange_t *vmrange, uintptr_t va_from, uintptr_t
     return NULL;
 
   VMM_VERBOSE("%s: Split VM range [%p, %p) to [%p, %p) and [%p, %p)\n",
-              vmm_get_name_dbg(vmrange->parent_vmm), vmrange->bounds.space_start,
+              vmm_get_name_dbg(vmrange->parent_vmm),
+              vmrange->bounds.space_start,
               vmrange->bounds.space_end, vmrange->bounds.space_start,
               va_from, va_to, vmrange->bounds.space_end);
 
@@ -207,7 +212,8 @@ static vmrange_t *split_vmrange(vmrange_t *vmrange, uintptr_t va_from, uintptr_t
 }
 
 /* Fix VM range holes size after new VM range is inserted */
-static void fix_vmrange_holes_after_insertion(vmm_t *vmm, vmrange_t *vmrange, ttree_cursor_t *cursor)
+static void fix_vmrange_holes_after_insertion(vmm_t *vmm, vmrange_t *vmrange,
+                                              ttree_cursor_t *cursor)
 {
   vmrange_t *vmr;
   ttree_cursor_t csr;
@@ -216,8 +222,9 @@ static void fix_vmrange_holes_after_insertion(vmm_t *vmm, vmrange_t *vmrange, tt
   if (!ttree_cursor_prev(&csr)) {
     vmr = ttree_item_from_cursor(&csr);
     VMM_VERBOSE("%s(P) [%p, %p): old hole size: %ld, new hole size: %ld\n",
-                vmm_get_name_dbg(vmm), vmr->bounds.space_start, vmr->bounds.space_end,
-                vmr->hole_size, vmrange->bounds.space_start - vmr->bounds.space_end);
+                vmm_get_name_dbg(vmm), vmr->bounds.space_start,
+                vmr->bounds.space_end, vmr->hole_size,
+                vmrange->bounds.space_start - vmr->bounds.space_end);
     vmr->hole_size = vmrange->bounds.space_start - vmr->bounds.space_end;
   }
 
@@ -225,8 +232,9 @@ static void fix_vmrange_holes_after_insertion(vmm_t *vmm, vmrange_t *vmrange, tt
   if (!ttree_cursor_next(&csr)) {
     vmr = ttree_item_from_cursor(&csr);
     VMM_VERBOSE("%s(N) [%p, %p): old hole size: %ld, new hole size: %ld\n",
-                vmm_get_name_dbg(vmm), vmrange->bounds.space_start, vmrange->bounds.space_end,
-                vmrange->hole_size, vmr->bounds.space_start - vmrange->bounds.space_end);    
+                vmm_get_name_dbg(vmm), vmrange->bounds.space_start,
+                vmrange->bounds.space_end, vmrange->hole_size,
+                vmr->bounds.space_start - vmrange->bounds.space_end);
     vmrange->hole_size = vmr->bounds.space_start - vmrange->bounds.space_end;
   }
   else {
@@ -236,8 +244,9 @@ static void fix_vmrange_holes_after_insertion(vmm_t *vmm, vmrange_t *vmrange, tt
      */
 
     VMM_VERBOSE("%s(L) [%p, %p): old hole size: %ld, new hole size: %ld\n",
-                vmm_get_name_dbg(vmm), vmrange->bounds.space_start, vmrange->bounds.space_end,
-                vmrange->hole_size, USPACE_VA_TOP - vmrange->bounds.space_end);
+                vmm_get_name_dbg(vmm), vmrange->bounds.space_start,
+                vmrange->bounds.space_end, vmrange->hole_size,
+                USPACE_VA_TOP - vmrange->bounds.space_end);
     vmrange->hole_size = USPACE_VA_TOP - vmrange->bounds.space_end;
   }
 }
@@ -245,7 +254,8 @@ static void fix_vmrange_holes_after_insertion(vmm_t *vmm, vmrange_t *vmrange, tt
 void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name)
 {
 #ifndef CONFIG_TEST
-  ASSERT(!valid_user_address_range(mandmap->virt_addr, mandmap->num_pages << PAGE_WIDTH));
+  ASSERT(!valid_user_address_range(mandmap->virt_addr,
+                                   mandmap->num_pages << PAGE_WIDTH));
 #endif /* CONFIG_TEST */
 
   mandmap->name = (char *)mandmap_name;
@@ -260,15 +270,17 @@ int vm_mandmaps_roll(vmm_t *target_mm)
   vm_mandmap_t *mandmap;
 
   list_for_each_entry(&__mandmaps_lst, mandmap, node) {
-    status = mmap_core(&target_mm->rpd, mandmap->virt_addr, mandmap->phys_addr >> PAGE_WIDTH,
+    status = mmap_core(&target_mm->rpd, mandmap->virt_addr,
+                       mandmap->phys_addr >> PAGE_WIDTH,
                        mandmap->num_pages, mandmap->flags, true);
     VMM_VERBOSE("[%s]: Mandatory mapping \"%s\" [%p -> %p] was initialized\n",
-                vmm_get_name_dbg(target_mm), mandmap->name,
-                mandmap->virt_addr, mandmap->virt_addr + (mandmap->num_pages << PAGE_WIDTH));
+                vmm_get_name_dbg(target_mm), mandmap->name, mandmap->virt_addr,
+                mandmap->virt_addr + (mandmap->num_pages << PAGE_WIDTH));
     if (status) {
-      kprintf(KO_ERROR "Mandatory mapping \"%s\" failed [err=%d]: Can't mmap region %p -> %p starting"
-              " from page with index #%x!\n",
-              mandmap->name, status, mandmap->virt_addr, mandmap->virt_addr + (mandmap->num_pages << PAGE_WIDTH),
+      kprintf(KO_ERROR "Mandatory mapping \"%s\" failed [err=%d]:  Can't"
+              " mmap region %p -> %p starting from page with index #%x!\n",
+              mandmap->name, status, mandmap->virt_addr,
+              mandmap->virt_addr + (mandmap->num_pages << PAGE_WIDTH),
               mandmap->phys_addr << PAGE_WIDTH);
       goto out;
     }
@@ -292,7 +304,34 @@ void vmm_subsystem_initialize(void)
     panic("vmm_subsystem_initialize: Can not create memory cache for vmrange objects. ENOMEM.");
 }
 
-vmm_t *vmm_create(void)
+static void __clear_vmranges_tree(vmm_t *vmm)
+{
+  ttree_node_t *tnode;
+  int i;
+  vmrange_t *vmr;
+
+  tnode = ttree_tnode_leftmost(vmm->vmranges_tree.root);
+  if (!tnode) {
+    ASSERT(vmm->num_vmrs == 0);
+    return;
+  }
+
+  while (tnode) {
+    tnode_for_each_index(tnode, i) {
+      vmr = ttree_key2item(&vmm->vmranges_tree, tnode_key(tnode, i));
+      munmap_core(&vmm->rpd, vmr->bounds.space_start,
+                  (vmr->bounds.space_end - vmr->bounds.space_start) >> PAGE_WIDTH,
+                  true /* unpin pages */);
+      destroy_vmrange(vmr);
+    }
+
+    tnode = tnode->successor;
+  }
+
+  ASSERT(vmm->num_vmrs == 0);
+}
+
+vmm_t *vmm_create(task_t *owner)
 {
   vmm_t *vmm;
 
@@ -303,12 +342,29 @@ vmm_t *vmm_create(void)
   memset(vmm, 0, sizeof(*vmm));
   ttree_init(&vmm->vmranges_tree, __vmranges_cmp, vmrange_t, bounds);
   rwsem_initialize(&vmm->rwsem);
-  if (ptable_ops.initialize_rpd(&vmm->rpd) < 0) {
+  if (initialize_rpd(&vmm->rpd, vmm) < 0) {
     memfree(vmm);
     vmm = NULL;
   }
 
+  vmm->owner = owner;
+  vmm_set_name_from_pid_dbg(vmm);
   return vmm;
+}
+
+void vmm_destroy(vmm_t *vmm)
+{
+  VMM_VERBOSE("[%s]: Destroying VMM...\n", vmm_get_name_dbg(vmm));
+  rwsem_down_write(&vmm->rwsem);
+  pagetable_lock(&vmm->rpd);
+
+  __clear_vmranges_tree(vmm);  
+  VMM_VERBOSE("[%s]: VM ranges tree was successfully destroyed.\n", vmm_get_name_dbg(vmm));
+
+  /* TODO DK: implement cleanup of sticky memory objects if exist */
+  pagetable_unlock(&vmm->rpd);
+  rwsem_up_write(&vmm->rwsem);
+  memfree(vmm);
 }
 
 /*
@@ -327,7 +383,7 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
 
   ASSERT(dst != src);
   ASSERT((flags & (VMM_CLONE_POPULATE | VMM_CLONE_COW)) != (VMM_CLONE_POPULATE | VMM_CLONE_COW));
-  
+
   rwsem_down_write(&src->rwsem);
   pagetable_lock(&src->rpd);
   tnode = ttree_tnode_leftmost(src->vmranges_tree.root);
@@ -364,8 +420,8 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
 
       /* Handle each mapped page in given range regarding the specified clone policy */
       for (addr = vmr->bounds.space_start; addr < vmr->bounds.space_end; addr += PAGE_SIZE) {
-        pidx = ptable_ops.vaddr2page_idx(&src->rpd, addr, &pde);
-        
+        pidx = __vaddr2page_idx(&src->rpd, addr, &pde);
+
         /*
          * In some situations page may not be present in src's page table because it was
          * swapped before vmm_clone is called. In this case, we make a copy of the lowest
@@ -374,7 +430,7 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
         if (pidx == PAGE_IDX_INVAL) {
           if (pde != NULL) {
             pidx = pde_fetch_page_idx(pde);
-            ret = mmap_core(&dst->rpd, addr, pidx, 1, pde_get_flags(pde), false);
+            ret = mmap_one_page(&dst->rpd, addr, pidx, pde_get_flags(pde));
             if (ret)
               goto clone_failed;
           }
@@ -393,8 +449,7 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
           page->flags |= PF_COW; /* PF_COW flag tells memory object about nature of the fault */
 
           /* Remap page to read-only in src */
-          ret = mmap_core(&src->rpd, addr, pidx, 1,
-                          ((vmr->flags & KMAP_FLAGS_MASK) & ~VMR_WRITE), false);
+          ret = mmap_one_page(&src->rpd, addr, pidx, (vmr->flags & ~VMR_WRITE));
           if (ret)
             goto clone_failed;
         }
@@ -416,7 +471,8 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
           pidx = pframe_number(page);
         }
 
-        ret = mmap_core(&dst->rpd, addr, pidx, 1, new_vmr_flags & KMAP_FLAGS_MASK, true);
+        ret = mmap_one_page(&dst->rpd, addr, pidx, new_vmr_flags);
+        pin_page_frame(pframe_by_number(pidx));
         if (ret)
           goto clone_failed;
       }
@@ -432,7 +488,7 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
   clone_failed:
   pagetable_unlock(&src->rpd);
   rwsem_up_write(&src->rwsem);
-  //vmm_destroy(dst);
+  __clear_vmranges_tree(dst);
 
   return ret;
 }
@@ -544,15 +600,15 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages
   bool was_merged = false;
 
   vmr = NULL;
-  ASSERT(memobj != NULL);
+  ASSERT_DBG(memobj != NULL);
   ttree_cursor_init(&vmm->vmranges_tree, &cursor);
 
   /* general checking */
-  if (!(flags & VMR_PROTO_MASK) /* protocol must be set */
+  if (!(flags & VMR_PROT_MASK) /* protocol must be set */
       || !(flags & (VMR_PRIVATE | VMR_SHARED)) /* private *or* shared flags must be set */
       || ((flags & (VMR_PRIVATE | VMR_SHARED)) == (VMR_PRIVATE | VMR_SHARED)) /* but they mustn't be set together */
       || !npages /* npages must not be zero */
-      || ((flags & VMR_NONE) && ((flags & VMR_PROTO_MASK) != VMR_NONE)) /* VMR_NONE must not be set with VMR_SHARED or VMR_PRIVATE */
+      || ((flags & VMR_NONE) && ((flags & VMR_PROT_MASK) != VMR_NONE)) /* VMR_NONE must not be set with VMR_SHARED or VMR_PRIVATE */
       || (flags & (VMR_PHYS | VMR_SHARED)) == (VMR_PHYS | VMR_SHARED)   /* VMR_SHARED can not coexist with VMR_PHYS */
       || ((flags & VMR_FIXED) && !addr)) /* VMR_FIXED expects that address is specified */
   {
@@ -717,7 +773,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
   uintptr_t va_to = va_from + (npages << PAGE_WIDTH);
   vmrange_t *vmr, *vmr_prev = NULL;
 
-  ASSERT(!(va_from & PAGE_MASK));
+  ASSERT_DBG(!(va_from & PAGE_MASK));
   ttree_cursor_init(&vmm->vmranges_tree, &cursor);
 
   /*
@@ -727,7 +783,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
    * after position where [va_from, va_from + PAGE_SIZE) could be. If such item is found and
    * if it has appropriate bounds, it is the very first VM range covered by given diapason.
    */
-  vmr = vmrange_find(vmm, va_from, va_to, &cursor);
+  vmr = vmrange_find(vmm, va_from, va_from + 1, &cursor);
   if (!vmr) {
     if (!ttree_cursor_next(&cursor))
       vmr = ttree_item_from_cursor(&cursor);
@@ -758,7 +814,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
 
     /*
      * va_from may be greater than the bottom virtual address of
-     * given range. If so, range's top address must be decreased 
+     * given range. If so, range's top address must be decreased
      * regarding the new top address.
      */
     pagetable_lock(&vmm->rpd);
@@ -842,12 +898,61 @@ int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page,
   page_frame_iterator_t pfi;
   ITERATOR_CTX(page_frame, PF_ITER_INDEX) pf_idx_ctx;
 
-  if ((va & PAGE_MASK) || !npages)
-    return -EINVAL;
-
   pfi_index_init(&pfi, &pf_idx_ctx, first_page, first_page + npages - 1);
   iter_first(&pfi);
   return __mmap_core(rpd, va, npages, &pfi, flags, pin_pages);
+}
+
+int __fault_in_user_page(vmrange_t *vmrange, uintptr_t addr, uint32_t pfmask, page_idx_t *out_pidx)
+{
+  pde_t *pde;
+  vmm_t *vmm = vmrange->parent_vmm;
+  page_idx_t pidx;
+  vmrange_flags_t vmr_mask = VMR_READ;
+  int ret;
+
+  ASSERT_DBG((addr >= vmrange->bounds.space_start) && (addr < vmrange->bounds.space_end));
+  ASSERT_DBG(__valid_vmr_rights(vmrange, pfmask));
+  ASSERT_DBG((vmrange->flags & vmr_mask) == vmr_mask);
+
+  if (pfmask & PFLT_WRITE)
+    vmr_mask |= VMR_WRITE;
+
+  pagetable_lock(&vmm->rpd);
+  pidx = __vaddr2page_idx(&vmm->rpd, addr, &pde);
+  if (pidx != PAGE_IDX_INVAL) {
+    /*
+     * If page by given address is already mapped with valid protection attributes,
+     * we don't need emulate PF on it.
+     */
+    if ((ptable_to_kmap_flags(pde_get_flags(pde)) & vmr_mask) == vmr_mask) {
+      pagetable_unlock(&vmm->rpd);
+      goto out;
+    }
+  }
+  else
+    pfmask |= PFLT_NOT_PRESENT;
+
+  pagetable_unlock(&vmm->rpd);
+  ret = memobj_method_call(vmrange->memobj, handle_page_fault, vmrange, addr, pfmask);
+  if (ret)
+    return ret;
+
+  /*
+   * After fault is handled and tied with VM range memory object doesn't return an error,
+   * page index of mapped page may be easily fetched from the page table of the proccess.
+   * Note, here we don't need to lock the table: fault_in_user_pages function is called with
+   * downed on read vmm semaphore, so after fault is handled and page is present in the table,
+   * it can not be unmapped while semaphore is downed/
+   */
+  pidx = __vaddr2page_idx(&vmm->rpd, addr, &pde);
+  ASSERT(pidx != PAGE_IDX_INVAL);
+
+out:
+  if (out_pidx)
+    *out_pidx = pidx;
+
+  return 0;
 }
 
 int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t pfmask,
@@ -855,8 +960,6 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
 {
   page_idx_t pidx;
   int ret = 0;
-  pde_t *pde;
-  vmrange_flags_t vmr_mask = VMR_READ;
   uintptr_t va;
   pgoff_t npages, i = 0;
   vmrange_t *vmr;
@@ -870,20 +973,12 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
   if (!valid_user_address_range(va, (npages << PAGE_WIDTH))) {
     return -EFAULT;
   }
-  if (pfmask & PFLT_WRITE) {
-    vmr_mask |= VMR_WRITE; /* VM range must have write access */
-  }
 
   vmr = vmrange_find(vmm, va, va + 1, &cursor);
   if (!vmr) {
     return -EFAULT;
   }
 
-  /* check if protection attributes are ok */
-  if (!__valid_vmr_rights(vmr, pfmask) || ((vmr->flags & vmr_mask) != vmr_mask)) {
-    return -EACCES;
-  }
-  
   while (i < npages) {
     /*
      * If va crosses the end of current VM range, try get the next VM range
@@ -903,45 +998,17 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
         return -EACCES;
       }
     }
-    
-    pagetable_lock(&vmm->rpd);
-    pidx = ptable_ops.vaddr2page_idx(&vmm->rpd, va, &pde);
-    if (pidx != PAGE_IDX_INVAL) {
-      /*
-       * If page by given address is already mapped with valid protection attributes,
-       * we don't need emulate PF on it.
-       */
-      if ((ptable_to_kmap_flags(pde_get_flags(pde)) & vmr_mask) == vmr_mask) {
-        pagetable_unlock(&vmm->rpd);
-        goto eof_fault;
-      }
-    }
-    else
-      pfmask |= PFLT_NOT_PRESENT;
-    
-    pagetable_unlock(&vmm->rpd);
-    ret = memobj_method_call(vmr->memobj, handle_page_fault, vmr, va, pfmask);
-    if (ret) {
-      return ret;
-    }
 
-    /*
-     * After fault is handled and tied with VM range memory object doesn't return an error,
-     * page index of mapped page may be easily fetched from the page table of the proccess.
-     * Note, here we don't need to lock the table: fault_in_user_pages function is called with
-     * downed on read vmm semaphore, so after fault is handled and page is present in the table,
-     * it can not be unmapped while semaphore is downed/
-     */
-    pidx = ptable_ops.vaddr2page_idx(&vmm->rpd, va, &pde);
-    ASSERT(pidx != PAGE_IDX_INVAL);
-    
-eof_fault:
-    if (callback)
+    ret = __fault_in_user_page(vmr, va, pfmask, &pidx);
+    if (ret)
+      return ret;
+
+    if (callback) {
       callback(vmr, pframe_by_number(pidx), data);
+    }
 
     va += PAGE_SIZE;
     i++;
-    pfmask &= ~PFLT_NOT_PRESENT;
   }
 
   return 0;
@@ -956,21 +1023,25 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
   rwsem_down_read(&vmm->rwsem);
   vmr = vmrange_find(vmm, PAGE_ALIGN_DOWN(fault_addr), PAGE_ALIGN_DOWN(fault_addr) + 1, NULL);
   if (!vmr) {
-    return -EFAULT;
+    ret = -EFAULT;
+    goto out;
   }
 
   /*
    * If fault was caused by write attemption and VM range that was found
    * has VMR_WRITE flag unset or VMR_NONE flag set, fault can not be handled.
    */
-  if (!__valid_vmr_rights(vmr, pfmask))
-    return -EACCES;
+  if (!__valid_vmr_rights(vmr, pfmask)) {
+    ret = -EACCES;
+    goto out;
+  }
 
   ASSERT(vmr->memobj != NULL);
-  memobj = vmr->memobj;  
+  memobj = vmr->memobj;
   ret = memobj_method_call(memobj, handle_page_fault, vmr, PAGE_ALIGN_DOWN(fault_addr), pfmask);
+
+out:
   rwsem_up_read(&vmm->rwsem);
-  
   return ret;
 }
 
@@ -998,7 +1069,7 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
     goto out;
   }
 
-  vmrflags = (margs.prot & VMR_PROTO_MASK) | (margs.flags << VMR_FLAGS_OFFS);
+  vmrflags = (margs.prot & VMR_PROT_MASK) | (margs.flags << VMR_FLAGS_OFFS);
   /*
    * Basic rules:
    * 1) offset must be page aligned
@@ -1047,12 +1118,13 @@ int sys_munmap(pid_t victim, uintptr_t addr, size_t length)
     victim_task = current_task();
   else {
     victim_task = pid_to_task(victim);
-    if (!victim_task)
+    if (!victim_task) {
       return -ESRCH;
+    }
   }
 
   vmm = victim_task->task_mm;
-  
+
   /* address must be page aligned and length must be specified */
   if (!length || (addr & PAGE_MASK)) {
     ret = -EINVAL;
@@ -1072,20 +1144,147 @@ int sys_munmap(pid_t victim, uintptr_t addr, size_t length)
 out:
   if (victim_task && victim)
     release_task_struct(victim_task);
-  
+
+  return ret;
+}
+
+int sys_grant_pages(uintptr_t va_from, size_t length, pid_t target_pid, uintptr_t target_addr)
+{
+  task_t *target = NULL, *current;
+  vmrange_t *vmr, *target_vmr;
+  ttree_cursor_t cursor;
+  page_idx_t npages, i, pidx;
+  page_frame_t *page;
+  int ret = 0;
+
+  /* TODO DK: add rights checking. */
+  current = current_task();
+  if ((va_from & PAGE_MASK) || !length || (target_addr & PAGE_MASK) ||
+      !valid_user_address_range(va_from, length) ||
+      (current->pid == target_pid)) {
+    return -EINVAL;
+  }
+
+  /* Whant to grant pages to idle task? fuck you! */
+  if (!target_pid)
+    return -EPERM;
+
+  length = PAGE_ALIGN(length);
+  npages = length >> PAGE_WIDTH;
+  target = pid_to_task(target_pid);
+  if (!target)
+    return -ESRCH;
+
+  rwsem_down_read(&target->task_mm->rwsem);
+  target_vmr = vmrange_find(target->task_mm, target_addr, target_addr + length - 1, NULL);
+  if (!target_vmr) {
+    ret = -ENOMEM;
+    goto unlock_target;
+  }
+
+  /* VMR_CANRECPAGES implies that both VMR_PHYS and VMR_SHARED are not set */
+  if (!(target_vmr->flags & VMR_CANRECPAGES)) {
+    ret = -EACCES;
+    goto unlock_target;
+  }
+  if ((target_addr < target_vmr->bounds.space_start) ||
+      ((target_addr + length) > target_vmr->bounds.space_end)) {
+    ret = -ENOMEM;
+    goto unlock_target;
+  }
+
+  /* Ok, now we can take care about pages we want to grant */
+  rwsem_down_read(&current->task_mm->rwsem);
+  vmr = vmrange_find(current->task_mm, va_from, va_from + 1, &cursor);
+  if (!vmr) {
+    ret = -ENOMEM;
+    goto unlock_current;
+  }
+
+  /* VM range we take pages from must have VMR_PHYS and VMR_SHARED flags clear too. */
+  if (vmr->flags & (VMR_PHYS | VMR_SHARED)) {
+    ret = -EACCES;
+    goto unlock_current;
+  }
+
+  for (i = 0; i < npages; i++, target_addr += PAGE_SIZE, va_from += PAGE_SIZE) {
+    if (unlikely(va_from >= vmr->bounds.space_end)) {
+      if (ttree_cursor_next(&cursor) < 0) {
+        ret = -ENOMEM;
+        goto unlock_current;
+      }
+
+      vmr = ttree_item_from_cursor(&cursor);
+      if (va_from < vmr->bounds.space_start) {
+        ret = -ENOMEM;
+        goto unlock_current;
+      }
+      if (vmr->flags & (VMR_PHYS | VMR_SHARED)) {
+        ret = -EACCES;
+        goto unlock_current;
+      }
+    }
+
+    pagetable_lock(&current->task_mm->rpd);
+
+    /*
+     * All pages current task is granting to somebody must be present.
+     * We're not going fault on each of them.
+     */
+    pidx = vaddr2page_idx(&current->task_mm->rpd, va_from);
+    if (pidx == PAGE_IDX_INVAL) {
+      ret = -EFAULT;
+      pagetable_unlock(&current->task_mm->rpd);
+      goto unlock_current;
+    }
+
+    /* Munmap the page from caller's address space */
+    munmap_one_page(&current->task_mm->rpd, va_from);
+    pagetable_unlock(&current->task_mm->rpd);
+    /* We didn't decrement refcount of the page, so it must be greater than 0 */
+    page = pframe_by_number(pidx);
+
+    pagetable_lock(&target->task_mm->rpd);
+    pidx = vaddr2page_idx(&target->task_mm->rpd, target_addr);
+
+    /*
+     * If page on a given address is already mapped(it doesn't matter which exactly)
+     * we won't replace it by the page we've just removed from the caller's address range.
+     */
+    if (pidx != PAGE_IDX_INVAL) {
+      pagetable_unlock(&target->task_mm->rpd);
+      unpin_page_frame(page);
+      ret = -EBUSY;
+      goto unlock_current;
+    }
+
+    ret = mmap_one_page(&target->task_mm->rpd, target_addr,
+                          pframe_number(page), target_vmr->flags);
+    if (ret) {
+      pagetable_unlock(&target->task_mm->rpd);
+      unpin_page_frame(page);
+      goto unlock_current;
+    }
+
+    pagetable_unlock(&target->task_mm->rpd);
+  }
+
+unlock_current:
+  rwsem_up_read(&current->task_mm->rwsem);
+unlock_target:
+  rwsem_up_read(&target->task_mm->rwsem);
+
+  release_task_struct(target);
   return ret;
 }
 
 #ifdef CONFIG_DEBUG_MM
 #include <eza/task.h>
 
-void vmm_set_name_from_pid_dbg(vmm_t *vmm, unsigned long pid)
+void vmm_set_name_from_pid_dbg(vmm_t *vmm)
 {
-  if (is_tid(pid))
-    pid = TID_TO_PIDBASE(pid);
-
   memset(vmm->name_dbg, 0, VMM_DBG_NAME_LEN);
-  snprintf(vmm->name_dbg, VMM_DBG_NAME_LEN, "VMM [PID: %ld]", pid);
+  snprintf(vmm->name_dbg, VMM_DBG_NAME_LEN, "VMM (PID: %ld)", vmm->owner->pid);
 }
 
 void vmm_enable_verbose_dbg(void)

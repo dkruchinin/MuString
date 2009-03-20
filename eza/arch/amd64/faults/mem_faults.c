@@ -185,13 +185,16 @@ stop_cpu:
   fault_dump_regs(regs,stack_frame->rip);
   kprintf_fault( " Invalid address: %p\n", invalid_address );
   kprintf_fault( " RSP: %p\n", stack_frame->old_rsp);
-#ifdef CONFIG_DUMP_USTACK
+
   if( kernel_fault(stack_frame) ) {
     show_stack_trace(stack_frame->old_rsp);
-  } else {
+  }
+#ifdef CONFIG_DUMP_USTACK
+  else {
     __dump_user_stack(stack_frame->old_rsp);
   }
 #endif /* CONFIG_DUMP_USTACK */
+  
   interrupts_disable();
   for(;;);
 

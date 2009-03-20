@@ -56,7 +56,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
      * mapping it into the place we've been asked.
      */
     pagetable_lock(&vmm->rpd);
-    if (unlikely(ptable_ops.vaddr2page_idx(&vmm->rpd, addr, NULL) != PAGE_IDX_INVAL)) {
+    if (unlikely(vaddr2page_idx(&vmm->rpd, addr) != PAGE_IDX_INVAL)) {
       /*
        * In very rare situatinons several threads may generate a fault by one address.
        * So here we have to check if the fault was handled by somebody earlier. If so,
@@ -67,11 +67,14 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
       goto out;
     }
 
-    ret = mmap_core(&vmm->rpd, addr, pframe_number(pf),
-                    1, vmr->flags & KMAP_FLAGS_MASK, true);
+    ret = mmap_one_page(&vmm->rpd, addr, pframe_number(pf), vmr->flags);    
     pagetable_unlock(&vmm->rpd);    
-    if (ret)
+    if (ret) {
       free_page(pf);
+    }
+    else {
+      pin_page_frame(pf);
+    }
   }
   else  {
     pde_t *pde;
@@ -79,9 +82,8 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
     page_idx_t pidx;
 
     pagetable_lock(&vmm->rpd);
-    pidx = ptable_ops.vaddr2page_idx(&vmm->rpd, addr, &pde);
+    pidx = __vaddr2page_idx(&vmm->rpd, addr, &pde);
     ASSERT(pidx != PAGE_IDX_INVAL);
-    //kprintf_fault("[%d] COW ADDR: %p(%#x)\n", current_task()->pid, addr, pidx);
     if (unlikely(ptable_to_kmap_flags(pde_get_flags(pde)) & KMAP_WRITE)) {
       pagetable_unlock(&vmm->rpd);
       goto out;
@@ -99,12 +101,11 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
 
       copy_page_frame(new_page, page);
       unpin_page_frame(page);
-      page = new_page;
+      pin_page_frame(new_page);
+      page = new_page;      
     }
 
-    //kprintf_fault("[%d] MAP page %#x to %p\n", current_task()->pid, pframe_number(page), addr);
-    ret = mmap_core(&vmm->rpd, addr, pframe_number(page), 1,
-                    vmr->flags & KMAP_FLAGS_MASK, true);
+    ret = mmap_one_page(&vmm->rpd, addr, pframe_number(page), vmr->flags);
     pagetable_unlock(&vmm->rpd);
   }
 

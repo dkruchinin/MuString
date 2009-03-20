@@ -37,14 +37,18 @@
 #include <eza/usercopy.h>
 
 #define __set_exiting_flag(exiter)              \
-  LOCK_TASK_STRUCT((exiter));                   \
-  set_task_flags((exiter),TF_EXITING);          \
-  UNLOCK_TASK_STRUCT((exiter))
+  {                                             \
+    LOCK_TASK_STRUCT((exiter));                 \
+    set_task_flags((exiter),TF_EXITING);        \
+    UNLOCK_TASK_STRUCT((exiter));               \
+  }
 
 #define __clear_exiting_flag(exiter)            \
-  LOCK_TASK_STRUCT((exiter));                   \
-  clear_task_flag((exiter),TF_EXITING);          \
-  UNLOCK_TASK_STRUCT((exiter))
+  {                                             \
+    LOCK_TASK_STRUCT((exiter));                 \
+    clear_task_flag((exiter),TF_EXITING);       \
+    UNLOCK_TASK_STRUCT((exiter));               \
+  }
 
 static void __exit_ipc(task_t *exiter) {
   task_ipc_t *ipc;
@@ -71,10 +75,6 @@ static void __exit_ipc(task_t *exiter) {
 }
 
 static void __exit_limits(task_t *exiter)
-{
-}
-
-static void __exit_mm(task_t *exiter)
 {
 }
 
@@ -205,8 +205,7 @@ void do_exit(int code,ulong_t flags,long exitval)
     __flush_pending_uworks(exiter);
     task_event_notify(TASK_EVENT_TERMINATION);
   }
-
-  __exit_mm(exiter);
+  
   clear_task_disintegration_request(exiter);
 
   if( !is_thread(exiter) ) { /* All process-related works are performed here. */
@@ -215,7 +214,10 @@ void do_exit(int code,ulong_t flags,long exitval)
       __exit_ipc(exiter);
     }
     __kill_all_threads(exiter);
-
+    if (!is_kernel_thread(exiter)) {
+      vmm_destroy(exiter->task_mm);
+    }
+    
     if( flags & EF_DISINTEGRATE ) {
       /* Prepare the final reincarnation event. */
       event_initialize_task(&exiter->reinc_event,exiter);

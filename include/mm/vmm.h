@@ -41,23 +41,25 @@
 #define VMM_DBG_NAME_LEN 128
 #endif /* CONFIG_DEBUG_MM */
 
-#define VMR_PROTO_MASK (VMR_NONE | VMR_READ | VMR_WRITE | VMR_EXEC | VMR_NOCACHE)
+#define VMR_PROT_MASK      (VMR_NONE | VMR_READ | VMR_WRITE | VMR_EXEC | VMR_CANRECPAGES)
 #define VMR_FLAGS_OFFS 5
 
+struct __task_struct;
+
 typedef enum __vmrange_flags {
-  VMR_NONE     = 0x0001,
-  VMR_READ     = 0x0002,
-  VMR_WRITE    = 0x0004,
-  VMR_EXEC     = 0x0008,
-  VMR_NOCACHE  = 0x0010,
-  VMR_FIXED    = 0x0020,
-  VMR_ANON     = 0x0040,
-  VMR_PRIVATE  = 0x0080,
-  VMR_SHARED   = 0x0100,
-  VMR_PHYS     = 0x0200,
-  VMR_STACK    = 0x0400,
-  VMR_POPULATE = 0x0800,
-  VMR_GENERIC  = 0x1000,
+  VMR_NONE         = 0x0001,
+  VMR_READ         = 0x0002,
+  VMR_WRITE        = 0x0004,
+  VMR_EXEC         = 0x0008,  
+  VMR_NOCACHE      = 0x0010,
+  VMR_FIXED        = 0x0020,
+  VMR_ANON         = 0x0040,
+  VMR_PRIVATE      = 0x0080,
+  VMR_SHARED       = 0x0100,
+  VMR_PHYS         = 0x0200,
+  VMR_STACK        = 0x0400,
+  VMR_POPULATE     = 0x0800,
+  VMR_CANRECPAGES  = 0x1000,
 } vmrange_flags_t;
 
 typedef vmrange_flags_t kmap_flags_t;
@@ -104,11 +106,9 @@ typedef struct __vmrange {
 
 typedef struct __vmm {
   ttree_t vmranges_tree;
-  vmrange_t *cached_vmr; /* TODO DK: use this stuff */
-  atomic_t vmm_users;
+  struct __task_struct *owner;
   rpd_t rpd;
   rwsem_t rwsem;
-  uintptr_t aspace_start;
   ulong_t num_vmrs;
   page_idx_t num_pages;
   page_idx_t max_pages;
@@ -163,6 +163,28 @@ static inline void pin_page_frame(page_frame_t *pf)
 #define __mmap_core(rpd, va, npages, pfi, __flags, pin_pages)                     \
   ptable_ops.mmap(rpd, va, npages, pfi, kmap_to_ptable_flags((__flags) & KMAP_FLAGS_MASK), pin_pages)
 
+static inline int mmap_one_page(rpd_t *rpd, uintptr_t va, page_idx_t pidx, kmap_flags_t flags)
+{
+  return ptable_ops.mmap_one_page(rpd, va, pidx,
+                                  kmap_to_ptable_flags((flags) & KMAP_FLAGS_MASK));
+}
+
+static inline void munmap_one_page(rpd_t *rpd, uintptr_t va)
+{
+  ptable_ops.munmap_one_page(rpd, va);
+}
+
+
+static inline page_idx_t __vaddr2page_idx(rpd_t *rpd, uintptr_t addr, pde_t **pde)
+{
+  return ptable_ops.vaddr2page_idx(rpd, addr, pde);
+}
+
+static inline page_idx_t vaddr2page_idx(rpd_t *rpd, uintptr_t addr)
+{
+  return __vaddr2page_idx(rpd, addr, NULL);
+}
+
 static inline bool mm_vaddr_is_mapped(rpd_t *rpd, uintptr_t va)
 {
   return (ptable_ops.vaddr2page_idx(rpd, va, NULL) != PAGE_IDX_INVAL);
@@ -178,7 +200,8 @@ void vmm_subsystem_initialize(void);
 int vmm_clone(vmm_t *dst, vmm_t *src, int flags);
 void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name);
 int vm_mandmaps_roll(vmm_t *target_mm);
-vmm_t *vmm_create(void);
+vmm_t *vmm_create(struct __task_struct *owner);
+void vmm_destroy(vmm_t *vmm);
 int vmm_handle_page_fault(vmm_t *vmm, uintptr_t addr, uint32_t pfmask);
 long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages,
                  vmrange_flags_t flags, pgoff_t offset);
@@ -233,11 +256,12 @@ struct mmap_args;
  */
 long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs);
 int sys_munmap(pid_t victim, uintptr_t addr, size_t length);
+int sys_grant_pages(uintptr_t va_from, size_t length, pid_t target_pid, uintptr_t target_addr);
 
 #ifdef CONFIG_DEBUG_MM
 static inline char *vmm_get_name_dbg(vmm_t *vmm)
 {
-  return ((vmm->name_dbg) ? vmm->name_dbg : "VMM [noname]");
+  return vmm->name_dbg;
 }
 
 static inline void vmm_set_name_dbg(vmm_t *vmm, const char *name)
@@ -245,10 +269,15 @@ static inline void vmm_set_name_dbg(vmm_t *vmm, const char *name)
   strncpy(vmm->name_dbg, name, VMM_DBG_NAME_LEN);
 }
 
-void vmm_set_name_from_pid_dbg(vmm_t *vmm, unsigned long pid);
+void vmm_set_name_from_pid_dbg(vmm_t *vmm);
 void vmm_enable_verbose_dbg(void);
 void vmm_disable_verbose_dbg(void);
 void vmranges_print_tree_dbg(vmm_t *vmm);
+#else
+#define vmm_get_name_dbg(vmm) "NONAME"
+#define vmm_set_name_dbg(vmm, name)
+#define vmm_set_name_from_pid(vmm)
+#define vmranges_print_tree_dbg(vmm)
 #endif /* CONFIG_DEBUG_MM */
 
 #endif /* __VMM_H__ */
