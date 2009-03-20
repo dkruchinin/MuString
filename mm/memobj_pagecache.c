@@ -73,7 +73,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
   ASSERT(!(vmr->flags & VMR_PHYS));
   ASSERT(!((memobj->flags & MMO_FLG_NOSHARED) && (vmr->flags & VMR_SHARED)));
   mmap_flags &= ~VMR_WRITE;
-  if (pfmask & PFLT_NOT_PRESENT) {    
+  if (pfmask & PFLT_NOT_PRESENT) {
     /* At first try to find out if the page is already in the cache... */
     spinlock_lock_read(&priv->cache_lock);
     page = __pcache_get_page(priv, offset);
@@ -156,7 +156,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
     ASSERT(!(vmr->flags & VMR_PRIVATE)); /* FIXME DK: Implement write-faults with VMR_PRIVATE mappings */
     ASSERT(pfmask & PFLT_WRITE);
     pagetable_lock(&vmm->rpd);
-    idx = ptable_ops.vaddr2page_idx(&vmm->rpd, addr, NULL);
+    idx = vaddr2page_idx(&vmm->rpd, addr);
     pagetable_unlock(&vmm->rpd);
 
     /*
@@ -194,10 +194,10 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
     mmap_flags |= VMR_WRITE;
   }
 
-  map_page:
+map_page:
   pagetable_lock(&vmm->rpd);
   if (pfmask & PFLT_NOT_PRESENT) {
-    idx = ptable_ops.vaddr2page_idx(&vmm->rpd, addr, NULL);
+    idx = vaddr2page_idx(&vmm->rpd, addr);
     if (unlikely(idx != PAGE_IDX_INVAL)) {
       ret = 0;
       unpin_page_frame(page);
@@ -205,11 +205,10 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
     }
   }
 
-  kprintf("%d: map %#x with offset %d\n", current_task()->pid, pframe_number(page), page->offset);
-  ret = mmap_core(&vmm->rpd, addr, pframe_number(page), 1, mmap_flags, false);
+  ret = mmap_one_page(&vmm->rpd, addr, pframe_number(page), mmap_flags);
   pagetable_unlock(&vmm->rpd);
   
-  out:
+out:
   return ret;
 }
 

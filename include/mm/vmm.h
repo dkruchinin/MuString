@@ -163,6 +163,28 @@ static inline void pin_page_frame(page_frame_t *pf)
 #define __mmap_core(rpd, va, npages, pfi, __flags, pin_pages)                     \
   ptable_ops.mmap(rpd, va, npages, pfi, kmap_to_ptable_flags((__flags) & KMAP_FLAGS_MASK), pin_pages)
 
+static inline int mmap_one_page(rpd_t *rpd, uintptr_t va, page_idx_t pidx, kmap_flags_t flags)
+{
+  return ptable_ops.mmap_one_page(rpd, va, pidx,
+                                  kmap_to_ptable_flags((flags) & KMAP_FLAGS_MASK));
+}
+
+static inline void munmap_one_page(rpd_t *rpd, uintptr_t va)
+{
+  ptable_ops.munmap_one_page(rpd, va);
+}
+
+
+static inline page_idx_t __vaddr2page_idx(rpd_t *rpd, uintptr_t addr, pde_t **pde)
+{
+  return ptable_ops.vaddr2page_idx(rpd, addr, pde);
+}
+
+static inline page_idx_t vaddr2page_idx(rpd_t *rpd, uintptr_t addr)
+{
+  return __vaddr2page_idx(rpd, addr, NULL);
+}
+
 static inline bool mm_vaddr_is_mapped(rpd_t *rpd, uintptr_t va)
 {
   return (ptable_ops.vaddr2page_idx(rpd, va, NULL) != PAGE_IDX_INVAL);
