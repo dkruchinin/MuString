@@ -69,10 +69,12 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
 
     ret = mmap_one_page(&vmm->rpd, addr, pframe_number(pf), vmr->flags);    
     pagetable_unlock(&vmm->rpd);    
-    if (ret)
+    if (ret) {
       free_page(pf);
-
-    pin_page_frame(pf);
+    }
+    else {
+      pin_page_frame(pf);
+    }
   }
   else  {
     pde_t *pde;
