@@ -56,7 +56,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
      * mapping it into the place we've been asked.
      */
     pagetable_lock(&vmm->rpd);
-    if (unlikely(ptable_ops.vaddr2page_idx(&vmm->rpd, addr, NULL) != PAGE_IDX_INVAL)) {
+    if (unlikely(vaddr2page_idx(&vmm->rpd, addr) != PAGE_IDX_INVAL)) {
       /*
        * In very rare situatinons several threads may generate a fault by one address.
        * So here we have to check if the fault was handled by somebody earlier. If so,
