@@ -276,7 +276,7 @@ void vmranges_print_tree_dbg(vmm_t *vmm);
 #else
 #define vmm_get_name_dbg(vmm) "NONAME"
 #define vmm_set_name_dbg(vmm, name)
-#define vmm_set_name_from_pid(vmm)
+#define vmm_set_name_from_pid_dbg(vmm)
 #define vmranges_print_tree_dbg(vmm)
 #endif /* CONFIG_DEBUG_MM */
 
