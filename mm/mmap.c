@@ -304,7 +304,28 @@ void vmm_subsystem_initialize(void)
     panic("vmm_subsystem_initialize: Can not create memory cache for vmrange objects. ENOMEM.");
 }
 
-static void __clear_vmranges_tree(vmm_t *vmm)
+vmm_t *vmm_create(task_t *owner)
+{
+  vmm_t *vmm;
+
+  vmm = alloc_from_memcache(__vmms_cache);
+  if (!vmm)
+    return NULL;
+
+  memset(vmm, 0, sizeof(*vmm));
+  ttree_init(&vmm->vmranges_tree, __vmranges_cmp, vmrange_t, bounds);
+  rwsem_initialize(&vmm->rwsem);
+  if (initialize_rpd(&vmm->rpd, vmm) < 0) {
+    memfree(vmm);
+    vmm = NULL;
+  }
+
+  vmm->owner = owner;
+  vmm_set_name_from_pid_dbg(vmm);
+  return vmm;
+}
+
+void __clear_vmranges_tree(vmm_t *vmm)
 {
   ttree_node_t *tnode;
   int i;
@@ -329,27 +350,6 @@ static void __clear_vmranges_tree(vmm_t *vmm)
   }
 
   ASSERT(vmm->num_vmrs == 0);
-}
-
-vmm_t *vmm_create(task_t *owner)
-{
-  vmm_t *vmm;
-
-  vmm = alloc_from_memcache(__vmms_cache);
-  if (!vmm)
-    return NULL;
-
-  memset(vmm, 0, sizeof(*vmm));
-  ttree_init(&vmm->vmranges_tree, __vmranges_cmp, vmrange_t, bounds);
-  rwsem_initialize(&vmm->rwsem);
-  if (initialize_rpd(&vmm->rpd, vmm) < 0) {
-    memfree(vmm);
-    vmm = NULL;
-  }
-
-  vmm->owner = owner;
-  vmm_set_name_from_pid_dbg(vmm);
-  return vmm;
 }
 
 void vmm_destroy(vmm_t *vmm)
