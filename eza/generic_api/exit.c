@@ -214,12 +214,10 @@ void do_exit(int code,ulong_t flags,long exitval)
       __exit_ipc(exiter);
     }
     __kill_all_threads(exiter);
-    if (!is_kernel_thread(exiter)) {
-      vmm_destroy(exiter->task_mm);
-    }
     
     if( flags & EF_DISINTEGRATE ) {
       /* Prepare the final reincarnation event. */
+      __clear_vmranges_tree(exiter->task_mm);
       event_initialize_task(&exiter->reinc_event,exiter);
 
       if( !__notify_disintegration_done(exiter->uworks_data.disintegration_descr,0) ) {
@@ -255,7 +253,10 @@ void do_exit(int code,ulong_t flags,long exitval)
       dreq=exiter->uworks_data.disintegration_descr;
       exiter->uworks_data.disintegration_descr=NULL;
       UNLOCK_TASK_STRUCT(exiter);
-
+      if (!is_kernel_thread(exiter)) {
+        vmm_destroy(exiter->task_mm);
+      }
+      
       if( dreq ) {
         __notify_disintegration_done(dreq,__DR_EXITED);
       }

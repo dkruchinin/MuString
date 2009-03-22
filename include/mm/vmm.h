@@ -202,6 +202,7 @@ void vm_mandmap_register(vm_mandmap_t *mandmap, const char *mandmap_name);
 int vm_mandmaps_roll(vmm_t *target_mm);
 vmm_t *vmm_create(struct __task_struct *owner);
 void vmm_destroy(vmm_t *vmm);
+void __clear_vmranges_tree(vmm_t *vmm);
 int vmm_handle_page_fault(vmm_t *vmm, uintptr_t addr, uint32_t pfmask);
 long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr, page_idx_t npages,
                  vmrange_flags_t flags, pgoff_t offset);
