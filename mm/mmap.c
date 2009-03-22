@@ -350,6 +350,7 @@ void __clear_vmranges_tree(vmm_t *vmm)
   }
 
   ASSERT(vmm->num_vmrs == 0);
+  ttree_destroy(&vmm->vmranges_tree);
 }
 
 void vmm_destroy(vmm_t *vmm)

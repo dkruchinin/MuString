@@ -611,6 +611,8 @@ void ttree_destroy(ttree_t *ttree)
     next = tnode->successor;
     memfree(tnode);
   }
+
+  ttree->root = NULL;
 }
 
 void *ttree_lookup(ttree_t *ttree, void *key, ttree_cursor_t *cursor)
