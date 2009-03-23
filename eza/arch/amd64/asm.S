@@ -273,6 +273,7 @@ no_works_after_syscall:
 
   /* Now restore user %gs */
   cli
+  addq $8,%rsp /* Simulate our extra 'push %rax' */
   RESTORE_USER_SEGMENT_REGISTERS
   pushq %rax
   mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax

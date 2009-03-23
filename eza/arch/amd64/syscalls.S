@@ -107,6 +107,7 @@ syscall_point:
 	movq $USER_SELECTOR(UDATA_DES),HW_INTERRUPT_CTX_SS_OFFT(%rsp)
 	movq %gs:CPU_SCHED_STAT_USTACK_OFFT,%rcx
 	movq %rcx,HW_INTERRUPT_CTX_RSP_OFFT(%rsp)
+	subq $8,%rsp /* Simulate 'push %rax' */
 
 	/* After changing stack pointer, we can enable IRQs */
 	sti
