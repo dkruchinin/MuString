@@ -257,7 +257,9 @@ page_frame_t *generic_create_pagedir(void)
 
 void generic_ptable_unmap(rpd_t *rpd, uintptr_t va_from, page_idx_t npages, bool unpin_pages)
 {
-  do_ptable_unmap(rpd, RPD_PAGEDIR(rpd), va_from, va_from + ((npages - 1) << PAGE_WIDTH), PTABLE_LEVEL_LAST, unpin_pages);
+  do_ptable_unmap(rpd, RPD_PAGEDIR(rpd), va_from,
+                  va_from + ((npages - 1) << PAGE_WIDTH), PTABLE_LEVEL_LAST, unpin_pages);
+  tlb_flush(rpd);
 }
 
 int generic_ptable_map(rpd_t *rpd, uintptr_t va_from, page_idx_t npages,
@@ -288,6 +290,7 @@ int generic_ptable_map(rpd_t *rpd, uintptr_t va_from, page_idx_t npages,
                 "from %p to %p. (%d pages is enough)\n", va_from, ptminfo.va_to, npages);
   }
 
+  tlb_flush(rpd);
   return ret;
 }
 
@@ -337,6 +340,7 @@ int generic_map_page(rpd_t *rpd, uintptr_t addr, page_idx_t pidx, ptable_flags_t
 
   pde = pde_fetch(cur_dir, pde_offset2idx(addr, PTABLE_LEVEL_FIRST));
   map_one_entry(rpd, pde, pidx, flags);
+  tlb_flush_entry(rpd, addr);
   return 0;
 }
 
@@ -361,6 +365,7 @@ void generic_unmap_page(rpd_t *rpd, uintptr_t addr)
     return;
 
   unmap_one_entry(rpd, pde);
+  tlb_flush_entry(rpd, addr);
   for (level = PTABLE_LEVEL_FIRST; level < PTABLE_LEVEL_LAST; level++) {
     cur_dir = pde_fetch_subdir(dirspath[level]);
     if (!atomic_get(&cur_dir->refcount)) {
