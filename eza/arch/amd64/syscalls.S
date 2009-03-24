@@ -98,11 +98,6 @@ syscall_point:
 	subq $HW_INTERRUPT_CTX_SIZE,%rsp
 	movq %rcx,HW_INTERRUPT_CTX_RIP_OFFT(%rsp)
 	movq $USER_SELECTOR(UTEXT_DES),HW_INTERRUPT_CTX_CS_OFFT(%rsp)
-	/* Since %rcx was saved, we can use it. */
-	pushfq
-	popq %rcx
-	orq $RFLAGS_IF,%rcx
-	movq %rcx,HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
 
 	movq $USER_SELECTOR(UDATA_DES),HW_INTERRUPT_CTX_SS_OFFT(%rsp)
 	movq %gs:CPU_SCHED_STAT_USTACK_OFFT,%rcx
