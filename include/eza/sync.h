@@ -79,7 +79,7 @@ enum {
 };
 
 /* Per-process sync info structure. */
-#define MAX_PROCESS_SYNC_OBJS  48
+#define MAX_PROCESS_SYNC_OBJS  72
 
 typedef struct __task_sync_data {
   atomic_t use_count;
