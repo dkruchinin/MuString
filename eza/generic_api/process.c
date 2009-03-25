@@ -79,6 +79,15 @@ void zombify_task(task_t *target)
   UNLOCK_TASK_STRUCT(target);
 }
 
+void unhash_task(task_t *task)
+{
+  hash_level_t l = pid_to_hash_level(task->pid);
+
+  LOCK_PID_HASH_LEVEL_W(l);
+  list_del(&task->pid_list);
+  UNLOCK_PID_HASH_LEVEL_W(l);
+}
+
 task_t *lookup_task(pid_t pid, ulong_t flags)
 {
   tid_t tid;

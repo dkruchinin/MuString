@@ -80,6 +80,7 @@
 #define SC_MEMOBJ_CREATE       41
 #define SC_FORK                42
 #define SC_GRANT_PAGES         43
+#define SC_WAITPID             44
 
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */
@@ -356,6 +357,8 @@ long sys_timer_delete(long id);
 long sys_sigwait(sigset_t *set,int *sig);
 
 void sys_sched_yield(void);
+
+long sys_waitpid(pid_t pid,int *status,int options);
 
 #endif
 

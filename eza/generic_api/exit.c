@@ -50,6 +50,10 @@
     UNLOCK_TASK_STRUCT((exiter));               \
   }
 
+/* Internal flags related to 'wait()' functions.
+ */
+#define __WT_ONE_WAITER  0x1  /*Only one waiter is allowed */
+
 static void __exit_ipc(task_t *exiter) {
   task_ipc_t *ipc;
   task_ipc_priv_t *p;  
@@ -175,6 +179,44 @@ repeat:
   }
 }
 
+static void __wakeup_waiters(task_t *exiter,long exitval)
+{
+  countered_event_t *ce;
+
+  if( is_thread(exiter) ) {
+    mutex_lock(&exiter->group_leader->tg_priv->thread_mutex);
+    LOCK_TASK_STRUCT(exiter);
+    exiter->jointee.exit_ptr=exitval;
+    ce=exiter->cwaiter;
+    exiter->cwaiter=__UNUSABLE_PTR;
+    UNLOCK_TASK_STRUCT(exiter);
+    mutex_unlock(&exiter->group_leader->tg_priv->thread_mutex);
+  } else {
+    LOCK_TASK_STRUCT(exiter);
+    exiter->jointee.exit_ptr=exitval;
+    ce=exiter->cwaiter;
+    exiter->cwaiter=__UNUSABLE_PTR;
+    UNLOCK_TASK_STRUCT(exiter);
+  }
+
+  if( !list_is_empty(&exiter->jointed) ) { /* Notify all waiting tasks. */
+    jointee_t *j=container_of(list_node_first(&exiter->jointed),jointee_t,l);
+    task_t *waiter=container_of(j,task_t,jointee);
+
+    LOCK_TASK_STRUCT(waiter);
+    if( j->exiter == exiter ) {
+      j->exit_ptr=exitval;
+      event_raise(&j->e);
+    }
+    list_del(&j->l);
+    UNLOCK_TASK_STRUCT(waiter);
+  }
+
+  if( ce ) {
+    countered_event_raise(ce);
+  }
+}
+
 void do_exit(int code,ulong_t flags,long exitval)
 {
   task_t *exiter=current_task();
@@ -197,7 +239,7 @@ void do_exit(int code,ulong_t flags,long exitval)
 
   __set_exiting_flag(exiter);
 
-  if( is_thread(exiter) ) {
+  if( is_thread(exiter) || !(flags & EF_DISINTEGRATE) ) {
     zombify_task(exiter);
   }
 
@@ -205,7 +247,7 @@ void do_exit(int code,ulong_t flags,long exitval)
     __flush_pending_uworks(exiter);
     task_event_notify(TASK_EVENT_TERMINATION);
   }
-  
+
   clear_task_disintegration_request(exiter);
 
   if( !is_thread(exiter) ) { /* All process-related works are performed here. */
@@ -214,7 +256,7 @@ void do_exit(int code,ulong_t flags,long exitval)
       __exit_ipc(exiter);
     }
     __kill_all_threads(exiter);
-    
+
     if( flags & EF_DISINTEGRATE ) {
       /* Prepare the final reincarnation event. */
       __clear_vmranges_tree(exiter->task_mm);
@@ -262,43 +304,13 @@ void do_exit(int code,ulong_t flags,long exitval)
       }
     }
     __exit_resources(exiter,flags);
-    /* TODO: [mt] Notify our parent. */
   } else { /* is_thread(). */
-    countered_event_t *ce;
-
     __exit_limits(exiter);
     __exit_ipc(exiter);
     __exit_resources(exiter,flags);
-
-    mutex_lock(&exiter->group_leader->tg_priv->thread_mutex);
-    LOCK_TASK_STRUCT(exiter);
-    exiter->jointee.exit_ptr=exitval;
-    ce=exiter->cwaiter;
-    exiter->cwaiter=__UNUSABLE_PTR; /* We don't wake anybody up anymore ! */
-    UNLOCK_TASK_STRUCT(exiter);
-    mutex_unlock(&exiter->group_leader->tg_priv->thread_mutex);
-
-    if( !list_is_empty(&exiter->jointed) ) { /* Notify the waiting task. */
-      jointee_t *j=container_of(list_node_first(&exiter->jointed),jointee_t,l);
-      task_t *waiter=container_of(j,task_t,jointee);
-
-      LOCK_TASK_STRUCT(waiter);
-      if( j->exiter == exiter ) {
-        j->exit_ptr=exitval;
-        event_raise(&j->e);
-      }
-      list_del(&j->l);
-      UNLOCK_TASK_STRUCT(waiter);
-    }
-
-    if( ce ) {
-      countered_event_raise(ce);
-    }
-    /* Note that thread's resources will be freed after either 'joining' or
-     * its parent's exiting.
-     */
   }
 
+  __wakeup_waiters(exiter,exitval);
   sched_del_task(exiter);
   panic( "do_exit(): zombie task <%d:%d> is still running !\n",
          exiter->pid, exiter->tid);
@@ -312,7 +324,7 @@ void sys_exit(int code)
     /* Initiate termination of the root thread and proceed. */
     force_task_exit(current_task()->group_leader,code);
   }
-  do_exit(code,code,0);
+  do_exit(code,0,code);
 }
 
 void sys_thread_exit(long value)
@@ -321,11 +333,6 @@ void sys_thread_exit(long value)
 }
 
 long sys_wait_id(idtype_t idtype,id_t id,usiginfo_t *siginfo,int options)
-{
-  return 0;
-}
-
-long sys_waitpid(pid_t pid,int *status,int options)
 {
   return 0;
 }
@@ -426,3 +433,117 @@ out_release:
   release_task_struct(target);
   return r;
 }
+
+static long __wait_task(task_t *target,int *status,int options)
+{
+  long r=0;
+  task_t *caller=current_task();
+  int exitval;
+  bool unref=false;
+  task_t *parent=pid_to_task(target->ppid);
+
+  if( !parent ) {
+    return -ESRCH;
+  }
+
+  event_initialize_task(&caller->jointee.e,caller);
+
+  LOCK_TASK_STRUCT(target);
+  if( target->cwaiter != __UNUSABLE_PTR ) {
+    if( options & WNOHANG ) {
+      UNLOCK_TASK_STRUCT(target);
+      goto out;
+    }
+    caller->jointee.exiter=target;
+    list_add2tail(&target->jointed,&caller->jointee.l);
+    UNLOCK_TASK_STRUCT(target);
+  } else {
+    /* Target task has probably exited. So try to pick up its exit pointer
+     * on a different manner.
+     */
+    UNLOCK_TASK_STRUCT(target);
+
+    LOCK_TASK_CHILDS(parent);
+    LOCK_TASK_STRUCT(target);
+
+    if( list_node_is_bound(&target->child_list) ) {
+      list_del(&target->child_list);
+      exitval=target->jointee.exit_ptr;
+      unref=true;
+    } else {
+      r=-ESRCH;
+    }
+
+    UNLOCK_TASK_STRUCT(target);
+    UNLOCK_TASK_CHILDS(parent);
+    goto found;
+  }
+
+  if( !r ) {
+    event_yield(&caller->jointee.e);
+
+    /* Check for asynchronous interruption. */
+    LOCK_TASK_STRUCT(caller);
+    if( task_was_interrupted(caller) ) {
+      /* We take into account only 'fairplay' interruption which means
+       * only interruption while we're on the waiting list. Otherwise,
+       * if target thread woke us up before the signal arrived (in such
+       * a situation we're not bound to it), we assume that -EINTR shouldn't
+       * be returned (but all pending signals will be delivered, nevertheless).
+       */
+      if( list_node_is_bound(&caller->jointee.l) ) {
+        list_del(&caller->jointee.l);
+        r=-EINTR;
+      }
+    } else {
+      exitval=caller->jointee.exit_ptr;
+    }
+    caller->jointee.exiter=NULL;
+    UNLOCK_TASK_STRUCT(caller);
+
+    /* Remove target task from the list of its parent. */
+    LOCK_TASK_CHILDS(parent);
+    LOCK_TASK_STRUCT(target);
+    if( list_node_is_bound(&target->child_list) ) {
+      list_del(&target->child_list);
+      unref=true;
+    }
+    UNLOCK_TASK_STRUCT(target);
+    UNLOCK_TASK_CHILDS(parent);
+  }
+
+found:
+  if( !r && status ) {
+    r=copy_to_user(status,&exitval,sizeof(exitval));
+    if( r ) {
+      r=-EFAULT;
+    }
+  }
+
+out:
+  if( unref ) { /* Remove task's initial reference. */
+    unhash_task(target);
+    release_task_struct(target);
+  }
+  return r;
+}
+
+long sys_waitpid(pid_t pid,int *status,int options)
+{
+  task_t *target;
+  long r;
+
+  if( pid <= 0 ) {
+    return -EINVAL;
+  }
+
+  target=lookup_task(pid,LOOKUP_ZOMBIES);
+  if( !target ) {
+    return -ESRCH;
+  }
+
+  r=__wait_task(target,status,options);
+  release_task_struct(target);
+  return r;
+}
+
