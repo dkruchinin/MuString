@@ -56,12 +56,13 @@ typedef ulong_t page_idx_t;
 typedef uint8_t page_flags_t;
 
 #define PF_RESERVED   0x01 /**< Page is reserved */
-#define PF_SLAB_LOCK  0x02 /**< Page lock (used by slab allocator) */
-#define PF_SYNCING    0x04
-#define PF_DIRTY      0x08
-#define PF_COW        0x10
+#define PF_LOCK       0x02 /**< Page lock (used by slab allocator) */
+#define PF_DIRTY      0x04
+#define PF_COW        0x08
+#define PF_SHARED     0x10
+#define PF_SLAB       0x20
 
-#define PF_CLEAR_MASK (PF_COW | PF_DIRTY | PF_SYNCING)
+#define PF_CLEAR_MASK (PF_COW | PF_DIRTY | PF_SHARED | PF_SLAB)
 
 /* page fault flags */
 #define PFLT_NOT_PRESENT 0x01
@@ -72,6 +73,8 @@ typedef uint8_t page_flags_t;
 #define __page_aligned__ __attribute__((__aligned__(PAGE_SIZE)))
 
 struct __memobj;
+struct __rmap_group_entry;
+struct __rmap_group_head;
 
 /**
  * @struct page_frame_t
@@ -85,17 +88,18 @@ struct __memobj;
 typedef struct __page_frame {
   list_node_t node;
   list_node_t chain_node;
-  
+
   union {
     void *slab_pages_start;
-    struct {  
-      atomic_t refcount;
-      atomic_t dirtycount;
-      pgoff_t offset;
-      struct __memobj *owner;
-    };
+    atomic_t refcount;
+  };
+  union {
+    struct __rmap_group_head *rmap_shared;
+    struct __rmap_group_entry *rmap_anon;
+    struct __memobj *memobj;
   };
   
+  pgoff_t offset;
   page_idx_t idx;
   ulong_t _private;
   page_flags_t flags;
@@ -167,6 +171,7 @@ static inline page_frame_t *virt_to_pframe(void *addr)
 static inline void clear_page_frame(page_frame_t *page)
 {
   page->flags &= ~PF_CLEAR_MASK;
+  ASSERT(!(page->flags & PF_LOCK));
   atomic_set(&page->refcount, 0);
 }
 

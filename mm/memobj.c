@@ -62,6 +62,58 @@ static void __init_kernel_memobjs(void)
     panic("Can't create generic memory object: [ERROR %d]", ret);
 }
 
+static int reset_memobj_backend(memobj_t *memobj, struct memobj_backend_info *backend_info)
+{
+  int ret;
+  task_t *server_task;
+  ipc_gen_port_t *server_port;
+  
+  ASSERT_DBG(memobj->backend != NULL);
+  server_task = pid_to_task(backend_info->server_pid);
+  if (!server_task)
+    return -ESRCH;
+
+  server_port = ipc_get_port(server_task, backend_info->port_id);
+  if (!server_port) {
+    ret = -ENOENT;
+    ipc_put_port(server_port);
+    goto release_task;
+  }
+  
+  ret = ipc_open_channel_raw(server_port, IPC_BLOCKED_ACCESS, &memobj->backend->channel);
+  if (ret) {
+    ipc_put_port(server_port);
+    goto release_task;
+  }
+
+release_task:
+  release_task(server_task);
+  return ret;
+}
+
+static int create_memobj_backend(memobj_t *memobj, struct memobj_backend_info *backend_info)
+{
+  int ret = 0;
+  
+  ASSERT_DBG(memobj->backend == NULL);
+  memobj->backend = memalloc(sizeof(*(memobj->backend)));
+  if (!memobj->backend)
+    return -ENOMEM;
+
+  rw_spinlock_initialize(&memobj->backend->rwlock);
+  ret = reset_memobj_backend(memobj, backend_info);
+  if (ret)
+    goto release_backend;
+
+  return 0;
+  
+release_backend:
+  memfree(memobj->backend);
+  memobj->backend = NULL;
+  return ret;
+}
+
+
 void memobj_subsystem_initialize(void)
 {
   memobj_id_t i;
@@ -190,31 +242,6 @@ bool __try_destroy_memobj(memobj_t *memobj)
   return ret;
 }
 
-int memobj_create_backend(memobj_t *memobj, task_t *server_task, ulong_t port_id)
-{
-  ipc_gen_port_t *server_port;
-  int ret;
-  
-  if (memobj->backend)
-    return -EALREADY;
-  if (!(memobj->flags & MMO_FLG_BACKENDED))
-    return -ENOTSUP;
-
-  server_port = ipc_get_port(server_task, port_id);
-  if (!server_port)
-    return -EBADF;
-
-  spinlock_lock(&memobj->members_lock);
-  ret = ipc_open_channel_raw(server_port, IPC_BLOCKED_ACCESS | IPC_KERNEL_SIDE, &memobj->backend);
-  if (ret) {
-    memobj->backend = NULL;
-    ipc_put_port(server_port);
-  }
-
-  spinlock_unlock(&memobj->members_lock);
-  return ret;
-}
-
 int memobj_prepare_page_raw(memobj_t *memobj, page_frame_t **page)
 {
   int ret = 0;
@@ -224,7 +251,7 @@ int memobj_prepare_page_raw(memobj_t *memobj, page_frame_t **page)
   if (pf) {
     pf->owner = memobj;
     atomic_set(&pf->dirtycount, 0);
-    atomic_set(&pf->refcount, 0);
+    atomic_set(&pf->refcount, 1);
   }
   else
     ret = -ENOMEM;
@@ -320,22 +347,34 @@ int sys_memobj_control(memobj_id_t memobj_id, int cmd, long uarg)
         goto out;
       case MEMOBJ_CTL_SET_BACKEND:
       {
-        struct memobj_backend_info backend_info;
-        task_t *server_task;
-
-        /*if (copy_from_user(&backend_info, (void *)uarg, sizeof(backend_info))) {
-          ret = -EFAULT;
+        if (memobj->id == GENERIC_MEMOBJ_ID) {
+          ret = -EPERM;
           goto out;
         }
-
-        server_task = pid_to_task(backend_info.server_pid);
-        if (!server_task) {
-          ret = -ESRCH;
+        if (!(memobj->flags & MEMOBJ_BACKENDED)) {
+          ret = -EINVAL;
           goto out;
         }
+        else {
+          struct memobj_backend_info backend_info;
 
-        ret = memobj_create_backend(memobj, server_task, backend_info.port_id);*/
-        goto out;
+          if (copy_from_user(&backend_info, (void *)uarg, sizeof(backend_info))) {
+            ret = -EFAULT;
+            goto out;
+          }
+          if (memobj->backend) {
+            spinlock_lock_write(&memobj->backend->rwlock);
+            ipc_destroy_channel(memobj->backend->channel);
+            memobj->backend->channel = NULL;
+            ret = reset_memobj_backend(memobj, &backend_info);
+            spinlock_unlock_write(&memobj->backend->rwlock);
+          }
+          else {
+            ret = create_memobj_backend(memobj, &backend_info);
+          }
+          
+          goto out;
+        }
       }
       case MEMOBJ_CTL_GET_BACKEND:
         ret = -ENOTSUP;

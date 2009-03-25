@@ -23,6 +23,7 @@ enum {
   MEMOBJ_DPC        = 0x01,
   MEMOBJ_BACKENDED  = 0x02,
   MEMOBJ_NOSHARED   = 0x04,
+  MEMOBJ_KALLOC     = 0x08,
 };
 
 struct memobj_info {
@@ -47,15 +48,22 @@ enum {
   MREQ_TYPE_SYNCPAGE,
 };
 
-struct memobj_rem_request {
-  int req_type;
-  ulong_t page_index;
+#define MFAULT_READ  0x01
+#define MFAULT_WRITE 0x02
+#define MFAULT_NP    0x04
+
+struct memobj_backend_request {
+  memobj_id_t memobj_id;
+  int type;
   pgoff_t pg_offset;
+  ulong_t priv;
+  int fault_mask;
 };
 
-/* predefined system values */
-#define NOFD  0
-#define MAP_FAILED ((void *)-1)
+struct memobj_backend_asnwer {
+  int status;
+  uintptr_t private;
+};
 
 /* Memory object Commands */
 enum {  

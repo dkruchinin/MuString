@@ -28,28 +28,32 @@
 #include <mm/memobj.h>
 #include <mm/pfalloc.h>
 #include <mm/ptable.h>
+#include <mm/rmap.h>
 #include <mlibc/types.h>
 
-/* TODO DK: implement generic pages caching */
-
-#include <mlibc/kprintf.h>
-#include <eza/task.h>
+#ifdef CONFIG_DEBUG_GMO
+#define GMO_DBG(fmt, args...)                                \
+  do {                                                       \
+    kprintf("[GMO_DBG] (%s) ", __FUNCTION__);                \
+    kprintf(fmt, ##args);                                    \
+  } while (0)
+#else
+#define GMO_DBG(fmt, args...)
+#endif /* CONFIG_DEBUG_GMO */
 
 static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
 {
   int ret = 0;
   vmm_t *vmm = vmr->parent_vmm;
 
-  ASSERT(!(vmr->flags & VMR_PHYS));
-  ASSERT(!(vmr->flags & VMR_NONE));
+  ASSERT_DBG(!(vmr->flags & VMR_PHYS));
+  ASSERT_DBG(!(vmr->flags & VMR_NONE));
   if (pfmask & PFLT_NOT_PRESENT) {
     page_frame_t *pf;
 
-    pf = alloc_page(AF_USER | AF_ZERO);
-    if (!pf) {
-      ret = -ENOMEM;
+    ret = memobj_prepare_page_raw(vmr->memobj, &pf);
+    if (ret)
       goto out;
-    }
 
     /*
      * Simple "not-present" fault is handled by allocating a new page and
@@ -63,18 +67,23 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
        * our job is done.
        */
       pagetable_unlock(&vmm->rpd);
-      free_page(pf);
+      unpin_page_frame(pf);
       goto out;
     }
 
-    ret = mmap_one_page(&vmm->rpd, addr, pframe_number(pf), vmr->flags);    
-    pagetable_unlock(&vmm->rpd);    
-    if (ret) {
-      free_page(pf);
+    ret = mmap_one_page(&vmm->rpd, addr, pframe_number(pf), vmr->flags);
+    if (likely(!ret)) {
+      lock_page_frame(pf, PF_LOCK);
+      ret = rmap_register_anon(page, vmm, addr);
+      unlock_page_frame(pf, PF_LOCK);
     }
     else {
-      pin_page_frame(pf);
+      unpin_page_frame(pf);
+      pagetable_unlock(&vmm->rpd);
+      goto out;
     }
+
+    pagetable_unlock(&vmm->rpd);
   }
   else  {
     pde_t *pde;
@@ -100,16 +109,40 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
       }
 
       copy_page_frame(new_page, page);
+      
+      lock_page_frame(page, PF_LOCK);
+      ASSERT(rmap_unregister_shared(page, vmm, addr) == 0);
+      unlock_page_frame(page, PF_LOCK);
+      
       unpin_page_frame(page);
       pin_page_frame(new_page);
-      page = new_page;      
+
+      /*
+       * Since "new_page" was just allocated, it's not necessary to lock it
+       * befor regestering its reverse mapping.
+       */
+      ret = rmap_register_anon(new_page, vmm, addr);
+      if (ret) {
+        unpin_page_frame(new_page);
+        goto out;
+      }
     }
 
     ret = mmap_one_page(&vmm->rpd, addr, pframe_number(page), vmr->flags);
+    if (unlikely(ret)) {
+      rmap_unregister_mapping();
+    }
+    if (likely(!ret)) {
+      ret = rmap_register_mapping(vmr->memobj, pframe_number(page), vmm, addr);
+    }
+    else {
+      
+    }
+    
     pagetable_unlock(&vmm->rpd);
   }
 
-  out:
+out:
   return ret;
 }
 
@@ -158,6 +191,75 @@ static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npa
   pagetable_unlock(&vmm->rpd);
   if (ret)
     free_pages_chain(pages);
+
+  return ret;
+}
+
+/*
+ * Assumed the this function is called after pagetable related to given
+ * VM range is locked. Otherwise there might be uncomfortable situations
+ * when page rmap is changed and page is swapped out simultaneously.
+ */
+static int *generic_remap_page_cow(vmrange_t *vmr, page_idx_t pidx, uintptr_t addr)
+{
+  memobj_t *memobj = vmr->memobj;
+  vmm_t *vmm = vmr->parent_vmm;
+  page_frame_t *page;
+  int ret;
+
+  /* There is nothing to do with physical mappings. We event don't need */
+  if (unlikely(vmr->flags & VMR_PHYS))
+    return 0;
+
+  page = pframe_by_number(pidx);  
+
+  /*
+   * In simplest case the page that will be marked with PF_COW flag is changing its state
+   * and state of its reverse mapping. I.e. it was a part of anonymous mapping, but
+   * after PF_COW flag is set it becomes a part of shared(between parent and child[s])
+   * mapping. If so, its refcount must be 1.
+   */
+  if (likely(atomic_get(&page->refcount) == 1)) {
+    ASSERT(!(page->flags & PF_COW));
+    /* Here we have to change page's reverse mapping from anonymous to shared one */
+    lock_page_frame(page, PF_LOCK);
+    /* clear old anonymous rmap */
+    ASSERT(rmap_unregister_anon(page, vmm, addr) == 0);    
+    unlock_page_frame(page, PF_LOCK);
+    /* Remap page for read-only access */
+    ret = mmap_one_page(&vmm->rpd, addr, pidx, vmr->flags & ~VMR_WRITE);
+    if (ret) {
+      GMO_DBG("[cow] (pid %ld) Failed to remap COW'ed page %#x by address %p. [RET = %d]\n",
+              vmm->owner->pid, pidx, addr, ret);
+      return ret;
+    }
+
+    /* PF_COW flag will tell memory object about nature of the fault */
+    page->flags |= PF_COW;
+    /* and create a new one(shared) */
+    lock_page_frame(page, PF_LOCK);
+    ret = rmap_register_shared(memobj, page, vmm, addr);
+    if (ret) {
+      GMO_DBG("[cow] (pid %ld) Failed to register shared mapping for page %#x\n",
+              vmm->owner->pid, pidx);
+
+      unlock_page_frame(page, PF_LOCK);
+      return ret;
+    }
+
+    unlock_page_frame(page, PF_LOCK);
+  }
+  else {
+    /*
+     * In other case page already has PF_COW flag and thus its reverse mapping is
+     * already shared. Actually it's a quite common situation: for example one process
+     * has done fork and has born a new child that shares most of its pages with parent.
+     * Then a child does fork to born another one, that will share its COW'ed pages wit
+     * its parent and grandparent.
+     */
+    ASSERT(page->flags & PF_COW);
+    ret = 0;
+  }
 
   return ret;
 }

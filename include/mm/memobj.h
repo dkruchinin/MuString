@@ -55,12 +55,18 @@ struct __memobj;
 struct __vmrange;
 struct __ipc_channel;
 
+typedef struct __memobj_backend {
+  spinlock_t lock;
+  struct __ipc_channel *channel;
+} memobj_backend_t;
+
 typedef struct __memobj_ops {
   int (*handle_page_fault)(struct __vmrange *vmr, uintptr_t addr, uint32_t pfmask);
   int (*populate_pages)(struct __vmrange *vmr, uintptr_t addr, page_idx_t npages);
   int (*put_page)(struct __memobj *memobj, pgoff_t offset, page_frame_t *page);
   int (*get_page)(struct __memobj *memobj, pgoff_t offset, page_frame_t **page);
   int (*truncate)(struct __memobj *memobj, pgoff_t new_offset);
+  int (*prepare_page_cow)(struct __vmrange *vmr, page_idx_t pidx);
   void (*cleanup)(struct __memobj *memobj);
 } memobj_ops_t;
 
@@ -72,7 +78,7 @@ typedef struct __memobj {
   memobj_ops_t *mops;
   pgoff_t size;
   list_node_t mmo_node;
-  struct __ipc_channel *backend;
+  memobj_backend_t *backend;
   spinlock_t members_lock;
   void *private;
   atomic_t users_count;
@@ -102,7 +108,12 @@ extern memobj_t *generic_memobj;
   ({ int __ret = -ECANCELED;                                            \
      if (likely(!atomic_bit_test(&(memobj)->flags,                      \
                                  bitnumber(MMO_FLG_INACTIVE)))) {       \
-       __ret = (memobj)->mops->method(args);                            \
+       if (liekely((memobj)->mops->method != NULL)) {                   \
+         __ret = (memobj)->mops->method(args);                          \
+       }                                                                \
+       else {                                                           \
+         __ret = -ENOTSUP;                                              \
+       }                                                                \
      }                                                                  \
      __ret; })
 
