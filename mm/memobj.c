@@ -242,6 +242,121 @@ bool __try_destroy_memobj(memobj_t *memobj)
   return ret;
 }
 
+/*
+ * This function must be called after page table lock is aquired.
+ * It guaranties that src_page's efcount will be at least equal to 1.
+ * This prevent tasks from simultaneously copying and(later)
+ * freeing the same page.
+ */
+int memobj_handle_cow(vmrange_t *vmr, uintptr_t addr,
+                      page_frame_t *dst_page, page_frame_t *src_page)
+{
+  int ret;
+  vmm_t *vmm = vmr->parent_vmm;
+  page_idx_t pidx;
+  
+  ASSERT_DBG((addr >= vmr->bounds.space_start) &&
+             (addr < vmr->bounds.space_end));
+
+  pidx = vaddr2page_idx(&vmm->rpd, addr);
+
+  /*
+   * Check if another thread hasn't already made all work itself.
+   * If so, there is nothing to do here anymore.
+   */
+  if (unlikely(pidx != pframe_number(src_page))) {
+    return 0;
+  }
+  
+  copy_page_frame(dst_page, src_page);
+  lock_page_frame(src_page, PF_LOCK);
+  /* reverse mapping *must* exist */
+  ASSERT(rmap_unregister_shared(dst_page, vmm, addr) == 0);
+  unlock_page_frame(src_page, PF_LOCK);
+
+  unpin_page_frame(src_page);
+  pin_page_frame(dst_page);
+  
+  ret = mmap_one_page(&vmm->rpd, addr, pframe_number(dst_page), vmr->flags);
+  if (ret) {
+    unpin_page_frame(dst_page);
+    return ret;
+  }
+
+  /*
+   * Ok, page is mapped now and we're free to register new anonymous
+   * reverse mapping for it.
+   */
+  ret = rmap_register_anon(dst_page, vmm, addr);  
+  return ret;
+}
+
+/*
+ * Assumed the this function is called after pagetable related to given
+ * VM range is locked. Otherwise there might be uncomfortable situations
+ * when page rmap is changed and page is swapped out simultaneously.
+ */
+int memobj_prepare_page_cow(vmrange_t *vmr, page_idx_t pidx, uintptr_t addr)
+{
+  memobj_t *memobj = vmr->memobj;
+  vmm_t *vmm = vmr->parent_vmm;
+  page_frame_t *page;
+  int ret;
+
+  ASSERT_DBG((addr >= vmr->bounds.space_start) &&
+             (addr < vmr->bounds.space_end));
+
+  /* There is nothing to do with physical mappings. We event don't need */
+  if (unlikely(vmr->flags & VMR_PHYS))
+    return 0;
+
+  page = pframe_by_number(pidx);  
+
+  /*
+   * In simplest case the page that will be marked with PF_COW flag is changing its state
+   * and state of its reverse mapping. I.e. it was a part of anonymous mapping, but
+   * after PF_COW flag is set it becomes a part of shared(between parent and child[s])
+   * mapping. If so, its refcount must be 1.
+   */
+  if (likely(atomic_get(&page->refcount) == 1)) {
+    ASSERT(!(page->flags & PF_COW));
+    /* Here we have to change page's reverse mapping from anonymous to shared one */
+    lock_page_frame(page, PF_LOCK);
+    /* clear old anonymous rmap */
+    ASSERT(rmap_unregister_anon(page, vmm, addr) == 0);    
+    unlock_page_frame(page, PF_LOCK);
+    /* Remap page for read-only access */
+    ret = mmap_one_page(&vmm->rpd, addr, pidx, vmr->flags & ~VMR_WRITE);
+    if (ret)
+      return ret;
+
+    /* PF_COW flag will tell memory object about nature of the fault */
+    page->flags |= PF_COW;
+    /* and create a new one(shared) */
+    lock_page_frame(page, PF_LOCK);
+    ret = rmap_register_shared(memobj, page, vmm, addr);
+    if (ret) {
+      unlock_page_frame(page, PF_LOCK);
+      return ret;
+    }
+
+    unlock_page_frame(page, PF_LOCK);
+  }
+  else {
+    /*
+     * In other case page already has PF_COW flag and thus its reverse mapping is
+     * already shared. Actually it's a quite common situation: for example one process
+     * has done fork and has born a new child that shares most of its pages with parent.
+     * Then a child does fork to born another one, that will share its COW'ed pages wit
+     * its parent and grandparent.
+     */
+    ASSERT(page->flags & PF_COW);
+    ret = 0;
+  }
+
+  return ret;
+}
+
 int memobj_prepare_page_raw(memobj_t *memobj, page_frame_t **page)
 {
   int ret = 0;

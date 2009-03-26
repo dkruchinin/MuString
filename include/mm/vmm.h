@@ -60,6 +60,7 @@ typedef enum __vmrange_flags {
   VMR_STACK        = 0x0400,
   VMR_POPULATE     = 0x0800,
   VMR_CANRECPAGES  = 0x1000,
+  VMR_GATE         = 0x2000,
 } vmrange_flags_t;
 
 typedef vmrange_flags_t kmap_flags_t;
@@ -185,9 +186,9 @@ static inline page_idx_t vaddr2page_idx(rpd_t *rpd, uintptr_t addr)
   return __vaddr2page_idx(rpd, addr, NULL);
 }
 
-static inline bool mm_vaddr_is_mapped(rpd_t *rpd, uintptr_t va)
+static inline bool page_is_mapped(rpd_t *rpd, uintptr_t va)
 {
-  return (ptable_ops.vaddr2page_idx(rpd, va, NULL) != PAGE_IDX_INVAL);
+  return (vaddr2page_idx(rpd, va) != PAGE_IDX_INVAL);
 }
 
 /**

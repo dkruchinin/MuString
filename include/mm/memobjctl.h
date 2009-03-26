@@ -8,7 +8,8 @@ typedef unsigned long memobj_id_t;
 typedef enum memobj_nature {
   MMO_NTR_GENERIC = 1,
   MMO_NTR_SRV,
-  MMO_NTR_PAGECACHE,
+  MMO_NTR_PCACHE,
+  MMO_NTR_PCACHE_BACKED,
   MMO_NTR_PROXY,
 } memobj_nature_t;
 
@@ -23,7 +24,7 @@ enum {
   MEMOBJ_DPC        = 0x01,
   MEMOBJ_BACKENDED  = 0x02,
   MEMOBJ_NOSHARED   = 0x04,
-  MEMOBJ_KALLOC     = 0x08,
+  MEMOBJ_SLAVE      = 0x08,
 };
 
 struct memobj_info {

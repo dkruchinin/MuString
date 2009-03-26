@@ -61,8 +61,9 @@ typedef uint8_t page_flags_t;
 #define PF_COW        0x08
 #define PF_SHARED     0x10
 #define PF_SLAB       0x20
+#define PF_PENDING    0x40
 
-#define PF_CLEAR_MASK (PF_COW | PF_DIRTY | PF_SHARED | PF_SLAB)
+#define PF_CLEAR_MASK (PF_COW | PF_DIRTY | PF_SHARED | PF_SLAB | PF_PENDING)
 
 /* page fault flags */
 #define PFLT_NOT_PRESENT 0x01

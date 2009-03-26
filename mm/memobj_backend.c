@@ -28,7 +28,7 @@
 #include <mm/memobj.h>
 #include <mm/slab.h>
 #include <mm/pfalloc.h>
-#include <mm/ptable.h>
+#include <mm/rmap.h>
 #include <eza/spinlock.h>
 #include <mlibc/stddef.h>
 #include <mlibc/types.h>
@@ -44,18 +44,24 @@
 #endif /* CONFIG_DEBUG_PAGECACHE */
 
 
-static inline void __add_dirty_page(struct pcache_private *priv, page_frame_t *page)
+static inline void __add_dirty_page(memobj_t *memobj, page_frame_t *page)
 {
-  atomic_inc(&page->dirtycount);
-  atomic_bit_set(&page->flags, pow2(PF_DIRTY));
+  struct pcache_private *priv = memobj->priv;
+  
+  if (!(memobj->flags & MMO_FLG_DPC)) {
+    /* TODO DK: simply mark page as dirty and put it in LRU or something... */
+    return;
+  }
+  
+  if (atomic_test_and_set_bit(&page->flags, pow2(PF_DIRTY)))
+    return; /* Page is already marked as dirty. */
+  
+  PAGECACHE_DBG("(pid %ld): New dirty page %#x by offset %#x\n",
+                current_task()->pid, pframe_number(page), page->offset);
   list_add2tail(&priv->dirty_pages, &page->node);
   priv->num_dirty_pages++;
 }
 
-static inline page_frame_t *__pcache_get_page(struct pcache_private *priv, pgoff_t offset)
-{
-  return hat_lookup(&priv->pagecache, offset);
-}
 
 static page_frame_t *copy_private_page(page_frame_t *src)
 {
@@ -65,13 +71,15 @@ static page_frame_t *copy_private_page(page_frame_t *src)
     return NULL;
 
   copy_page_frame(copy, src);
+  copy->offset = src->offset;
+  copy->owner = src->owner;
+  atomic_set(&copy->refcount, 1);
+  atomic_set(&copy->dirtycount, 0);
   unpin_page_frame(src);
-  pin_page_frame(copy);
   
   return copy;
 }
 
-static int handle_not_present_fault(vmr)
 
 static int prepare_backended_page(memobj_t *memobj, pgoff_t offset, uint32_t pfmask, page_frame_t **page)
 {
@@ -98,6 +106,10 @@ static int prepare_backended_page(memobj_t *memobj, pgoff_t offset, uint32_t pfm
   rcv_iovec.iov_base = (void *)&answ;
   rcv_iovec.iov_len = sizeof(answ);
 
+  /*
+   * FIXME DK: here *must* be a fucking mutex insted of RW spinlock
+   * and it *must* be locked until server relies us.
+   */
   spinlock_lock_read(&memobj->backend->rwlock);
   server_task = memobj->backend->server;
   grab_task_struct(server_task);
@@ -116,14 +128,8 @@ static int prepare_backended_page(memobj_t *memobj, pgoff_t offset, uint32_t pfm
 
   priv = memobj->priv;
   spinlock_lock_read(&priv->cache_lock);
-  *page = __pcache_get_page(priv, offset);
-  spinlock_unlock_read(&priv->cache_lock);
-  if (!*page) {
-    PAGECACHE_DBG("(pid %ld). Server (%ld) failed to allocate new page by offset %#x\n",
-                  current_task->pid, server->pid, offset);
-    ret = -EFAULT;
-  }
-  else {
+  *page = hat_lookup(&priv->pagecache, offset);
+  if (*page) {
     /*
      * If server successfully allocated a new page for a cache by given offset, it(page)
      * must be already inserted in hashed array tree with refcount equal to 1(at least).
@@ -133,10 +139,102 @@ static int prepare_backended_page(memobj_t *memobj, pgoff_t offset, uint32_t pfm
     PAGECACHE_DBG("(pid %ld) Server (%ld) allocated page %#x for offset %#x\n",
                   current_task()->pid, server->pid, pframe_number(*page), offset);
   }
+  else {
+    PAGECACHE_DBG("(pid %ld). Server (%ld) failed to allocate new page by offset %#x\n",
+                  current_task->pid, server->pid, offset);
+    ret = -EFAULT;
+  }
+  spinlock_unlock_read(&priv->cache_lock);
 
 out:
   release_task_struct(server_task);
   unpin_channel(channel);
+  return ret;
+}
+
+static int handle_not_present_fault(vmrange_t *vmr, pgoff_t offset, uint32_t pfmask, page_frame_t **page)
+{
+  page_frame_t *p;
+  memobj_t *memobj = vmr->memobj;
+  vmm_t *vmm = vmr->parent_vmm;
+  struct pcache_private *priv = memobj->priv;
+  int ret = 0;
+  
+  if (!(memobj->flags & MMO_FLG_BACKENDED)) {
+    ret = memobj_prepare_page_raw(memobj, &p);
+    if (ret)
+      goto out;
+
+    p->offset = offset;
+    //p->owner = memobj; XXX
+    pin_page_frame(p);
+    if ((vmr->flags & VMR_PRIVATE) && (pfmask & PFLT_WRITE)) {      
+      *page = p;
+      goto out;
+    }
+
+    /*
+     * If memory doesn't have backend, all pages in #PF handler are
+     * allocated explicitly. Thus, after page is allocated it has to be
+     * inserted in a cache.
+     */
+    spinlock_lock_write(&priv);
+    ret = hat_insert(&priv->pagecahce, offset, p);
+    if (!ret && (memobj->flags & MMO_FLG_DPC) && (pfmask & PFLT_WRITE)) {
+      /*
+       * If dirty pages collection facility was enabled in a given
+       * memory object and writing caused the fault, put the page in
+       * a dirty pages list.
+       */
+        __add_dirty_page(priv, page);
+    }
+    else if (unlikely(ret == -EEXIST)) {
+      /*
+       * While we were allocating and initializing the page, somebody
+       * could insert another page by the same offset.
+       * If so, the proper page may be easily taken from the cache by its offset
+       */
+      unpin_page_frame(p);
+      p = hat_lookup(&priv->pagecache, offset);
+      ASSERT(p != NULL);
+      pin_page_frame(p);
+      *page = p;
+      ret = 0;
+    }
+    
+    spinlock_unlock_write(&priv);
+  }
+  else {
+    /*
+     * Backended memory objects requires their backends to allocate (and may be
+     * fill with some content) them a page. After backend replied that it did its work,
+     * required page *must be* already in cache, thus here we don't need to explicitly insert
+     * it in.
+     */
+    ret = prepare_backended_page(memobj, offset, &p);
+    if (ret)
+      goto out;
+
+    *page = p;
+    if (pfmask & PFLT_WRITE) {
+      if (vmr->flags & VMR_PRIVATE) {
+        p = copy_private_page(p);
+        if (!p) {
+          unpin_page_frame(p);
+          ret = -ENOMEM;
+        }
+        
+        goto out;
+      }
+      if (memobj->flags & MMO_FLG_DPC) {
+        spinlock_lock_write(&priv->cache_lock);
+        __add_dirty_page(priv, p);
+        spinlock_unlock_write(&priv->cache_lock);
+      }
+    }
+  }
+
+out:
   return ret;
 }
 
@@ -148,7 +246,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
   struct pcache_private *priv = memobj->private;
   pgoff_t offset = addr2pgoff(vmr, addr);
   page_frame_t *page = NULL;
-  page_idx_t idx;
+  vmrange_flags_t mmap_flags = vmr->flags;
  
   if (unlikely(offset >= memobj->size)) {
     PAGECACHE_DBG("(pid %ld) handlig #PF on %p by invalid offset %#x (max = %#x)!\n",
@@ -164,125 +262,88 @@ static int pcache_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
   ASSERT_DBG(!(vmr->flags & VMR_NONE));
   ASSERT_DBG(!(vmr->flags & VMR_PHYS));
   ASSERT_DBG(!((memobj->flags & MMO_FLG_NOSHARED) && (vmr->flags & VMR_SHARED)));
-  
-  mmap_flags &= ~VMR_WRITE;
+
   if (pfmask & PFLT_NOT_PRESENT) {
-    return handle_not_present_fault(vmr, addr, offset, pfmask);
+    /*
+     * With "page cache" memory object there might be exactly two possible situations
+     * when page is not present:
+     *  1) It is already in a cache(HAT). In this case we simply mmap it to address
+     *     space of faulted process(of course after all flags are checked)
+     *  2) It is not in a cache. In this case new page has to be allocated(implicitly inkernel
+     *     or explicitly by backend. It depends on the nature of given object) and inserted in
+     *     cache by given offset.
+     */    
     spinlock_lock_read(&priv->cache_lock);
-    /* Try find out if page is already in a cache */
-    page = __pcache_get_page(priv, offset);
+    page = hat_lookup(&priv->pagecache, offset);
     if (page) {
       PAGECACHE_DBG("(pid %ld) #PF: page by offset %ld[idx = %#x] is already in a cache.\n",
                     vmm->owner->pid, offset, pframe_number(page));
       /* We don't want page to be fried while we're working with it. */
       pin_page_frame(page);
+      if (pfmask & PFLT_WRITE) {
+        __add_dirty_page(memobj, page);
+        mmap_flags &= ~VMR_WRITE;
+      }
     }
-    
+
     spinlock_unlock_read(&priv->cache_lock);
+    
     if (!page) {
-      /*
-       * If page wasn't found in a cache, we have to prepare it
-       * depending on the nature of its memory object and VM range.
-       */
       if (!(memobj->flags & MMO_FLG_BACKENDED)) {
-        ret = memobj_prepare_page_raw(memobj, &page);
-      }
-      else {
-        ret = prepare_backended_page(memobj, offset, &page);
-      }
-      if (ret) {
-        PAGECACHE_DBG("(pid %ld) failed prepare new page by offset %#x\n",
-                      current_task()->pid, offset);
-        return ret;
-      }
-
-      page->offset = offset;
-      page->owner = memobj;
-      if (unlikely(vmr->flags & VMR_PRIVATE)) {
-        /*
-         * In private mmappings all modifactions with page made by calling process
-         * must not be visible in other processes sharing the same page.
-         * While a page in VMR_PRIVATE mapping is accessed for read only, we don't care
-         * about it. But when one of processes tries to write in it(from private mapping),
-         * we have to make a copy of the page and replace it in address space of fault process.
-         */
-        if (pfmask & PFLT_WRITE)
-          page = copy_private_page(page);
-        
-        goto map_page;
-      }
-      
-      /*
-       * For page caches without backend all pages in #PF handler are allocated and
-       * inserted in a cache impilitely. There 
-       */
-      if (!(memobj->flags & MMO_FLG_BACKENDED))
-
-      spinlock_lock_write(&priv->cache_lock);      
-      /* put page in the cache */
-      ret = hat_insert(&priv->pagecache, offset, page);
-      if (!ret && (memobj->flags & MMO_FLG_DPC)) {
-        /*
-         * If dirty pages collection facility was enabled in a given
-         * memory object and writing caused the fault, put the page in
-         * a dirty pages list.
-         */
-        if (pfmask & PFLT_WRITE) {
-          mmap_flags |= VMR_WRITE;          
-          __add_dirty_page(priv, page);
+        ret = memobj_prepare_page_raw(memobj, &p);
+        if (ret) {
+          PAGECACHE_DBG("(pid %ld) Failed to prepare page for non-backended memory object "
+                        "by address %p. [RET = %d]\n", vmm->owner->pid, addr, ret);
+          return ret;
+        }
+        if (unlikely(vmr->flags & VMR_PRIVATE) && (pfmask & VMR_WRITE)) {
         }
       }
-      else if (unlikely(ret == -EEXIST)) {
-        /*
-         * While we were allocating and initializing the page, somebody
-         * could insert another page by the same offset.
-         * If so, the proper page may be easily taken from the cache by its offset
-         */
-          
-        free_page(page);
-        page = __pcache_get_page(priv, offset);        
-        ASSERT(page != NULL);
-        pin_page_frame(page);
+      else {
+        /* ask backend to allocate us a page */
+        ret = prepare_backended_page(memobj, offset, &p);
+        if (ret) {
+          PAGECACHE_DBG("(pid %ld) Failed to prepare page for backended memory object "
+                        "by address %p. [RET = %d]\n", vmm->owner->pid, addr, ret);
+          return ret;
+        }
       }
-
-      spinlock_unlock_write(&priv->cache_lock);
-      goto map_page;
-    }
-    if (unlikely(vmr->flags & VMR_PRIVATE)) {
-      page_frame_t *new_page;
-
-      /* Just copy the page if the fault occured in private mapping */
-      ret = memobj_prepare_page_raw(memobj, &new_page);
-      if (ret)
+      
+      
+      ret = handle_not_present_fault(vmr, offset, pfmask, &page);
+      if (ret) {
+        PAGECACHE_DBG("(pid %ld) Failed to handle \"not-present\" fault by offset %#x. [RET = %d]\n",
+                      vmm->owner->pid, offset, ret);
         return ret;
-
-      copy_page_frame(new_page, page);      
-      new_page->offset = offset;
-      atomic_set(&new_page->refcount, 1);
+      }
+    }    
+    pagetable_lock(&vmm->rpd);
+    ret = mmap_one_page(&vmm->rpd, addr, pframe_number(page), mmap_flags);
+    pagetable_unlock(&vmm->rpd);
+    if (ret)
       unpin_page_frame(page);
-      page = new_page;
-    }
   }
   else {
     page_frame_t *cpage;
 
-    ASSERT(!(vmr->flags & VMR_PRIVATE)); /* FIXME DK: Implement write-faults with VMR_PRIVATE mappings */
-    ASSERT(pfmask & PFLT_WRITE);
+    ASSERT_DBG(!(vmr->flags & VMR_PRIVATE)); /* FIXME DK: Implement write-faults with VMR_PRIVATE mappings */
+    ASSERT_DBG(pfmask & PFLT_WRITE);
     pagetable_lock(&vmm->rpd);
     idx = vaddr2page_idx(&vmm->rpd, addr);
     pagetable_unlock(&vmm->rpd);
 
     /*
      * Very unpleasent situation may occur when an owner of the memory object
-     * removed from the cache a page that already has been mapped to one or more
+     * removed a page from the cachethat already has been mapped to one or more
      * address spaces. Moreover, beside this terrible thing it explicitly or implicitly
      * could hapily insert *another* page into the cache by the same offset.
-     * Here we have to take care about such kind of crap: if the page task fault on, was only removed
+     * Here we have to take care about such kind of crap: if the page task faults on, was only removed
      * from the cache, it have to be synced(if necessary) and inserted back into the cache,
      * otherwise(if it was replaced), old page have to be freed and the new one(taken from the cache)
      * should become a replacement the old one.
      */
     page = pframe_by_number(idx);
+    ASSERT(page->owner == memobj);
     spinlock_lock_read(&priv->cache_lock);
     cpage = __pcache_get_page(priv, page->offset);        
     if (unlikely(cpage != page)) {

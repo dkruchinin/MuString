@@ -63,10 +63,8 @@ typedef struct __memobj_backend {
 typedef struct __memobj_ops {
   int (*handle_page_fault)(struct __vmrange *vmr, uintptr_t addr, uint32_t pfmask);
   int (*populate_pages)(struct __vmrange *vmr, uintptr_t addr, page_idx_t npages);
-  int (*put_page)(struct __memobj *memobj, pgoff_t offset, page_frame_t *page);
-  int (*get_page)(struct __memobj *memobj, pgoff_t offset, page_frame_t **page);
   int (*truncate)(struct __memobj *memobj, pgoff_t new_offset);
-  int (*prepare_page_cow)(struct __vmrange *vmr, page_idx_t pidx);
+  int (*prepare_page_cow)(struct __vmrange *vmr, page_idx_t pidx, uintptr_t addr);
   void (*cleanup)(struct __memobj *memobj);
 } memobj_ops_t;
 
