@@ -84,7 +84,9 @@ void unhash_task(task_t *task)
   hash_level_t l = pid_to_hash_level(task->pid);
 
   LOCK_PID_HASH_LEVEL_W(l);
-  list_del(&task->pid_list);
+  if( list_node_is_bound(&task->pid_list) ) {
+    list_del(&task->pid_list);
+  }
   UNLOCK_PID_HASH_LEVEL_W(l);
 }
 

@@ -217,6 +217,27 @@ static void __wakeup_waiters(task_t *exiter,long exitval)
   }
 }
 
+static void __unlink_children(task_t *exiter)
+{
+  task_t *child;
+
+  list_for_each_entry(&exiter->children,child,child_list) {
+    LOCK_TASK_STRUCT(child);
+    child->ppid=CHILD_REAPER_PID;
+    UNLOCK_TASK_STRUCT(child);
+  }
+}
+
+static void __notify_parent(task_t *exiter)
+{
+#ifdef CONFIG_AUTOREMOVE_ORPHANS
+   if( exiter->ppid == 1 ) {
+     unhash_task(exiter);
+   }
+#else
+#endif
+}
+
 void do_exit(int code,ulong_t flags,long exitval)
 {
   task_t *exiter=current_task();
@@ -304,6 +325,8 @@ void do_exit(int code,ulong_t flags,long exitval)
       }
     }
     __exit_resources(exiter,flags);
+    __unlink_children(exiter);
+    __notify_parent(exiter);
   } else { /* is_thread(). */
     __exit_limits(exiter);
     __exit_ipc(exiter);

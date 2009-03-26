@@ -21,6 +21,19 @@ config CORESERVERS_LAUNCH_DELAY
        range 500 3000
        default 500
 
+menu "Task settings"
+
+config AUTOREMOVE_ORPHANS
+     bool "Automatically remove zombies whose parent is 1 (init)"
+     default y
+     help
+     If this option is set, any process whose parent has become 1 as a result
+     of its real parent termination, will be automatically removed from the list
+     of processes upon calling 'exit()', and won't require to call 'wait()' against
+     it.
+
+endmenu
+
 menu "Scheduler settings"
 
 config TRACE_CURRENT
