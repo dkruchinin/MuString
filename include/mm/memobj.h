@@ -43,45 +43,51 @@ typedef enum __memobj_flags { /* memory object flags */
   MMO_FLG_IMMORTAL   = 0x08,
   MMO_FLG_DPC        = 0x10,
   MMO_FLG_BACKENDED  = 0x20,
-  MMO_FLG_NOSHARED   = 0x40,
+  MMO_FLG_SHARED     = 0x40,
   MMO_FLG_INACTIVE   = 0x80,
 } memobj_flags_t;
 
 #define MMO_LIFE_MASK   (MMO_FLG_SPIRIT | MMO_FLG_STICKY | MMO_FLG_LEECH | MMO_FLG_IMMORTAL)
-#define MMO_FLAGS_MASK  (MMO_FLG_DPC | MMO_FLG_NOSHARED | MMO_FLG_BACKENDED)
+#define MMO_FLAGS_MASK  (MMO_FLG_DPC | MMO_FLG_SHARED | MMO_FLG_BACKENDED)
 #define MMO_FLAGS_SHIFT 4
 
 struct __memobj;
 struct __vmrange;
 struct __ipc_channel;
 
-typedef struct __memobj_backend {
-  spinlock_t lock;
-  struct __ipc_channel *channel;
-} memobj_backend_t;
-
 typedef struct __memobj_ops {
-  int (*handle_page_fault)(struct __vmrange *vmr, uintptr_t addr, uint32_t pfmask);
-  int (*populate_pages)(struct __vmrange *vmr, uintptr_t addr, page_idx_t npages);
+  int (*handle_page_fault)(struct __vmrange *vmr,
+                           uintptr_t addr, uint32_t pfmask);
+  int (*insert_page)(struct __vmrange *vmr, page_frame_t *page,
+                     uintptr_t addr, ulong_t flags);
+  int (*delete_page)(struct __vmrange *vmr, page_frame_t *page);
+  int (*populate_pages)(struct __vmrange *vmr,
+                        uintptr_t addr, page_idx_t npages);
+  int (*depopulate_pages)(struct __vmrange *vmr,
+                          uintptr_t va_from, uintptr_t va_to);
   int (*truncate)(struct __memobj *memobj, pgoff_t new_offset);
-  int (*prepare_page_cow)(struct __vmrange *vmr, page_idx_t pidx, uintptr_t addr);
   void (*cleanup)(struct __memobj *memobj);
 } memobj_ops_t;
 
 struct __task_struct;
 
-/* FIXME DK: and what about backend? */
 typedef struct __memobj {
   memobj_id_t id;
   memobj_ops_t *mops;
   pgoff_t size;
   list_node_t mmo_node;
-  memobj_backend_t *backend;
-  spinlock_t members_lock;
+  rw_spinlock_t members_rwlock;
+  
+  struct memobj_backend {
+    struct __task_struct *server;
+    struct __ipc_channel *channel;
+  } backend;
+
   void *private;
   atomic_t users_count;
   memobj_nature_t nature;
   uint32_t flags;
+  
   struct {
     uid_t owner_uid;
     gid_t owner_gid;
@@ -96,6 +102,7 @@ typedef struct __memobj {
 #define COW_MEMOBJ_ID       1
 #define SRV_MEMOBJ_ID       2
 
+#define memobj_has_backend(memobj) ((memobj)->backend.server != NULL)
 #define memobj_kernel_nature(ntr) ((ntr) < NUM_RSRV_MEMOBJ_IDS)
 #define memobj_kernel_nature2id(ntr) ((ntr) - 1)
 #define memobj_is_generic(memobj) ((memobj) == generic_memobj)
@@ -106,7 +113,7 @@ extern memobj_t *generic_memobj;
   ({ int __ret = -ECANCELED;                                            \
      if (likely(!atomic_bit_test(&(memobj)->flags,                      \
                                  bitnumber(MMO_FLG_INACTIVE)))) {       \
-       if (liekely((memobj)->mops->method != NULL)) {                   \
+       if (likely((memobj)->mops->method != NULL)) {                    \
          __ret = (memobj)->mops->method(args);                          \
        }                                                                \
        else {                                                           \
@@ -149,6 +156,7 @@ static inline bool unpin_memobj(memobj_t *memobj)
 
 /* memobject nature-dependent initialization functions */
 int generic_memobj_initialize(memobj_t *memobj, uint32_t flags);
+void pagecache_memobjs_prepare(void);
 int pagecache_memobj_initialize(memobj_t *memobj, uint32_t flags);
 
 #endif /* __MEMOBJ_H__ */

@@ -75,29 +75,27 @@ static inline void __determine_page_mempool(page_frame_t *pframe)
 static void verify_mapping(const char *descr, uintptr_t start_addr,
                           page_idx_t num_pages, page_idx_t start_idx)
 {
-  page_frame_iterator_t pfi;
-  page_idx_t idx = start_idx;  
-  ITERATOR_CTX(page_frame, PF_ITER_PTABLE) pfi_ptable_ctx;
+  page_idx_t idx = start_idx, pde_idx;
+  page_idx_t end_idx = idx + num_pages;
 
-  pfi_ptable_init(&pfi, &pfi_ptable_ctx, &kernel_rpd, start_addr, num_pages);
   kprintf(" Verifying %s...", descr);
-  iterate_forward(&pfi) {
-    if (pfi.pf_idx != idx)
+  while (idx < end_idx) {
+    pde_idx = vaddr2page_idx(&kernel_rpd, start_addr);
+    if (pde_idx != idx)
       goto failed;
 
     idx++;
+    start_addr += PAGE_SIZE;
   }
-  if ((idx - start_idx) != num_pages)
-    goto failed;
   
   kprintf(" %*s\n", strlen(descr) + 14, "[OK]");
   return;
 
   failed:
   kprintf(" %*s\n", 18 - strlen(descr), "[FAILED]");
-  panic("Range: %p - %p. Got idx %u, but %u was expected. ERROR = %d",
+  panic("Range: %p - %p. Got idx %u, but %u was expected.",
         start_addr, start_addr + ((num_pages - 1) << PAGE_WIDTH),
-        pfi.pf_idx, idx, pfi.error);
+        pde_idx, idx);
 }
 #else
 #define verify_mapping(descr, start_addr, num_pages, start_idx)

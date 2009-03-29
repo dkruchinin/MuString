@@ -146,16 +146,12 @@ void initialize_idle_tasks(void)
     /* FIXME DK: redisign! */
     {
         page_frame_t *pf = alloc_pages(KERNEL_STACK_PAGES, 0);
-        page_frame_iterator_t pfi;
-        ITERATOR_CTX(page_frame, PF_ITER_INDEX) pfi_index_ctx;
         
         if (!pf)
             panic("Can't allocate %d pages for kernel stack!", KERNEL_STACK_PAGES);
-
-        pfi_index_init(&pfi, &pfi_index_ctx, pframe_number(pf), pframe_number(pf) + KERNEL_STACK_PAGES - 1);
-        iter_first(&pfi);
-        r = ptable_ops.mmap(&task->rpd, task->kernel_stack.low_address, KERNEL_STACK_PAGES,
-                            &pfi, PDE_RW | PDE_NX, true);
+        
+        r = mmap_kern(task->kernel_stack.low_address, pframe_number(pf),
+                      KERNEL_STACK_PAGES, KMAP_KERN | KMAP_READ | KMAP_WRITE);
         if( r != 0 ) {
             panic("Can't map kernel stack for idle task !");
         }

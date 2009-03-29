@@ -73,9 +73,8 @@ typedef uint8_t page_flags_t;
 
 #define __page_aligned__ __attribute__((__aligned__(PAGE_SIZE)))
 
-struct __memobj;
-struct __rmap_group_entry;
 struct __rmap_group_head;
+struct __rmap_group_entry;
 
 /**
  * @struct page_frame_t
@@ -97,7 +96,6 @@ typedef struct __page_frame {
   union {
     struct __rmap_group_head *rmap_shared;
     struct __rmap_group_entry *rmap_anon;
-    struct __memobj *memobj;
   };
   
   pgoff_t offset;

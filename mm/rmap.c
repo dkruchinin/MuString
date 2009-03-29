@@ -71,10 +71,11 @@ int rmap_register_anon(page_frame_t *page, vmm_t *vmm, uintptr_t addr)
     return -ENOMEM;
 
   entry->memobj = generic_memobj;
+  page->rmap_anon = entry;
   return 0;
 }
 
-int rmap_register_shared_entry(page_frame_t *page, vmm_t *vmm, uintptr_t *addr)
+int rmap_register_shared_entry(page_frame_t *page, vmm_t *vmm, uintptr_t addr)
 {
   rmap_group_head_t *group_head = page->rmap_shared;
   rmap_group_entry_t *ge;
@@ -114,26 +115,21 @@ int rmap_register_shared(memobj_t *memobj, page_frame_t *page, vmm_t *vmm, uintp
   return ret;
 }
 
-int rmap_register_mapping(memobj_t *memobj, page_idx_t pidx, vmm_t *vmm, uintptr_t address)
+int rmap_register_mapping(memobj_t *memobj, page_frame_t *page, vmm_t *vmm, uintptr_t address)
 {
   int ret;
-  page_frame_t *page;
-
-  if (unlikely(!page_idx_is_present(pidx)))
-    return 0;
-
-  page = pframe_by_number(pidx);
+  
   lock_page_frame(page, PF_LOCK);
   if (!(page->flags & (PF_SHARED | PF_COW))) {
     rmap_group_entry_t *entry = page->rmap_anon;
 
-    if (unlikely(entry)) {
-      kprintf(KO_WARNING "Trying to register reverse anonymous mapping for page(%#x) that "
+    if (unlikely(entry != NULL)) {
+      kprintf(KO_ERROR "Trying to register reverse anonymous mapping for page(%#x) that "
               "already has one: (VMM's pid = %ld, addr = %p). Register: "
               "(VMM's pid = %ld, addr = %p)!\n", pframe_number(page),
               entry->vmm->owner->pid, entry->addr, vmm->owner->pid, address);
-      unlock_page_frame(page, PF_LOCK);
       ret = -EALREADY;
+      goto out;
     }
 
     ret = rmap_register_anon(page, vmm, address);
@@ -141,7 +137,7 @@ int rmap_register_mapping(memobj_t *memobj, page_idx_t pidx, vmm_t *vmm, uintptr
   else {
     ret = rmap_register_shared(memobj, page, vmm, address);
   }
-  
+
 out:
   unlock_page_frame(page, PF_LOCK);
   return ret;
@@ -170,7 +166,7 @@ int rmap_unregister_shared(page_frame_t *page, vmm_t *vmm, uintptr_t addr)
     }
   }
   if (!found) {
-    kprnitf(KO_WARNING "Trying to unregister shared mapping for page %#x. "
+    kprintf(KO_WARNING "Trying to unregister shared mapping for page %#x. "
             "Mapping with VMM(pid = %ld) and address %p wasn't found!\n",
             vmm->owner->pid, addr);
     return -ESRCH;
@@ -207,21 +203,16 @@ int rmap_unregister_anon(page_frame_t *page, vmm_t *vmm, uintptr_t addr)
   return 0;
 }
 
-int rmap_unregister_mapping(page_idx_t pidx, vmm_t *vmm, uintptr_t address)
+int rmap_unregister_mapping(page_frame_t *page, vmm_t *vmm, uintptr_t address)
 {
-  page_frame_t *page;
   int ret;
   
-  if (unlikely(!page_idx_is_present(pidx)))
-    return 0;
-
-  page = pframe_by_number(pidx);
   lock_page_frame(page, PF_LOCK);
   if (!(page->flags & (PF_SHARED | PF_COW))) {
     if (unlikely(!page->rmap_anon)) {
       kprintf(KO_WARNING "Can not unregister anonymous mapping (VMM's pid = %ld, addr = %p) "
               "for page #%x, because it hasn't \"rmap_anon\" field set.\n",
-              vmm->owner->pid, address, pidx);
+              vmm->owner->pid, address, pframe_number(page));
       goto out;
     }
 
@@ -230,7 +221,8 @@ int rmap_unregister_mapping(page_idx_t pidx, vmm_t *vmm, uintptr_t address)
   else {
     ret = rmap_unregister_shared(page, vmm, address);
   }
-  
+
 out:
   unlock_page_frame(page, PF_LOCK);
+  return ret;
 }

@@ -590,6 +590,8 @@ long sys_fork(void)
   if( !r ) {
     r=new->pid;
   }
+
+  kprintf("fork returns %d\n", r);
   return r;
 }
 

@@ -165,17 +165,21 @@ static inline long __send_iov_v(ulong_t channel,
 
   c = ipc_get_channel(current_task(), channel);
   if (!c) {
+    kprintf("inval 1\n");
     return -EINVAL;
   }
   if (!__valid_iovecs(snd_kiovecs, snd_numvecs)) {
+    kprintf("einval 2\n");
     return -EFAULT;
   }
   if (rcv_kiovecs && !__valid_iovecs(rcv_kiovecs, rcv_numvecs)) {
+    kprintf("efault\n");
     return -EFAULT;
   }
 
   ret = ipc_port_send_iov(c, snd_kiovecs, snd_numvecs, rcv_kiovecs, rcv_numvecs);
   ipc_put_channel(c);
+  kprintf("IPC RET = %d\n", ret);
   return ret;
 }
 
@@ -226,6 +230,7 @@ long sys_port_send_iov(ulong_t channel, iovec_t iov[], uint32_t numvecs,
   }
 
   if (copy_from_user(kiovecs, iov, numvecs * sizeof(iovec_t))) {
+    kprintf("EFAULT!!!\n");
     return -EFAULT;
   }
 
@@ -260,6 +265,7 @@ long sys_port_msg_read(ulong_t port, ulong_t msg_id, uintptr_t recv_buf,
 
   r = ipc_port_msg_read(p, msg_id, &iovec, 1, offset);
   ipc_put_port(p);
+  kprintf("PORT MSG READ %d\n", r);
   return r;
 }
 

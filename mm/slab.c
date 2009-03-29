@@ -56,7 +56,7 @@ static memcache_t slabs_memcache;  /* memory cache for slab_t structures */
 static int next_memcache_type = SLAB_FIRST_TYPE;
 static SPINLOCK_DEFINE(memcaches_lock);
 static SPINLOCK_DEFINE(verbose_lock);
-static bool verbose = false; /* enable/distable verbose mode */
+static bool verbose = true; /* enable/distable verbose mode */
 static LIST_DEFINE(memcaches_lst); /* A list of all registered memory caches in system */
 #endif /* CONFIG_DEBUG_SLAB */
 
@@ -72,10 +72,9 @@ static void free_slab_object(slab_t *slab, void *obj);
   __page2slab(virt_to_pframe((void *)align_down((uintptr_t)(addr), PAGE_SIZE)))
 
 /* slab locking and unlocking macros */
-#define __lock_slab_page(pg)                    \
-  spinlock_lock_bit(&(pg)->flags, bitnumber(PF_SLAB_LOCK))
-#define __unlock_slab_page(pg)                  \
-  spinlock_unlock_bit(&(pg)->flags, bitnumber(PF_SLAB_LOCK))
+#define __lock_slab_page(pg) lock_page_frame(pg, PF_LOCK)
+#define __unlock_slab_page(pg) unlock_page_frame(pg, PF_LOCK)
+
 #define __slab_lock(slab)                       \
   __lock_slab_page((slab)->pages)
 #define __slab_unlock(slab)                     \
@@ -783,7 +782,7 @@ memcache_t *create_memcache(const char *name, size_t size,
                cache->pages_per_slab, atomic_get(&cache->nslabs), cache->object_size);
   return cache;
   
-  err:
+err:
   if (cache) {
     for_each_cpu(i) {
       slab_t *slab = cache->active_slabs[i];
