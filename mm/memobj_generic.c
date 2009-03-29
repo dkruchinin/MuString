@@ -207,6 +207,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
       }
       
       unpin_page_frame(page);
+      kprintf("===> Copy on write: %p (%#x by %#x)\n", addr, pframe_number(page), pframe_number(new_page));
       ret = mmap_one_page(&vmm->rpd, addr, pframe_number(new_page), vmr->flags);
       if (likely(!ret)) {
         ret = rmap_register_mapping(vmr->memobj, new_page, vmm, addr);

@@ -493,8 +493,7 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
           page = pframe_by_number(pidx);
           if ((vmr->flags & (VMR_WRITE | VMR_PRIVATE)) ==
               (VMR_WRITE | VMR_PRIVATE)) {
-            mmap_flags &= ~VMR_WRITE;
-            
+            mmap_flags &= ~VMR_WRITE;            
           }
           if (!(page->flags & PF_COW)) {
             ret = memobj_method_call(vmr->memobj, delete_page, vmr, page);
@@ -504,7 +503,8 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
             page->flags |= PF_COW;
             ret = memobj_method_call(vmr->memobj, insert_page, vmr, page,
                                      addr, mmap_flags);
-            
+            if (ret)
+              goto clone_failed;
           }
         }
         else if ((flags & VMM_CLONE_POPULATE) &&
