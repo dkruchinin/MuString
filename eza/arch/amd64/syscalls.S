@@ -46,7 +46,7 @@ syscall_table:
 	.quad	sys_free_ioports
 	.quad   sys_create_irq_counter_array
 	.quad   sys_wait_on_irq_array           /* 10 */
-    .quad   sys_ipc_port_poll
+        .quad   sys_ipc_port_poll
 	.quad   sys_nanosleep
 	.quad   sys_scheduler_control
 	.quad   sys_exit
@@ -76,9 +76,10 @@ syscall_table:
 	.quad   sys_timer_delete
 	.quad   sys_sigwait
 	.quad   sys_sched_yield                 /* 40 */
-    .quad   sys_memobj_create
-    .quad   sys_fork
-    .quad   sys_grant_pages
+	.quad   sys_memobj_create
+	.quad   sys_fork
+	.quad   sys_grant_pages
+	.quad   sys_waitpid
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \
@@ -98,15 +99,11 @@ syscall_point:
 	subq $HW_INTERRUPT_CTX_SIZE,%rsp
 	movq %rcx,HW_INTERRUPT_CTX_RIP_OFFT(%rsp)
 	movq $USER_SELECTOR(UTEXT_DES),HW_INTERRUPT_CTX_CS_OFFT(%rsp)
-	/* Since %rcx was saved, we can use it. */
-	pushfq
-	popq %rcx
-	orq $RFLAGS_IF,%rcx
-	movq %rcx,HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
 
 	movq $USER_SELECTOR(UDATA_DES),HW_INTERRUPT_CTX_SS_OFFT(%rsp)
 	movq %gs:CPU_SCHED_STAT_USTACK_OFFT,%rcx
 	movq %rcx,HW_INTERRUPT_CTX_RSP_OFFT(%rsp)
+	subq $8,%rsp /* Simulate 'push %rax' */
 
 	/* After changing stack pointer, we can enable IRQs */
 	sti

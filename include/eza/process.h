@@ -106,5 +106,6 @@ void perform_disintegrate_work(void);
 #define perform_cancellation_work()    do_exit(0,0,PTHREAD_CANCELED)
 
 void force_task_exit(task_t *target,int exit_value);
+void unhash_task(task_t *task);
 
 #endif

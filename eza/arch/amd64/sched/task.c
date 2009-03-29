@@ -423,6 +423,8 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
       l=((ulong_t)regs-512) & 0xfffffffffffffff0;
       memset( (char *)l, 0, 512 );
 
+      r=arch_process_context_control(task,SYS_PR_CTL_SET_PERTASK_DATA,
+                                     attrs->per_task_data);
       break;
     default:
       r=-EINVAL;

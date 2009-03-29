@@ -122,6 +122,8 @@ typedef uint32_t cpu_array_t;
 
 #define CPU_AFFINITY_ALL_CPUS 0
 
+#define CHILD_REAPER_PID  1
+
 struct __scheduler;
 struct __task_ipc;
 struct __userspace_events_data;

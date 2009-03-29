@@ -19,6 +19,7 @@ static ipc_channel_t *__allocate_channel(ipc_gen_port_t *port,ulong_t flags)
   ipc_channel_t *channel=memalloc(sizeof(*channel));
 
   if( channel ) {
+    channel->ipc=NULL;
     channel->flags=flags;
     spinlock_initialize(&channel->lock);
     channel->server_port=port;
