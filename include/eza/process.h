@@ -68,10 +68,10 @@ typedef struct __disintegration_req_packet {
 
 #define __DR_EXITED  1 /* Target task exited before disintegrating itself. */
 
-task_t *lookup_task(pid_t pid,ulong_t flags);
+task_t *lookup_task(pid_t pid,tid_t tid,ulong_t flags);
 
 /* Default lookup for non-zombie tasks. */
-#define pid_to_task(p)  lookup_task(p,0)
+#define pid_to_task(p)  lookup_task(p,0,0)
 
 /**
  * @fn status_t do_process_control(task_t *target,ulong_t cmd, ulong_t arg)
@@ -107,5 +107,7 @@ void perform_disintegrate_work(void);
 
 void force_task_exit(task_t *target,int exit_value);
 void unhash_task(task_t *task);
+
+task_t *lookup_task_thread(task_t *p,tid_t tid);
 
 #endif

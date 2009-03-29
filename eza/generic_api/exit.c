@@ -362,22 +362,15 @@ long sys_wait_id(idtype_t idtype,id_t id,usiginfo_t *siginfo,int options)
 
 long sys_thread_wait(tid_t tid,void **value_ptr)
 {
-  task_t *target=lookup_task(tid,LOOKUP_ZOMBIES);
-  task_t *caller=current_task();
+  task_t *target,*caller=current_task();
   long r,exitval;
 
-  if( !target ) {
+  if( !tid || tid == caller->tid ) {
+    return -EINVAL;
+  }
+
+  if( !(target=lookup_task(current_task()->pid,tid,LOOKUP_ZOMBIES)) ) {
     return -ESRCH;
-  }
-
-  if( !is_thread(target) || target->pid != caller->pid ) {
-    r=-EINVAL;
-    goto out_release;
-  }
-
-  if( target == caller ) {
-    r=-EDEADLOCK;
-    goto out_release;
   }
 
   r=0;
@@ -560,7 +553,7 @@ long sys_waitpid(pid_t pid,int *status,int options)
     return -EINVAL;
   }
 
-  target=lookup_task(pid,LOOKUP_ZOMBIES);
+  target=lookup_task(pid,0,LOOKUP_ZOMBIES);
   if( !target ) {
     return -ESRCH;
   }

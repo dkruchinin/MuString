@@ -603,7 +603,7 @@ static void __process_events_test(void *ctx)
 
   te_ctl.ev_mask=TASK_EVENT_TERMINATION;
   te_ctl.port=port;
-  r=sys_task_control(task->pid,SYS_PR_CTL_ADD_EVENT_LISTENER,
+  r=sys_task_control(task->pid,0,SYS_PR_CTL_ADD_EVENT_LISTENER,
                      (ulong_t)&te_ctl);
   if( r ) {
     tf->printf("Can't set event listener: %d\n",r);
@@ -613,7 +613,7 @@ static void __process_events_test(void *ctx)
   tf->printf( "Check that no one can set more than one same listeners.\n" );
   te_ctl.ev_mask=TASK_EVENT_TERMINATION;
   te_ctl.port=port;
-  r=sys_task_control(task->pid,SYS_PR_CTL_ADD_EVENT_LISTENER,
+  r=sys_task_control(task->pid,0,SYS_PR_CTL_ADD_EVENT_LISTENER,
                      (ulong_t)&te_ctl);
   if( r != -EBUSY ) {
     tf->printf("How did I manage to set the second listener ? %d\n",r);

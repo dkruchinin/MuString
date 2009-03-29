@@ -262,10 +262,6 @@ int sys_kill(pid_t pid,int sig,usiginfo_t *sinfo)
     return -EINVAL;
   }
 
-  if( is_tid(pid) ) {
-    return -ESRCH;
-  }
-
   if( sinfo ) {
     if( !trusted_task(current_task()) ) {
       return -EPERM;
@@ -353,18 +349,13 @@ long sys_thread_kill(pid_t process,tid_t tid,int sig)
   long r;
   usiginfo_t k_siginfo;
 
-  if( !valid_signal(sig) || !is_tid(tid) ) {
+  if( !valid_signal(sig) ) {
     return -EINVAL;
   }
 
-  target=pid_to_task(tid);
+  target=lookup_task(process,tid,0);
   if( !target ) {
     return -ESRCH;
-  }
-
-  if( process && (target->pid != process) ) {
-    r=-ESRCH;
-    goto out;
   }
 
   memset(&k_siginfo,0,sizeof(k_siginfo));
@@ -375,7 +366,6 @@ long sys_thread_kill(pid_t process,tid_t tid,int sig)
   k_siginfo.si_code=SI_USER;
 
   r=send_task_siginfo(target,&k_siginfo,false,NULL);
-out:
   release_task_struct(target);
   return r;
 }

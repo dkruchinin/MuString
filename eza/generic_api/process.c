@@ -90,20 +90,30 @@ void unhash_task(task_t *task)
   UNLOCK_PID_HASH_LEVEL_W(l);
 }
 
-task_t *lookup_task(pid_t pid, ulong_t flags)
+task_t *lookup_task_thread(task_t *p,tid_t tid)
 {
-  tid_t tid;
-  bool thread;
+  list_node_t *n;
+  task_t *t,*target=NULL;
+
+  if( tid && tid < CONFIG_THREADS_PER_PROCESS ) {
+    LOCK_TASK_CHILDS(p);
+    list_for_each(&p->threads,n) {
+      t=container_of(n,task_t,child_list);
+      if(t->tid == tid) {
+        grab_task_struct(t);
+        target=t;
+        break;
+      }
+    }
+    UNLOCK_TASK_CHILDS(p);
+  }
+  return target;
+}
+
+task_t *lookup_task(pid_t pid, tid_t tid, ulong_t flags)
+{
   task_t *t,*task=NULL;
   list_node_t *n;
-
-  if( pid > NUM_PIDS ) {
-    tid=pid;
-    pid=TID_TO_PIDBASE(pid);
-    thread=true;
-  } else {
-    thread=false;
-  }
 
   if( pid < NUM_PIDS ) {
     hash_level_t l = pid_to_hash_level(pid);
@@ -118,34 +128,14 @@ task_t *lookup_task(pid_t pid, ulong_t flags)
       }
     }
     UNLOCK_PID_HASH_LEVEL_R(l);
-
-    /* Now we should check for task's invisibility.
-     * To avoid double-locking, we perform all task-related checks later.
-     */
-    if( task && !thread ) {
-      goto found_something;
-    }
   }
 
-  if( task && thread ) {
-    task_t *target=NULL;
-
-    LOCK_TASK_CHILDS(task);
-    list_for_each(&task->threads,n) {
-      t=container_of(n,task_t,child_list);
-      if(t->tid == tid) {
-        grab_task_struct(t);
-        target=t;
-        break;
-      }
-    }
-    UNLOCK_TASK_CHILDS(task);
-
+  if( task && tid ) {
+    task_t *target=lookup_task_thread(task,tid);
     release_task_struct(task);
     task=target;
   }
 
-found_something:
   if( task ) {
     t=NULL;
 
@@ -474,28 +464,7 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
         }
       }
       UNLOCK_TASK_STRUCT(target);
-    case SYS_PR_CTL_GETPID:
-      if (target->pid != current_task()->pid) {
-        return -ESRCH;
-      }
-
-      return target->pid;
-
-    case SYS_PR_CTL_GETPPID:
-      if (target->pid != current_task()->pid) {
-        return -ESRCH;
-      }
-
-      return target->ppid;
-
-    case SYS_PR_CTL_GETTID:
-      if (target->pid != current_task()->pid) {
-        return -ESRCH;
-      }
-
-      return target->tid;
-
-    return 0;
+      return 0;
   }
   return -EINVAL;
 }
@@ -512,16 +481,40 @@ void force_task_exit(task_t *target,int exit_value)
   UNLOCK_TASK_STRUCT(target);
 }
 
-int sys_task_control(pid_t pid, ulong_t cmd, ulong_t arg)
+int sys_task_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
 {
   int r;
   task_t *task;
   ulong_t lookup_flags=0;
+  task_t *caller=current_task();
 
-  if(pid && is_tid(pid)) {
-    if( cmd == SYS_PR_CTL_DISINTEGRATE_TASK ) {
-      return -EINVAL;
+  if( tid ) {
+    switch( cmd ) {
+      case SYS_PR_CTL_DISINTEGRATE_TASK:
+        kprintf_fault("[1]\n");
+        return -EINVAL;
     }
+  }
+
+  /* First check for commands suitable only for the caller as the target. */
+  switch( cmd ) {
+    case SYS_PR_CTL_GETPID:
+      if( !pid ) {
+        return caller->pid;
+      }
+      return -EINVAL;
+
+    case SYS_PR_CTL_GETPPID:
+      if( !pid ) {
+        return caller->ppid;
+      }
+      return -EINVAL;
+
+    case SYS_PR_CTL_GETTID:
+      if( !pid ) {
+        return caller->tid;
+      }
+      return -EINVAL;
   }
 
   /* Only reincarnation can target zombies. */
@@ -533,7 +526,7 @@ int sys_task_control(pid_t pid, ulong_t cmd, ulong_t arg)
     pid=current_task()->pid;
   }
 
-  if( (task=lookup_task(pid,lookup_flags)) == NULL ) {
+  if( !(task=lookup_task(pid,tid,lookup_flags)) ) {
     return -ESRCH;
   }
 

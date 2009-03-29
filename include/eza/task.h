@@ -51,15 +51,6 @@ typedef uint32_t time_slice_t;
 #define PID_HASH_LEVELS  (1 << PID_HASH_LEVEL_SHIFT)
 #define PID_HASH_LEVEL_MASK  (PID_HASH_LEVELS-1)
 
-/* TID-related macros. */
-#define TID_SHIFT  16
-#define MAX_THREADS_PER_PROCESS  (1<<TID_SHIFT)
-#define GENERATE_TID(pid,tid) (((pid)<<TID_SHIFT) | tid)
-#define TID_TO_PIDBASE(tid)  ((tid)>>TID_SHIFT)
-#define TID(tid) ((tid) & ~(MAX_THREADS_PER_PROCESS-1))
-
-#define is_tid(t)  ((t) >= (1<<TID_SHIFT))
-
 /* Macros for locking task structure. */
 #define LOCK_TASK_STRUCT(t) spinlock_lock(&t->lock)
 #define UNLOCK_TASK_STRUCT(t) spinlock_unlock(&t->lock)

@@ -123,9 +123,7 @@ static int __alloc_pid_and_tid(task_t *parent,ulong_t flags,
     tid=idx_allocate(&parent->group_leader->tg_priv->tid_allocator);
     UNLOCK_TASK_STRUCT(parent);
 
-    if( tid != IDX_INVAL ) {
-      tid=GENERATE_TID(pid,tid);
-    } else {
+    if( tid == IDX_INVAL ) {
       return -ENOMEM;
     }
   } else {
@@ -133,7 +131,7 @@ static int __alloc_pid_and_tid(task_t *parent,ulong_t flags,
     if( pid == INVALID_PID ) {
       return -ENOMEM;
     }
-    tid=pid;
+    tid=0;
   }
 
   *ppid=pid;
@@ -146,7 +144,7 @@ static void __free_pid_and_tid(task_t *parent,pid_t pid, tid_t tid,
 {
   if( thread ) {
     LOCK_TASK_STRUCT(parent);
-    idx_free(&parent->group_leader->tg_priv->tid_allocator,TID(tid));
+    idx_free(&parent->group_leader->tg_priv->tid_allocator,tid);
     UNLOCK_TASK_STRUCT(parent);
   } else {
     LOCK_PID_ARRAY;

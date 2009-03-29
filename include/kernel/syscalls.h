@@ -124,7 +124,9 @@ long sys_create_task(ulong_t flags,task_creation_attrs_t *a);
  * @fn status_t sys_task_control( pid_t pid, ulong_t cmd, ulong_t arg);
  * @brief Main function for controlling tasks.
  *
- * @param target - Task to control
+ * @param target - Task to control (PID)
+ * @param tid    - Thread within the target process (or zero if the main
+ *                 thread is assumed)
  * @param cmd - Command. Possible commands are:
  *   SYS_PR_CTL_SET_ENTRYPOINT
  *     Set entrypoint for a newly created task to @a arg. Target task will start
@@ -159,7 +161,7 @@ long sys_create_task(ulong_t flags,task_creation_attrs_t *a);
  *    EFAULT - argument points to insufficient address in userspace;
  *    
  */
-int sys_task_control( pid_t pid, ulong_t cmd, ulong_t arg);
+int sys_task_control( pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg);
 
 
 
