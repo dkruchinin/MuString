@@ -52,7 +52,6 @@ static int __mmap_one_phys_page(vmm_t *vmm, page_idx_t pidx,
     GMO_DBG("(pid %ld) Failed to mmap one physical page %#x to address %p. "
             "Some other page is already mapped by this address.\n",
             vmm->owner->pid, pidx, addr);
-    kprintf("===> 1\n");
     return -EBUSY;
   }
 
@@ -67,7 +66,7 @@ static int __mmap_one_phys_page(vmm_t *vmm, page_idx_t pidx,
 
     pin_page_frame(p);
     p->offset = pidx;
-  }  
+  }
 
   return ret;
 }
@@ -81,9 +80,8 @@ static int __mmap_one_anon_page(vmm_t *vmm, page_frame_t *page,
     GMO_DBG("(pid %ld) Failed to mmap one anonymous page %#x to address %p. "
             "Some other page is already mapped by this address.\n",
             vmm->owner->pid, pframe_number(page), addr);
-    
+
     free_page(page);
-    kprintf("==> 2\n");
     return -EBUSY;
   }
 
@@ -99,12 +97,12 @@ static int __mmap_one_anon_page(vmm_t *vmm, page_frame_t *page,
   lock_page_frame(page, PF_LOCK);
   ret = rmap_register_anon(page, vmm, addr);
   unlock_page_frame(page, PF_LOCK);
-  
+
   if (unlikely(ret)) {
     GMO_DBG("(pid %ld) Failed to register anonymous rmap for "
             "just mapped to %p page %#x. [RET = %d]\n",
             vmm->owner->pid, addr, pframe_number(page), ret);
-    
+
     munmap_one_page(&vmm->rpd, addr);
     unpin_page_frame(page);
   }
@@ -205,9 +203,8 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
         free_page(new_page);
         goto out_unlock;
       }
-      
+
       unpin_page_frame(page);
-      kprintf("===> Copy on write: %p (%#x by %#x)\n", addr, pframe_number(page), pframe_number(new_page));
       ret = mmap_one_page(&vmm->rpd, addr, pframe_number(new_page), vmr->flags);
       if (likely(!ret)) {
         ret = rmap_register_mapping(vmr->memobj, new_page, vmm, addr);
@@ -220,7 +217,6 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
 
 out_unlock:
   pagetable_unlock(&vmm->rpd);
-  kprintf("PF returns %d\n", ret);
   return ret;
 }
 
@@ -314,7 +310,6 @@ static int generic_delete_page(vmrange_t *vmr, page_frame_t *page)
   uintptr_t addr = pgoff2addr(vmr, page->offset);
 
   ASSERT(vmr->memobj == memobj_from_page(page));
-  kprintf("DEL %p\n", addr);
   munmap_one_page(&vmr->parent_vmm->rpd, addr);
   return rmap_unregister_mapping(page, vmr->parent_vmm, addr);
 }
@@ -353,11 +348,6 @@ eof_cycle:
   return 0;
 }
 
-static void generic_cleanup(memobj_t *memobj)
-{
-  panic("Detected an attemption to free generic memory object!");
-}
-
 static memobj_ops_t generic_memobj_ops = {
   .handle_page_fault = generic_handle_page_fault,
   .populate_pages = generic_populate_pages,
@@ -365,6 +355,7 @@ static memobj_ops_t generic_memobj_ops = {
   .insert_page = generic_insert_page,
   .delete_page = generic_delete_page,
   .cleanup = NULL,
+  .truncate = NULL,
 };
 
 memobj_t *generic_memobj = NULL;
