@@ -781,7 +781,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr,
    */
   if ((memobj->id == GENERIC_MEMOBJ_ID) && !(flags & VMR_PHYS))
     offset = addr >> PAGE_WIDTH;
-  if ((offset + npages) >= memobj->size) {
+  if ((offset + npages) > memobj->size) {
     err = -EOVERFLOW;
     goto err;
   }
@@ -836,6 +836,9 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr,
          */
         vmr = merge_vmranges(prev, vmr);
       }
+    }
+    else {
+      vmr = prev;
     }
   }
   if (!was_merged) {

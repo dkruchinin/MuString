@@ -141,18 +141,19 @@ int copy_user(void *dest,void *src,ulong_t size)
   return r;
 }
 
+/* FIXME DK: check if address is not in mandatory mapping area */
 int copy_to_user(void *dest,void *src,ulong_t size)
 {
-  if (!valid_user_address_range((uintptr_t)dest, size))
-    return -EFAULT;
+  /*if (!valid_user_address_range((uintptr_t)dest, size))
+    return -EFAULT;*/
   
   return copy_user(dest,src,size);
 }
 
 int copy_from_user(void *dest,void *src,ulong_t size)
 {
-  if (!valid_user_address_range((uintptr_t)src, size))
-    return -EFAULT;
+  /*if (!valid_user_address_range((uintptr_t)src, size))
+    return -EFAULT;*/
 
   return copy_user(dest,src,size);
 }

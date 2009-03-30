@@ -297,7 +297,7 @@ static long __transfer_reply_data_iov(ipc_port_message_t *msg,
       for(i=0,rlen=reply_len;i<numvecs && rlen;i++,reply_iov++) {
         to_copy=MIN(rlen,reply_iov->iov_len);
 
-        if( from_server ) {
+        if( from_server ) {          
           r=copy_from_user(rcv_buf,reply_iov->iov_base,to_copy);
         } else {
           r=copy_to_user(reply_iov->iov_base,rcv_buf,to_copy);

@@ -35,8 +35,9 @@ struct memobj_info {
   mode_t acc_mode;
   int users;
   enum memobj_nature nature;
-  enum memobj_life lifetype;
+  enum memobj_life lifetype;  
   uint32_t flags;
+  long backend_port;
 };
 
 struct memobj_backend_info {
@@ -52,19 +53,6 @@ enum {
 #define MFAULT_READ  0x01
 #define MFAULT_WRITE 0x02
 #define MFAULT_NP    0x04
-
-struct memobj_backend_request {
-  memobj_id_t memobj_id;
-  int type;
-  pgoff_t pg_offset;
-  ulong_t priv;
-  int fault_mask;
-};
-
-struct memobj_backend_asnwer {
-  int status;
-  uintptr_t private;
-};
 
 /* Memory object Commands */
 enum {  

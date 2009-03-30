@@ -32,7 +32,6 @@
 #include <eza/task.h>
 #include <mlibc/types.h>
 
-#define CONFIG_DEBUG_GMO 1
 #ifdef CONFIG_DEBUG_GMO
 #define GMO_DBG(fmt, args...)                                \
   do {                                                       \

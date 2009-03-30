@@ -18,6 +18,8 @@
  * (c) Copyright 2009 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
  * mm/memobj.c - Memory objects subsystem
+ * Please NOTE: this is ugly absurd code was written for test only purpose.
+ * It hasn't any real applications and will be rewritten soon.
  *
  */
 
@@ -60,22 +62,14 @@ static void __init_kernel_memobjs(void)
     panic("Can't create generic memory object: [ERROR %d]", ret);
 }
 
-static int reset_memobj_backend(memobj_t *memobj, struct memobj_backend_info *backend_info)
+static int reset_memobj_backend(memobj_t *memobj, task_t *server_task, long backend_port)
 {
   int ret;
-  task_t *server_task;
   ipc_gen_port_t *server_port;
 
-  ASSERT(!(memobj->flags & MMO_FLG_BACKENDED));
-  server_task = pid_to_task(backend_info->server_pid);
-  if (!server_task)
-    return -ESRCH;
-
-  server_port = ipc_get_port(server_task, backend_info->port_id);
+  server_port = ipc_get_port(server_task, backend_port);
   if (!server_port) {
-    ret = -ENOENT;
-    ipc_put_port(server_port);
-    goto release_task;
+    return -ENOENT;
   }
 
   spinlock_lock_write(&memobj->members_rwlock);
@@ -94,8 +88,6 @@ static int reset_memobj_backend(memobj_t *memobj, struct memobj_backend_info *ba
   memobj->backend.server = server_task;  
 unlock_memobj:
   spinlock_unlock_write(&memobj->members_rwlock);
-release_task:
-  release_task_struct(server_task);
   return ret;
 }
 
@@ -186,6 +178,9 @@ int memobj_create(memobj_nature_t nature, uint32_t flags,
         break;
       case MMO_NTR_PCACHE:
         ret = pagecache_memobj_initialize(memobj, flags);
+        break;
+      case MMO_NTR_PROXY:
+        ret = proxy_memobj_initialize(memobj, flags);
         break;
       default:
         ret = -EINVAL;
@@ -284,7 +279,14 @@ int sys_memobj_create(struct memobj_info *user_mmo_info)
                       mmo_info.size >> PAGE_WIDTH, &memobj);
   if (ret)
     return ret;
-
+  if (mmo_info.backend_port != -1) {
+    ret = reset_memobj_backend(memobj, current_task(), mmo_info.backend_port);
+    if (ret) {
+      __try_destroy_memobj(memobj);
+      return ret;
+    }
+  }
+  
   mmo_info.flags = (memobj->flags & MMO_FLAGS_MASK) >> MMO_FLAGS_SHIFT;
   mmo_info.id = memobj->id;
   if (copy_to_user(user_mmo_info, &mmo_info, sizeof(mmo_info))) {

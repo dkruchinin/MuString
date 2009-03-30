@@ -65,7 +65,7 @@ typedef struct __memobj_ops {
                         uintptr_t addr, page_idx_t npages);
   int (*depopulate_pages)(struct __vmrange *vmr,
                           uintptr_t va_from, uintptr_t va_to);
-  int (*truncate)(struct __memobj *memobj, pgoff_t new_offset);
+  int (*truncate)(struct __memobj *memobj, pgoff_t new_size);
   void (*cleanup)(struct __memobj *memobj);
 } memobj_ops_t;
 
@@ -158,5 +158,6 @@ static inline bool unpin_memobj(memobj_t *memobj)
 int generic_memobj_initialize(memobj_t *memobj, uint32_t flags);
 void pagecache_memobjs_prepare(void);
 int pagecache_memobj_initialize(memobj_t *memobj, uint32_t flags);
+int proxy_memobj_initialize(memobj_t *memobj, uint32_t flags);
 
 #endif /* __MEMOBJ_H__ */
