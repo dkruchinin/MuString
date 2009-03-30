@@ -314,6 +314,7 @@ static int generic_delete_page(vmrange_t *vmr, page_frame_t *page)
   uintptr_t addr = pgoff2addr(vmr, page->offset);
 
   ASSERT(vmr->memobj == memobj_from_page(page));
+  kprintf("DEL %p\n", addr);
   munmap_one_page(&vmr->parent_vmm->rpd, addr);
   return rmap_unregister_mapping(page, vmr->parent_vmm, addr);
 }

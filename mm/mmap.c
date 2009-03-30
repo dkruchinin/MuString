@@ -851,7 +851,6 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr,
    * if VMR_STACK flag was specified, the returned address must be
    * the top address of the VM range.
    */
-  kprintf("RET!\n");
   return (!(flags & VMR_STACK) ? addr : (addr + (npages << PAGE_WIDTH)));
 
   err:
@@ -867,7 +866,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr,
 int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
 {
   ttree_cursor_t cursor;
-  uintptr_t va_to = va_from + (npages << PAGE_WIDTH);
+  uintptr_t va_to = va_from + ((uintptr_t)npages << PAGE_WIDTH);
   vmrange_t *vmr, *vmr_prev = NULL;
 
   ASSERT_DBG(!(va_from & PAGE_MASK));
@@ -919,7 +918,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
      * regarding the new top address.
      */
     memobj_method_call(vmr->memobj, depopulate_pages, vmr,
-                       va_from, vmr->bounds.space_end - va_from);
+                       va_from, va_from + (vmr->bounds.space_end - va_from));
     va_from = vmr->bounds.space_end;
     vmr->bounds.space_end = new_end;
 
@@ -954,12 +953,12 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
       vmr->offset = addr2pgoff(vmr, va_to);
       vmr->bounds.space_start = va_to;
       memobj_method_call(vmr->memobj, depopulate_pages, vmr,
-                         va_from, va_to - va_from);
+                         va_from, va_from + (va_to - va_from));
       break;
     }
 
     memobj_method_call(vmr->memobj, depopulate_pages, vmr,
-                       va_from, vmr->bounds.space_end - va_from);
+                       va_from, vmr->bounds.space_end);
     ttree_delete_placeful(&cursor);
     destroy_vmrange(vmr);
     vmr = NULL;
@@ -1099,7 +1098,6 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
 
     ret = __fault_in_user_page(vmr, va, pfmask, &pidx);
     if (ret) {
-      kprintf("Fault in user page ==> %d\n", ret);
       return ret;
     }
 
@@ -1156,7 +1154,6 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
   struct mmap_args margs;
   vmrange_flags_t vmrflags;
 
-  kprintf("sys_mmap\n");
   if (likely(!victim)) {
     victim_task = current_task();
   }
@@ -1208,7 +1205,6 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
   if (memobj)
     unpin_memobj(memobj);
 
-  kprintf("mmap end => %d\n", ret);
   return ret;
 }
 
@@ -1282,6 +1278,7 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
     return -ESRCH;
 
   rwsem_down_read(&target->task_mm->rwsem);
+  /* Find target VM range */
   target_vmr = vmrange_find(target->task_mm, target_addr,
                             target_addr + length - 1, NULL);
   if (!target_vmr) {
@@ -1302,16 +1299,13 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
 
   /* Ok, now we can take care about pages we want to grant */
   rwsem_down_read(&current->task_mm->rwsem);
+  /* Find first range pages will be granted from */
   vmr = vmrange_find(current->task_mm, va_from, va_from + 1, &cursor);
   if (!vmr) {
     ret = -ENOMEM;
     goto unlock_current;
   }
-
-  /*
-   * VM range we take pages from must have VMR_PHYS,
-   * VMR_SHARED and VMR_GATE flags clear too.
-   */
+  /* Only serveral types of VM ranges can grant pages they have */
   if (vmr->flags & NON_GRANTABLE_VMRS_MASK) {
     ret = -EACCES;
     goto unlock_current;
@@ -1336,7 +1330,6 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
       }
     }
 
-    kprintf("Lock <<<<<<<<<<<<<<<<\n");
     pagetable_lock(&current->task_mm->rpd);
 
     /*
@@ -1346,12 +1339,12 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
     pidx = vaddr2page_idx(&current->task_mm->rpd, va_from);
     if (pidx == PAGE_IDX_INVAL) {
       ret = -EFAULT;
-      kprintf("[%d] UNLOCK and EFAULT!\n", current->pid);
       pagetable_unlock(&current->task_mm->rpd);
       goto unlock_current;
     }
 
     page = pframe_by_number(pidx);
+    /* Delete page from source's VM range. Source process */
     ret = memobj_method_call(vmr->memobj, delete_page, vmr, page);
     if (ret) {
       VMM_VERBOSE("[%s] Failed to delete page %#x from address %p\n",
@@ -1363,7 +1356,15 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
     }
 
     pagetable_unlock(&current->task_mm->rpd);
-    if (unlikely(page->flags & PF_COW)) {
+
+    /*
+     * Woops, we just met a page marked as copy-on-write.
+     * No, it's not a tradegy, but it requires some extra work.
+     * In simplest case - if target VM range has write access,
+     * page content will be copied to fresh one, otherwise page
+     * will be mapped as is.
+     */
+    if (unlikely((page->flags & PF_COW) && (target_vmr->flags & VMR_WRITE))) {
       page_frame_t *new_page = alloc_page(AF_USER);
 
       if (!new_page) {
@@ -1381,8 +1382,8 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
     pidx = vaddr2page_idx(&target->task_mm->rpd, target_addr);
 
     /*
-     * If page on a given address is already mapped(it doesn't
-     * matter which exactly) we won't replace it by the page we've
+     * If some page is already mapped to given address (it doesn't
+     * matter which one exactly) we won't replace it by the page we've
      * just removed from the caller's address range.
      */
     if (pidx != PAGE_IDX_INVAL) {
@@ -1392,7 +1393,8 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
       goto unlock_current;
     }
 
-    ret = memobj_method_call(target_vmr->memobj, insert_page, vmr,
+    /* finally page may be inserted in target VM range */
+    ret = memobj_method_call(target_vmr->memobj, insert_page, target_vmr,
                              page, target_addr, target_vmr->flags);
     if (ret) {
       pagetable_unlock(&target->task_mm->rpd);
@@ -1409,7 +1411,6 @@ unlock_target:
   rwsem_up_read(&target->task_mm->rwsem);
 
   release_task_struct(target);
-  kprintf("reeeet => %d\n", ret);
   return ret;
 }
 
