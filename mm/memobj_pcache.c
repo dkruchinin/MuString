@@ -29,7 +29,6 @@
 #include <mm/mem.h>
 #include <mm/pfalloc.h>
 #include <mm/memobj.h>
-#include <mm/pcache_common.h>
 #include <mm/rmap.h>
 #include <eza/spinlock.h>
 #include <mlibc/types.h>
