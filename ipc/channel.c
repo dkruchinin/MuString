@@ -82,8 +82,6 @@ int ipc_open_channel_raw(ipc_gen_port_t *server_port, ulong_t flags, ipc_channel
     ret = -EINVAL;
     goto out;
   }
-  if (unlikely(is_kernel_thread(current_task())))
-    flags |= IPC_KERNEL_SIDE;
   
   channel = __allocate_channel(server_port, flags);
   if (!channel) {

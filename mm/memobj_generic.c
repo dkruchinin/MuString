@@ -23,57 +23,137 @@
 
 #include <config.h>
 #include <ds/list.h>
-#include <ds/hat.h>
+#include <ds/ttree.h>
+#include <mm/mem.h>
 #include <mm/vmm.h>
 #include <mm/memobj.h>
 #include <mm/pfalloc.h>
-#include <mm/ptable.h>
+#include <mm/rmap.h>
+#include <eza/task.h>
 #include <mlibc/types.h>
 
-/* TODO DK: implement generic pages caching */
+#ifdef CONFIG_DEBUG_GMO
+#define GMO_DBG(fmt, args...)                                \
+  do {                                                       \
+    kprintf("[GMO_DBG] (%s) ", __FUNCTION__);                \
+    kprintf(fmt, ##args);                                    \
+  } while (0)
+#else
+#define GMO_DBG(fmt, args...)
+#endif /* CONFIG_DEBUG_GMO */
 
-#include <mlibc/kprintf.h>
-#include <eza/task.h>
+static int __mmap_one_phys_page(vmm_t *vmm, page_idx_t pidx,
+                                uintptr_t addr, vmrange_flags_t flags)
+{
+  int ret;
 
-static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
+  if (unlikely(page_is_mapped(&vmm->rpd, addr))) {
+    GMO_DBG("(pid %ld) Failed to mmap one physical page %#x to address %p. "
+            "Some other page is already mapped by this address.\n",
+            vmm->owner->pid, pidx, addr);
+    return -EBUSY;
+  }
+
+  ret = mmap_one_page(&vmm->rpd, addr, pidx, flags);
+  if (ret) {
+    GMO_DBG("(pid %ld) Failed to mmap one physical page %#x "
+            "to address %p. [RET = %d]\n", vmm->owner->pid, pidx, addr, ret);
+    return ret;
+  }
+  if (likely(page_idx_is_present(pidx))) {
+    page_frame_t *p = pframe_by_number(pidx);
+
+    pin_page_frame(p);
+    p->offset = pidx;
+  }
+
+  return ret;
+}
+
+static int __mmap_one_anon_page(vmm_t *vmm, page_frame_t *page,
+                                uintptr_t addr, vmrange_flags_t flags)
+{
+  int ret;
+
+  if (unlikely(page_is_mapped(&vmm->rpd, addr))) {
+    GMO_DBG("(pid %ld) Failed to mmap one anonymous page %#x to address %p. "
+            "Some other page is already mapped by this address.\n",
+            vmm->owner->pid, pframe_number(page), addr);
+
+    free_page(page);
+    return -EBUSY;
+  }
+
+  ret = mmap_one_page(&vmm->rpd, addr, pframe_number(page), flags);
+  if (ret) {
+    GMO_DBG("(pid %ld) Failed to mmap one anonymous page "
+            "%#x to address %p. [RET = %d]\n", vmm->owner->pid,
+            pframe_number(page), addr, ret);
+    return ret;
+  }
+
+  pin_page_frame(page);
+  lock_page_frame(page, PF_LOCK);
+  ret = rmap_register_anon(page, vmm, addr);
+  unlock_page_frame(page, PF_LOCK);
+
+  if (unlikely(ret)) {
+    GMO_DBG("(pid %ld) Failed to register anonymous rmap for "
+            "just mapped to %p page %#x. [RET = %d]\n",
+            vmm->owner->pid, addr, pframe_number(page), ret);
+
+    munmap_one_page(&vmm->rpd, addr);
+    unpin_page_frame(page);
+  }
+
+  return ret;
+}
+
+static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
+                                     uint32_t pfmask)
 {
   int ret = 0;
   vmm_t *vmm = vmr->parent_vmm;
 
-  ASSERT(!(vmr->flags & VMR_PHYS));
-  ASSERT(!(vmr->flags & VMR_NONE));
+  if ((vmr->flags & (VMR_PHYS | VMR_NONE)))
+    return -EINVAL;
+
   if (pfmask & PFLT_NOT_PRESENT) {
     page_frame_t *pf;
+    vmrange_flags_t mmap_flags = vmr->flags;
+
+    if (!(pfmask & PFLT_WRITE)) {
+      mmap_flags &= ~VMR_WRITE;
+    }
 
     pf = alloc_page(AF_USER | AF_ZERO);
-    if (!pf) {
-      ret = -ENOMEM;
-      goto out;
-    }
+    if (!pf)
+      return -ENOMEM;
 
     /*
-     * Simple "not-present" fault is handled by allocating a new page and
-     * mapping it into the place we've been asked.
+     * For simple not present faults we have to allocate
+     * new page and mmap it into address space of faulted process.
      */
-    pagetable_lock(&vmm->rpd);
-    if (unlikely(vaddr2page_idx(&vmm->rpd, addr) != PAGE_IDX_INVAL)) {
-      /*
-       * In very rare situatinons several threads may generate a fault by one address.
-       * So here we have to check if the fault was handled by somebody earlier. If so,
-       * our job is done.
-       */
-      pagetable_unlock(&vmm->rpd);
-      free_page(pf);
-      goto out;
-    }
+    atomic_set(&pf->refcount, 0);
+    pf->offset = addr2pgoff(vmr, addr);
 
-    ret = mmap_one_page(&vmm->rpd, addr, pframe_number(pf), vmr->flags);    
-    pagetable_unlock(&vmm->rpd);    
+    pagetable_lock(&vmm->rpd);
+    ret = __mmap_one_anon_page(vmm, pf, addr, mmap_flags);
     if (ret) {
+      /*
+       * If somebody has handled a fault by given address
+       * before us, we have nothing to do.
+       */
+
+      GMO_DBG("(pid %ld): Failed to mmap page %#x to %p. [RET = %d]\n",
+              vmm->owner->pid, pframe_number(pf), addr);
+
+      if (ret == -EBUSY) {
+        ret = 0;
+      }
+
       free_page(pf);
-    }
-    else {
-      pin_page_frame(pf);
+      goto out_unlock;
     }
   }
   else  {
@@ -83,106 +163,198 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pf
 
     pagetable_lock(&vmm->rpd);
     pidx = __vaddr2page_idx(&vmm->rpd, addr, &pde);
-    ASSERT(pidx != PAGE_IDX_INVAL);
+    if (unlikely(pidx == PAGE_IDX_INVAL)) {
+      ret = -EFAULT;
+      goto out_unlock;
+    }
     if (unlikely(ptable_to_kmap_flags(pde_get_flags(pde)) & KMAP_WRITE)) {
-      pagetable_unlock(&vmm->rpd);
-      goto out;
+      ret = 0;
+      goto out_unlock;
     }
 
     page = pframe_by_number(pidx);
-    if (page->flags & PF_COW) {
-      page_frame_t *new_page = alloc_page(AF_USER);
+    if (likely(!(page->flags & PF_COW))) {
+      /*
+       * Just remap page with rights we've been asked.
+       * TODO DK: mark page as dirty.
+       */
 
+      ret = mmap_one_page(&vmm->rpd, addr, pidx, vmr->flags);
+    }
+    else { /* Handle copy-on-write */
+      page_frame_t *new_page;
+
+      new_page = alloc_page(AF_USER);
       if (!new_page) {
-        pagetable_unlock(&vmm->rpd);
         ret = -ENOMEM;
-        goto out;
+        goto out_unlock;
       }
 
+      atomic_set(&new_page->refcount, 1);
+      new_page->offset = page->offset;
       copy_page_frame(new_page, page);
-      unpin_page_frame(page);
-      pin_page_frame(new_page);
-      page = new_page;      
-    }
+      ret = rmap_unregister_mapping(page, vmm, addr);
+      if (ret) {
+        GMO_DBG("[%s] Failed to unregister mapping of page %#x "
+                "from address %p [ERR = %d]\n", vmm_get_name_dbg(vmm),
+                pframe_number(page), addr, ret);
 
-    ret = mmap_one_page(&vmm->rpd, addr, pframe_number(page), vmr->flags);
-    pagetable_unlock(&vmm->rpd);
+        free_page(new_page);
+        goto out_unlock;
+      }
+
+      unpin_page_frame(page);
+      ret = mmap_one_page(&vmm->rpd, addr, pframe_number(new_page), vmr->flags);
+      if (likely(!ret)) {
+        ret = rmap_register_mapping(vmr->memobj, new_page, vmm, addr);
+      }
+      else {
+        free_page(new_page);
+      }
+    }
   }
 
-  out:
+out_unlock:
+  pagetable_unlock(&vmm->rpd);
   return ret;
 }
 
-static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npages)
+static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr,
+                                  page_idx_t npages)
 {
-  int ret;
-  memobj_t *memobj = vmr->memobj;    
-  page_frame_iterator_t pfi;
+  int ret = 0;
   vmm_t *vmm = vmr->parent_vmm;
   page_frame_t *p, *pages = NULL;
-  pgoff_t offs;
-  
-  if (!(vmr->flags & VMR_PHYS)) {
-    ITERATOR_CTX(page_frame, PF_ITER_LIST) list_ctx;
-    
+
+  if (likely(!(vmr->flags & VMR_PHYS))) {
+    list_head_t chain_head;
+
+    list_init_head(&chain_head);
     pages = alloc_pages(npages, AF_ZERO | AF_USER);
     if (!pages)
       return -ENOMEM;
 
-    pfi_list_init(&pfi, &list_ctx, &pages->chain_node, pages->chain_node.prev);
+    list_set_head(&chain_head, &pages->chain_node);
+    pagetable_lock(&vmm->rpd);
+    list_for_each_entry(&chain_head, p, chain_node) {
+      ret = __mmap_one_anon_page(vmm, p, addr, vmr->flags);
+      if (unlikely(ret)) {
+        GMO_DBG("(pid %ld): Failed to mmap anonymous page %#x to address %p. "
+                "[RET = %d]\n", vmm->owner->pid, pframe_number(p), addr, ret);
+
+        pagetable_unlock(&vmm->rpd);
+        return ret;
+      }
+
+      p->offset = addr2pgoff(vmr, addr);
+      addr += PAGE_SIZE;
+    }
+
+    pagetable_unlock(&vmm->rpd);
   }
   else {
-    page_idx_t idx;
-    ITERATOR_CTX(page_frame, PF_ITER_INDEX) index_ctx;
+    page_idx_t idx, i;
 
     idx = addr2pgoff(vmr, addr);
-    pfi_index_init(&pfi, &index_ctx, idx, idx + npages - 1);
-  }
+    pagetable_lock(&vmm->rpd);
+    for (i = 0; i < npages; i++, addr += PAGE_SIZE) {
+      ret = __mmap_one_phys_page(vmm, idx + i, addr, vmr->flags);
 
-  offs = vmr->offset;
-  iterate_forward(&pfi) {
-    if (likely(page_idx_is_present(pfi.pf_idx))) {
-      p = pframe_by_number(pfi.pf_idx);
-      p->offset = offs;
-      p->owner = memobj;
-      pin_page_frame(p);
+      if (ret) {
+        GMO_DBG("(pid %ld): Failed to mmap physical page %#x to address %p. "
+                "[RET = %d]\n", i, addr, ret);
+
+        pagetable_unlock(&vmm->rpd);
+        return ret;
+      }
     }
-    
-    offs++;
-  }
 
-  iter_first(&pfi);
-  pagetable_lock(&vmm->rpd);
-  ret = __mmap_core(&vmr->parent_vmm->rpd, addr, npages, &pfi,
-                    vmr->flags & KMAP_FLAGS_MASK, false);
-  pagetable_unlock(&vmm->rpd);
-  if (ret)
-    free_pages_chain(pages);
+    pagetable_unlock(&vmm->rpd);
+  }
 
   return ret;
 }
 
-static int generic_put_page(memobj_t *memobj, pgoff_t offset, page_frame_t *page)
+static int generic_insert_page(vmrange_t *vmr, page_frame_t *page,
+                               uintptr_t addr, ulong_t mmap_flags)
 {
-  return -ENOTSUP;
+  vmm_t *vmm = vmr->parent_vmm;
+  int ret;
+  memobj_t *pg_memobj = memobj_from_page(page);
+
+  if ((addr < vmr->bounds.space_start) ||
+      (addr >= vmr->bounds.space_end)) {
+    return -EFAULT;
+  }
+  if (pg_memobj && (pg_memobj != vmr->memobj)) {
+    return -EINVAL;
+  }  
+  
+  ret = mmap_one_page(&vmm->rpd, addr, pframe_number(page),
+                      mmap_flags & KMAP_FLAGS_MASK);
+  if (ret) {
+    GMO_DBG("[%d] Failed to insert(mmap) page %#x in VM range [%p, %p) by "
+            "address %p (VMM: %s). [ERR = %d]\n",
+            vmr->memobj->id, pframe_number(page), vmr->bounds.space_start,
+            vmr->bounds.space_end, addr, vmm_get_name_dbg(vmm), ret);
+    return ret;
+  }
+
+  page->offset = addr2pgoff(vmr, addr);
+  return rmap_register_mapping(vmr->memobj, page, vmm, addr);
 }
 
-static int generic_get_page(memobj_t *memobj, pgoff_t offset, page_frame_t **page)
+static int generic_delete_page(vmrange_t *vmr, page_frame_t *page)
 {
-  return -ENOTSUP;
+  uintptr_t addr = pgoff2addr(vmr, page->offset);
+
+  ASSERT(vmr->memobj == memobj_from_page(page));
+  munmap_one_page(&vmr->parent_vmm->rpd, addr);
+  return rmap_unregister_mapping(page, vmr->parent_vmm, addr);
 }
 
-static void generic_cleanup(memobj_t *memobj)
+static int generic_depopulate_pages(vmrange_t *vmr, uintptr_t va_from,
+                                     uintptr_t va_to)
 {
-  panic("Detected an attemption to free generic memory object!");
+  vmm_t *vmm = vmr->parent_vmm;
+  page_idx_t pidx;
+  page_frame_t *page;
+  
+  ASSERT(vmr->memobj == generic_memobj);
+
+  pagetable_lock(&vmm->rpd);
+  while (va_from < va_to) {
+    pidx = vaddr2page_idx(&vmm->rpd, va_from);
+    if (pidx == PAGE_IDX_INVAL) {
+      goto eof_cycle;
+    }
+
+    munmap_one_page(&vmm->rpd, va_from);
+    if (likely(page_idx_is_present(pidx))) {
+      page = pframe_by_number(pidx);
+      if (!(vmr->flags & VMR_PHYS)) {
+        rmap_unregister_mapping(page, vmm, va_from);
+      }
+
+      unpin_page_frame(page);
+    }
+
+eof_cycle:
+    va_from += PAGE_SIZE;
+  }
+
+  pagetable_unlock(&vmm->rpd);
+  return 0;
 }
 
 static memobj_ops_t generic_memobj_ops = {
   .handle_page_fault = generic_handle_page_fault,
   .populate_pages = generic_populate_pages,
-  .put_page = generic_put_page,
-  .get_page = generic_get_page,
-  .cleanup = generic_cleanup,
+  .depopulate_pages = generic_depopulate_pages,
+  .insert_page = generic_insert_page,
+  .delete_page = generic_delete_page,
+  .cleanup = NULL,
+  .truncate = NULL,
 };
 
 memobj_t *generic_memobj = NULL;
@@ -194,7 +366,7 @@ int generic_memobj_initialize(memobj_t *memobj, uint32_t flags)
   generic_memobj = memobj;
   memobj->mops = &generic_memobj_ops;
   atomic_set(&memobj->users_count, 2); /* Generic memobject is immortal */
-  memobj->flags = MMO_FLG_NOSHARED | MMO_FLG_IMMORTAL;
+  memobj->flags = MMO_FLG_IMMORTAL;
 
   return 0;
 }

@@ -112,7 +112,7 @@ void doublefault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
   //char b[512];
   uintptr_t inval_addr;
 
-  __asm__ __volatile__("movq %%cr2, %0" : "=r"(inval_addr));
+  __asm__ __volatile__("movq %%cr2, %0" : "=r"(inval_addr));  
   kprintf_fault("[!!] Fatal double fault exception! RIP=%p. (Inval addr = %p) CPU stopped.\n",
                 stack_frame->rip, inval_addr);  
   for (;;);

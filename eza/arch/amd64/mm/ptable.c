@@ -28,7 +28,7 @@
 #include <mm/page.h>
 #include <mm/pfi.h>
 #include <mm/pfalloc.h>
-#include <mm/ptable.h>
+#include <mm/mem.h>
 #include <mm/vmm.h>
 #include <eza/spinlock.h>
 #include <eza/errno.h>
@@ -61,8 +61,6 @@ ptable_ops_t ptable_ops = {
   .initialize_rpd = __initialize_rpd,
   .deinitialize_rpd = __deinitialize_rpd,
   .clone_rpd = clone_rpd,
-  .mmap = generic_ptable_map,
-  .munmap = generic_ptable_unmap,
   .mmap_one_page = generic_map_page,
   .munmap_one_page = generic_unmap_page,
   .vaddr2page_idx = generic_vaddr2page_idx,

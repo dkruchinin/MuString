@@ -28,6 +28,7 @@
 #include <mm/page.h>
 #include <mm/pfalloc.h>
 #include <mm/vmm.h>
+#include <mm/rmap.h>
 #include <eza/arch/elf.h>
 #include <eza/kconsole.h>
 #include <eza/errno.h>
@@ -44,6 +45,37 @@
 long initrd_start_page,initrd_num_pages;
 
 #ifndef CONFIG_TEST
+
+static int mmap_core(vmm_t *vmm, uintptr_t addr, page_idx_t first_page,
+                     pgoff_t npages, kmap_flags_t flags)
+{
+  pgoff_t i;
+  int ret = 0;
+  page_frame_t *page;
+  vmrange_t *vmr;
+
+  vmr = vmrange_find(vmm, addr, addr + 1, NULL);
+  ASSERT(vmr != NULL);
+  pagetable_lock(&vmm->rpd);
+  for (i = 0; i < npages; i++, first_page++, addr += PAGE_SIZE) {
+    ret = mmap_one_page(&vmm->rpd, addr, first_page, flags);
+    if (ret)
+      goto out;
+    if (likely(page_idx_is_present(first_page))) {
+      page = pframe_by_number(first_page);
+      pin_page_frame(page);
+      lock_page_frame(page, PF_LOCK);
+      rmap_register_anon(page, vmm, addr);
+      unlock_page_frame(page, PF_LOCK);
+
+      page->offset = addr2pgoff(vmr, addr);
+    }
+  }
+
+out:
+  pagetable_unlock(&vmm->rpd);
+  return ret;
+}
 
 static void __create_task_mm(task_t *task, int num)
 {
@@ -152,8 +184,8 @@ static void __create_task_mm(task_t *task, int num)
   r = vmrange_map(generic_memobj, vmm, USPACE_VA_BOTTOM, text_size, VMR_READ | VMR_EXEC | VMR_PRIVATE | VMR_FIXED, 0);
   if (!PAGE_ALIGN(r))
     panic("Server [#%d]: Failed to create VM range for \"text\" section. (ERR = %d)", num, r);
-  
-  r = mmap_core(task_get_rpd(task), USPACE_VA_BOTTOM, code >> PAGE_WIDTH, text_size, KMAP_READ | KMAP_EXEC, true);
+
+  r = mmap_core(vmm, USPACE_VA_BOTTOM, code >> PAGE_WIDTH, text_size, KMAP_READ | KMAP_EXEC);
   if (r)
     panic("Server [#%d]: Failed to map \"text\" section. (ERR = %d)", num, r);
 
@@ -163,7 +195,7 @@ static void __create_task_mm(task_t *task, int num)
     if (!PAGE_ALIGN(r))
       panic("Server [#%d]: Failed to create VM range for \"data\" section. (ERR = %d)", num, r);
 
-    r = mmap_core(task_get_rpd(task), real_data_offset, data_bss >> PAGE_WIDTH, data_size, KMAP_READ | KMAP_WRITE, true);
+    r = mmap_core(vmm, real_data_offset, data_bss >> PAGE_WIDTH, data_size, KMAP_READ | KMAP_WRITE);
     if (r)
       panic("Server [#%d]: Failed to map \"data\" section. (ERR = %d)", num, r);
   }

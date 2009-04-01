@@ -31,11 +31,9 @@
 #include <mm/page.h>
 #include <mm/pfalloc.h>
 #include <mm/memobj.h>
-#include <mm/ptable.h>
+#include <mm/mem.h>
 #include <mlibc/types.h>
 #include <eza/rwsem.h>
-#include <eza/arch/mm.h>
-#include <eza/arch/ptable.h>
 
 #ifdef CONFIG_DEBUG_MM
 #define VMM_DBG_NAME_LEN 128
@@ -60,6 +58,7 @@ typedef enum __vmrange_flags {
   VMR_STACK        = 0x0400,
   VMR_POPULATE     = 0x0800,
   VMR_CANRECPAGES  = 0x1000,
+  VMR_GATE         = 0x2000,
 } vmrange_flags_t;
 
 typedef vmrange_flags_t kmap_flags_t;
@@ -100,6 +99,7 @@ typedef struct __vmrange {
   struct __vmm *parent_vmm;
   memobj_t *memobj;
   uintptr_t hole_size;
+  list_node_t rmap_node;
   pgoff_t offset;
   vmrange_flags_t flags;  
 } vmrange_t;
@@ -124,71 +124,6 @@ typedef struct __vmrange_set {
   ttree_cursor_t cursor;
 } vmrange_set_t;
 
-extern rpd_t kernel_rpd;
-
-#define valid_user_address(va)                  \
-  valid_user_address_range(va, 0)
-
-static inline bool valid_user_address_range(uintptr_t va_start, uintptr_t length)
-{
-    return ((va_start >= USPACE_VA_BOTTOM) &&
-            ((va_start + length) <= USPACE_VA_TOP));
-}
-
-static inline void *user_to_kernel_vaddr(rpd_t *rpd, uintptr_t addr)
-{
-  page_idx_t idx = ptable_ops.vaddr2page_idx(rpd, addr, NULL);
-
-  if (idx == PAGE_IDX_INVAL)
-    return NULL;
-
-  return ((char *)pframe_to_virt(pframe_by_number(idx)) + (addr - PAGE_ALIGN_DOWN(addr)));
-}
-
-static inline void unpin_page_frame(page_frame_t *pf)
-{
-  if (atomic_dec_and_test(&pf->refcount))
-    free_page(pf);
-}
-
-static inline void pin_page_frame(page_frame_t *pf)
-{
-  atomic_inc(&pf->refcount);
-}
-
-#define mmap_kern(va, first_page, npages, flags)       \
-  mmap_core(&kernel_rpd, va, first_page, npages, flags, false)
-#define munmap_kern(va, npages, unpin_pages)                \
-  munmap_core(&kernel_rpd, va, npages, unpin_pages)
-#define __mmap_core(rpd, va, npages, pfi, __flags, pin_pages)                     \
-  ptable_ops.mmap(rpd, va, npages, pfi, kmap_to_ptable_flags((__flags) & KMAP_FLAGS_MASK), pin_pages)
-
-static inline int mmap_one_page(rpd_t *rpd, uintptr_t va, page_idx_t pidx, kmap_flags_t flags)
-{
-  return ptable_ops.mmap_one_page(rpd, va, pidx,
-                                  kmap_to_ptable_flags((flags) & KMAP_FLAGS_MASK));
-}
-
-static inline void munmap_one_page(rpd_t *rpd, uintptr_t va)
-{
-  ptable_ops.munmap_one_page(rpd, va);
-}
-
-
-static inline page_idx_t __vaddr2page_idx(rpd_t *rpd, uintptr_t addr, pde_t **pde)
-{
-  return ptable_ops.vaddr2page_idx(rpd, addr, pde);
-}
-
-static inline page_idx_t vaddr2page_idx(rpd_t *rpd, uintptr_t addr)
-{
-  return __vaddr2page_idx(rpd, addr, NULL);
-}
-
-static inline bool mm_vaddr_is_mapped(rpd_t *rpd, uintptr_t va)
-{
-  return (ptable_ops.vaddr2page_idx(rpd, va, NULL) != PAGE_IDX_INVAL);
-}
 
 /**
  * @brief Initialize mm internals
@@ -211,8 +146,6 @@ vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, ttree_
 void vmranges_find_covered(vmm_t *vmm, uintptr_t va_from, uintptr_t va_to, vmrange_set_t *vmrs);
 int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t pfmask,
                         void (*callback)(vmrange_t *vmr, page_frame_t *page, void *data), void *data);
-int mmap_core(rpd_t *rpd, uintptr_t va, page_idx_t first_page,
-              page_idx_t npages, kmap_flags_t flags, bool pin_pages);
 
 static inline void vmrange_set_next(vmrange_set_t *vmrs)
 {
@@ -224,11 +157,6 @@ static inline void vmrange_set_next(vmrange_set_t *vmrs)
   }
   else
     vmrs->vmr = NULL;
-}
-
-static inline void munmap_core(rpd_t *rpd, uintptr_t va, ulong_t npages, bool unpin_pages)
-{
-  ptable_ops.munmap(rpd, va, npages, unpin_pages);
 }
 
 static inline pgoff_t addr2pgoff(vmrange_t *vmr, uintptr_t addr)

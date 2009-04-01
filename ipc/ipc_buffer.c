@@ -161,6 +161,7 @@ outerror:
   }
 
   UNLOCK_TASK_VM(owner);
+  kprintf("outerror ===> %d\n", r);
   return r;
 }
 

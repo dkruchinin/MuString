@@ -3,7 +3,7 @@
 
 #include <ds/iterator.h>
 #include <mm/page.h>
-#include <mm/ptable.h>
+#include <mm/mem.h>
 #include <eza/arch/ptable.h>
 #include <mlibc/types.h>
 

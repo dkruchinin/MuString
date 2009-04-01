@@ -8,7 +8,8 @@ typedef unsigned long memobj_id_t;
 typedef enum memobj_nature {
   MMO_NTR_GENERIC = 1,
   MMO_NTR_SRV,
-  MMO_NTR_PAGECACHE,
+  MMO_NTR_PCACHE,
+  MMO_NTR_SLAVE,
   MMO_NTR_PROXY,
 } memobj_nature_t;
 
@@ -22,7 +23,8 @@ enum memobj_life {
 enum {
   MEMOBJ_DPC        = 0x01,
   MEMOBJ_BACKENDED  = 0x02,
-  MEMOBJ_NOSHARED   = 0x04,
+  MEMOBJ_SHARED     = 0x04,
+  MEMOBJ_SLAVE      = 0x08,
 };
 
 struct memobj_info {
@@ -33,8 +35,9 @@ struct memobj_info {
   mode_t acc_mode;
   int users;
   enum memobj_nature nature;
-  enum memobj_life lifetype;
+  enum memobj_life lifetype;  
   uint32_t flags;
+  long backend_port;
 };
 
 struct memobj_backend_info {
@@ -47,15 +50,9 @@ enum {
   MREQ_TYPE_SYNCPAGE,
 };
 
-struct memobj_rem_request {
-  int req_type;
-  ulong_t page_index;
-  pgoff_t pg_offset;
-};
-
-/* predefined system values */
-#define NOFD  0
-#define MAP_FAILED ((void *)-1)
+#define MFAULT_READ  0x01
+#define MFAULT_WRITE 0x02
+#define MFAULT_NP    0x04
 
 /* Memory object Commands */
 enum {  

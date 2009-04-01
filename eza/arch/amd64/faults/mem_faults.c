@@ -189,9 +189,9 @@ stop_cpu:
   if( kernel_fault(stack_frame) ) {
     show_stack_trace(stack_frame->old_rsp);
   }
-#ifdef CONFIG_DUMP_USTACK
+#ifdef CONFIG_DUMP_USPACE_STACK
   else {
-    __dump_user_stack(stack_frame->old_rsp);
+    __dump_stack(stack_frame->old_rsp);
   }
 #endif /* CONFIG_DUMP_USTACK */
   
