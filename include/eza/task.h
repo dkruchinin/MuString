@@ -101,6 +101,7 @@ typedef enum __task_creation_flag_t {
   CLONE_SHMEM    = 0x20,
   CLONE_PHYS     = 0x40,
   CLONE_REPL_IPC = 0x80, /* Replicate IPC, not reference. */
+  CLONE_REPL_SYNC = 0x100, /* Replicate sync state, not reference. */
 } task_creation_flags_t;
 
 #define TASK_MMCLONE_SHIFT 3

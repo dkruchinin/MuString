@@ -31,6 +31,8 @@
 
 static pthread_mutexattr_t __default_mutex_attrs={(PTHREAD_PROCESS_PRIVATE)};
 
+static sync_umutex_t *__allocate_umutex(void);
+
 /* Mutex-related logic. */
 static int __mutex_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
 {
@@ -54,9 +56,22 @@ static int __mutex_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
   }
 }
 
+static struct __kern_sync_object *__umutex_clone(struct __kern_sync_object *obj)
+{
+  sync_umutex_t *new=__allocate_umutex();
+  sync_umutex_t *source=(sync_umutex_t *)obj;
+
+  if( new ) {
+    new->k_syncobj.id=source->k_syncobj.id;
+    return &new->k_syncobj;
+  }
+  return NULL;
+}
+
 static sync_obj_ops_t __mutex_ops = {
   .control=__mutex_control,
   .dtor=sync_default_dtor,
+  .clone=__umutex_clone,
 };
 
 static sync_umutex_t *__allocate_umutex(void)

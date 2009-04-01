@@ -32,6 +32,8 @@
 #define __LOCK_EVENT(e) spinlock_lock(&(e)->__lock)
 #define __UNLOCK_EVENT(e) spinlock_unlock(&(e)->__lock)
 
+static sync_uevent_t *__allocate_uevent(void);
+
 static int __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
 {
   sync_uevent_t *e=__UEVENT_OBJ(obj);
@@ -65,38 +67,49 @@ static int __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
   return 0;
 }
 
+static struct __kern_sync_object *__urawevent_clone(struct __kern_sync_object *obj)
+{
+  sync_uevent_t *new=__allocate_uevent();
+  sync_uevent_t *source=(sync_uevent_t *)obj;
+
+  if( new ) {
+    new->k_syncobj.id=source->k_syncobj.id;
+    return &new->k_syncobj;
+  }
+  return NULL;
+}
+
 static sync_obj_ops_t __rawevent_ops = {
   .control=__rawevent_control,
   .dtor=sync_default_dtor,
+  .clone=__urawevent_clone,
 };
 
-#if 0
-static bool __uevent_sched_handler(void *data)
+static sync_uevent_t *__allocate_uevent(void)
 {
-  wqueue_task_t *wt=(wqueue_task_t *)data;
-  sync_uevent_t *e=(sync_uevent_t*)wt->private;
+  sync_uevent_t *e=memalloc(sizeof(*e));
 
-  return !e->__ecount;
+  if( e ) {
+    memset(e,0,sizeof(*e));
+    e->k_syncobj.type=__SO_RAWEVENT;
+    e->k_syncobj.ops=&__rawevent_ops;
+    atomic_set(&e->k_syncobj.refcount,1);
+
+    waitqueue_initialize(&e->__wq);
+    spinlock_initialize(&e->__lock);
+  }
+
+  return e;
 }
-#endif
 
 int sync_create_uevent(kern_sync_object_t **obj,void *uobj,
                             uint8_t *attrs,ulong_t flags)
 {
-  sync_uevent_t *e=memalloc(sizeof(*e));
+  sync_uevent_t *e=__allocate_uevent();
 
   if( !e ) {
     return -ENOMEM;
   }
-
-  /* Initialize event object. */
-  memset(e,0,sizeof(*e));
-  e->k_syncobj.type=__SO_RAWEVENT;
-  e->k_syncobj.ops=&__rawevent_ops;
-  atomic_set(&e->k_syncobj.refcount,1);
-
-  waitqueue_initialize(&e->__wq);
-  spinlock_initialize(&e->__lock);
 
   *obj=(kern_sync_object_t*)e;
   return 0;

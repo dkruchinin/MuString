@@ -290,8 +290,10 @@ static int __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags,
       task->sync_data=parent->sync_data;
       return dup_task_sync_data(parent->sync_data);
     }
+  } else if( flags & CLONE_REPL_SYNC ) {
+    task->sync_data=replicate_task_sync_data(parent);
+    return task->sync_data ? 0 : -ENOMEM;
   }
-
   task->sync_data=allocate_task_sync_data();
   return task->sync_data ? 0 : -ENOMEM;
 }

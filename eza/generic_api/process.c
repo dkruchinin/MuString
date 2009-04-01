@@ -589,7 +589,7 @@ long sys_fork(void)
   tca.exec_attrs.destructor=caller->uworks_data.destructor;
   tca.exec_attrs.per_task_data=caller->ptd;
 
-  r=create_task(current_task(),CLONE_COW | CLONE_REPL_IPC,
+  r=create_task(current_task(),CLONE_COW | CLONE_REPL_IPC | CLONE_REPL_SYNC,
                 TPL_USER,&new,&tca);
   if( !r ) {
     r=new->pid;

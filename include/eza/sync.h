@@ -59,6 +59,7 @@ struct __kern_sync_object;
 typedef struct __sync_obj_ops {
   int (*control)(struct __kern_sync_object *obj,ulong_t cmd,ulong_t arg);
   void (*dtor)(void *obj);
+  struct __kern_sync_object *(*clone)(struct __kern_sync_object *obj);
 } sync_obj_ops_t;
 
 typedef struct __uspace_mutex {
@@ -128,6 +129,7 @@ static inline void release_task_sync_data(task_sync_data_t *sync_data)
 }
 
 task_sync_data_t *allocate_task_sync_data(void);
+task_sync_data_t *replicate_task_sync_data(struct __task_struct *parent);
 int dup_task_sync_data(task_sync_data_t *sync_data);
 
 #define LOCK_SYNC_DATA_R(l)  mutex_lock(&(l)->mutex)

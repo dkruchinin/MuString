@@ -218,6 +218,42 @@ task_sync_data_t *allocate_task_sync_data(void)
   return s;
 }
 
+task_sync_data_t *replicate_task_sync_data(struct __task_struct *parent)
+{
+  task_sync_data_t *sd=allocate_task_sync_data();
+  task_sync_data_t *source=parent->sync_data;
+
+  if( sd ) {
+    int i,r=0;
+
+    if( !source ) {
+      return sd;
+    }
+
+    LOCK_SYNC_DATA_W(source);
+    for(i=1;i<=source->numobjs;i++) {
+      if( source->sync_objects[i] ) {
+        sd->sync_objects[i]=source->sync_objects[i]->ops->clone(source->sync_objects[i]);
+        if( !sd->sync_objects[i] ) {
+          r=1;
+          break;
+        }
+      }
+    }
+    if( !r ) {
+      sd->numobjs=source->numobjs;
+    }
+    UNLOCK_SYNC_DATA_W(source);
+
+    if( r ) {
+      memfree(sd);
+      sd=NULL;
+    }
+  }
+
+  return sd;
+}
+
 void sync_default_dtor(void *obj)
 {
   memfree(obj);
