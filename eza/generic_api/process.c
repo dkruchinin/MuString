@@ -160,6 +160,7 @@ task_t *lookup_task(pid_t pid, tid_t tid, ulong_t flags)
 static void __setup_common_task_attributes(task_t *target,exec_attrs_t *attrs)
 {
   target->uworks_data.destructor=attrs->destructor;
+  target->ptd=attrs->per_task_data;
 }
 
 int create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
