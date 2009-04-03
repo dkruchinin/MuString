@@ -537,7 +537,7 @@ static void tlsf_free_pages(page_frame_t *pages, page_idx_t num_pages, void *dat
 
     bit_clear(&pages[i]._private, TLSF_PB_BUSY);
     clear_page_frame(&pages[i]);
-    list_del(&pages[i].chain_node);
+    list_init_node(&pages[i].chain_node);
   }
   if ((num_pages == 1) && !__put_page_to_cache(tlsf, pages))
     return;

@@ -132,7 +132,7 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
   regs_t *regs=(regs_t *)(((uintptr_t)stack_frame)-sizeof(struct __gpr_regs)-8);
   usiginfo_t siginfo;
   task_t *faulter=current_task();
-
+  
   get_fault_address(invalid_address);
   fixup = fixup_fault_address(stack_frame->rip);
   if(PFAULT_SVISOR(stack_frame->error_code) && !fixup) {

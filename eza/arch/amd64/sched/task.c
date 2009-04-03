@@ -432,3 +432,37 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
   }
   return r;
 }
+
+/* NOTE: Interrupts must be disabled before calling this function. */
+void arch_activate_task(task_t *to)
+{
+  arch_context_t *to_ctx = (arch_context_t*)&to->arch_context[0];
+  arch_context_t *from_ctx = (arch_context_t*)&(current_task()->arch_context[0]);
+  tss_t *tss=to_ctx->tss;
+  uint16_t tss_limit;  
+
+  if( !tss ) {
+    tss=get_cpu_tss(to->cpu);
+    tss_limit=TSS_DEFAULT_LIMIT;
+  } else {
+    tss_limit=to_ctx->tss_limit;
+  }
+
+  /* We should setup TSS to reflect new task's kernel stack. */
+  tss->rsp0 = to->kernel_stack.high_address;
+  /* Reload TSS. */
+  load_tss(to->cpu,tss,tss_limit);
+
+  /* Setup LDT for new task. */
+  if( to_ctx->ldt ) {
+    load_ldt(to->cpu,to_ctx->ldt,to_ctx->ldt_limit);
+  }
+
+#ifdef CONFIG_TEST
+  kprintf( "**  ACTIVATING TASK: %d:%p (CPU: %d) **\n",
+           to->pid,rsp,to->cpu);
+#endif
+  
+  /* Let's jump ! */
+  arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
+}
