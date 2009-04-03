@@ -273,6 +273,10 @@ void do_exit(int code,ulong_t flags,long exitval)
 
   if( !is_thread(exiter) ) { /* All process-related works are performed here. */
     if( !(flags & EF_DISINTEGRATE) ) {
+      if (!is_kernel_thread(exiter)) {
+        vmm_destroy(exiter->task_mm);
+      }
+
       __exit_limits(exiter);
       __exit_ipc(exiter);
     }
@@ -316,9 +320,6 @@ void do_exit(int code,ulong_t flags,long exitval)
       dreq=exiter->uworks_data.disintegration_descr;
       exiter->uworks_data.disintegration_descr=NULL;
       UNLOCK_TASK_STRUCT(exiter);
-      if (!is_kernel_thread(exiter)) {
-        vmm_destroy(exiter->task_mm);
-      }
       
       if( dreq ) {
         __notify_disintegration_done(dreq,__DR_EXITED);

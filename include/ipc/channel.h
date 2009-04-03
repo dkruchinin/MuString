@@ -52,7 +52,7 @@ static inline int ipc_get_channel_port(ipc_channel_t *c,
       r=-EPIPE;
     }
   } else {
-    r=-EINVAL;
+      r=-EINVAL;
   }
   UNLOCK_CHANNEL(c);
 

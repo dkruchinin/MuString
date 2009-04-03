@@ -32,7 +32,7 @@ extern volatile cpu_id_t online_cpus;
 
 #define COND_RESCHED_CURRENT \
     if( !in_atomic() && current_task_needs_resched() ) { \
-      schedule(); \
+        schedule();                                      \
     }
 
 static inline void preempt_disable(void)
