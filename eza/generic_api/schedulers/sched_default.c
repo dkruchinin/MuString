@@ -326,7 +326,7 @@ static void def_schedule(void)
    * switch is required.
    */
   ints_enabled=is_interrupts_enabled();
-  if( ints_enabled ) {
+  if( is_interrupts_enabled() ) {
     interrupts_disable();
   }
 
@@ -374,7 +374,7 @@ get_next_task:
   __UNLOCK_CPU_SCHED_DATA(sched_data);
 
   if( need_switch ) {
-    arch_activate_task(next);
+      arch_activate_task(next);
   }
 
   if( ints_enabled ) {

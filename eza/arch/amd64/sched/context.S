@@ -60,9 +60,8 @@ arch_hw_activate_task:
   pushq %rax
   SAVE_ALL
 
-  pushq $__return_from_sleep
-
   cli
+  pushq $__return_from_sleep
   /* Update this CPU's 'current' and its kernel stack. */
   movq %rsi, %gs:(CPU_SCHED_STAT_CURRENT_OFFT)
   movq %rcx, %gs:(CPU_SCHED_STAT_KSTACK_OFFT)
@@ -86,7 +85,7 @@ arch_hw_activate_task:
 
   /* Determine if we need to reload %cr3 */
   movq %cr3, %rax;
-  cmp %rax,ARCH_CTX_CR3_OFFSET(%rdi)
+  cmpq %rax,ARCH_CTX_CR3_OFFSET(%rdi)
   jz leave_cr3
 
   movq ARCH_CTX_CR3_OFFSET(%rdi),%rax

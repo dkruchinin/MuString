@@ -76,8 +76,9 @@ static inline bool page_is_mapped(rpd_t *rpd, uintptr_t va)
 
 static inline void unpin_page_frame(page_frame_t *pf)
 {
-  if (atomic_dec_and_test(&pf->refcount))
+  if (atomic_dec_and_test(&pf->refcount)) {
     free_page(pf);
+  }
 }
 
 static inline void pin_page_frame(page_frame_t *pf)

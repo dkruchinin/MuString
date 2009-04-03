@@ -107,7 +107,6 @@ void main_routine(void) /* this function called from boostrap assembler code */
   kcons->init();  
   kcons->enable();  
   kprintf("[MB] Modules: %d\n",init.c);
-
   mm_initialize();
   slab_allocator_init();
   vmm_initialize();
