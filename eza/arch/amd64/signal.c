@@ -278,11 +278,12 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
   task_t *current=current_task();
   int i;
 
-  kprintf_fault("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
+/*  kprintf_fault("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
               reason,retcode,
               current->pid,current->tid,
               kstack);
   kprintf_fault("[UWORKS]: UWORKS=0x%X\n",uworks);
+*/
 
   /* First, check for pending disintegration requests. */
   if( uworks & ARCH_CTX_UWORKS_DISINT_REQ_MASK ) {
