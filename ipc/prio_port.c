@@ -168,6 +168,7 @@ static int prio_remove_message(struct __ipc_gen_port *port,
                                          ipc_port_message_t,l);
       m->id=msg->id;
       ds->message_ptrs[m->id]=m;
+
       __remove_message(m);
       __add_one_message(&ds->prio_head,m);
       ds->num_waiters--;

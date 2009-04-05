@@ -67,9 +67,11 @@ static int reset_memobj_backend(memobj_t *memobj, task_t *server_task, long back
   int ret;
   ipc_gen_port_t *server_port;
 
+  grab_task_struct(server_task);
   server_port = ipc_get_port(server_task, backend_port);
   if (!server_port) {
-    return -ENOENT;
+    ret = -ENOENT;
+    goto release_task;
   }
 
   spinlock_lock_write(&memobj->members_rwlock);
@@ -88,6 +90,10 @@ static int reset_memobj_backend(memobj_t *memobj, task_t *server_task, long back
   memobj->backend.server = server_task;  
 unlock_memobj:
   spinlock_unlock_write(&memobj->members_rwlock);
+  return ret;
+
+release_task:
+  release_task_struct(server_task);
   return ret;
 }
 

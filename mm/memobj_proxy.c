@@ -26,21 +26,37 @@ static int proxy_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
   vmrange_t *serv_vmr;
   page_idx_t pidx;
   page_frame_t *page;
+  task_t *server;
+  ipc_channel_t *chan;
 
   ret = 0;
   spinlock_lock_read(&memobj->members_rwlock);
   if (addr2pgoff(vmr, addr) >= memobj->size) {
     ret = -EFAULT;
   }
+  else {
+    server = memobj->backend.server;
+    if (server)
+      grab_task_struct(server);
+    
+    chan = memobj->backend.channel;
+    if (chan)
+      ipc_pin_channel(chan);
+  }
 
   spinlock_unlock_read(&memobj->members_rwlock);
   if (ret)
     return ret;
-  
-  if (!memobj->backend.server)
+  if (!server || !chan) {
+    if (server)
+      release_task_struct(server);
+    if (chan)
+      ipc_unpin_channel(chan);
+
     return -ENOENT;
+  }
   
-  serv_vmm = memobj->backend.server->task_mm;
+  serv_vmm = server->task_mm;
   msg.hdr.event = MMEV_PAGE_FAULT;
   msg.hdr.memobj_id = memobj->id;
   msg.pfmask = pfmask;
@@ -51,7 +67,7 @@ static int proxy_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
   rcv_iovec.iov_base = (void *)&rcvaddr;
   rcv_iovec.iov_len = sizeof(uintptr_t);
 
-  ret = ipc_port_send_iov(memobj->backend.channel, &snd_iovec, 1, &rcv_iovec, 1);
+  ret = ipc_port_send_iov(chan, &snd_iovec, 1, &rcv_iovec, 1);
   if (ret < 0) {
     return ret;
   }
@@ -70,7 +86,6 @@ static int proxy_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
     ret = -EINVAL;
     goto out_unlock_srv;
   }
-
   
   pagetable_lock(&serv_vmm->rpd);
   pidx = vaddr2page_idx(&serv_vmm->rpd, rcvaddr);
@@ -102,6 +117,8 @@ static int proxy_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
   
 out_unlock_srv:
   rwsem_up_read(&serv_vmm->rwsem);
+  release_task_struct(server);
+  ipc_unpin_channel(chan);
   return ret;
 }
 
@@ -114,8 +131,17 @@ static int proxy_depopulate_pages(vmrange_t *vmr, uintptr_t va_from, uintptr_t v
   iovec_t snd_iovec, rcv_iovec;
   struct mmev_msync msync;
   int ret, srvret;
-
-  ASSERT(memobj->backend.server != NULL);  
+  task_t *server;
+  ipc_channel_t *chan;
+  
+  ASSERT(memobj->backend.server != NULL);
+  spinlock_lock_read(&memobj->members_rwlock);
+  server = memobj->backend.server;
+  grab_task_struct(server);
+  chan = memobj->backend.channel;
+  ipc_pin_channel(chan);
+  spinlock_unlock_read(&memobj->members_rwlock);
+  
   while (va_from < va_to) {
     pagetable_lock(&vmm->rpd);
     pidx = vaddr2page_idx(&vmm->rpd, va_from);
@@ -128,7 +154,7 @@ static int proxy_depopulate_pages(vmrange_t *vmr, uintptr_t va_from, uintptr_t v
     munmap_one_page(&vmm->rpd, va_from);
     rmap_unregister_mapping(page, vmm, va_from);
     pagetable_unlock(&vmm->rpd);
-    if (vmm != memobj->backend.server->task_mm) {
+    if (vmm != server->task_mm) {
       msync.hdr.event = MMEV_MSYNC;
       msync.hdr.memobj_id = memobj->id;
       msync.offset = page->offset;
@@ -138,7 +164,7 @@ static int proxy_depopulate_pages(vmrange_t *vmr, uintptr_t va_from, uintptr_t v
       rcv_iovec.iov_base = (void *)&srvret;
       rcv_iovec.iov_len = sizeof(int);
 
-      ret = ipc_port_send_iov(memobj->backend.channel, &snd_iovec, 1, &rcv_iovec, 1);
+      ret = ipc_port_send_iov(chan, &snd_iovec, 1, &rcv_iovec, 1);
       unpin_page_frame(page);
       if (ret < 0)
         goto eof_cycle;
@@ -148,6 +174,8 @@ eof_cycle:
     va_from += PAGE_SIZE;
   }
 
+  release_task_struct(server);
+  ipc_unpin_channel(chan);
   return 0;
 }
 
@@ -159,6 +187,7 @@ static int proxy_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npage
   list_node_t *n, *safe;
   page_frame_t *pages, *p;
   int ret = 0;
+  
   
   if (!memobj->backend.server) {
     return -ENOENT;
