@@ -191,9 +191,6 @@ void cleanup_thread_data(gc_action_t *action)
 {
   task_t *task=(task_t*)action->data;
 
-  /* NOTE: Don't free task structure directly since it will
-   * be probably processed via 'waitpid()' functionality
-   */
   free_kernel_stack(task->kernel_stack.id);
   release_task_struct(task);
 }
@@ -234,8 +231,6 @@ static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
     list_init_head(&task->children);
     list_init_head(&task->threads);
 
-    list_init_head(&task->task_events.my_events);
-    list_init_head(&task->task_events.listeners);
     list_init_head(&task->jointed);
 
     spinlock_initialize(&task->lock);
@@ -279,8 +274,27 @@ static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags,
   return r;
 }
 
+static int __setup_task_events(task_t *task,task_t *parent,ulong_t flags,
+                               task_privelege_t priv)
+{
+  if( !(flags & CLONE_MM) || priv == TPL_KERNEL ) {
+    task->task_events=memalloc(sizeof(task_events_t));
+    if( !task->task_events ) {
+      return -ENOMEM;
+    }
+    list_init_head(&task->task_events->my_events);
+    list_init_head(&task->task_events->listeners);
+    atomic_set(&task->task_events->refcount,1);
+    mutex_initialize(&task->task_events->lock);
+  } else {
+    task->task_events=parent->task_events;
+    atomic_inc(&task->task_events->refcount);
+  }
+  return 0;
+}
+
 static int __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags,
-                                       task_privelege_t priv)
+                                  task_privelege_t priv)
 {
   if( flags & CLONE_MM ) {
     if( !parent->sync_data && (priv != TPL_KERNEL) ) {
@@ -483,7 +497,12 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   if( r ) {
     goto free_signals;
   }
-  
+
+  r=__setup_task_events(task,parent,flags,priv);
+  if( r ) {
+    goto free_posix;
+  }
+
   /* Setup task's initial state. */
   task->state = TASK_STATE_JUST_BORN;
   task->cpu = cpu_id();
@@ -501,6 +520,9 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
     *t = task;
     return 0; 
   }
+
+free_posix:
+  /* TODO: [mt] Free POSIX data properly. */
 free_signals:
   /* TODO: [mt] Free signals data properly. */
 free_uevents:
@@ -529,5 +551,16 @@ task_create_fault:
 void release_task_struct(struct __task_struct *t)
 {
   if( atomic_dec_and_test(&t->refcount) ) {
+    if( is_thread(t) ) {
+      LOCK_TASK_STRUCT(t->group_leader);
+      idx_free(&t->group_leader->tg_priv->tid_allocator,t->tid);
+      UNLOCK_TASK_STRUCT(t->group_leader);
+    } else {
+      LOCK_PID_ARRAY;
+      index_array_free_value(&pid_array,t->pid);
+      UNLOCK_PID_ARRAY;
+    }
+
+    free_pages_addr(t,1);
   }
 }

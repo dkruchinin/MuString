@@ -265,8 +265,16 @@ void do_exit(int code,ulong_t flags,long exitval)
   }
 
   if( !(flags & EF_DISINTEGRATE) ) {
-    __flush_pending_uworks(exiter);
-    task_event_notify(TASK_EVENT_TERMINATION);
+    /* Free sub-resources of this task in case it is really exiting. */
+
+    if( atomic_dec_and_test(&exiter->task_events->refcount) ) {
+      memfree(exiter->task_events);
+    }
+
+    if( !(is_thread(exiter)) ) {
+      __flush_pending_uworks(exiter);
+      task_event_notify(TASK_EVENT_TERMINATION);
+    }
   }
 
   clear_task_disintegration_request(exiter);
@@ -435,16 +443,20 @@ long sys_thread_wait(tid_t tid,void **value_ptr)
       exitval=caller->jointee.exit_ptr;
     }
     caller->jointee.exiter=NULL;
-    UNLOCK_TASK_STRUCT(target);
+    UNLOCK_TASK_STRUCT(caller);
   }
 
 out_copy:
-  if( !r && value_ptr ) {
-    r=copy_to_user(value_ptr,&exitval,sizeof(exitval));
-    if( r ) {
-      r=-EFAULT;
+  if( !r ) {
+    release_task_struct(target);  /* Initial parent reference. */
+    if( value_ptr ) {
+      r=copy_to_user(value_ptr,&exitval,sizeof(exitval));
+      if( r ) {
+        r=-EFAULT;
+      }
     }
   }
+
 out_release:
   release_task_struct(target);
   return r;
@@ -537,19 +549,24 @@ found:
   }
 
 out:
-  if( unref ) { /* Remove task's initial reference. */
+  if( unref ) { /* Remove task's parent reference. */
     unhash_task(target);
     release_task_struct(target);
   }
+  release_task_struct(parent);
   return r;
 }
 
 long sys_waitpid(pid_t pid,int *status,int options)
 {
-  task_t *target;
+  task_t *target,*caller=current_task();
   long r;
 
   if( pid <= 0 ) {
+    return -EINVAL;
+  }
+
+  if( pid == caller->pid ) {
     return -EINVAL;
   }
 

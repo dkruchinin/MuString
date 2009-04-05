@@ -386,11 +386,18 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       }
       break;
     case SYS_PR_CTL_ADD_EVENT_LISTENER:
+      if( target->pid == current_task()->pid ) {
+        return -EDEADLOCK;
+      }
+
       if(copy_from_user(&te_ctl,(void *)arg,sizeof(te_ctl) ) ) {
         return -EFAULT;
       }
       return task_event_attach(target,current_task(),&te_ctl);
     case SYS_PR_CTL_DEL_EVENT_LISTENER:
+      if( current_task()->pid == arg ) {
+        return -EDEADLOCK;
+      }
       return task_event_detach(arg,current_task());
     case SYS_PR_CTL_SET_PERTASK_DATA:
       if( !valid_user_address(arg) ) {
@@ -492,7 +499,8 @@ int sys_task_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
   if( tid ) {
     switch( cmd ) {
       case SYS_PR_CTL_DISINTEGRATE_TASK:
-        kprintf_fault("[1]\n");
+      case SYS_PR_CTL_ADD_EVENT_LISTENER:
+      case SYS_PR_CTL_DEL_EVENT_LISTENER:
         return -EINVAL;
     }
   }
@@ -524,11 +532,12 @@ int sys_task_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
   }
 
   if( !pid ) {
-    pid=current_task()->pid;
-  }
-
-  if( !(task=lookup_task(pid,tid,lookup_flags)) ) {
-    return -ESRCH;
+    task=current_task();
+    grab_task_struct(task);
+  } else {
+    if( !(task=lookup_task(pid,tid,lookup_flags)) ) {
+      return -ESRCH;
+    }
   }
 
   if( !security_ops->check_process_control(task,cmd,arg) ) {

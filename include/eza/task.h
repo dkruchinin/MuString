@@ -63,8 +63,8 @@ typedef uint32_t time_slice_t;
 #define TASK_EVENT_TERMINATION  0x1
 #define NUM_TASK_EVENTS  1
 #define ALL_TASK_EVENTS_MASK  ((1<<NUM_TASK_EVENTS)-1)
-#define LOCK_TASK_EVENTS(t)
-#define UNLOCK_TASK_EVENTS(t)
+#define LOCK_TASK_EVENTS(t) mutex_lock(&t->task_events->lock)
+#define UNLOCK_TASK_EVENTS(t) mutex_unlock(&t->task_events->lock)
 
 typedef struct __task_event_ctl_arg {
   ulong_t ev_mask;
@@ -90,6 +90,8 @@ typedef struct __task_event_listener {
 typedef struct __task_events {
   list_head_t my_events;
   list_head_t listeners;
+  mutex_t lock;
+  atomic_t refcount;
 } task_events_t;
 
 typedef enum __task_creation_flag_t {
@@ -107,7 +109,7 @@ typedef enum __task_creation_flag_t {
 #define TASK_MMCLONE_SHIFT 3
 #define TASK_FLAG_UNDER_STATE_CHANGE  0x1
 
-#define TASK_INITIAL_REFCOUNT 2
+#define TASK_INITIAL_REFCOUNT 2 /* 1 for the parent to allow 'wait()'. */
 
 typedef uint32_t priority_t;
 typedef uint32_t cpu_array_t;
@@ -241,7 +243,7 @@ typedef struct __task_struct {
   struct __userspace_events_data *uspace_events;
 
   /* Task state events */
-  task_events_t task_events;
+  task_events_t *task_events;
 
   /* Signal-related stuff. */
   signal_struct_t siginfo;
