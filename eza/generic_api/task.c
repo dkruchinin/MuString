@@ -556,9 +556,9 @@ void release_task_struct(struct __task_struct *t)
       idx_free(&t->group_leader->tg_priv->tid_allocator,t->tid);
       UNLOCK_TASK_STRUCT(t->group_leader);
     } else {
-      LOCK_PID_ARRAY;
-      index_array_free_value(&pid_array,t->pid);
-      UNLOCK_PID_ARRAY;
+//      LOCK_PID_ARRAY;
+//      index_array_free_value(&pid_array,t->pid);
+//      UNLOCK_PID_ARRAY;
     }
 
     free_pages_addr(t,1);
