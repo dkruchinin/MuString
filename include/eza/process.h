@@ -46,6 +46,7 @@
 #define SYS_PR_CTL_GETPID              0xC
 #define SYS_PR_CTL_GETPPID             0xD
 #define SYS_PR_CTL_GETTID              0xE
+#define SYS_PR_CTL_SET_SHORTNAME       0xF
 
 #define PTHREAD_CANCEL_ENABLE   1
 #define PTHREAD_CANCEL_DISABLE  0

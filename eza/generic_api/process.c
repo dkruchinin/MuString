@@ -358,6 +358,19 @@ static int __reincarnate_task(task_t *target,ulong_t arg)
   return r;
 }
 
+static long __set_shortname(task_t *target,ulong_t arg)
+{
+  long r;
+
+  if( copy_from_user(target->short_name,(void *)arg,TASK_SHORTNAME_LEN) ) {
+    r=-EFAULT;
+  } else {
+    r=0;
+  }
+  target->short_name[TASK_SHORTNAME_LEN-1]='\0';
+  return r;
+}
+
 long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
 {
   task_event_ctl_arg te_ctl;
@@ -409,6 +422,8 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
         target->ptd = arg;
 
       return r;
+    case SYS_PR_CTL_SET_SHORTNAME:
+      return __set_shortname(target,arg);
     case SYS_PR_CTL_DISINTEGRATE_TASK:
       if( target == current_task() ) {
         return -EWOULDBLOCK;
