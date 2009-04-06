@@ -123,6 +123,10 @@ static void __exit_resources(task_t *exiter,ulong_t flags)
   if( !(flags & EF_DISINTEGRATE) ) {
     /* Remove all our listeners. */
     exit_task_events(exiter);
+
+    if( atomic_dec_and_test(&exiter->task_events->refcount) ) {
+      memfree(exiter->task_events);
+    } 
   }
 }
 
@@ -265,12 +269,6 @@ void do_exit(int code,ulong_t flags,long exitval)
   }
 
   if( !(flags & EF_DISINTEGRATE) ) {
-    /* Free sub-resources of this task in case it is really exiting. */
-
-    if( atomic_dec_and_test(&exiter->task_events->refcount) ) {
-      memfree(exiter->task_events);
-    }
-
     if( !(is_thread(exiter)) ) {
       __flush_pending_uworks(exiter);
       task_event_notify(TASK_EVENT_TERMINATION);
