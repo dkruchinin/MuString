@@ -115,7 +115,7 @@ void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_fr
 kernel_fault:
   kprintf_fault("[CPU %d] Unhandled kernel-mode GPF exception! Stopping CPU with error code=%d.\n\n",
           cpu_id(), stack_frame->error_code);
-  stop_cpu:
+stop_cpu:  
   fault_dump_regs(regs,stack_frame->rip);
   show_stack_trace(stack_frame->old_rsp);
 #ifdef CONFIG_DUMP_USTACK

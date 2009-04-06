@@ -103,6 +103,7 @@ void fault_dump_regs(regs_t *r, ulong_t rip)
   if (likely(is_cpu_online(cpu_id()))) {
     kprintf("[CPU #%d] Current task: PID=%d, TID=0x%X\n",
             cpu_id(),current_task()->pid,current_task()->tid);
+    kprintf( " Task short name: '%s'\n",current_task()->short_name);
   }
   kprintf(" RAX: %p, RBX: %p, RDI: %p, RSI: %p\n RDX: %p, RCX: %p\n",
           r->rax,r->gpr_regs.rbx,

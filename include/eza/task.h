@@ -66,6 +66,8 @@ typedef uint32_t time_slice_t;
 #define LOCK_TASK_EVENTS(t) mutex_lock(&t->task_events->lock)
 #define UNLOCK_TASK_EVENTS(t) mutex_unlock(&t->task_events->lock)
 
+#define TASK_SHORTNAME_LEN  32
+
 typedef struct __task_event_ctl_arg {
   ulong_t ev_mask;
   ulong_t port;
@@ -260,6 +262,8 @@ typedef struct __task_struct {
 
   /* Userspace works-reated stuff. */
   uworks_data_t uworks_data;
+
+  char short_name[TASK_SHORTNAME_LEN];
 
   /* Arch-dependent context is located here */
   uint8_t arch_context[256];
