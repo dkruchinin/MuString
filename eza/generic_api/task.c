@@ -518,6 +518,10 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   task->uid=parent->uid;
   task->gid=parent->gid;
 
+  if( parent->short_name[0] ) {
+    strcpy(task->short_name,parent->short_name);
+  }
+
   if( !(r=__add_to_parent(task,parent,flags,priv)) ) {
     *t = task;
     return 0; 
