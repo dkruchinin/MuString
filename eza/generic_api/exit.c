@@ -328,7 +328,7 @@ void do_exit(int code,ulong_t flags,long exitval)
       dreq=exiter->uworks_data.disintegration_descr;
       exiter->uworks_data.disintegration_descr=NULL;
       UNLOCK_TASK_STRUCT(exiter);
-      
+
       if( dreq ) {
         __notify_disintegration_done(dreq,__DR_EXITED);
       }

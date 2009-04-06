@@ -394,7 +394,6 @@ void vmm_destroy(vmm_t *vmm)
 {
   VMM_VERBOSE("[%s]: Destroying VMM...\n", vmm_get_name_dbg(vmm));
   rwsem_down_write(&vmm->rwsem);
-
   __clear_vmranges_tree(vmm);
   VMM_VERBOSE("[%s]: VM ranges tree was successfully "
               "destroyed.\n", vmm_get_name_dbg(vmm));
