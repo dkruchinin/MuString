@@ -114,7 +114,7 @@ void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_fr
 
 kernel_fault:
   kprintf_fault("[CPU %d] Unhandled kernel-mode GPF exception! Stopping CPU with error code=%d.\n\n",
-                cpu_id(), stack_frame->error_code);
+          cpu_id(), stack_frame->error_code);
 stop_cpu:  
   fault_dump_regs(regs,stack_frame->rip);
   show_stack_trace(stack_frame->old_rsp);
@@ -132,7 +132,7 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
   regs_t *regs=(regs_t *)(((uintptr_t)stack_frame)-sizeof(struct __gpr_regs)-8);
   usiginfo_t siginfo;
   task_t *faulter=current_task();
-  
+
   get_fault_address(invalid_address);
   fixup = fixup_fault_address(stack_frame->rip);
   if(PFAULT_SVISOR(stack_frame->error_code) && !fixup) {
@@ -159,6 +159,8 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
     if (!ret) {
       return;
     }
+
+    vmranges_print_tree_dbg(vmm);
     if (fixup != 0) {
       goto kernel_fault;
     }

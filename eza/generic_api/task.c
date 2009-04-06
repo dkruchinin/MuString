@@ -436,6 +436,7 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
 
   task=__allocate_task_struct(flags,priv);
   if( !task ) {
+    r = -ENOMEM;
     goto free_pid;
   }
 

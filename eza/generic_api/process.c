@@ -171,7 +171,6 @@ int create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
 
   r = create_new_task(parent,flags,priv,&new_task,attrs);
   if(r == 0) {
-
     if( attrs ) {
       __setup_common_task_attributes(new_task,&attrs->exec_attrs);
     }

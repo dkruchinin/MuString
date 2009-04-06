@@ -161,6 +161,7 @@ void idx_free(idx_allocator_t *ida, ulong_t idx)
   }
   else
     ptr = ida->main_bmap + start_id;
+
   if (!bit_test_and_clear(ptr, bitno)) {
     kprintf(KO_WARNING "Detected an attempt to free already fried index %d "
             "[function: %s]!\n", idx, __FUNCTION__);
