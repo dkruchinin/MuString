@@ -625,15 +625,14 @@ static void prepare_memcache(memcache_t *cache, size_t object_size, int pages_pe
   cache->pages_per_slab = pages_per_slab;
 
   /*
-   * cache->inuse list contains partial and empty slabs
-   * memory caceh owns. Note, that partial cache are always at the
-   * end of the list and empty cache are allways at the head.
+   * cache->inuse list contains both partial and empty slabs
+   * given memory caceh owns. 
    */
   list_init_head(&cache->available_slabs);
   list_init_head(&cache->inuse_slabs);
-  atomic_set(&cache->nslabs, 0);
-  atomic_set(&cache->nempty_slabs, 0);
-  atomic_set(&cache->npartial_slabs, 0);
+  cache->nslabs = 0;
+  cache->nempty_slabs = 0;
+  cache->npartial_slabs = 0;
   spinlock_initialize(&cache->lock); /* for memcache lists protecting */
 
 }
@@ -835,7 +834,7 @@ void *alloc_from_memcache(memcache_t *cache)
   slab_t *slab;
   void *obj = NULL;
 
-  /* firstly try to getper cpu slab */
+  /* firstly try to get percpu slab */
   slab = __get_percpu_slab(cache);
   if (unlikely(!slab->nobjects)) {
     slab_t *old_slab = slab;

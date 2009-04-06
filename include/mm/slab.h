@@ -167,22 +167,28 @@ struct __memcache {
   list_head_t inuse_slabs;               /**< List of active and full slabs */
   list_head_t available_slabs;           /**< List of empty and partial slabs */
   slab_t *active_slabs[CONFIG_NRCPUS];   /**< Active slabs(there may be only one active slab if SMCF_SHARED was set) */
+  
 #ifdef CONFIG_DEBUG_SLAB
-  struct memcache_debug_info dbg; 
+  struct memcache_debug_info dbg;
 #endif /* CONFIG_DEBUG_SLAB */
-  atomic_t nslabs;                 /**< Total number of slabs in cache */
-  atomic_t nempty_slabs;           /**< Number of empty slabs in cache */
-  atomic_t npartial_slabs;         /**< Number of partial slabs in cache */
-  size_t object_size;              /**< Size of object which is allocated from slabs */
-  spinlock_t lock;                 /**< Lock for cache's lists */
-  int pages_per_slab;              /**< Number of pages per each slab created by this cache */
-  memcache_flags_t flags;          /**< Behaviour control flags */
+  
+#if defined(CONFIG_DEBUG_SLAB || CONFIG_SLAB_MERGEABLE)
+  list_node_t memcache_node;
+#endif /* defined(CONFIG_DEBUG_SLAB || CONFIG_SLAB_MERGEABLE) */
+  
+  int nslabs;
+  int nempty_slabs;
+  int npartial_slabs;
+  size_t object_size;
+  spinlock_t lock;
+  int pages_per_slab;
+  memcache_flags_t flags;
 };
 
 void slab_allocator_init(void);
 
 /**
- * @brief Create new memory cache
+  * @brief Create new memory cache
  * @param name  - Name of new memory cache
  * @param size  - Object size
  * @param pages - Number of pages per each cache's slab
