@@ -79,7 +79,7 @@ long sys_create_port( ulong_t flags, ulong_t queue_size )
 
 int sys_close_port(ulong_t port)
 {
-  return ipc_close_port(current_task(),port);
+  return ipc_close_port(current_task()->ipc,port);
 }
 
 static inline long __reply_iov(ulong_t port, ulong_t msg_id,

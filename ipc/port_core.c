@@ -267,12 +267,16 @@ static void __shutdown_port(ipc_gen_port_t *port)
 {
   ipc_port_message_t *msg;
 
-  while((msg=port->msg_ops->remove_head_message(port))) {
-    if( event_is_active(&msg->event) ) {
-      msg->replied_size=-EPIPE;
-      event_raise(&msg->event);
-    }
+repeat:
+  IPC_LOCK_PORT_W(port);
+  msg=port->msg_ops->remove_head_message(port);
+  if( msg ) {
+    msg->replied_size=-EPIPE;
+    event_raise(&msg->event);
+    IPC_UNLOCK_PORT_W(port);
+    goto repeat;
   }
+  IPC_UNLOCK_PORT_W(port);
 }
 
 static long __transfer_reply_data_iov(ipc_port_message_t *msg,
@@ -380,9 +384,8 @@ static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
   return r;
 }
 
-int ipc_close_port(task_t *owner,ulong_t port)
+int ipc_close_port(task_ipc_t *ipc,ulong_t port)
 {
-  task_ipc_t *ipc = get_task_ipc(owner);
   ipc_gen_port_t *p;
   bool shutdown=false;
   int r;
@@ -392,7 +395,7 @@ int ipc_close_port(task_t *owner,ulong_t port)
   }
 
   LOCK_IPC(ipc);
-  if( !ipc->ports || port >= owner->limits->limits[LIMIT_IPC_MAX_PORTS]) {
+  if( !ipc->ports || port > ipc->max_port_num ) {
     r=-EMFILE;
     goto out_unlock;
   }
@@ -430,7 +433,6 @@ out_unlock:
     }
     ipc_put_port(p);
   }
-  release_task_ipc(ipc);
   return r;
 }
 

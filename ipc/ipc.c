@@ -12,8 +12,6 @@
 
 static memcache_t *ipc_priv_data_cache;
 
-static void __close_ipc_resources(task_ipc_t *ipc);
-
 void initialize_ipc(void)
 {
 
@@ -24,7 +22,6 @@ void initialize_ipc(void)
   if( !ipc_priv_data_cache ) {
     panic( "initialize_ipc(): Can't create the IPC private data memcache !" );
   }
-
 }
 
 
@@ -32,26 +29,20 @@ static void __close_ipc_resources(task_ipc_t *ipc)
 {
   uint32_t i;
 
-  return;
-
   /* Close all open ports. */
-  kprintf_fault("ipc->ports: %p\n",ipc->ports);
   if( ipc->ports ) {
     for(i=0;i<=ipc->max_port_num;i++) {
       if( ipc->ports[i] ) {
-        kprintf_fault(" > Closing port %d\n",i);
         ipc_close_port(ipc,i);
       }
     }
   }
 
   /* Close all channels. */
-  kprintf_fault("ipc->channels: %p\n",ipc->channels);
   if( ipc->channels ) {
     for(i=0;i<=ipc->max_channel_num;i++) {
       if( ipc->channels[i] ) {
-        kprintf_fault("closing channel: %d\n",i);
-        ipc_close_channel(ipc,i);
+        ipc_close_channel(current_task(),i);
       }
     }
   }
@@ -59,16 +50,7 @@ static void __close_ipc_resources(task_ipc_t *ipc)
 
 void release_task_ipc(task_ipc_t *ipc)
 {
-  if( current_task()->pid == 13 ) {
-    kprintf_fault(" ---- Releasing IPC (%d:%d) : %d\n",
-                  current_task()->pid,current_task()->tid,
-                  ipc->use_count);
-  }
   if( atomic_dec_and_test(&ipc->use_count) ) {
-    if( current_task()->pid == 13 ) {
-      kprintf_fault(" >>> IPC released ! (%d:%d)\n",
-                    current_task()->pid,current_task()->tid);
-    }
       __close_ipc_resources(ipc);
     idx_allocator_destroy(&ipc->ports_array);
     idx_allocator_destroy(&ipc->channel_array);   
