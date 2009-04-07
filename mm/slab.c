@@ -30,6 +30,7 @@
 #include <mm/slab.h>
 #include <eza/kernel.h>
 #include <eza/spinlock.h>
+#include <eza/rwsem.h>
 #include <eza/errno.h>
 #include <eza/arch/types.h>
 
@@ -37,6 +38,9 @@
 static memcache_t *generic_memcaches[SLAB_GENERIC_CACHES]; /* POW2 caches(memalloc allocates memory from them) */
 static memcache_t caches_memcache; /* memory cache for memcache_t structures */
 static memcache_t slabs_memcache;  /* memory cache for slab_t structures */
+
+static RWSEM_DEFINE(memcaches_rwlock);
+static list_head_t memcaches;
 
 /*
  * When DEBUG_SLAB is enabled, each memoty cache contains its unique ID.
@@ -111,26 +115,10 @@ static inline void __display_statistics(memcache_t *cache)
                atomic_get(&cache->npartial_slabs), atomic_get(&cache->nempty_slabs));
 }
 
-/*
- * In debug mode each memory cache has its name, unique type and
- * it always registered in memory caches list.
- */
-static int __register_memcache_dbg(memcache_t *cache, const char *name)
+/* When CONFIG_DEBUG_SLAB enabled, each memory cache has "name" field. */
+static inline void __register_memcache_dbg(memcache_t *cache, const char *name)
 {
-  if (cache->flags & SMCF_GENERIC)
-    cache->dbg.name = idalloc(strlen(name) + 1);
-  else
-    cache->dbg.name = memalloc(strlen(name) + 1);
-  if (!cache->dbg.name)
-    return -ENOMEM;
-
-  strcpy(cache->dbg.name, name);
-  spinlock_lock(&memcaches_lock);
-  cache->dbg.type = next_memcache_type++;
-  list_add2tail(&memcaches_lst, &cache->dbg.n);
-  spinlock_unlock(&memcaches_lock);
-
-  return 0;
+  strmcpy(cache->name, name, MEMCACHE_DBG_NAME_MAX);
 }
 
 static void __unregister_memcache_dbg(memcache_t *cache)
@@ -156,14 +144,14 @@ static void __prepare_slab_pages_dbg(memcache_t *cache, page_frame_t *pages)
 }
 
 /*
- * Return real address slab's object <obj>. If <add> is not 0,
- * adds it to <obj> address and returns result.
+ * Return real address of a slab object <obj>. If <add> is not 0,
+ * add it to <obj> address and return the result.
  */
 static inline void *__getobjrealaddr(slab_t *slab, void *obj, uint32_t add)
 {
   char *p = obj;  
-  
-  if (unlikely((uintptr_t)p == PAGE_ALIGN(p)))
+
+  if (unlikely((uintptr_t)p & PAGE_ALIGN))
     p += SLAB_PAGE_OFFS;
   if (add) {
     /*
@@ -300,6 +288,12 @@ static void __validate_slab_object_dbg(slab_t *slab, void *obj)
 #define __unregister_memcache_dbg(cache)
 #endif /* CONFIG_DEBUG_SLAB */
 
+#ifdef CONFIG_SLAB_COLLECT_STAT
+#define __stat_inc_nslabs(cache) ((cache)->nslabs++)
+#else
+#define __stat_inc_nslabs(cache)
+#endif /* CONFIG_SLAB_COLLECT_STAT */
+
 static inline int __count_objects_per_slab(memcache_t *cache)
 {
   /*
@@ -367,13 +361,14 @@ static void *__slab_getfreeobj(slab_t *slab)
 
 /*
  * Split available space in slab into slab objects
- * of fixed size. Objects are equals chunks of memory
- * that may be allocated later.
+ * of fixed size. Objects are equal memory chunks
+ * that will be used for allocation from given slab.
  */
 static void __init_slab_objects(slab_t *slab, int skip_objs)
 {
   memcache_t *cache = slab->memcache;
-  char *obj = __getobjrealaddr(slab, pframe_to_virt(slab->pages), skip_objs * cache->object_size);
+  char *obj = __getobjrealaddr(slab, pframe_to_virt(slab->pages),
+                               skip_objs * cache->object_size);
   char *next = obj;
   int cur = __count_objects_per_slab(cache) - skip_objs;
 
@@ -382,8 +377,8 @@ static void __init_slab_objects(slab_t *slab, int skip_objs)
     next = __getobjrealaddr(slab, obj, cache->object_size);
   }
 
-  SLAB_VERBOSE("slab %p of %s has %zd free objects\n",
-               slab, cache->dbg.name, slab->nobjects);
+  SLAB_VERBOSE("[%s] slab %p of %s has %zd free objects\n",
+               slab->memcache->name, slab, cache->dbg.name, slab->nobjects);
 }
 
 
@@ -423,22 +418,19 @@ static void prepare_slab_pages(slab_t *slab)
   }
 }
 
-/*
- * This function doesn't care about memory cache locking,
- * so if locking is really necessary, it should be set manually
- * befure calling this function.
- */
 static int prepare_slab(memcache_t *cache, slab_t *slab)
 {
   memset(slab, 0, sizeof(*slab));
   slab->memcache = cache;
   slab->pages = alloc_slab_pages(cache);
-  if (!slab->pages)
+  if (!slab->pages) {
     return -ENOMEM;
-  else
+  }
+  else {
     prepare_slab_pages(slab);
-  
-  __init_slab_objects(slab, 0);
+  }
+
+  __init_slab_objects(slab, 0);  
   return 0;
 }
 
@@ -454,6 +446,11 @@ static slab_t *__create_slabs_slab(void)
   if (!pages)
     goto out;
 
+  /*
+   * When creating a new slab for slab_t structures, the very
+   * first object in the slab must be reserverd for itself.
+   * Thus it will be fried only after given slab is destroyed.
+   */
   slab = pframe_to_virt(pages) + SLAB_PAGE_OFFS;
   slab->memcache = &slabs_memcache;
   slab->objects = NULL;
@@ -464,7 +461,7 @@ static slab_t *__create_slabs_slab(void)
   SLAB_VERBOSE("Create new slab(%p), (objs=%d) for slabs memory cache(sz=%d)\n",
                slab, slab->nobjects, slab->memcache->object_size);
 
-  out:
+out:
   return slab;
 }
 
@@ -528,7 +525,8 @@ static slab_t *create_new_slab(memcache_t *cache)
   atomic_inc(&cache->nslabs);
   SLAB_VERBOSE("(create_new_slab): new slab for %s was dynamically created.\n",
                new_slab->memcache->dbg.name);
-  out:
+  
+out:
   __display_statistics(cache);
   return new_slab;
 }
@@ -618,44 +616,67 @@ static void free_slab_object(slab_t *slab, void *obj)
   __slab_unlock(slab);
 }
 
-static void prepare_memcache(memcache_t *cache, size_t object_size, int pages_per_slab)
+static void prepare_memcache(memcache_t *cache, size_t object_size,
+                             int pages_per_slab)
 {
   memset(cache, 0, sizeof(*cache));
   cache->object_size = object_size;
   cache->pages_per_slab = pages_per_slab;
 
   /*
-   * cache->inuse list contains both partial and empty slabs
-   * given memory caceh owns. 
+   * avail_slabs list holds all slabs that may be used for
+   * objects allocation. Partial slabs located before empty
+   * slabs. Empty slabs always placed at the tail of the list.
    */
-  list_init_head(&cache->available_slabs);
-  list_init_head(&cache->inuse_slabs);
-  cache->nslabs = 0;
-  cache->nempty_slabs = 0;
-  cache->npartial_slabs = 0;
-  spinlock_initialize(&cache->lock); /* for memcache lists protecting */
+  list_init_head(&cache->avail_slabs);
+}
 
+/*
+ * Register new memory cache. By default all memory caches
+ * linked in one sorted "memcaches_list".
+ */
+static void register_memcache(memcache_t *memcache, const char *name)
+{
+  __register_memcache_dbg(memcache, name);
+  rwsem_down_write(&memcaches_rwlock);
+  if (likely(!list_is_empty(&memcaches_list))) {
+    memcache_t *c;
+
+    list_for_each_entry(&memcaches_list, c, memcache_node) {
+      if (c->object_size > memcache->object_size) {
+        list_add_before(&c->memcache_node, &memcache->memcache_node);
+        break;
+      }
+    }
+  }
+  else {
+    list_add2tail(&memcaches_list, &memcache->memcache_node);
+  }
+  
+  rwsem_up_write(&memcaches_rwlock);
 }
 
 /*
  * There are only two "heart" caches: one for memcache_t structures and another
  * one for slab_t strcutures.
- * __create_hear_cache creates caches slab core system needs very much.
  */
-static void __create_heart_cache(memcache_t *cache, size_t size, const char *name)
+static void __create_heart_cache(memcache_t *cache, size_t size,
+                                 const char *name)
 {
   int ret, i;
 
   SLAB_VERBOSE("creating heart cache %s, object size=%d\n", name, size);
-  /* we don't need allocate "heart" caches dynamically, they are predefined */
+
+  /*
+   * All "heart" caches are predefined, so we don't need to allocate
+   * them dynamically.
+   */
   prepare_memcache(cache, size, GENERIC_SLAB_PAGES);
   cache->flags = SLAB_GENERIC_FLAGS;
-  ret = __register_memcache_dbg(cache, name);
-  if (ret)
-    goto err;
-
+  bit_clear(&cache->flags, __MMC_LOCK_BIT);
+  register_memcache(cache, name);
   SLAB_VERBOSE("memory cache %s was initialized. (size = %d, pages per slab = %d)\n",
-               cache->dbg.name, cache->object_size, cache->pages_per_slab);  
+               cache->name, cache->object_size, cache->pages_per_slab);
   ret = -ENOMEM;
   for_each_cpu(i) {
     slab_t *slab;
@@ -679,17 +700,17 @@ static void __create_heart_cache(memcache_t *cache, size_t size, const char *nam
         goto err;
     }
 
-    SLAB_VERBOSE("creating percpu slab for %s, cpu=%d\n", name, i);
-    list_add2tail(&cache->inuse_slabs, &slab->pages->node);
-    atomic_inc(&cache->nslabs);
+    SLAB_VERBOSE("Created percpu slab for %s, cpu=%d\n", name, i);
     cache->active_slabs[i] = slab;
+    __stat_inc_nslabs(cache);    
     __display_statistics(cache);
   }
 
   kprintf(" Cache \"%s\" (size=%zd) was successfully initialized\n",
           name, size);
   return;
-  err:
+  
+err:
   panic("Can't create slab memory cache for \"%s\" elements! (err=%d)", name, ret);
 }
 
@@ -699,14 +720,16 @@ static void __create_generic_caches(void)
   int i = 0, err = 0;
   char cache_name[16] = "size ";
 
-  memset(generic_memcaches, 0, sizeof(*generic_memcaches) * SLAB_GENERIC_CACHES);
+  memset(generic_memcaches, 0, sizeof(*generic_memcaches) *
+         SLAB_GENERIC_CACHES);
   while (size <= SLAB_OBJECT_MAX_SIZE) {
     ASSERT((size >= SLAB_OBJECT_MIN_SIZE) &&
            (size <= SLAB_OBJECT_MAX_SIZE));
     memset(cache_name + 5, 0, 11);
     sprintf(cache_name + 5, "%3d", size);
     generic_memcaches[i] = create_memcache(cache_name, size,
-                                           GENERIC_SLAB_PAGES, SLAB_GENERIC_FLAGS);
+                                           CONFIG_SLAB_DEFAULT_NUMPAGES,
+                                           SLAB_GENERIC_FLAGS);
     if (!generic_memcaches[i])
       goto err;
 
@@ -716,7 +739,7 @@ static void __create_generic_caches(void)
 
   return;
   
-  err:
+err:
   panic("Can't greate generic cache for size %zd: (err = %d)", size, err);
 }
 
@@ -741,8 +764,12 @@ memcache_t *create_memcache(const char *name, size_t size,
 
   if (size < SLAB_OBJECT_MIN_SIZE)
     size = SLAB_OBJECT_MIN_SIZE;
-  else if (size > SLAB_OBJECT_MAX_SIZE)
+  else if (size > SLAB_OBJECT_MAX_SIZE) {
+    SLAB_VERBOSE("Failed to create slab %s of size %zd: Slab size "
+                 "exeeds max allowed object size (%d).\n",
+                 name, size, SLAB_OBJECT_MAX_SIZE);
     goto err;
+  }
 
   cache = alloc_from_memcache(&caches_memcache);
   if (!cache)

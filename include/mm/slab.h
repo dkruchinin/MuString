@@ -39,25 +39,33 @@
 #include <eza/arch/atomic.h>
 #include <mlibc/types.h>
 
-/* Max number of empty slabs one memory cache may have. */
+/*
+ * Max number of empty slabs one memory cache may have.
+ * If this number is exceeded, odd empty slabs will be
+ * automatically destroyed.
+ */
 #define SLAB_EMPTYSLABS_MAX  (CONFIG_NRCPUS)
-/* End address of objects list */
+
+/* End mark of slab objects list */
 #define SLAB_OBJLIST_END     ((char *)0xF00BAAF)
+
 /* Quantity of pages per slab for generic caches */
 #define GENERIC_SLAB_PAGES   1
 #define DEFAULT_SLAB_PAGES   1
+
 /* Minimal allowed object size */
 #define SLAB_OBJECT_MIN_SIZE 8 
 #define FIRST_GENSLABS_POW2  3
 #define LAST_GENSLABS_POW2   10
 
 /* Max allowed object size */
-#define SLAB_OBJECT_MAX_SIZE (1<<LAST_GENSLABS_POW2)
+#define SLAB_OBJECT_MAX_SIZE (1 << LAST_GENSLABS_POW2)
 
 /* number of generic memory caches(except memory caches for memcache_t and slab_t) */
 #define SLAB_GENERIC_CACHES  (LAST_GENSLABS_POW2 - FIRST_GENSLABS_POW2 + 1)
 
 #ifdef CONFIG_DEBUG_SLAB
+#define MEMCACHE_DBG_NAME_MAX 128
 /* Min space required for holding debug information in slab's free objects */
 #define SLAB_OBJDEBUG_MINSIZE ((sizeof(int) << 1) + sizeof(char *))
 #define SLAB_LEFTGUARD_OFFS   sizeof(int)
@@ -73,15 +81,6 @@
 /* Very first memory cache type (last type is ((1 << 31) - SLAB_MAGIC_BASE) */
 #define SLAB_FIRST_TYPE       (1)
 
-/*
- * Private memory cache strucutre containing
- * various debug information.
- */
-struct memcache_debug_info {
-  char *name;        /* Memory cache name */
-  unsigned int type; /* Memory cache type */
-  list_node_t n;     /* obvious */
-};
 #else
 #define SLAB_PAGE_OFFS      0
 #define SLAB_LEFTGUARD_OFFS 0
@@ -133,6 +132,7 @@ typedef struct __slab {
 #define SMCF_CONST     0x10 /**< Do not create new slabs for memory cache */
 #define SMCF_GENERIC   0x20 /**< Memory cache is generic(it can't bee destroyed) */
 #define SMCF_MERGE     0x40 /**< Try to merge memory cache with existing one that has identical object size */
+#define __SMCF_LOCK_BIT 15
 /* TODO DK: implement the following policies: SMCF_SHARED, SMCF_POISON, SMCF_MERGE */
 
 /* generic slabs default behaviour control flags */
@@ -164,25 +164,25 @@ typedef uint8_t memcache_flags_t;
  * @see memcache_flags_t
  */
 struct __memcache {
-  list_head_t inuse_slabs;               /**< List of active and full slabs */
-  list_head_t available_slabs;           /**< List of empty and partial slabs */
+  list_head_t avail_slabs;               /**< List of empty and partial slabs */
   slab_t *active_slabs[CONFIG_NRCPUS];   /**< Active slabs(there may be only one active slab if SMCF_SHARED was set) */
+  list_node_t memcache_node;
+  int num_avail_slabs;
+  int object_size;
+  int pages_per_slab;  
+  memcache_flags_t flags;
+  uint8_t pool_type;
   
 #ifdef CONFIG_DEBUG_SLAB
-  struct memcache_debug_info dbg;
+  char name[MEMCACHE_DBG_NAME_MAX];
+  list_head_t full_slabs;
 #endif /* CONFIG_DEBUG_SLAB */
-  
-#if defined(CONFIG_DEBUG_SLAB || CONFIG_SLAB_MERGEABLE)
-  list_node_t memcache_node;
-#endif /* defined(CONFIG_DEBUG_SLAB || CONFIG_SLAB_MERGEABLE) */
-  
+
+#ifdef CONFIG_SLAB_COLLECT_STAT  
   int nslabs;
   int nempty_slabs;
   int npartial_slabs;
-  size_t object_size;
-  spinlock_t lock;
-  int pages_per_slab;
-  memcache_flags_t flags;
+#endif /* CONFIG_SLAB_COLLECT_STAT */
 };
 
 void slab_allocator_init(void);
