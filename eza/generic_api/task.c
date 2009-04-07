@@ -264,7 +264,6 @@ static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags,
     r=setup_task_ipc(task);
     if( !r ) {
       get_task_ipc(parent);
-      dup_task_ipc_resources(task->ipc);
     }
   } else {
     if( flags & CLONE_REPL_IPC ) {
@@ -568,6 +567,8 @@ void release_task_struct(struct __task_struct *t)
 //      UNLOCK_PID_ARRAY;
     }
 
+    kprintf_fault(" >>>> Freeing task struct: %d-%d\n",
+                  t->pid,t->tid);
     free_pages_addr(t,1);
   }
 }

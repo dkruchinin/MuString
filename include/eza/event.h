@@ -84,7 +84,7 @@ static bool event_defered_sched_handler(void *data)
   return !(t->flags & EVENT_OCCURED);
 }
 
-static inline int event_yield(event_t *event)
+static inline int event_yield_state(event_t *event,int state)
 {
   struct __task_struct *t;
   int r=-EINVAL;
@@ -100,7 +100,7 @@ static inline int event_yield(event_t *event)
     if(!ec) {
       ec=event_defered_sched_handler;
     }
-    r=sched_change_task_state_deferred(t,TASK_STATE_SLEEPING,ec,event);
+    r=sched_change_task_state_deferred(t,state,ec,event);
 
     LOCK_EVENT(event,is);
     if( event->flags & EVENT_OCCURED ) {
@@ -113,6 +113,10 @@ static inline int event_yield(event_t *event)
   }
   return r;
 }
+
+#define event_yield_intr(e)  event_yield_state((e),TASK_STATE_SLEEPING)
+#define event_yield_susp(e)  event_yield_state((e),TASK_STATE_SUSPENDED)
+#define event_yield(e)  event_yield_intr((e))
 
 static inline void event_raise(event_t *event)
 {

@@ -547,10 +547,13 @@ long ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
     return -EINVAL;
   }
 
+recv_cycle:
   /* Main 'Receive' cycle. */
   msg=NULL;
+  if( task_was_interrupted(owner) ) {
+    return -EINTR;
+  }
 
-recv_cycle:
   IPC_LOCK_PORT_W(port);
   if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
     if( !port->avail_messages ) {
@@ -563,9 +566,9 @@ recv_cycle:
        * port's waitqueue.
        */
         waitqueue_prepare_task(&w,owner);
-        r=waitqueue_push(&port->waitqueue,&w);
-        IPC_UNLOCK_PORT_W(port);
+        r=waitqueue_push_intr(&port->waitqueue,&w);
 
+        IPC_UNLOCK_PORT_W(port);
         if( !r ) {
           goto recv_cycle;
         } else {

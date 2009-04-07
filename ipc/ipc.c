@@ -12,6 +12,8 @@
 
 static memcache_t *ipc_priv_data_cache;
 
+static void __close_ipc_resources(task_ipc_t *ipc);
+
 void initialize_ipc(void)
 {
 
@@ -25,9 +27,49 @@ void initialize_ipc(void)
 
 }
 
+
+static void __close_ipc_resources(task_ipc_t *ipc)
+{
+  uint32_t i;
+
+  return;
+
+  /* Close all open ports. */
+  kprintf_fault("ipc->ports: %p\n",ipc->ports);
+  if( ipc->ports ) {
+    for(i=0;i<=ipc->max_port_num;i++) {
+      if( ipc->ports[i] ) {
+        kprintf_fault(" > Closing port %d\n",i);
+        ipc_close_port(ipc,i);
+      }
+    }
+  }
+
+  /* Close all channels. */
+  kprintf_fault("ipc->channels: %p\n",ipc->channels);
+  if( ipc->channels ) {
+    for(i=0;i<=ipc->max_channel_num;i++) {
+      if( ipc->channels[i] ) {
+        kprintf_fault("closing channel: %d\n",i);
+        ipc_close_channel(ipc,i);
+      }
+    }
+  }
+}
+
 void release_task_ipc(task_ipc_t *ipc)
 {
+  if( current_task()->pid == 13 ) {
+    kprintf_fault(" ---- Releasing IPC (%d:%d) : %d\n",
+                  current_task()->pid,current_task()->tid,
+                  ipc->use_count);
+  }
   if( atomic_dec_and_test(&ipc->use_count) ) {
+    if( current_task()->pid == 13 ) {
+      kprintf_fault(" >>> IPC released ! (%d:%d)\n",
+                    current_task()->pid,current_task()->tid);
+    }
+      __close_ipc_resources(ipc);
     idx_allocator_destroy(&ipc->ports_array);
     idx_allocator_destroy(&ipc->channel_array);   
     memfree(ipc);
@@ -112,29 +154,6 @@ free_ipc:
   return -ENOMEM;
 }
 
-void close_ipc_resources(task_ipc_t *ipc)
-{
-  uint32_t i;
-
-  /* Close all open ports. */
-  if( ipc->ports ) {
-    for(i=0;i<=ipc->max_port_num;i++) {
-      if( ipc->ports[i] ) {
-        ipc_close_port(current_task(),i);
-      }
-    }
-  }
-
-  /* Close all channels. */
-  if( ipc->channels ) {
-    for(i=0;i<=ipc->max_channel_num;i++) {
-      if( ipc->channels[i] ) {
-        ipc_close_channel(current_task(),i);
-      }
-    }
-  }
-}
-
 void *allocate_ipc_memory(long size)
 {
   void *addr;
@@ -162,37 +181,6 @@ void free_ipc_memory(void *addr,int size)
     }
     free_pages_addr(addr,pages);
   }
-}
-
-void dup_task_ipc_resources(task_ipc_t *ipc)
-{
-  int i;
-
-  LOCK_IPC(ipc);
-
-  /* Duplicate all open ports. */
-  if( ipc->ports ) {
-    for(i=0;i<=ipc->max_port_num;i++) {
-      IPC_LOCK_PORTS(ipc);
-      if( ipc->ports[i] ) {
-        atomic_inc(&ipc->ports[i]->own_count);
-      }
-      IPC_UNLOCK_PORTS(ipc);
-    }
-  }
-
-  /* Duplicate all open channels. */
-  if( ipc->channels ) {
-    for(i=0;i<=ipc->max_channel_num;i++) {
-      IPC_LOCK_CHANNELS(ipc);
-      if( ipc->channels[i] ) {
-        atomic_inc(&ipc->channels[i]->use_count);
-      }
-      IPC_UNLOCK_CHANNELS(ipc);
-    }
-  }
-
-  UNLOCK_IPC(ipc);
 }
 
 long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)

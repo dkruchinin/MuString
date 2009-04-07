@@ -92,7 +92,7 @@ int ipc_open_channel_raw(ipc_gen_port_t *server_port, ulong_t flags, ipc_channel
   ASSERT(out_channel != NULL);
   *out_channel = channel;
   return ret;
-  
+
   out:
   if (channel)
    ipc_destroy_channel(channel);

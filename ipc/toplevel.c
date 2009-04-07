@@ -163,15 +163,17 @@ static inline long __send_iov_v(ulong_t channel,
   ipc_channel_t *c;
   long ret;
 
-  c = ipc_get_channel(current_task(), channel);
-  if (!c) {
-    return -EINVAL;
-  }
   if (!__valid_iovecs(snd_kiovecs, snd_numvecs)) {
     return -EFAULT;
   }
+
   if (rcv_kiovecs && !__valid_iovecs(rcv_kiovecs, rcv_numvecs)) {
     return -EFAULT;
+  }
+
+  c = ipc_get_channel(current_task(), channel);
+  if (!c) {
+    return -EINVAL;
   }
 
   ret = ipc_port_send_iov(c, snd_kiovecs, snd_numvecs, rcv_kiovecs, rcv_numvecs);

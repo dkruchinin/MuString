@@ -94,13 +94,12 @@ static void __perform_default_action(int sig)
 {
   int sm=_BM(sig);
 
-  kprintf( ">>>>>>> DEFAULT ACTION FOR %d: ",sig );
+  kprintf( "[!!] Default action for signal %d is: ",sig );
   if( sm & LETHAL_SIGNALS ) {
-    kprintf( "TERMINATE PROCESS\n" );
+    kprintf( "TERMINATE\n" );
     do_exit(EXITCODE(sig,0),0,0);
   }
   kprintf( "IGNORE\n" );
-  for(;;);
 }
 
 static void __handle_cancellation_request(int reason,uintptr_t kstack)
@@ -278,12 +277,13 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
   task_t *current=current_task();
   int i;
 
-/*  kprintf_fault("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
-              reason,retcode,
-              current->pid,current->tid,
-              kstack);
-  kprintf_fault("[UWORKS]: UWORKS=0x%X\n",uworks);
-*/
+  /*
+  kprintf_fault("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
+                reason,retcode,
+                current->pid,current->tid,
+                kstack);
+                kprintf_fault("[UWORKS]: UWORKS=0x%X\n",uworks);
+  */
 
   /* First, check for pending disintegration requests. */
   if( uworks & ARCH_CTX_UWORKS_DISINT_REQ_MASK ) {

@@ -51,6 +51,28 @@ static void __release_listener(task_event_listener_t *l)
   __free_listener(l);
 }
 
+static task_events_t *__get_task_events(task_t *task)
+{
+  task_events_t *te;
+
+  LOCK_TASK_STRUCT(task);
+  if( !(task->flags & TF_EXITING) && task->task_events ) {
+    te=task->task_events;
+    atomic_inc(&te->refcount);
+  } else {
+    te=NULL;
+  }
+  UNLOCK_TASK_STRUCT(task);
+  return te;
+}
+
+static void __release_task_events(task_events_t *te)
+{
+  if( atomic_dec_and_test(&te->refcount) ) {
+    memfree(te);
+  }
+}
+
 void task_event_notify(ulong_t events)
 {
   task_t *task=current_task();
@@ -83,13 +105,14 @@ void task_event_notify(ulong_t events)
   UNLOCK_TASK_EVENTS(task);
 }
 
-int task_event_attach(task_t *target,task_t *listener,
+int task_event_attach(task_t *target_task,task_t *listener,
                       task_event_ctl_arg *ctl_arg)
 {
   ipc_gen_port_t *port;
   task_event_listener_t *l;
   int r=-EINVAL;
   list_node_t *n;
+  task_events_t *target_events;
 
   if( !ctl_arg->ev_mask || (ctl_arg->ev_mask & ~(ALL_TASK_EVENTS_MASK)) ) {
     return -EINVAL;
@@ -110,38 +133,48 @@ int task_event_attach(task_t *target,task_t *listener,
 
   r = ipc_open_channel_raw(port, IPC_KERNEL_SIDE, &l->channel);
   if (r) {
-    ipc_destroy_channel(l->channel);
-    goto out_free;
+    goto put_port;
   }
-  
+
   l->events=ctl_arg->ev_mask;
   l->listener=listener;
-  l->target=target;
+  l->target=target_task;
 
-  /* Make sure caller hasn't installed another listenersfor this process. */
-  LOCK_TASK_EVENTS(target);
-  if( check_task_flags(target,TF_EXITING) ) {
-    /* Target task became a zombie ? */
+  if( !(target_events=__get_task_events(target_task)) ) {
     r=-ESRCH;
-    goto dont_add;
+    goto put_channel;
   }
 
-  list_for_each(&target->task_events->listeners,n) {
-    task_event_listener_t *tl=container_of(n,task_event_listener_t,llist);
+  mutex_lock(&target_events->lock);
 
-    if( tl->listener == listener ) {
-      r=-EBUSY;
-      goto dont_add;
+  LOCK_TASK_STRUCT(target_task);
+  if( !target_task->task_events ) {
+    /* Target task has passed the point of no event generation ? */
+    r=-ESRCH;
+  } else {
+    r=0;
+  }
+  UNLOCK_TASK_STRUCT(target_task);
+
+  if( !r ) {
+    list_for_each(&target_events->listeners,n) {
+      task_event_listener_t *tl=container_of(n,task_event_listener_t,llist);
+
+      /* Make sure caller hasn't installed another listeners for this process. */
+      if( tl->listener == listener ) {
+        r=-EBUSY;
+        goto dont_add;
+      }
     }
+    list_add2tail(&target_events->listeners,&l->llist);
+    grab_task_struct(target_task);
   }
-  list_add2tail(&target->task_events->listeners,&l->llist);
-  grab_task_struct(target);
-  r=0;
 dont_add:
-  UNLOCK_TASK_EVENTS(target);
+  mutex_unlock(&target_events->lock);
+  __release_task_events(target_events);
 
   if( r ) {
-    goto put_port;
+    goto put_channel;
   }
 
   /* Add this listener to our list. */
@@ -150,6 +183,9 @@ dont_add:
   UNLOCK_TASK_EVENTS(listener);
 
   return r;
+put_channel:
+  ipc_destroy_channel(l->channel);
+  goto out_free; /* Skip 'put_port' since it is freed in 'destroy_channel()' */
 put_port:
   ipc_put_port(port);
 out_free:
@@ -162,10 +198,12 @@ int task_event_detach(int target,struct __task_struct *listener)
   list_head_t lss;
   task_event_listener_t *tl;
   list_node_t *ln,*lns;
+  task_events_t *target_events;
   int evcount=0;
 
-  LOCK_TASK_EVENTS(listener);
   list_init_head(&lss);
+
+  LOCK_TASK_EVENTS(listener);
   list_for_each_safe(&listener->task_events->my_events,ln,lns) {
     tl=container_of(ln,task_event_listener_t,owner_list);
 
@@ -178,16 +216,21 @@ int task_event_detach(int target,struct __task_struct *listener)
   UNLOCK_TASK_EVENTS(listener);
 
   if( evcount ) {
-    list_for_each_entry(&lss,tl,owner_list) {
-      LOCK_TASK_EVENTS(tl->target);
-      /* Target can exit before we've reached the list node, and remove us from its
-       * list of attached actions, so perform an extra check.
-       */
-      if( list_node_is_bound(&tl->llist) ) {
-        list_del(&tl->llist);
-      }
-      UNLOCK_TASK_EVENTS(tl->target);
+    while( !list_is_empty(&lss) ) {
+      tl=container_of(list_node_first(&lss),task_event_listener_t,owner_list);
 
+      list_del(&tl->owner_list);
+      if( (target_events=__get_task_events(tl->target)) ) {
+        mutex_lock(&target_events->lock);
+        /* Target can exit before we've reached the list node, and remove us from its
+         * list of attached actions, so perform an extra check.
+         */
+        if( list_node_is_bound(&tl->llist) ) {
+          list_del(&tl->llist);
+        }
+        mutex_unlock(&target_events->lock);
+        __release_task_events(target_events);
+      }
       release_task_struct(tl->target);
       __release_listener(tl);
     }
@@ -196,41 +239,58 @@ int task_event_detach(int target,struct __task_struct *listener)
   return -EINVAL;
 }
 
+/* NOTE: Invoke this function only from task's exit path (i.e. when
+ * __TF_EXITING is set) to protect your listeners from NULL fault,
+ * and invoke it only once !
+ */
 void exit_task_events(task_t *task)
 {
+  task_events_t *target_events,*my_events=task->task_events;
   list_node_t *n,*ns;
   task_event_listener_t *tl;
-  task_events_t *tevents=task->task_events;
 
-  if( atomic_dec_and_test(&tevents->refcount) ) {
-    /* We don't need to lock our events since there are no more
-     * threads that share this structure.
-     * Step 1: Remove our listeners.
+  if( is_thread(task) ) {
+    LOCK_TASK_STRUCT(task);
+    task->task_events=NULL;
+    UNLOCK_TASK_STRUCT(task);
+  } else {
+    /* We don't lock our own listeners since we're the only thread owning
+     * our events.
      */
-    list_for_each_safe(&tevents->my_events,n,ns) {
+    list_for_each_safe(&my_events->my_events,n,ns) {
       tl=container_of(n,task_event_listener_t,owner_list);
 
       list_del(&tl->owner_list);
-      LOCK_TASK_EVENTS(tl->target);
-      /* Target can exit before we've reached the list node, and remove us from its
-       * list of attached actions, so perform an extra check.
-       */
-      if( list_node_is_bound(&tl->llist) ) {
-        list_del(&tl->llist);
-      }
-      UNLOCK_TASK_EVENTS(tl->target);
 
+      if( (target_events=__get_task_events(tl->target)) ) {
+        mutex_lock(&target_events->lock);
+        /* Target can exit before we've reached the list node, and remove us from its
+         * list of attached actions, so perform an extra check.
+         */
+        if( list_node_is_bound(&tl->llist) ) {
+          list_del(&tl->llist);
+        }
+        mutex_unlock(&target_events->lock);
+        __release_task_events(target_events);
+      }
       release_task_struct(tl->target);
       __release_listener(tl);
     }
 
+    /* No more listeners, folks. */
+    mutex_lock(&my_events->lock);
+    LOCK_TASK_STRUCT(task);
+    task->task_events=NULL;
+    UNLOCK_TASK_STRUCT(task);
+
     /* Step 2: Remove listeners that target us under protection of the lock
      * since outer listeners may be detaching them from our list concurrently.
      */
-    LOCK_TASK_EVENTS(task);
-    list_for_each_safe(&tevents->listeners,n,ns) {
+    list_for_each_safe(&my_events->listeners,n,ns) {
       list_del(n);
     }
-    UNLOCK_TASK_EVENTS(task);
+    mutex_unlock(&my_events->lock);
   }
+
+  __release_task_events(my_events);
 }
