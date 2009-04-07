@@ -54,10 +54,11 @@
 #define DEFAULT_SLAB_PAGES   1
 
 /* Minimal allowed object size */
-#define SLAB_OBJECT_MIN_SIZE 8 
 #define FIRST_GENSLABS_POW2  3
 #define LAST_GENSLABS_POW2   10
 
+/* min allowed object size */
+#define SLAB_OBJECT_MIN_SIZE (1 << FIRST_GENSLABS_POW2)
 /* Max allowed object size */
 #define SLAB_OBJECT_MAX_SIZE (1 << LAST_GENSLABS_POW2)
 
@@ -125,18 +126,17 @@ typedef struct __slab {
  * The following flags controls memory cache behaviour
  * @see memcache_t
  */
-#define SMCF_PDMA      0x01 /**< Allocate pages for slabs from DMA pool */
-#define SMCF_PGEN      0x02 /**< Allocate pages for slabs from GENERAL pool */
-#define SMCF_SHARED    0x04 /**< Do not create percpu slabs */
-#define SMCF_POISON    0x08 /**< Make slab objects "poison" after their freeing */
-#define SMCF_CONST     0x10 /**< Do not create new slabs for memory cache */
-#define SMCF_GENERIC   0x20 /**< Memory cache is generic(it can't bee destroyed) */
-#define SMCF_MERGE     0x40 /**< Try to merge memory cache with existing one that has identical object size */
-#define __SMCF_LOCK_BIT 15
+#define SMCF_CONST     0x01
+#define SMCF_UNIQUE    0x02
+#define SMCF_IMMORTAL  0x04
+#define SMCF_POISON    0x08
+#define SMCF_ATOMIC    0x10
+
+#define SMCF_MASK       0x1F
+#define __SMCF_LOCK_BIT 7
 /* TODO DK: implement the following policies: SMCF_SHARED, SMCF_POISON, SMCF_MERGE */
 
 /* generic slabs default behaviour control flags */
-#define SLAB_GENERIC_FLAGS (SMCF_PGEN | SMCF_GENERIC)
 
 /**
  * @typedef uint8_t memcache_flags_t

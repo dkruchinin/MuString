@@ -34,13 +34,22 @@
 #include <eza/errno.h>
 #include <eza/arch/types.h>
 
-/* generic memory caches */
-static memcache_t *generic_memcaches[SLAB_GENERIC_CACHES]; /* POW2 caches(memalloc allocates memory from them) */
-static memcache_t caches_memcache; /* memory cache for memcache_t structures */
-static memcache_t slabs_memcache;  /* memory cache for slab_t structures */
+#define SLAB_GENERIC_FLAGS (SMCF_UNIQUE | SMCF_IMMORTAL)
 
+/* POW2 generic memory caches(memalloc allocates memory from them) */
+static memcache_t *generic_memcaches[SLAB_GENERIC_CACHES];
+
+/* memory cache for memcache_t structures */
+static memcache_t caches_memcache;
+
+/* memory cache for slab_t structures */
+static memcache_t slabs_memcache;
+
+/* RW semaphore for protection of memcaches_list */
 static RWSEM_DEFINE(memcaches_rwlock);
-static list_head_t memcaches;
+
+/* Sorted by objects size list of all registered memory caches in a system. */
+static LIST_DEFINE(memcaches_list);
 
 /*
  * When DEBUG_SLAB is enabled, each memoty cache contains its unique ID.
@@ -149,7 +158,7 @@ static void __prepare_slab_pages_dbg(memcache_t *cache, page_frame_t *pages)
  */
 static inline void *__getobjrealaddr(slab_t *slab, void *obj, uint32_t add)
 {
-  char *p = obj;  
+  char *p = obj;
 
   if (unlikely((uintptr_t)p & PAGE_ALIGN))
     p += SLAB_PAGE_OFFS;
@@ -206,9 +215,9 @@ static bool __slab_page_is_valid_dbg(slab_t *slab, char *page)
  * be found.
  */
 static void __validate_address_dbg(void *addr)
-{  
+{
   unsigned int page_guard = *(unsigned int *)align_down((uintptr_t)addr, PAGE_SIZE);
-  bool cache_found = false;  
+  bool cache_found = false;
   struct memcache_debug_info *dbg;
 
   spinlock_lock(&memcaches_lock);
@@ -253,7 +262,7 @@ static void __validate_slab_object_dbg(slab_t *slab, void *obj)
     char *p = (char *)obj;
     int i = 0;
 
-    if (*(unsigned int *)p != SLAB_OBJLEFT_GUARD) 
+    if (*(unsigned int *)p != SLAB_OBJLEFT_GUARD)
       goto inval;
 
     p += SLAB_RIGHTGUARD_OFFS;
@@ -313,6 +322,11 @@ static inline int __count_objects_per_slab(memcache_t *cache)
 #define __get_percpu_slab(cache)                \
   ((cache)->active_slabs[cpu_id()])
 
+#define __lock_memcache(cache)                  \
+  (spinlock_lock_bit(&(cache)->flags, __SMCF_LOCK_BIT))
+#define __unlock_memcache(cache)                \
+  (spinlock_unlock_bit(&(cache)->flags, __SMCF_LOCK_BIT))
+
 /* set new percpu slab. */
 static inline void __set_percpu_slab(memcache_t *cache, slab_t *slab)
 {
@@ -336,7 +350,7 @@ static void __slab_setfreeobj(slab_t *slab, void *obj)
   
   if (unlikely(!slab->objects))
     *(char **)p = SLAB_OBJLIST_END;
-  else 
+  else
     *(char **)p = (char *)slab->objects;
   
   slab->objects = (char **)p;
@@ -373,7 +387,7 @@ static void __init_slab_objects(slab_t *slab, int skip_objs)
   int cur = __count_objects_per_slab(cache) - skip_objs;
 
   for (; cur > 0; cur--, obj = next) {
-    __slab_setfreeobj(slab, obj); 
+    __slab_setfreeobj(slab, obj);
     next = __getobjrealaddr(slab, obj, cache->object_size);
   }
 
@@ -714,33 +728,41 @@ err:
   panic("Can't create slab memory cache for \"%s\" elements! (err=%d)", name, ret);
 }
 
+/*
+ * Generic memory caches are a set of caches with sizes equal to
+ * multiple of power of 2. These caches are used by memalloc function,
+ * which tries to find out generic memory cache of size greater or equal
+ * to requested one.
+ * There is constant number of generic caches in a system equals to number
+ * of all power of 2 in a range [SLAB_OBJECT_MIN_SIZE, SLAB_OBJECT_MAX_SIZE].
+ */
 static void __create_generic_caches(void)
 {
-  size_t size = 1 << FIRST_GENSLABS_POW2;
-  int i = 0, err = 0;
+  size_t size = SLAB_OBJECT_MAX_SIZE;
+  int i = 0;
   char cache_name[16] = "size ";
 
+  ASSERT(is_powerof2(SLAB_OBJECT_MAX_SIZE));
   memset(generic_memcaches, 0, sizeof(*generic_memcaches) *
          SLAB_GENERIC_CACHES);
   while (size <= SLAB_OBJECT_MAX_SIZE) {
     ASSERT((size >= SLAB_OBJECT_MIN_SIZE) &&
            (size <= SLAB_OBJECT_MAX_SIZE));
-    memset(cache_name + 5, 0, 11);
+
     sprintf(cache_name + 5, "%3d", size);
+    *(cache_name + 9) = '\0';
+
     generic_memcaches[i] = create_memcache(cache_name, size,
                                            CONFIG_SLAB_DEFAULT_NUMPAGES,
                                            SLAB_GENERIC_FLAGS);
     if (!generic_memcaches[i])
-      goto err;
+      panic("Can't greate generic cache for size %zd: (ENOMEM)", size);
 
     size <<= 1;
     i++;
   }
 
   return;
-  
-err:
-  panic("Can't greate generic cache for size %zd: (err = %d)", size, err);
 }
 
 void slab_allocator_init(void)
@@ -822,6 +844,55 @@ err:
   }
   
   return NULL;
+}
+
+#define MEMCACHE_MERGE_MASK (SMCF_POISON | SMCF_ATOMIC | SMCF_CONST)
+memcache_t *create_memcache_ext(const char *name, size_t size,
+                                int pages, memcache_flags_t flags,
+                                uint8_t mempool_type)
+{
+  memcache_t *memcache = NULL;
+
+  flags &= SMCF_MASK;
+  if (size < SLAB_OBJECT_MIN_SIZE) {
+    size = SLAB_OBJECT_MIN_SIZE;
+  }
+  else if (size > SLAB_OBJECT_MAX_SIZE) {
+    kprintf(KO_ERROR "Failed to create memory cache \"%s\" of size %d: "
+            "required size exeeds max available slab object size(%d)!\n",
+            name, size, SLAB_OBJECT_MAX_SIZE);
+    goto out;
+  }
+
+  if (!(flags & SMCF_UNIQUE)) {
+    /* Try to attach to alredy registered cache if any */
+    memcache_t *victim;
+
+    rwsem_down_read(&memcaches_rwlock);
+    list_for_each_entry(&memcaches_list, victim, memcache_node) {
+      /* TODO DK: add description... */
+      if (((victim->object_size - size) < MAX_ALLOWED_FRAG) &&
+          !(victim->flags & SMCF_UNIQUE) &&
+          ((vimctim->flags & MEMCACHE_MERGE_MASK) ==
+           (flags & MEMCACHE_MERGE_MASK)) &&
+          victim->mempool_type == mempool_type) {
+        
+        __lock_memcache(victim);
+        victim->users++;
+        memcache = victim;
+        __unlock_memcache(victim);
+
+        break;
+      }
+    }
+
+    rwsem_up_read(&memcaches_rwlcok);
+    if (memcache) /* was successfully merged */
+      goto out;
+  }
+
+out:
+  return memcache;
 }
 
 int destroy_memcache(memcache_t *cache)
