@@ -127,9 +127,8 @@ void ipc_unref_channel(ipc_channel_t *channel,ulong_t c)
   }
 }
 
-int ipc_close_channel(task_t *owner,ulong_t ch_id)
+int ipc_close_channel(struct __task_ipc *ipc,ulong_t ch_id)
 {
-  task_ipc_t *ipc=get_task_ipc(owner);
   ipc_channel_t *c;
   int r;
 
@@ -149,7 +148,6 @@ int ipc_close_channel(task_t *owner,ulong_t ch_id)
   }
 
   UNLOCK_IPC(ipc);
-  release_task_ipc(ipc);
   return r;
 }
 

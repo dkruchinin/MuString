@@ -63,7 +63,7 @@ long sys_open_channel(pid_t pid,ulong_t port,ulong_t flags)
 
 int sys_close_channel(ulong_t channel)
 {
-  return ipc_close_channel(current_task(),channel);
+  return ipc_close_channel(current_task()->ipc,channel);
 }
 
 long sys_create_port( ulong_t flags, ulong_t queue_size )

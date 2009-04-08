@@ -42,7 +42,7 @@ static void __close_ipc_resources(task_ipc_t *ipc)
   if( ipc->channels ) {
     for(i=0;i<=ipc->max_channel_num;i++) {
       if( ipc->channels[i] ) {
-        ipc_close_channel(current_task(),i);
+        ipc_close_channel(ipc,i);
       }
     }
   }

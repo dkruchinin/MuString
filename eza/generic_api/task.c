@@ -567,7 +567,7 @@ void release_task_struct(struct __task_struct *t)
 //      UNLOCK_PID_ARRAY;
     }
 
-    kprintf_fault(" >>>> Freeing task struct: %d-%d\n",
+    kprintf_fault("[DBG] release_task_struct(): freeing task struct for [%d:%d]\n",
                   t->pid,t->tid);
     free_pages_addr(t,1);
   }

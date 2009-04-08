@@ -204,7 +204,8 @@ send_sigsegv:
   siginfo.si_code=SEGV_MAPERR;
   siginfo.si_addr=(void *)invalid_address;
 
-  kprintf_fault("[!!] Sending SIGSEGV to %d:%d\n",faulter->pid,faulter->tid);
+  kprintf_fault("[!!] Sending SIGSEGV to %d:%d ('%s')\n",
+                faulter->pid,faulter->tid,faulter->short_name);
   send_task_siginfo(faulter,&siginfo,true,NULL);
 }
 
