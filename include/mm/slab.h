@@ -130,11 +130,16 @@ typedef struct __slab {
 #define SMCF_UNIQUE    0x02
 #define SMCF_IMMORTAL  0x04
 #define SMCF_POISON    0x08
-#define SMCF_ATOMIC    0x10
+#define SMCF_OCCUPY    0x10
 
 #define SMCF_MASK       0x1F
-#define __SMCF_LOCK_BIT 7
-/* TODO DK: implement the following policies: SMCF_SHARED, SMCF_POISON, SMCF_MERGE */
+
+#define __SMCF_BIT_IRQ  6
+#define __SMCF_BIT_LOCK 7
+
+/* slab alloc flags */
+#define SBF_ATOMIC     0x01
+#define SBF_FROM_INTR  0x02
 
 /* generic slabs default behaviour control flags */
 

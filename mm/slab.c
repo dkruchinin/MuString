@@ -94,12 +94,12 @@ static void free_slab_object(slab_t *slab, void *obj);
   __unlock_slab_page((slab)->pages)
 
 #ifdef CONFIG_DEBUG_SLAB
-#define SLAB_VERBOSE(fmt, args...)              \
-  do {                                          \
-    if (verbose) {                              \
-      kprintf("[SLAB VERBOSE]: ");              \
-      kprintf(fmt, ##args);                     \
-    }                                           \
+#define SLAB_VERBOSE(fmt, args...)                      \
+  do {                                                  \
+    if (verbose) {                                      \
+      kprintf("[SLAB VERBOSE] {%s}: ", __FUNCTION__);   \
+      kprintf(fmt, ##args);                             \
+    }                                                   \
   } while (0)
 
 /*
@@ -298,9 +298,13 @@ static void __validate_slab_object_dbg(slab_t *slab, void *obj)
 #endif /* CONFIG_DEBUG_SLAB */
 
 #ifdef CONFIG_SLAB_COLLECT_STAT
-#define __stat_inc_nslabs(cache) ((cache)->nslabs++)
+#define memcache_stat_inc(cache, ___memb)          \
+  ((cache)->___memb++)
+#define memcache_stat_dec(cache, ___memb)       \
+  ((cache)->___memb--)
 #else
-#define __stat_inc_nslabs(cache)
+#define memcache_stat_inc(cache, ___memb)
+#define memcache_stat_dec(cache, ___memb)
 #endif /* CONFIG_SLAB_COLLECT_STAT */
 
 static inline int __count_objects_per_slab(memcache_t *cache)
@@ -395,6 +399,14 @@ static void __init_slab_objects(slab_t *slab, int skip_objs)
                slab->memcache->name, slab, cache->dbg.name, slab->nobjects);
 }
 
+static inline void slab_mark_as_full(slab_t *slab)
+{
+  slab->state = SLAB_FULL;
+  
+#ifdef CONFIG_DEBUG_SLAB
+  list_add2tail(&slab->memcache->full_slabs, &slab->node);
+#endif /* CONFIG_DEBUG_SLAB */
+}
 
 /*
  * alloc slab pages doesn't care about memory cache locking
@@ -479,67 +491,80 @@ out:
   return slab;
 }
 
-static slab_t *create_new_slab(memcache_t *cache)
+static slab_t *create_new_slab(memcache_t *memcache)
 {
   slab_t *new_slab = NULL;
 
+  __lock_memcache(memcache);
+  
   /*
-   * There may be suitable slab in the partial slabs list
-   * and in the empty slabs list.
-   * Typical stratagy: try to get partial slab first. If there
-   * are no any partial slabs, try to get an empty one.
+   * At first, try to find out if there are empty or partial slabs
+   * in avail_slabs list of memory cache. If so, one of them will be
+   * used. By default when slab becomes partial it is added at the
+   * head of the list, if empty - at the tail. Here we take the very
+   * first slab in the list. If partial slabs exist it will be partial,
+   * otherwise it will be empty.
    */
-  if (atomic_get(&cache->npartial_slabs)) {
-    atomic_dec(&cache->npartial_slabs);
-    spinlock_lock(&cache->lock);
-    new_slab =
-      __page2slab((page_frame_t *)list_entry(list_node_first(&cache->available_slabs), page_frame_t, node));
-    list_del(&new_slab->pages->node);
-    spinlock_unlock(&cache->lock);
-    SLAB_VERBOSE("(create_new_slab): slab %p for %s was taken from partial slabs(objs=%d)\n",
-                 new_slab, new_slab->memcache->dbg.name, new_slab->nobjects);
-  }
-  else if (atomic_get(&cache->nempty_slabs)) {
-    atomic_dec(&cache->nempty_slabs);
-    spinlock_lock(&cache->lock);
-    new_slab =
-      __page2slab((page_frame_t *)list_entry(list_node_last(&cache->available_slabs), page_frame_t, node));
-    list_del(&new_slab->pages->node);
-    spinlock_unlock(&cache->lock);
-    SLAB_VERBOSE("(create_new_slab): slab %p for %s was taken from empty slabs (objs=%d)\n",
-                 new_slab, new_slab->memcache->dbg.name, new_slab->nobjects);
-  }
-  if (new_slab)
-    goto out;
+  if (!list_is_empty(&memcache->avail_slabs)) {
+    page_frame_t *p = list_entry(list_node_first(&memcache->avail_slabs,
+                                                 page_frame_t, node));
 
+    list_del(&p->node);
+    new_slab = __page2slab(p);
+    switch (new_slab->state) {
+        case SLAB_PARTIAL:
+          memcache->npartial_slabs--;
+          SLAB_VERBOSE("[%s] slab %p was taken from partial "
+                       "slabs(avail objs=%d)\n", memcache->name, new_slab,
+                       new_slab->nobjects);
+          break;
+        case SLAB_EMPTY:
+          memcache->nempty_slabs--;
+          SLAB_VERBOSE("[%s] slab %p was taken from empty "
+                       "slabs(avail objs=%d)\n", memcache->name, new_slab,
+                       new_slab->nobjects);
+          break;
+        default:
+          /*
+           * Only empty or partial slabs may be linked in avail_slabs
+           * list. If there exist slab of any other type, it's a BUG.
+           */
+          panic("Slab with unknown state(%d) was found in "
+                "avail_slabs list of memcache %p!\n", memcache);
+    }
+
+    __unlock_memcache(memcache);
+    goto out;
+  }
+  
   /*
    * Unfortunaly, there are no any partial or empty slabs available,
    * so we have to allocate a new one.
    * Note: One memory cache(slabs_memcache) has specific allocation policy
    * different from allocation policy of other slabs...
    */
-  if (unlikely(cache == &slabs_memcache))
-    new_slab = __create_slabs_slab();
-  else {
+  __unlock_memcache(memcache);
+  if (likely(memcache != &slabs_memcache)) {
     int ret;
 
-    if (cache->flags & SMCF_CONST) {
+    if (memcache->flags & SMCF_CONST) {
       new_slab = NULL;
       goto out;
     }
-    
+
     new_slab = alloc_from_memcache(&slabs_memcache);
-    ret = prepare_slab(cache, new_slab);
+    ret = prepare_slab(memcache, new_slab);
     if (ret) {
+      SLAB_VERBOSE("[%s] Failed to allocate new slab: [RET = %d]\n",
+                   memcache->name, ret);
+      
       destroy_slab(new_slab);
       new_slab = NULL;
     }
+
+    SLAB_VERBOSE("[%s] New slab created.\n", memcache->name);
   }
 
-  atomic_inc(&cache->nslabs);
-  SLAB_VERBOSE("(create_new_slab): new slab for %s was dynamically created.\n",
-               new_slab->memcache->dbg.name);
-  
 out:
   __display_statistics(cache);
   return new_slab;
@@ -642,7 +667,7 @@ static void prepare_memcache(memcache_t *cache, size_t object_size,
    * objects allocation. Partial slabs located before empty
    * slabs. Empty slabs always placed at the tail of the list.
    */
-  list_init_head(&cache->avail_slabs);
+  list_init_head(&cache->avail_slabs);  
 }
 
 /*
@@ -668,6 +693,11 @@ static void register_memcache(memcache_t *memcache, const char *name)
   }
   
   rwsem_up_write(&memcaches_rwlock);
+} 
+
+static int occupy_percpu_slabs(memcache_t *memcache)
+{
+  return 0; /* TODO DK: */
 }
 
 /*
@@ -891,6 +921,24 @@ memcache_t *create_memcache_ext(const char *name, size_t size,
       goto out;
   }
 
+  
+  memcache = alloc_from_memcache(&caches_memcache);
+  if (!memcache) {
+    SLAB_VERBOSE("Failed to allocate memory cache \"%s\" of size %zd. "
+                 "ENOMEM\n", name, size);
+    goto out;
+  }
+
+  prepare_memcache(memcache, size, pages);
+  memcache->flags = flags;
+  memcache->users = 1;
+  if (flags & SMCF_OCCUPY) {
+    occupy_percpu_slabs(memcache);
+  }
+  
+  bit_clear(&memcache->flags, __SMCF_LOCK_BIT);
+  register_memcache(memcache, name);
+  
 out:
   return memcache;
 }
@@ -927,10 +975,40 @@ int destroy_memcache(memcache_t *cache)
   return 0;
 }
 
-void *alloc_from_memcache(memcache_t *cache)
+void *__alloc_from_memcache(memcache_t *memcache, int flags)
 {
   slab_t *slab;
   void *obj = NULL;
+  int irqstat;
+
+  if (!(flags & SBF_FROM_INTR)) {
+    preept_disable();
+  }
+  else {
+    irqstat = is_interrupts_disable();
+    interrupts_disable();
+  }
+
+  slab = __get_percpu_slab(memcache);
+  if (likely(slab)) {
+    if (likely(slab->objects != 0)) {
+      goto alloc_from_slab;
+    }
+    else {
+      slab_t *new_slab;
+
+      __lock_memcache(memcache);
+      slab_mark_as_full(slab);
+      new_slab = create_new_slab(memcache);
+    }
+  }
+}
+
+void *alloc_from_memcache(memcache_t *cache, int alloc_flags)
+{
+  slab_t *slab;
+  void *obj = NULL;
+  int irqstat;
 
   /* firstly try to get percpu slab */
   slab = __get_percpu_slab(cache);
