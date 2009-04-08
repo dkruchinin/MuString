@@ -141,8 +141,9 @@ typedef struct __slab {
 #define __SMCF_BIT_LOCK 7
 
 /* slab alloc flags */
-#define SBF_ATOMIC     0x01
-#define SBF_DONT_GROW  0x02
+#define SAF_ATOMIC     0x01
+#define SAF_DONT_GROW  0x02
+#define SAF_MEMNULL    0x04
 
 /* generic slabs default behaviour control flags */
 

@@ -71,11 +71,11 @@ static void free_slab_object(slab_t *slab, void *obj);
 
 /* translate page frame to slab it belongs to */
 #define __page2slab(pf)                         \
-  container_of((page_frame_t *)(pf)->slab_pages_start, slab_t, pages)
+  ((slab_t *)(pf)->slab_ptr)
 
 /* get slab by virtual address of its object */
 #define __get_slab_by_addr(addr)                \
-  __page2slab(virt_to_pframe((void *)align_down((uintptr_t)(addr), PAGE_SIZE)))
+  __page2slab(virt_to_pframe((void *)PAGE_ALIGN_DOWN((uintptr_t)addr)))
 
 /* slab locking and unlocking macros */
 #define __lock_slab_page(pg) lock_page_frame(pg, PF_LOCK)
@@ -87,7 +87,7 @@ static void free_slab_object(slab_t *slab, void *obj);
   __unlock_slab_page((slab)->pages)
 
 
-#ifdef CONFIG_DEBUG_SLAB_PAGE_GUARD
+#ifdef CONFIG_DEBUG_SLAB_MARK_PAGES
 static inline void *__objrealaddr(void *obj, int add)
 {
   char *p = obj;
@@ -99,7 +99,7 @@ static inline void *__objrealaddr(void *obj, int add)
    */
   if (!((uintptr_t)p & PAGE_MASK) ||
       (PAGE_ALIGN(p) != PAGE_ALIGN(p + add))) {
-    p = (char *)(PAGE_ALIGN(p) + SLAB_PAGE_GUARD_SIZE);
+    p = (char *)(PAGE_ALIGN(p) + SLAB_PAGE_MARK_SIZE);
   }
 
   return (p + add);
@@ -111,8 +111,20 @@ static inline void *__objrealaddr(void *obj, int add)
  */
 static inline int __count_objects_per_slab(memcache_t *memcache)
 {
-  return (((PAGE_SIZE - SLAB_PAGE_GUARD_SIZE)
+  return (((PAGE_SIZE - SLAB_PAGE_MARK_SIZE)
            / memcache->object_size) * memcache->pages_per_slab);
+}
+
+static void slab_dbg_mark_pages(memcache_t *memcache, page_frame_t *pages)
+{
+  unsigned int page_mark = SLAB_PAGE_MARK_BASE + memcache->mark_vers;
+  int i;
+  char *p;
+
+  p = pframe_to_virt(pages);
+  for (i = 0; i < memcache->pages_per_slab; i++, p += PAGE_SIZE) {
+    *(unsigned int *)p = page_mark;
+  }
 }
 
 #else
@@ -125,7 +137,8 @@ static inline int __count_objects_per_slab(memcache_t *memcache)
           cache->object_size);
 }
 
-#endif /* CONFIG_DEBUG_SLAB_PAGE_GUARD */
+#define slab_dbg_mark_pages(memcache, pages)
+#endif /* CONFIG_DEBUG_SLAB_MARK_PAGES */
 
 #ifdef CONFIG_DEBUG_SLAB_OBJGUARDS
 static inline void slab_dbg_set_objguards(slab_t *slab, void *obj)
@@ -158,11 +171,16 @@ static inline void *__objoffs(slab_t *slab, void *obj, int leftright)
 #define SLAB_VERBOSE(fmt, args...)                      \
   do {                                                  \
     if (verbose) {                                      \
-      kprintf("[SLAB VERBOSE] {%s}: ", __FUNCTION__);   \
+      kprintf("[SLAB VERBOSE] |%s|: ", __FUNCTION__);   \
       kprintf(fmt, ##args);                             \
     }                                                   \
   } while (0)
 
+#define SLAB_PRINT_ERROR(fmt, args...)                       \
+  do {                                                       \
+    kprintf("[SLAB ERROR] |%s|: ", __FUNCTION__);            \
+    kprintf(fmt, ##args);                                    \
+  } while (0)
 /*
  * Display all slab addressess located in given list <lst>
  */
@@ -199,18 +217,6 @@ static void __unregister_memcache_dbg(memcache_t *cache)
   spinlock_lock(&memcaches_lock);
   list_del(&cache->dbg.n);
   spinlock_unlock(&memcaches_lock);
-}
-
-/* write slab page magit to the start of each slab's page */
-static void __prepare_slab_pages_dbg(memcache_t *cache, page_frame_t *pages)
-{
-  unsigned int slab_page_magic = SLAB_MAGIC_BASE + cache->dbg.type;
-  char *startpage, *first_addr = pframe_to_virt(pages);
-
-  for (startpage = first_addr; startpage < (first_addr + (cache->pages_per_slab << PAGE_WIDTH));
-       startpage += PAGE_SIZE) {
-    *(unsigned int *)startpage = slab_page_magic;
-  }
 }
 
 
@@ -311,30 +317,36 @@ static void __validate_slab_object_dbg(slab_t *slab, void *obj)
 #define __unregister_memcache_dbg(cache)
 #endif /* CONFIG_DEBUG_SLAB */
 
-#ifdef CONFIG_SLAB_COLLECT_STAT
-#define memcache_stat_inc(cache, ___memb)          \
-  ((cache)->___memb++)
-#define memcache_stat_dec(cache, ___memb)       \
-  ((cache)->___memb--)
-#else
-#define memcache_stat_inc(cache, ___memb)
-#define memcache_stat_dec(cache, ___memb)
-#endif /* CONFIG_SLAB_COLLECT_STAT */
-
-#define __get_percpu_slab(cache)                \
-  ((cache)->active_slabs[cpu_id()])
-
 #define __lock_memcache(cache)                  \
   (spinlock_lock_bit(&(cache)->flags, __SMCF_LOCK_BIT))
 #define __unlock_memcache(cache)                \
   (spinlock_unlock_bit(&(cache)->flags, __SMCF_LOCK_BIT))
 
-/* set new percpu slab. */
-static inline void __set_percpu_slab(memcache_t *cache, slab_t *slab)
-{
-  slab->state = SLAB_ACTIVE;
-  cache->active_slabs[cpu_id()] = slab;
-}
+#define __get_percpu_slab(memcache)             \
+  ((memcache)->active_slabs[cpu_id()])
+#define __set_percpu_slab(memcache, slab)       \
+  ((memcache)->active_slabs[cpu_id()] = (slab))
+
+#ifdef CONFIG_DEBUG_SLAB
+
+#define slab_register_full(memcache, slab)      \
+  list_add2tail(&(memcache)->full_slabs, &(slab)->pages->node)
+#define slab_unregister_full(slab)              \
+  list_del(&(slab)->pages->node)
+
+#else
+#define slab_register_full(memcache, slab)
+#define slab_unregister_full(slab)
+#endif /*CONFIG_DEBUG_SLAB */
+
+#define slab_register_partial(memcache, slab)   \
+  list_add2head(&(memcache)->avail_slabs, &(slab)->pages->node)
+#define slab_unregister_partial(slab)           \
+  list_del(&(slab)->pages->node)
+#define slab_register_empty(memcache, slab)     \
+  list_add2tail(&(memcache)->avail_slabs, &(slab)->pages->node)
+#define slab_unregister_empty(slab)             \
+  list_del(&(slab)->pages->node)
 
 /*
  * Each slab contains list of free objects. Each free object
@@ -342,16 +354,15 @@ static inline void __set_percpu_slab(memcache_t *cache, slab_t *slab)
  * If there is only one free object in the list, the pointer to the
  * next free object will be equal to SLAB_OBJLIST_END.
  */
-
 static inline void slab_add_free_obj(slab_t *slab, void *obj)
 {
-  char *p = __objoffs(slab, obj, 1);
+  uintptr_t *p = __objoffs(slab, obj, 1);
 
   if (likely(slab->objects != NULL)) {
-    *(uintptr_t **)p = (uintptr_t *)slab->objects;
+    *p = (uintptr_t)slab->objects;
   }
   else {
-    *(uintptr_t **)p = SLAB_OBJLIST_END;
+    *p = SLAB_OBJLIST_END;
   }
     
   slab->objects = (void *)p;
@@ -359,24 +370,21 @@ static inline void slab_add_free_obj(slab_t *slab, void *obj)
   slab->nobjects++;
 }
 
-static inline void *__slab_getfreeobj(slab_t *slab)
+static inline void *slab_get_free_obj(slab_t *slab)
 {
-  uintptr_t *obj = (uintptr_t *)slab->objects;
+  uintptr_t *p = slab->objects;
 
-  if (likely(obj != NULL)) {
-    if (likely(*(char **)obj != SLAB_OBJLIST_END)) {
-      slab->objects = (char **)
-    }
+  ASSERT_DBG(slab->objects != NULL);
+  if (likely(*p != SLAB_OBJLIST_END)) {
+    slab->objects = (void *)*p;
   }
-  if (!slab->objects)
-    return NULL;
-  if (*(char **)obj == SLAB_OBJLIST_END)
+  else {
     slab->objects = NULL;
-  else
-    slab->objects = (char **)(*(char **)obj);
+  }
 
   slab->nobjects--;
-  return __objoffs(slab, obj, -1);
+  slab_dbg_check_objguards(slab, __objoffs(slab, p, -1));
+  return __objoffs(slab, p, -1);
 }
 
 /*
@@ -404,7 +412,7 @@ static void __init_slab_objects(slab_t *slab, int skip_objs)
                slab->memcache->name, slab, slab->nobjects);
 }
 
-static inline void slab_mark_as_full(slab_t *slab)
+static inline void slab_mark_full(slab_t *slab)
 {
   slab->state = SLAB_FULL;
   
@@ -416,19 +424,31 @@ static inline void slab_mark_as_full(slab_t *slab)
               slab->memcache->name, slab);
 }
 
+#ifdef CONFIG_DEBUG_SLAB
+static inline void slab_unmark_full(slab_t *slab)
+{
+  
+}
+#else
+#define slab_unmerk_full(slab)
+#endif /* CONFIG_DEBUG_SLAB */
+
 /*
  * alloc slab pages doesn't care about memory cache locking
  * So, before calling alloc_slab_pages, user should lock cache
  * by himself. (if cache locking is necessary)
  */
-static page_frame_t *alloc_slab_pages(memcache_t *cache)
+static page_frame_t *alloc_slab_pages(memcache_t *memcache, pfalloc_flags_t pfa_flags)
 {
   page_frame_t *pages = NULL;
 
-  pages = alloc_pages(cache->pages_per_slab, 0);
-  if (pages)
-    __prepare_slab_pages_dbg(cache, pages);
+  pfa_flags |= (memcache->flags & MMPOOL_MASK);
+  pages = alloc_pages(memcache->pages_per_slab, pfa_flags);
+  if (!pages) {
+    return NULL;
+  }
 
+  slab_dbg_mark_pages(memcache, pages);
   return pages;
 }
 
@@ -452,11 +472,12 @@ static inline void prepare_slab_pages(slab_t *slab)
   }
 }
 
-static int prepare_slab(memcache_t *cache, slab_t *slab)
+static int prepare_slab(memcache_t *memcache, slab_t *slab,
+                        pfalloc_flags_t pfa_flags)
 {
   memset(slab, 0, sizeof(*slab));
-  slab->memcache = cache;
-  slab->pages = alloc_slab_pages(cache);
+  slab->memcache = memcache;
+  slab->pages = alloc_slab_pages(memcache, pfa_flags);
   if (!slab->pages) {
     return -ENOMEM;
   }
@@ -464,7 +485,7 @@ static int prepare_slab(memcache_t *cache, slab_t *slab)
     prepare_slab_pages(slab);
   }
 
-  __init_slab_objects(slab, 0);  
+  __init_slab_objects(slab, 0);
   return 0;
 }
 
@@ -472,12 +493,14 @@ static int prepare_slab(memcache_t *cache, slab_t *slab)
  * Slab for memory cache managing slab_t structures is
  * allocated and fried in a little diffrent way.
  */
-static slab_t *__create_slabs_slab(void)
+static slab_t *__create_slabs_slab(pfalloc_flags_t pfa_flags)
 {
-  page_frame_t *pages = alloc_slab_pages(&slabs_memcache);
+  page_frame_t *pages = alloc_slab_pages(&slabs_memcache, pfa_flags);
   slab_t *slab = NULL;
 
   if (!pages) {
+    SLAB_PRINT_ERROR("(%s) Failed to allocate %d pages for slab!\n",
+                     slabs_memcache.name, slabs_memcache.pages_per_slab);
     goto out;
   }
 
@@ -491,9 +514,10 @@ static slab_t *__create_slabs_slab(void)
   slab->objects = NULL;
   slab->nobjects = 0;
   slab->pages = pages;
-  prepare_slab_pages(slab);
   
+  prepare_slab_pages(slab);
   __init_slab_objects(slab, 1);
+  
   SLAB_VERBOSE("Create new slab(%p), (objs=%d) for slabs memory cache(sz=%d)\n",
                slab, slab->nobjects, slab->memcache->object_size);
 
@@ -501,28 +525,37 @@ out:
   return slab;
 }
 
-static slab_t *create_new_slab(memcache_t *memcache)
+static slab_t *create_new_slab(memcache_t *memcache, int alloc_flags)
 {
   slab_t *new_slab = NULL;
+  pfalloc_flags_t pfa_flags = 0;
 
+  pfa_flags |= (!!(alloc_flags & SAF_ATOMIC) << bitnumber(AF_ATOMIC));
   if (likely(memcache != &slabs_memcache)) {
     int ret;
 
-    new_slab = alloc_from_memcache(&slabs_memcache);
-    ret = prepare_slab(memcache, new_slab);
+    /*
+     * In worst case "slabs_memcache" have to allocate new slab
+     * for its slabs. If so, "create_new_slab" will be called again
+     * from "alloc_from_memcache". It'll call __create_slabs_slab(see below).
+     * TODO DK: Measure "alloc_from_memcache" execution time in worst case
+     * (described above). Are there any ways to reduce such crappy crap?
+     */
+    new_slab = alloc_from_memcache(&slabs_memcache, alloc_flags);
+    ret = prepare_slab(memcache, new_slab, pfa_flags);
     if (ret) {
-      SLAB_VERBOSE("[%s] Failed to allocate new slab: [RET = %d]\n",
-                   memcache->name, ret);
-      
+      SLAB_PRINT_ERROR("(%s) Failed to allocate new slab: [RET = %d]\n",
+                       memcache->name, ret);
+
       destroy_slab(new_slab);
-      new_slab = NULL;
+      return NULL;
     }
   }
   else {
-    new_slab = __create_slabs_slab();
+    new_slab = __create_slabs_slab(pfa_flags);
   }
 
-  __display_statistics(cache);
+  __display_statistics(memcache);
   return new_slab;
 }
 
@@ -541,71 +574,81 @@ static void destroy_slab(slab_t *slab)
   free_slab_pages(cache, slab_page);
 }
 
+/* This function must be called with interrupts disabled. */
 static void free_slab_object(slab_t *slab, void *obj)
 {
-  memcache_t *cache = slab->memcache;
-
-  __slab_lock(slab);
-  __slab_setfreeobj(slab, obj);
+  memcache_t *memcache = slab->memcache;
 
   /*
-   * If given slab is not a percpu guy, it may
-   * become partial(if it was full) or empty(if it was partial)
-   * after its object is freed. This means slab may be moved to another
-   * list in memory cache or simply freed.
-   * Note: active slabs(those that are currently used as percpu guys) are not
-   * become partial or empty until they become full and replaced with another slabs.
+   * If given slab has SLAB_ACTIVE state, it wouldn't become
+   * empty or partial. Also we don't need to lock it, because
+   * local interrupts are already disabled and SLAB_ACTIVE state
+   * tells us that given slab is per-cpu guy.
    */
-  if (slab->state != SLAB_ACTIVE) {
-    int objects_per_slab = __count_objects_per_slab(cache);
+  if (slab->state == SLAB_ACTIVE) {
+    slab_add_free_obj(slab, obj);
+    return;
+  }
 
-    if (slab->state == SLAB_FULL) {
-      /* Slab became full, so it is moved to "partial" list */
-      atomic_inc(&cache->npartial_slabs);
-      spinlock_lock(&cache->lock);
-      slab->state = SLAB_PARTIAL;
-      list_del(&slab->pages->node);
-      list_add2head(&cache->available_slabs, &slab->pages->node);
-      spinlock_unlock(&cache->lock);
-      SLAB_VERBOSE("(free_slab_object) %s's slab %p(nobjs=%d) became partial\n",
-                   cache->dbg.name, slab, slab->nobjects);
-      __display_statistics(cache);
-    }
-    else if (likely(slab->nobjects == objects_per_slab) ||
-             unlikely((cache == &slabs_memcache) &&
-                      (slab->nobjects == objects_per_slab - 1))) {
-      /*
-       * Slab became empty, so it either is moved to "empty" list or
-       * it is freed(if parent memory cache has too much empty slabs).
-       * Also it may occur slab just has became free is a "child" of slabs
-       * memory cache that has a little different allocating and freeing
-       * policyes than all other memory caches.
-       */      
-      if (unlikely((atomic_get(&cache->nempty_slabs) + 1) > SLAB_EMPTYSLABS_MAX)) {
-        SLAB_VERBOSE("(free_slab_object) %s's slab %p(nobjs=%d) became empty and it will be destroyed\n",
-                     cache->dbg.name, slab, slab->nobjects);
-        atomic_dec(&cache->npartial_slabs);
-        spinlock_lock(&cache->lock);
-        list_del(&slab->pages->node);
-        spinlock_unlock(&cache->lock);
-        atomic_dec(&cache->nslabs);
-        __slab_unlock(slab);
-        destroy_slab(slab);
-        __display_statistics(cache);        
-        return;
+  /*
+   * Otherwise given slab may have either SLAB_FULL or SLAB_PARTIAL
+   * state. Here we have to manually lock the slab.
+   */
+  __slab_lock(slab);
+  slab_add_free_obj(slab, obj);
+  switch (slab->status) {
+      case SLAB_FULL:
+        /* If slab was full, it becomes partial after item is fried */
+        slab->state = SLAB_PARTIAL;
+        __lock_memcache(memcache);
+        slab_unregister_full(slab);
+        slab_register_partial(memcache, slab);
+        memcache->npartial_slabs++;
+        __unlock_memcache(memcache);
+        break;
+      case SLAB_PARTIAL:
+      {
+        int objs_per_slab = __count_objects_per_slab(memcache);
+
+        /* We don't care about partial slab until it becomes empty. */
+        if ((slab->nobjects == objs_per_slab) ||
+            ((memcache == &slabs_memcache) &&
+             (slab->nobjects == (objs_per_slab - 1)))) {
+          __lock_memcache(memcache);
+
+          memcache->npartial_slabs--;
+          slab_unregister_partial(slab);
+
+          /*
+           * If number of empty slabs exceeds SLAB_EMPTYSLABS_MAX,
+           * given slab will be fried. Otherwise it will be added
+           * to memory cache empty slabs use for future use.
+           */
+          if (memcache->nempty_slabs == SLAB_EMPTYSLABS_MAX) {
+            memcache->nslabs--;
+            __unlock_memcache(memcache);
+            __unlock_slab(slab);
+            
+            destroy_slab(slab);
+            return;
+          }
+          else {
+            slab->state = SLAB_EMPTY;
+            memcache->nempty_slabs++;
+            slab_register_empty(memcache, slab);
+            __unlock_memcache(memcache);
+          }
+        }
+
+        break;
       }
-
-      SLAB_VERBOSE("(free_slab_object) %s's slab %p(nobjs=%d) became empty\n",
-                   cache->dbg.name, slab, slab->nobjects);      
-      atomic_inc(&cache->nempty_slabs);
-      spinlock_lock(&cache->lock);
-      slab->state = SLAB_EMPTY;
-      atomic_dec(&cache->npartial_slabs);
-      list_del(&slab->pages->node);
-      list_add2tail(&cache->available_slabs, &slab->pages->node);
-      spinlock_unlock(&cache->lock);
-      __display_statistics(cache);
-    }
+      default:
+        /*
+         * Slab object is fried from may be either SLAB_FULL or SLAB_PARTIAL
+         * only. And it's actually a bug if any other type is met.
+         */
+        panic("Unexpected slab status was met during slab object "
+              "freeing (%d)\n", slab->status);
   }
 
   __slab_unlock(slab);
@@ -687,7 +730,7 @@ static void __create_heart_cache(memcache_t *cache, size_t size,
      * so we are allocating it using init-data allocator for each CPU.
      */
     if (cache == &slabs_memcache) {
-      slab = __create_slabs_slab();
+      slab = __create_slabs_slab(0);
       if (!slab)
         goto err;
     }
@@ -1001,30 +1044,38 @@ void *alloc_from_memcache(memcache_t *memcache, int alloc_flags)
      * Unfortunaly, there are no any partial or empty slabs available,
      * so we have to allocate a new one.
      * But memory cache won't grow if caller forbid as from doing that
-     * by setting SBF_DONT_GROW flag.
+     * by setting SAF_DONT_GROW flag.
      */
-    if (alloc_flags & SBF_DONT_GROW) {
-      interrupts_restore(irqstat);
-      goto out;
-    }
-
-    new_slab = create_new_slab(memcache);
-    if (!new_slab) {
+    interrupts_restore(irqstat);
+    if (alloc_flags & SAF_DONT_GROW) {
       goto out;
     }
     
+    new_slab = create_new_slab(memcache, alloc_flags);
+    if (!new_slab) {
+      goto out;
+    }
+
+
+    interrupts_save_and_disable(irqstat);
     __lock_memcache(memcache);
+    
     __set_percpu_slab(memcache, new_slab);
     memcache->nslabs++;
+    
     __unlock_memcache(memcache);
-
     slab = new_slab;
   }
 
 alloc_obj:
-  obj = __slab_getfreeobj(slab);
+  obj = slab_get_free_obj(slab);
   interrupts_restore(irqstat);
-  
+
+  if (alloc_flags & SAF_MEMNULL) {
+    memset(obj, 0, memcache->object_size);
+  }
+
+  /* FIXME DK */
   __validate_slab_page_dbg(slab, (char *)align_down((uintptr_t)obj, PAGE_SIZE));
   __validate_slab_object_dbg(slab, obj);
   
