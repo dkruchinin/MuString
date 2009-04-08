@@ -15,7 +15,7 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
- * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
+ * (c) Copyright 2008 Dan Kruchinin <dk@jarios.org>
  *
  * include/mm/slab.h: SLAB allocator
  *
@@ -39,11 +39,6 @@
 #include <eza/arch/atomic.h>
 #include <mlibc/types.h>
 
-/*
- * Max number of empty slabs one memory cache may have.
- * If this number is exceeded, odd empty slabs will be
- * automatically destroyed.
- */
 #define SLAB_EMPTYSLABS_MAX  (CONFIG_NRCPUS)
 
 /* End mark of slab objects list */
@@ -65,18 +60,31 @@
 /* number of generic memory caches(except memory caches for memcache_t and slab_t) */
 #define SLAB_GENERIC_CACHES  (LAST_GENSLABS_POW2 - FIRST_GENSLABS_POW2 + 1)
 
-#ifdef CONFIG_DEBUG_SLAB
-#define MEMCACHE_DBG_NAME_MAX 128
+#ifdef CONFIG_DEBUG_SLAB_PAGE_GUARD
+#define SLAB_PAGE_OFFS  (sizeof(unsigned int))
+#else
+#define SLAB_PAGE_OFFS  0
+#endif /* CONFIG_DEBUG_SLAB_PAGE_GUARD */
+
+#ifdef CONFIG_DEBUG_SLAB_OBJGUARDS
+
 /* Min space required for holding debug information in slab's free objects */
-#define SLAB_OBJDEBUG_MINSIZE ((sizeof(int) << 1) + sizeof(char *))
-#define SLAB_LEFTGUARD_OFFS   sizeof(int)
-#define SLAB_RIGHTGUARD_OFFS  (sizeof(char *) + sizeof(int))
+#define SLAB_OBJDEBUG_MINSIZE ((sizeof(int) * 2) + sizeof(uintptr_t))
+#define SLAB_LEFTGUARD_OFFS   (sizeof(int))
+#define SLAB_RIGHTGUARD_OFFS  (sizeof(uintptr_t) + sizeof(int))
 /* Magic number that is written before address of next item in objects list */
 #define SLAB_OBJLEFT_GUARD    (0xABCD)
 /* Magic number that is written after address of next item in objects list */
 #define SLAB_OBJRIGHT_GUARD   (0xDCBA)
-/* Offset in each slab pages that is needed for holding debug information */
-#define SLAB_PAGE_OFFS        (sizeof(unsigned int))
+
+#else
+#endif /* CONFIG_DEBUG_SLAB_OBJGUARDS */
+
+#ifdef CONFIG_DEBUG_SLAB
+/* Max length of memory cache debug name */
+#define MEMCACHE_DBG_NAME_MAX 128
+
+
 /* Magic base of memory cache identifier holding in each slab's page */
 #define SLAB_MAGIC_BASE       (0xCAFDAF0)
 /* Very first memory cache type (last type is ((1 << 31) - SLAB_MAGIC_BASE) */
@@ -115,7 +123,7 @@ typedef struct __memcache memcache_t;
  * @see memcache_t
  */
 typedef struct __slab {
-  char **objects;       /**< A list of free objects */
+  void  *objects;       /**< A list of free objects */
   page_frame_t *pages;  /**< Pages slab owns */
   memcache_t *memcache; /**< Parent memory cache */
   int nobjects;         /**< Number of free objects in slab */
@@ -126,20 +134,15 @@ typedef struct __slab {
  * The following flags controls memory cache behaviour
  * @see memcache_t
  */
-#define SMCF_CONST     0x01
-#define SMCF_UNIQUE    0x02
-#define SMCF_IMMORTAL  0x04
-#define SMCF_POISON    0x08
-#define SMCF_OCCUPY    0x10
-
-#define SMCF_MASK       0x1F
+#define SMCF_UNIQUE     0x01
+#define SMCF_IMMORTAL   0x02
 
 #define __SMCF_BIT_IRQ  6
 #define __SMCF_BIT_LOCK 7
 
 /* slab alloc flags */
 #define SBF_ATOMIC     0x01
-#define SBF_FROM_INTR  0x02
+#define SBF_DONT_GROW  0x02
 
 /* generic slabs default behaviour control flags */
 
@@ -172,22 +175,19 @@ struct __memcache {
   list_head_t avail_slabs;               /**< List of empty and partial slabs */
   slab_t *active_slabs[CONFIG_NRCPUS];   /**< Active slabs(there may be only one active slab if SMCF_SHARED was set) */
   list_node_t memcache_node;
-  int num_avail_slabs;
+  
   int object_size;
-  int pages_per_slab;  
+  int pages_per_slab;
+  int nslabs;
+  int nempty_slabs;
+  int npartial_slabs;
+  
   memcache_flags_t flags;
-  uint8_t pool_type;
   
 #ifdef CONFIG_DEBUG_SLAB
   char name[MEMCACHE_DBG_NAME_MAX];
   list_head_t full_slabs;
 #endif /* CONFIG_DEBUG_SLAB */
-
-#ifdef CONFIG_SLAB_COLLECT_STAT  
-  int nslabs;
-  int nempty_slabs;
-  int npartial_slabs;
-#endif /* CONFIG_SLAB_COLLECT_STAT */
 };
 
 void slab_allocator_init(void);
