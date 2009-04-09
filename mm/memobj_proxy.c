@@ -58,6 +58,7 @@ static int proxy_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
   
   serv_vmm = server->task_mm;
   msg.hdr.event = MMEV_PAGE_FAULT;
+  msg.hdr.private = (long)memobj->private;
   msg.hdr.memobj_id = memobj->id;
   msg.pfmask = pfmask;
   msg.offset = addr2pgoff(vmr, addr);
@@ -157,6 +158,7 @@ static int proxy_depopulate_pages(vmrange_t *vmr, uintptr_t va_from, uintptr_t v
     if (vmm != server->task_mm) {
       msync.hdr.event = MMEV_MSYNC;
       msync.hdr.memobj_id = memobj->id;
+      msync.hdr.private = (long)memobj->private;
       msync.offset = page->offset;
 
       snd_iovec.iov_base = (void *)&msync;

@@ -295,6 +295,7 @@ int sys_memobj_create(struct memobj_info *user_mmo_info)
   
   mmo_info.flags = (memobj->flags & MMO_FLAGS_MASK) >> MMO_FLAGS_SHIFT;
   mmo_info.id = memobj->id;
+  memobj->private = (void *)mmo_info.private;
   if (copy_to_user(user_mmo_info, &mmo_info, sizeof(mmo_info))) {
     __try_destroy_memobj(memobj);
     return -EFAULT;

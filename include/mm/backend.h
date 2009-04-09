@@ -22,6 +22,7 @@ typedef struct __memobj_backend_t {
 struct mmev_hdr {
   mm_event_t event;
   memobj_id_t memobj_id;
+  long private;
 };
 
 struct mmev_fault {
