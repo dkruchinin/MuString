@@ -91,8 +91,9 @@ long sys_timer_create(clockid_t clockid,struct sigevent *evp,
 
   switch( kevp.sigev_notify ) {
     case SIGEV_SIGNAL_THREAD:
-      target=pid_to_task(kevp.tid);
+      target=lookup_task(current_task()->pid,kevp.tid,0);
       if( !target ) {
+        r=-ESRCH;
         goto free_id;
       }
       ksiginfo->target=target;
