@@ -198,6 +198,9 @@ stop_cpu:
   for(;;);
 
 send_sigsegv:
+   fault_dump_regs(regs,stack_frame->rip);                                                               
+     kprintf_fault( " Invalid address: %p\n", invalid_address );                                           
+     kprintf_fault( " RSP: %p\n", stack_frame->old_rsp);
   /* Send user the SIGSEGV signal. */
   INIT_USIGINFO_CURR(&siginfo);
   siginfo.si_signo=SIGSEGV;

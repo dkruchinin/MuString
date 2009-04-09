@@ -311,6 +311,7 @@ dont_check_common_exception_uworks:
   cli
   cmp $KERNEL_SELECTOR(KTEXT_DES),8+INT_STACK_FRAME_CS_OFFT(%rsp)
   je common_exception_path_kern_ret
+  RESTORE_USER_SEGMENT_REGISTERS
   swapgs
 common_exception_path_kern_ret:
   popq %rax
@@ -360,6 +361,7 @@ dont_check_err_exception_uworks:
   cli
   cmp $KERNEL_SELECTOR(KTEXT_DES),16+INT_STACK_FRAME_CS_OFFT(%rsp)
   je error_code_exception_path_kern_ret
+  RESTORE_USER_SEGMENT_REGISTERS
   swapgs
 error_code_exception_path_kern_ret:
   popq %rax
