@@ -105,6 +105,7 @@ void fault_dump_regs(regs_t *r, ulong_t rip)
             cpu_id(),current_task()->pid,current_task()->tid);
     kprintf( " Task short name: '%s'\n",current_task()->short_name);
   }
+  
   kprintf(" RAX: %p, RBX: %p, RDI: %p, RSI: %p\n RDX: %p, RCX: %p\n",
           r->rax,r->gpr_regs.rbx,
           r->gpr_regs.rdi,r->gpr_regs.rsi,
@@ -116,15 +117,12 @@ void show_stack_trace(uintptr_t stack)
 {
   int i;
 
-  if (unlikely(!is_cpu_online(cpu_id())))
-      return;
-  
-  kprintf("\nTop %d words of kernel stack (RSP=%p).\n\n",
-          CONFIG_NUM_STACKWORDS, stack);
+  kprintf_fault("\nTop %d words of kernel stack (RSP=%p).\n\n",
+                CONFIG_NUM_STACKWORDS, stack);
   
   for(i = 0; i < CONFIG_NUM_STACKWORDS; i++) {
     stack += sizeof(uintptr_t);
-    kprintf("  <%p>\n", *(long *)stack);    
+    kprintf_fault("  <%p>\n", *(long *)stack);    
   }
 }
 

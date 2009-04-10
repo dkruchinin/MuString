@@ -47,7 +47,12 @@
     }                                                   \
   } while (0)
 
-#define BUG(fmt, args...) ASSERT(false)
+#define BUG(fmt, args...)                       \
+  do {                                          \
+    kprintf("[KERNEL BUG] ");                   \
+    kprintf(fmt, ##args);                       \
+    ASSERT(false);                              \
+  } while(0)
 
 #endif /* __ASSERT_H__ */
 

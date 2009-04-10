@@ -52,7 +52,7 @@
 
 extern void initialize_idle_tasks(void);
 
-volatile cpu_id_t online_cpus;
+volatile cpu_id_t online_cpus = 0;
 
 /* Known schedulers. */
 static list_head_t schedulers;

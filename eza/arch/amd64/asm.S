@@ -281,7 +281,13 @@ common_exception_path:
   je common_exception_path_kern
   swapgs
 common_exception_path_kern:
+  pushq %rax
+  movq online_cpus, %rax
+  orq %rax, %rax
+  popq %rax
+  jz 1f
   sti
+1:      
   SAVE_ALL
   /* No we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to

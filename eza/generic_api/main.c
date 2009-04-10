@@ -92,9 +92,11 @@ static void main_routine_stage1(void)
   idle_loop();
 }
 
+static long krsp;
 void main_routine(void) /* this function called from boostrap assembler code */
-{
+{    
   kconsole_t *kcons = default_console();
+  __asm__ volatile("movq %%rsp, %0" : "=r" (krsp));
 
   /* After initializing memory stuff, the master CPU should perform
    * the final initializations.
@@ -105,7 +107,8 @@ void main_routine(void) /* this function called from boostrap assembler code */
   initialize_irqs();
 
   kcons->init();  
-  kcons->enable();  
+  kcons->enable();
+  kprintf("STACK = %p\n", krsp);
   kprintf("[MB] Modules: %d\n",init.c);
   mm_initialize();
   slab_allocator_init();

@@ -54,7 +54,7 @@ void invalid_opcode_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
   kprintf_fault("Invalid opcode exception!!!\n");
 
 out:
-  fault_dump_regs(regs, stack_frame->rip);
+  //fault_dump_regs(regs, stack_frame->rip);
   show_stack_trace(stack_frame->old_rsp);
   for(;;);
 }

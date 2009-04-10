@@ -580,7 +580,7 @@ static void free_slab_object(slab_t *slab, void *obj)
   if (slab->state == SLAB_ACTIVE) {
     if (__get_percpu_slab(memcache) == slab) {
       slab_add_free_obj(slab, obj);
-      SLAB_VERBOSE(memcache, ">> free object %p into percpu slab %p (CPU №%d)",
+      SLAB_VERBOSE(memcache, ">> free object %p into percpu slab %p (CPU №%d)]\n",
                    obj, slab, cpu_id());
     }
     else {
@@ -818,7 +818,7 @@ static void __create_heart_cache(memcache_t *cache, size_t size,
    */
 
   register_memcache(cache, name);
-  SLAB_VERBOSE("memory cache %s was initialized. (size = %d, pages per slab = %d)\n",
+  SLAB_VERBOSE(cache, "memory cache %s was initialized. (size = %d, pages per slab = %d)\n",
                cache->name, cache->object_size, cache->pages_per_slab);
   ret = -ENOMEM;
   for_each_cpu(i) {
@@ -867,7 +867,7 @@ err:
  */
 static void __create_generic_caches(void)
 {
-  size_t size = SLAB_OBJECT_MAX_SIZE;
+  size_t size = SLAB_OBJECT_MIN_SIZE;
   int i = 0;
   char cache_name[16] = "size ";
 
@@ -950,8 +950,8 @@ memcache_t *create_memcache(const char *name, size_t size,
 
     rwsem_up_read(&memcaches_rwlock);
     if (memcache) { /* was successfully merged */
-      SLAB_PRINT_ERROR(">> Merge size %d with memory cache %s\n",
-                       size, memcache->name);
+      SLAB_VERBOSE(NULL, ">> Merge size %d with memory cache %s\n",
+                   size, memcache->name);
       goto out;
     }
   }
@@ -988,6 +988,9 @@ memcache_t *create_memcache(const char *name, size_t size,
   }
   
   register_memcache(memcache, name);
+  SLAB_VERBOSE(memcache, ">> Created memory cache %s. "
+               "[Size = %d, pages_per_slab = %d, mark = %#x]\n", memcache->name,
+               memcache->pages_per_slab, memcache->mark_version);
   
 out:
   return memcache;
@@ -1042,6 +1045,7 @@ void *alloc_from_memcache(memcache_t *memcache, int alloc_flags)
   void *obj = NULL;
   int irqstat;
 
+  SLAB_DBG_ASSERT(memcache != NULL);
   interrupts_save_and_disable(irqstat);
   slab = __get_percpu_slab(memcache);
   if (unlikely(slab == NULL)) {
@@ -1052,6 +1056,7 @@ void *alloc_from_memcache(memcache_t *memcache, int alloc_flags)
     goto alloc_obj;
   }
 
+  kprintf("s3\n");
   /*
    * Check if there eixist some free objects in lazy freelist.
    * If so, we just swap objects from lazy list to slab freelist.
@@ -1078,12 +1083,15 @@ void *alloc_from_memcache(memcache_t *memcache, int alloc_flags)
                __slab_state_to_string(SLAB_FULL));
 
 take_new_slab:
-  slab = try_get_avail_slab(memcache);    
+  kprintf("zzz\n");
+  slab = try_get_avail_slab(memcache);
+  kprintf("ppp\n");
   if (slab) {
     memcache_unlock(memcache);
     goto alloc_obj;
   }
 
+  kprintf("ooo\n");
   __set_percpu_slab(memcache, NULL);
   memcache_unlock(memcache);
 
@@ -1142,6 +1150,9 @@ alloc_obj:
   obj = slab_get_free_obj(slab);
   interrupts_restore(irqstat);
 
+  SLAB_VERBOSE(memcache, ">> (%s) Allocated object %p from slab %p "
+               "(%d objects rest)\n", memcache->name, obj, slab, slab->nobjects);
+  
   slab_dbg_check_page(slab, (void *)PAGE_ALIGN_DOWN((uintptr_t)obj));
   slab_dbg_check_object(slab, obj);
   
