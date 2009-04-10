@@ -75,7 +75,7 @@
 #define SC_PORT_MSG_READ       36
 #define SC_KERNEL_CONTROL      37
 #define SC_TIMER_DELETE        38
-#define SC_SIGWAIT             39
+#define SC_SIGWAITINFO         39
 #define SC_SCHED_YIELD         40
 #define SC_MEMOBJ_CREATE       41
 #define SC_FORK                42
@@ -351,12 +351,12 @@ long sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset);
 
 long sys_thread_wait(tid_t tid,void **value_ptr);
 
-
 long sys_kernel_control(kcontrol_args_t *arg);
 
 long sys_timer_delete(long id);
 
-long sys_sigwait(sigset_t *set,int *sig);
+long sys_sigwaitinfo(sigset_t *set,int *sig,usiginfo_t *info,
+                     timespec_t *timeout);
 
 void sys_sched_yield(void);
 

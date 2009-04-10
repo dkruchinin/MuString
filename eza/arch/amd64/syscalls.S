@@ -74,7 +74,7 @@ syscall_table:
 	.quad   sys_port_msg_read
 	.quad   sys_kernel_control
 	.quad   sys_timer_delete
-	.quad   sys_sigwait
+	.quad   sys_sigwaitinfo
 	.quad   sys_sched_yield                 /* 40 */
 	.quad   sys_memobj_create
 	.quad   sys_fork

@@ -110,6 +110,12 @@ long sys_timer_create(clockid_t clockid,struct sigevent *evp,
   stuff->timers++;
   UNLOCK_POSIX_STUFF_W(stuff);
 
+#ifdef CONFIG_DEBUG_TIMERS
+  kprintf_fault("sys_timer_create() [%d:%d] created POSIX timer (%p) N %d %p\n",
+                current_task()->pid,current_task()->tid,ptimer,id,
+                &ptimer->ktimer);
+#endif
+
   return 0;
 free_target:
   if( target ) {

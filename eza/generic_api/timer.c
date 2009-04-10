@@ -130,6 +130,7 @@ void init_timers(void)
   initialize_deffered_actions();
 }
 
+#ifdef CONFIG_DEBUG_TIMERS
 static void __dump_major_tick(major_timer_tick_t *mt)
 {
   int i,rows=0,cols=0;
@@ -153,7 +154,7 @@ static void __dump_major_tick(major_timer_tick_t *mt)
           kt=container_of(da,ktimer_t,da);
 
           kprintf_fault("    <%d:%d> : list head=%p\n",
-                  kt->time_x,da->priority,&da->head);
+                        kt->time_x,da->priority,&da->head);
 
           if( !list_is_empty(&da->head) ) {
             list_for_each(&da->head,ln_b) {
@@ -163,7 +164,7 @@ static void __dump_major_tick(major_timer_tick_t *mt)
               kprintf_fault("                <%d:%d>\n",kt->time_x,tda->priority);
               if( ++cols >= 10 ) {
                 kprintf_fault("__dump_major_tick(): COL loop detected.\n");
-                for(;;);
+                goto out;
               }
             }
           }
@@ -172,11 +173,13 @@ static void __dump_major_tick(major_timer_tick_t *mt)
     }
     if( ++rows >= 10 ) {
       kprintf_fault("__dump_major_tick(): ROW loop detected.\n");
-      for(;;);
+      goto out;
     }
   }
+out:
   kprintf_fault("***** FINISHED DUMPING MAJOR TICK %d\n",mt->time_x);
 }
+#endif /* CONFIG_DEBUG_TIMERS */
 
 void process_timers(void)
 {
@@ -226,7 +229,18 @@ void process_timers(void)
 
         __last_processed_timer_tick=system_ticks;
         list_del(&tt->node);
+
+#ifdef CONFIG_DEBUG_TIMERS
+        kprintf_fault("process_timers(): [CPU %d] Scheduling deffered actions for tick %d.\n",
+                      cpu_id(),tt->time_x);
+#endif
+
         schedule_deffered_actions(&tt->actions);
+
+#ifdef CONFIG_DEBUG_TIMERS
+        kprintf_fault("process_timers(): [CPU %d] All deffered actions for tick %d scheduled.\n",
+                cpu_id(),tt->time_x);
+#endif
         break;
       }
     }
@@ -258,6 +272,12 @@ void delete_timer(ktimer_t *timer)
   }
   mtt=tt->major_tick;
   interrupts_save_and_disable(is);
+
+#ifdef CONFIG_DEBUG_TIMERS
+  kprintf_fault("delete_timer(): [%d:%d] detaching timer %p (TX=%d) from MTT %p (REF=%d)\n",
+                current_task()->pid,current_task()->tid,
+                timer,timer->time_x,mtt,mtt->use_counter);
+#endif
 
   spinlock_lock(&mtt->lock);
   if( list_node_is_bound(&timer->da.node) ) {
@@ -309,6 +329,8 @@ void delete_timer(ktimer_t *timer)
   spinlock_lock(&sw_timers_lock);
   spinlock_lock(&mtt->lock);
 
+  tt->major_tick=NULL;
+
   if( atomic_dec_and_test(&mtt->use_counter) ) {
 #ifdef CONFIG_TIMER_RBTREE
   #error Deletion of RB timers is not implemented yet !
@@ -343,8 +365,6 @@ void delete_timer(ktimer_t *timer)
       break;
   }
 }
-
-int __timer_verbose=0;
 
 long modify_timer(ktimer_t *timer,ulong_t time_x)
 {
@@ -472,6 +492,12 @@ long add_timer(ktimer_t *t)
     goto out_unlock_tick;
   }
 
+#ifdef CONFIG_DEBUG_TIMERS
+  kprintf_fault("add_timer(): [%d:%d] attached timer %p (TX=%d) to MTT %p (REF=%d)\n",
+                current_task()->pid,current_task()->tid,
+                t,t->time_x,mt,mt->use_counter);
+#endif
+
   lh=&mt->minor_ticks[(t->time_x-mtickv)/MINOR_TICK_GROUP_SIZE];
   if( !list_is_empty(lh) ) {
     list_for_each( lh,ln ) {
@@ -542,53 +568,6 @@ static bool __timer_deffered_sched_handler(void *data)
   ktimer_t *timer=(ktimer_t *)data;
   return (timer->time_x > system_ticks);
 }
-
-#ifdef CONFIG_TIMER_RBTREE
-void __dump_timers(long tick)
-{
-  major_timer_tick_t *mt,*major_tick=NULL;
-  long is;
-  struct rb_node *n;
-  ulong_t mtickv=tick-(tick % CONFIG_TIMER_GRANULARITY);
-
-  LOCK_SW_TIMERS_R(is);
-  n=timers_rb_root.rb_node;
-
-  while( n ) {
-    mt=rb_entry(n,major_timer_tick_t,rbnode);
-
-    if( mtickv < mt->time_x ) {
-      n=n->rb_left;
-    } else if( mtickv > mt->time_x )  {
-      n=n->rb_right;
-    } else {
-      major_tick=mt;
-      break;
-    }
-  }
-
-  if( major_tick ) {
-    int i;
-
-    spinlock_lock(&major_tick->lock);
-    kprintf("[%d] <%d>: ",cpu_id(),major_tick->time_x);
-    for(i=0;i<MINOR_TICK_GROUPS;i++) {
-      list_head_t *lh=&major_tick->minor_ticks[i];
-      list_node_t *ln;
-      timer_tick_t *tt;
-
-      list_for_each(lh,ln) {
-        tt=container_of(ln,timer_tick_t,node);
-        ASSERT(tt->major_tick == major_tick);
-        kprintf(" (%d) ",tt->time_x);
-      }
-      kprintf("\n");
-    }
-    spinlock_unlock(&major_tick->lock);
-  }
-  UNLOCK_SW_TIMERS_R(is);
-}
-#endif
 
 long sleep(ulong_t ticks)
 {
