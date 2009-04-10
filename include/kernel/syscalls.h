@@ -300,11 +300,12 @@ long sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout);
 int sys_nanosleep(timeval_t *in,timeval_t *out);
 
 /**
- * @fn status_t sys_scheduler_control(pid_t pid,ulong_t cmd,ulong_t arg)
+ * @fn status_t sys_scheduler_control(pid_t pid,tid_t tid,ulong_t cmd,ulong_t arg)
  *
  * Read or change a parameter related to scheduling scheme of target task.
  *
- * @param pid - Target task.
+ * @param pid - Target task (PID).
+ * @param tid - Target task (TID).
  * @param cmd - Command to apply.
  * @param arg - Command's argument.
  *
@@ -316,7 +317,7 @@ int sys_nanosleep(timeval_t *in,timeval_t *out);
  *     EPERM - operation was not allowed.
  *     ESRCH - insufficient pid passed.
  */
-long sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
+long sys_scheduler_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg);
 
 /**
  * @fn status_t sys_get_tid(void)

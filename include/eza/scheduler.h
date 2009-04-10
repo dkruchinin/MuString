@@ -151,7 +151,6 @@ void schedule(void);
 
 #define SCHEDULER_MAX_COMMON_IOCTL SYS_SCHED_CTL_SET_CPU
 
-long sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg);
 long do_scheduler_control(struct __task_struct *task, ulong_t cmd, ulong_t arg);
 long sleep(ulong_t ticks);
 

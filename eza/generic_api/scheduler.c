@@ -273,23 +273,31 @@ long do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
   }
 }
 
-long sys_scheduler_control(pid_t pid, ulong_t cmd, ulong_t arg)
+long sys_scheduler_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
 {
   task_t *target;
   long r;
 
   if(cmd > SCHEDULER_MAX_COMMON_IOCTL) {
     return  -EINVAL;
-  }  
+  }
 
-  target = pid_to_task(pid);  
-  if( target == NULL ) {
+  if( !pid && !tid ) {
+    target=current_task();
+    grab_task_struct(target);
+  } else {
+    target=lookup_task(pid,tid,0);
+  }
+
+  if( !target ) {
     return -ESRCH;
   }
-  
+
   /* if TF_USPC_BLOCKED flag is set, task static priority can not be changed by user */
-  if ((cmd == SYS_SCHED_CTL_SET_PRIORITY) && (target->flags & TF_USPC_BLOCKED))
-      return -EAGAIN;
+  if ((cmd == SYS_SCHED_CTL_SET_PRIORITY) && (target->flags & TF_USPC_BLOCKED)) {
+    r=-EAGAIN;
+    goto out_release;
+  }
 
   if( target->scheduler == NULL ) {
     r = -ENOTTY;
