@@ -16,15 +16,20 @@
     /* Address of the SWKS area. */
     #define KCTRL_SWKS_ADDR           0
 
+/* Top level node related to kernel debug parameters. */
+#define KCTRL_DEBUG             100000
+  /* Echoeing of target string to debug console. */
+  #define KCTRL_DEBUG_ECHO      0
+
 #define KCTRL_MAX_NAME_LEN  8
 
 typedef struct __kcontrol_args {
   int *name;
   unsigned name_len;
   void *old_data;
-  int *old_data_size;
+  unsigned int *old_data_size;
   void *new_data;
-  int new_data_size;
+  unsigned int new_data_size;
 } kcontrol_args_t;
 
 struct __kcontrol_node;
@@ -36,6 +41,8 @@ typedef enum {
   KCTRL_DATA_CHAR=1,
   KCTRL_DATA_CUSTOM=2,
 } kcontrol_data_type_t;
+
+#define KLOG_MAX_SIZE  512
 
 typedef struct __kcontrol_node {
   int id;

@@ -3,6 +3,7 @@
 #include <eza/errno.h>
 #include <eza/usercopy.h>
 #include <mlibc/stddef.h>
+#include <mlibc/kprintf.h>
 #include <eza/swks.h>
 
 extern long initrd_start_page,initrd_num_pages;
@@ -43,15 +44,6 @@ static kcontrol_node_t __kernel_subdirs[] = {
     .id=KCTRL_SYSTEM_INFO,
     .num_subdirs=ARRAY_SIZE(__kernel_system_subdirs),
     .subdirs=__kernel_system_subdirs,
-  },
-};
-
-#define NUM_ROOT_NODES  1
-static kcontrol_node_t __root_knodes[NUM_ROOT_NODES] = {
-  {
-    .id=KCTRL_KERNEL,
-    .num_subdirs=ARRAY_SIZE(__kernel_subdirs),
-    .subdirs=__kernel_subdirs,
   },
 };
 
@@ -125,6 +117,41 @@ static long __process_node(kcontrol_node_t *target,kcontrol_args_t *arg)
   target->data_size=newsize;
   return 0;
 }
+
+static long __debug_echo(kcontrol_node_t *target,kcontrol_args_t *arg)
+{
+  char buf[KLOG_MAX_SIZE];
+
+  if( copy_from_user(buf,arg->new_data,MIN(arg->new_data_size,KLOG_MAX_SIZE)) ) {
+    return -EFAULT;
+  }
+
+  kprintf_fault(buf);
+  return 0;
+}
+
+static kcontrol_node_t __debug_subdirs[] = {
+  {
+    .id=KCTRL_DEBUG_ECHO,
+    .type=KCTRL_DATA_CUSTOM,
+    .logic=__debug_echo,
+  },
+};
+
+#define NUM_ROOT_NODES  2
+
+static kcontrol_node_t __root_knodes[NUM_ROOT_NODES] = {
+  {
+    .id=KCTRL_KERNEL,
+    .num_subdirs=ARRAY_SIZE(__kernel_subdirs),
+    .subdirs=__kernel_subdirs,
+  },
+  {
+    .id=KCTRL_DEBUG,
+    .num_subdirs=ARRAY_SIZE(__debug_subdirs),
+    .subdirs=__debug_subdirs,
+  }
+};
 
 long sys_kernel_control(kcontrol_args_t *arg)
 {

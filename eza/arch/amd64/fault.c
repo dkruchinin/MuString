@@ -101,15 +101,15 @@ void install_fault_handlers(void)
 void fault_dump_regs(regs_t *r, ulong_t rip)
 {
   if (likely(is_cpu_online(cpu_id()))) {
-    kprintf("[CPU #%d] Current task: PID=%d, TID=0x%X\n",
+    kprintf_fault("[CPU #%d] Current task: PID=%d, TID=0x%X\n",
             cpu_id(),current_task()->pid,current_task()->tid);
-    kprintf( " Task short name: '%s'\n",current_task()->short_name);
+    kprintf_fault( " Task short name: '%s'\n",current_task()->short_name);
   }
-  kprintf(" RAX: %p, RBX: %p, RDI: %p, RSI: %p\n RDX: %p, RCX: %p\n",
+  kprintf_fault(" RAX: %p, RBX: %p, RDI: %p, RSI: %p\n RDX: %p, RCX: %p\n",
           r->rax,r->gpr_regs.rbx,
           r->gpr_regs.rdi,r->gpr_regs.rsi,
           r->gpr_regs.rdx,r->gpr_regs.rcx);
-  kprintf(" RIP: %p\n",rip);
+  kprintf_fault(" RIP: %p\n",rip);
 }
 
 void show_stack_trace(uintptr_t stack)
