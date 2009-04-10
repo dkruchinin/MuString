@@ -42,7 +42,9 @@ typedef uint64_t off_t;
 typedef uint64_t pgoff_t;
 
 #define TYPE_LONG_SHIFT  6
-#define BITS_PER_LONG  64
+#define BITS_PER_LONG    64
+#define BYTES_PER_LONG   8
+#define BYTES_LONG_SHIFT 3
 
 #ifdef CONFIG_SMP
 /*

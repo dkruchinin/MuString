@@ -53,15 +53,15 @@ typedef ulong_t page_idx_t;
  * @typedef uint16_t page_flags_t;
  * Page flags.
  */
-typedef uint8_t page_flags_t;
+typedef uint16_t page_flags_t;
 
-#define PF_RESERVED   0x01 /**< Page is reserved */
-#define PF_LOCK       0x02 /**< Page lock (used by slab allocator) */
-#define PF_DIRTY      0x04
-#define PF_COW        0x08
-#define PF_SHARED     0x10
-#define PF_SLAB       0x20
-#define PF_PENDING    0x40
+#define PF_RESERVED   (1 << MMPOOLS_SHIFT)
+#define PF_DIRTY      (1 << MMPOOLS_SHIFT + 1)
+#define PF_COW        (1 << MMPOOLS_SHIFT + 2)
+#define PF_SHARED     (1 << MMPOOLS_SHIFT + 3)
+#define PF_SLAB       (1 << MMPOOLS_SHIFT + 4)
+#define PF_PENDING    (1 << MMPOOLS_SHIFT + 5)
+#define PF_LOCK       (1 << MMPOOLS_SHIFT + 6)
 
 #define PF_CLEAR_MASK (PF_COW | PF_DIRTY | PF_SHARED | PF_SLAB | PF_PENDING)
 
@@ -90,15 +90,19 @@ typedef struct __page_frame {
   list_node_t chain_node;
 
   union {
-    void *slab_pages_start;
+    void *slab_ptr;
     atomic_t refcount;
-  };
+  };    
   union {
     struct __rmap_group_head *rmap_shared;
     struct __rmap_group_entry *rmap_anon;
+    void *slab_lazy_freelist;
   };
-  
-  pgoff_t offset;
+  union {
+    pgoff_t offset;
+    int slab_lazy_nobjs;
+  };
+    
   page_idx_t idx;
   ulong_t _private;
   page_flags_t flags;

@@ -34,7 +34,9 @@
 #include <eza/arch/atomic.h>
 #include <eza/arch/types.h>
 
-#define MMPOOLS_MAX 4
+#define MMPOOLS_MAX   4
+#define MMPOOLS_MASK  0x07
+#define MMPOOLS_SHIFT 3
 
 enum {
   BOOTMEM_POOL_TYPE = 0,

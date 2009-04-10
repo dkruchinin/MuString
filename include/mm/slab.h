@@ -39,17 +39,13 @@
 #include <eza/arch/atomic.h>
 #include <mlibc/types.h>
 
-#define SLAB_EMPTYSLABS_MAX  (CONFIG_NRCPUS)
-
-/* End mark of slab objects list */
-#define SLAB_OBJLIST_END     ((char *)0xF00BAAF)
+#define MEMCACHE_EMPTYSLABS_MAX  (CONFIG_NRCPUS)
 
 /* Quantity of pages per slab for generic caches */
 #define GENERIC_SLAB_PAGES   1
-#define DEFAULT_SLAB_PAGES   1
 
 /* Minimal allowed object size */
-#define FIRST_GENSLABS_POW2  3
+#define FIRST_GENSLABS_POW2  BYTES_LONG_SHIFT
 #define LAST_GENSLABS_POW2   10
 
 /* min allowed object size */
@@ -86,9 +82,9 @@
 
 
 /* Magic base of memory cache identifier holding in each slab's page */
-#define SLAB_MAGIC_BASE       (0xCAFDAF0)
+#define SLAB_PAGE_MARK_BASE    (0xCAFDAF0)
 /* Very first memory cache type (last type is ((1 << 31) - SLAB_MAGIC_BASE) */
-#define SLAB_FIRST_TYPE       (1)
+#define SLAB_FIRST_VERSION     1
 
 #else
 #define SLAB_PAGE_OFFS      0
@@ -130,15 +126,18 @@ typedef struct __slab {
   slab_state_t state;   /**< Slab state */
 } slab_t;
 
+typedef uint16_t memcache_flags_t;
+
 /**
  * The following flags controls memory cache behaviour
  * @see memcache_t
  */
-#define SMCF_UNIQUE     0x01
-#define SMCF_IMMORTAL   0x02
+#define SMCF_UNIQUE     (1 << MMPOOLS_SHIFT)
+#define SMCF_IMMORTAL   (1 << MMPOOLS_SHIFT + 1)
+#define SMCF_LAZY       (1 << MMPOOLS_SHIFT + 2)
+#define __SMCF_BIT_LOCK (1 << MMPOOLS_SHIFT + 3)
 
-#define __SMCF_BIT_IRQ  6
-#define __SMCF_BIT_LOCK 7
+#define SMCF_MASK (MMPOOLS_MASK | SMCF_UNIQUE | SMCF_IMMPORTAL | SMCF_LAZY)
 
 /* slab alloc flags */
 #define SAF_ATOMIC     0x01
@@ -146,20 +145,6 @@ typedef struct __slab {
 #define SAF_MEMNULL    0x04
 
 /* generic slabs default behaviour control flags */
-
-/**
- * @typedef uint8_t memcache_flags_t
- * @brief Flags that control memory cache behaviour
- *
- * @see memcache_t
- * @see SMCF_PDMA
- * @see SMCF_PGEN
- * @see SMCF_SHARED
- * @see SMCF_POISON
- * @see SMCF_CONST
- * @see SMCF_MERGE
- */
-typedef uint8_t memcache_flags_t;
 
 /**
  * @struct memcache_t
@@ -174,20 +159,25 @@ typedef uint8_t memcache_flags_t;
  */
 struct __memcache {
   list_head_t avail_slabs;               /**< List of empty and partial slabs */
-  slab_t *active_slabs[CONFIG_NRCPUS];   /**< Active slabs(there may be only one active slab if SMCF_SHARED was set) */
+  list_head_t full_slabs;
   list_node_t memcache_node;
-  
+
+  slab_t *active_slabs[CONFIG_NRCPUS];   /**< Active slabs(there may be only one active slab if SMCF_SHARED was set) */
   int object_size;
   int pages_per_slab;
-  int nslabs;
-  int nempty_slabs;
-  int npartial_slabs;
-  
+  int usecount;
+
+  struct {
+    int nslabs;
+    int nempty_slabs;
+    int npartial_slabs;
+  } stat;
+
   memcache_flags_t flags;
   
 #ifdef CONFIG_DEBUG_SLAB
   char name[MEMCACHE_DBG_NAME_MAX];
-  list_head_t full_slabs;
+  int mark_version;
 #endif /* CONFIG_DEBUG_SLAB */
 };
 
