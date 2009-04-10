@@ -47,14 +47,6 @@ config DEBUG_MM
          various runtime checks and special debug functions will execute.
          Also some debug API will be compiled.
 
-config DEBUG_SLAB
-       bool "Enable slab allocator debugging"
-       help
-         Enable debugging of SLAB memory allocator. If the option is enabled
-         many verbose information about SLAB subsystem internals will display.
-         DEBUG_SLAB also enables slab pages protection. So allocation from slab
-         will be a bit slower and each memory cache will take more space.
-
 config DEBUG_PTABLE
        bool "Debug low-level page table interface"
        default n

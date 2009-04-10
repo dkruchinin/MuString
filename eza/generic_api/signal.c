@@ -35,7 +35,7 @@
 
 static memcache_t *sigq_cache;
 
-#define __alloc_sigqueue_item()  alloc_from_memcache(sigq_cache)
+#define __alloc_sigqueue_item()  alloc_from_memcache(sigq_cache, 0)
 
 struct __def_sig_data {
   sigset_t *blocked,*pending;
@@ -51,8 +51,8 @@ static bool __deferred_sig_check(void *d)
 
 void initialize_signals(void)
 {
-  sigq_cache = create_memcache( "Sigqueue item memcache", sizeof(sigq_item_t),
-                                2, SMCF_PGEN);
+  sigq_cache = create_memcache("Sigqueue items", sizeof(sigq_item_t),
+                              1, GENERAL_POOL_TYPE | SMCF_IMMORTAL | SMCF_LAZY);
   if( !sigq_cache ) {
     panic( "initialize_signals(): Can't create the sigqueue item memcache !" );
   }

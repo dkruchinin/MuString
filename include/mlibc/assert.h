@@ -35,15 +35,19 @@
 #define ASSERT_DBG(cond)
 #endif /* CONFIG_DEBUG */
 
-#define CT_ASSERT(cond) ((void)sizeof(char[1 - 2 * !(cond)]))
+#define CT_ASSERT(cond)                         \
+  ((void)sizeof(char[1 - 2 * !(cond)]))
+
 #define ASSERT(cond)                                    \
   do {                                                  \
     if (unlikely(!(cond))) {                            \
       ASSERT_LOW_LEVEL("[KERNEL ASSERTION] " #cond "\n" \
                        "    in %s:%s:%d\n", __FILE__,   \
                        __FUNCTION__, __LINE__);         \
-  }                                                     \
-} while (0)
+    }                                                   \
+  } while (0)
+
+#define BUG(fmt, args...) ASSERT(false)
 
 #endif /* __ASSERT_H__ */
 

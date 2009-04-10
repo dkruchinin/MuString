@@ -15,9 +15,10 @@ static memcache_t *ipc_priv_data_cache;
 void initialize_ipc(void)
 {
 
-  ipc_priv_data_cache= create_memcache( "IPC private data memcache",
+  ipc_priv_data_cache= create_memcache("IPC private data",
                                         sizeof(task_ipc_priv_t),1,
-                                        SMCF_PGEN);
+                                       GENERAL_POOL_TYPE | SMCF_IMMORTAL |
+                                       SMCF_LAZY | SMCF_UNIQUE);
 
   if( !ipc_priv_data_cache ) {
     panic( "initialize_ipc(): Can't create the IPC private data memcache !" );
@@ -70,7 +71,7 @@ int setup_task_ipc(task_t *task)
     }
   }
 
-  ipc_priv=alloc_from_memcache(ipc_priv_data_cache);
+  ipc_priv=alloc_from_memcache(ipc_priv_data_cache, 0);
   if( !ipc_priv ) {
     goto free_ipc;
   } else {

@@ -34,6 +34,7 @@
 #include <ds/list.h>
 #include <mlibc/stddef.h>
 #include <mm/page.h>
+#include <mm/mmpool.h>
 #include <eza/smp.h>
 #include <eza/spinlock.h>
 #include <eza/arch/atomic.h>
@@ -56,14 +57,15 @@
 /* number of generic memory caches(except memory caches for memcache_t and slab_t) */
 #define SLAB_GENERIC_CACHES  (LAST_GENSLABS_POW2 - FIRST_GENSLABS_POW2 + 1)
 
-#ifdef CONFIG_DEBUG_SLAB_PAGE_GUARD
-#define SLAB_PAGE_OFFS  (sizeof(unsigned int))
-#else
-#define SLAB_PAGE_OFFS  0
+#ifdef CONFIG_DEBUG_SLAB_MARK_PAGES
+#define SLAB_PAGE_MARK_SIZE  (sizeof(unsigned int))
+/* Magic base of memory cache identifier holding in each slab's page */
+#define SLAB_PAGE_MARK_BASE    (0xCAFDAF0)
+/* Very first memory cache type (last type is ((1 << 31) - SLAB_MAGIC_BASE) */
+#define SLAB_FIRST_VERSION     1
 #endif /* CONFIG_DEBUG_SLAB_PAGE_GUARD */
 
 #ifdef CONFIG_DEBUG_SLAB_OBJGUARDS
-
 /* Min space required for holding debug information in slab's free objects */
 #define SLAB_OBJDEBUG_MINSIZE ((sizeof(int) * 2) + sizeof(uintptr_t))
 #define SLAB_LEFTGUARD_OFFS   (sizeof(int))
@@ -72,24 +74,11 @@
 #define SLAB_OBJLEFT_GUARD    (0xABCD)
 /* Magic number that is written after address of next item in objects list */
 #define SLAB_OBJRIGHT_GUARD   (0xDCBA)
-
-#else
 #endif /* CONFIG_DEBUG_SLAB_OBJGUARDS */
 
 #ifdef CONFIG_DEBUG_SLAB
 /* Max length of memory cache debug name */
 #define MEMCACHE_DBG_NAME_MAX 128
-
-
-/* Magic base of memory cache identifier holding in each slab's page */
-#define SLAB_PAGE_MARK_BASE    (0xCAFDAF0)
-/* Very first memory cache type (last type is ((1 << 31) - SLAB_MAGIC_BASE) */
-#define SLAB_FIRST_VERSION     1
-
-#else
-#define SLAB_PAGE_OFFS      0
-#define SLAB_LEFTGUARD_OFFS 0
-#define SLAB_RIGHGUARD_OFFS 0
 #endif /* CONFIG_DEBUG_SLAB */
 
 
@@ -133,11 +122,11 @@ typedef uint16_t memcache_flags_t;
  * @see memcache_t
  */
 #define SMCF_UNIQUE     (1 << MMPOOLS_SHIFT)
-#define SMCF_IMMORTAL   (1 << MMPOOLS_SHIFT + 1)
-#define SMCF_LAZY       (1 << MMPOOLS_SHIFT + 2)
-#define __SMCF_BIT_LOCK (1 << MMPOOLS_SHIFT + 3)
+#define SMCF_IMMORTAL   (1 << (MMPOOLS_SHIFT + 1))
+#define SMCF_LAZY       (1 << (MMPOOLS_SHIFT + 2))
+#define __SMCF_BIT_LOCK (1 << (MMPOOLS_SHIFT + 3))
 
-#define SMCF_MASK (MMPOOLS_MASK | SMCF_UNIQUE | SMCF_IMMPORTAL | SMCF_LAZY)
+#define SMCF_MASK (MMPOOLS_MASK | SMCF_UNIQUE | SMCF_IMMORTAL | SMCF_LAZY)
 
 /* slab alloc flags */
 #define SAF_ATOMIC     0x01
@@ -204,7 +193,7 @@ memcache_t *create_memcache(const char *name, size_t size,
  * @return A pointer to allocated object on success, NULL if no more memory available
  * @see memcache_t
  */
-void *alloc_from_memcache(memcache_t *cache);
+void *alloc_from_memcache(memcache_t *cache, int alloc_flags);
 
 /**
  * @brief Allocate @a size bytes from generic memory caches.

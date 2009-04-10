@@ -44,7 +44,7 @@ static inline int index2slot_id(ulong_t idx, int heigh)
 
 static inline hat_bucket_t *create_hat_bucket(void)
 {
-  hat_bucket_t *ret_hb = alloc_from_memcache(buckets_cache);
+    hat_bucket_t *ret_hb = alloc_from_memcache(buckets_cache, 0);
   if (!ret_hb)
     return NULL;
 
@@ -79,8 +79,8 @@ void hat_initialize(hat_t *hat)
   CT_ASSERT(is_powerof2(HAT_BUCKET_SLOTS));
   CT_ASSERT(sizeof(hat_bucket_t) <= SLAB_OBJECT_MAX_SIZE);
   if (!buckets_cache) {
-    buckets_cache = create_memcache("HAT memcache", sizeof(hat_bucket_t),
-                                    1, SMCF_PGEN | SMCF_GENERIC);
+    buckets_cache = create_memcache("HAT", sizeof(hat_bucket_t), 1,
+                                    GENERAL_POOL_TYPE | SMCF_IMMORTAL | SMCF_LAZY);
     if (!buckets_cache) {
       panic("Can not create buckets memory cache for HAT! (failed to allocate %zd bytes)",
             sizeof(hat_bucket_t));

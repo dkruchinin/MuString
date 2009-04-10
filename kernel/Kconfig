@@ -158,5 +158,19 @@ config NUM_STACKWORDS
        range 5 50
        default "5"
 
+menuconfig DEBUG_SLAB
+       bool "Enable genral slab allocator debugging"
+       default n
+
+if DEBUG_SLAB
+config DEBUG_SLAB_MARK_PAGES
+       bool "Mark slab pages"
+       default n
+
+config DEBUG_SLAB_OBJGUARDS
+       bool "Enable guarding of free slab objects"
+       default n
+endif
+
 endmenu
 

@@ -130,8 +130,8 @@ void memobj_subsystem_initialize(void)
   for (i = 0; i < NUM_RSRV_MEMOBJ_IDS; i++)
     idx_reserve(&memobjs_ida, i);
 
-  memobjs_memcache = create_memcache("Mmemory objects cache", sizeof(memobj_t),
-                                     DEFAULT_SLAB_PAGES, SMCF_PGEN | SMCF_GENERIC);
+  memobjs_memcache = create_memcache("Mmemory objects cache", sizeof(memobj_t), 1,
+                                     GENERAL_POOL_TYPE | SMCF_IMMORTAL | SMCF_LAZY);
   if (!memobjs_memcache)
     panic("memobj_subsystem_initialize: Can't create memory cache for memory objects. ENOMEM.");
 
@@ -149,7 +149,7 @@ int memobj_create(memobj_nature_t nature, uint32_t flags,
   if (!size)
     return -EINVAL;
   
-  memobj = alloc_from_memcache(memobjs_memcache);
+  memobj = alloc_from_memcache(memobjs_memcache, 0);
   if (!memobj) {
     ret = -ENOMEM;
     goto error;

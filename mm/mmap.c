@@ -125,7 +125,7 @@ static vmrange_t *create_vmrange(vmm_t *parent_vmm, memobj_t *memobj,
 {
   vmrange_t *vmr;
 
-  vmr = alloc_from_memcache(__vmrs_cache);
+  vmr = alloc_from_memcache(__vmrs_cache, 0);
   if (!vmr)
     return NULL;
 
@@ -317,14 +317,16 @@ out:
 void vmm_subsystem_initialize(void)
 {
   kprintf("[MM] Initializing VMM subsystem...\n");
-  __vmms_cache = create_memcache("VMM objects cache", sizeof(vmm_t),
-                                 DEFAULT_SLAB_PAGES, SMCF_PGEN | SMCF_GENERIC);
+  __vmms_cache = create_memcache("VMM objects cache", sizeof(vmm_t), 1,
+                                 GENERAL_POOL_TYPE | SMCF_IMMORTAL |
+                                 SMCF_UNIQUE | SMCF_LAZY);
   if (!__vmms_cache)
     panic("vmm_subsystem_initialize: Can not create memory "
           "cache for VMM objects. ENOMEM");
 
-  __vmrs_cache = create_memcache("Vmrange objects cache", sizeof(vmrange_t),
-                                 DEFAULT_SLAB_PAGES, SMCF_PGEN | SMCF_GENERIC);
+  __vmrs_cache = create_memcache("Vmrange objects cache", sizeof(vmrange_t), 1,
+                                 GENERAL_POOL_TYPE | SMCF_IMMORTAL |
+                                 SMCF_UNIQUE | SMCF_LAZY);
   if (!__vmrs_cache)
     panic("vmm_subsystem_initialize: Can not create memory "
           "cache for vmrange objects. ENOMEM.");
@@ -334,7 +336,7 @@ vmm_t *vmm_create(task_t *owner)
 {
   vmm_t *vmm;
   
-  vmm = alloc_from_memcache(__vmms_cache);
+  vmm = alloc_from_memcache(__vmms_cache, 0);
   if (!vmm)
     return NULL;
 

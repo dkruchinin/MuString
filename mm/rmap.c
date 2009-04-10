@@ -19,7 +19,9 @@ void rmap_subsystem_initialize(void)
   int i;
 
   for (i =0; i < 2; i++) {
-    caches[i] = create_memcache(names[i], sizes[i], 1, SMCF_PGEN | SMCF_GENERIC);
+    caches[i] = create_memcache(names[i], sizes[i], 1,
+                                GENERAL_POOL_TYPE | SMCF_UNIQUE |
+                                SMCF_IMMORTAL | SMCF_LAZY);
     if (!caches[i]) {
       panic("Failed to create memory cache for \"%s\" (size = %zd). ENOMEM\n",
             names[i], sizes[i]);
@@ -33,7 +35,7 @@ void rmap_subsystem_initialize(void)
 
 static rmap_group_entry_t *create_new_entry(vmm_t *vmm, uintptr_t addr)
 {
-  rmap_group_entry_t *entry = alloc_from_memcache(entries_cache);
+  rmap_group_entry_t *entry = alloc_from_memcache(entries_cache, 0);
 
   if (!entry)
     return NULL;
@@ -47,7 +49,7 @@ static rmap_group_entry_t *create_new_entry(vmm_t *vmm, uintptr_t addr)
 
 static rmap_group_head_t *create_new_head(memobj_t *memobj)
 {
-  rmap_group_head_t *group_head = alloc_from_memcache(heads_cache);
+  rmap_group_head_t *group_head = alloc_from_memcache(heads_cache, 0);
 
   if (!group_head)
     return NULL;

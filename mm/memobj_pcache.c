@@ -459,7 +459,7 @@ int pagecache_memobj_initialize(memobj_t *memobj, uint32_t flags)
   }
 
   memobj->flags = flags;
-  pcache = alloc_from_memcache(pcache_memcache);
+  pcache = alloc_from_memcache(pcache_memcache, 0);
   if (!pcache)
     return -ENOMEM;
 
@@ -476,8 +476,8 @@ int pagecache_memobj_initialize(memobj_t *memobj, uint32_t flags)
 void pagecache_memobjs_prepare(void)
 {
   ASSERT(pcache_memcache == NULL);
-  pcache_memcache = create_memcache("Pagecache", sizeof(struct pcache),
-                                    1, SMCF_PGEN | SMCF_GENERIC);
+  pcache_memcache = create_memcache("Pagecache", sizeof(struct pcache), 1,
+                                    GENERAL_POOL_TYPE | SMCF_IMMORTAL | SMCF_LAZY);
   if (!pcache_memcache) {
     panic("Can not create memory cache for pagecache objects. ENOMEM\n");
   }

@@ -38,6 +38,7 @@
 #define AF_DMA       0x02
 #define AF_ZERO      0x04
 #define AF_USER      0x08
+#define AF_ATOMIC    0x10
 
 #define PAGES_POOL_MASK (AF_BMEM | AF_DMA | AF_USER)
 

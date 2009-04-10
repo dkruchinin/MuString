@@ -3,7 +3,7 @@
 
 #include <mlibc/types.h>
 
-#define ASSERT_MAGIC 0xDEADBEAF
+#define ASSERT_MAGIC 0xDEADBEEF
 static always_inline void ASSERT_LOW_LEVEL(const char *assert_msg, const char *file,
                                            const char *function, int line)
 {
@@ -16,5 +16,6 @@ static always_inline void ASSERT_LOW_LEVEL(const char *assert_msg, const char *f
                    "m" (file), "m" (function), "Ir" ((long)line)
                    : "memory");
 }
+
 
 #endif /* __ARCH_ASSERT_H__ */

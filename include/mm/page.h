@@ -38,6 +38,8 @@
 #include <eza/arch/page.h>
 #include <eza/arch/atomic.h>
 
+#define MMPOOLS_MASK  0x07
+#define MMPOOLS_SHIFT 3
 #define PAGE_ALIGN(addr) (((uintptr_t)(addr) + PAGE_MASK) & ~PAGE_MASK)
 #define PAGE_ALIGN_DOWN(addr) ((uintptr_t)(addr) & ~PAGE_MASK)
 
@@ -56,12 +58,12 @@ typedef ulong_t page_idx_t;
 typedef uint16_t page_flags_t;
 
 #define PF_RESERVED   (1 << MMPOOLS_SHIFT)
-#define PF_DIRTY      (1 << MMPOOLS_SHIFT + 1)
-#define PF_COW        (1 << MMPOOLS_SHIFT + 2)
-#define PF_SHARED     (1 << MMPOOLS_SHIFT + 3)
-#define PF_SLAB       (1 << MMPOOLS_SHIFT + 4)
-#define PF_PENDING    (1 << MMPOOLS_SHIFT + 5)
-#define PF_LOCK       (1 << MMPOOLS_SHIFT + 6)
+#define PF_DIRTY      (1 << (MMPOOLS_SHIFT + 1))
+#define PF_COW        (1 << (MMPOOLS_SHIFT + 2))
+#define PF_SHARED     (1 << (MMPOOLS_SHIFT + 3))
+#define PF_SLAB       (1 << (MMPOOLS_SHIFT + 4))
+#define PF_PENDING    (1 << (MMPOOLS_SHIFT + 5))
+#define PF_LOCK       (1 << (MMPOOLS_SHIFT + 6))
 
 #define PF_CLEAR_MASK (PF_COW | PF_DIRTY | PF_SHARED | PF_SLAB | PF_PENDING)
 
@@ -92,7 +94,7 @@ typedef struct __page_frame {
   union {
     void *slab_ptr;
     atomic_t refcount;
-  };    
+  };
   union {
     struct __rmap_group_head *rmap_shared;
     struct __rmap_group_entry *rmap_anon;
@@ -100,9 +102,9 @@ typedef struct __page_frame {
   };
   union {
     pgoff_t offset;
-    int slab_lazy_nobjs;
+    int slab_num_lazy_objs;
   };
-    
+
   page_idx_t idx;
   ulong_t _private;
   page_flags_t flags;

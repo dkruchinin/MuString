@@ -45,7 +45,7 @@ task_t *gc_threads[CONFIG_NRCPUS][NUM_PERCPU_THREADS];
 #define UNLOCK_TASKLIST() spinlock_unlock(&tasklist_lock)
 
 static gc_action_t *__alloc_gc_action(void) {
-  return alloc_from_memcache(gc_actions_cache);
+    return alloc_from_memcache(gc_actions_cache, 0);
 }
 
 static void __free_gc_action(struct __gc_action *action)
@@ -61,8 +61,8 @@ void initialize_gc(void)
     list_init_head(&gc_tasklists[i]);
   }
 
-  gc_actions_cache = create_memcache( "GC action memcache", sizeof(gc_action_t),
-                                      1, SMCF_PGEN);
+  gc_actions_cache = create_memcache("GC actions", sizeof(gc_action_t), 1,
+                                     GENERAL_POOL_TYPE | SMCF_IMMORTAL | SMCF_LAZY);
   if( !gc_actions_cache ) {
     panic( "initialize_gc(): Can't create GC actions memcache !" );
   }
