@@ -145,6 +145,7 @@ static void slab_dbg_check_address(void *addr)
 
   rwsem_down_read(&memcaches_rwlock);
   list_for_each_entry(&memcaches_list, mc, memcache_node) {
+      kprintf("... %s, %d\n", mc->name, mc->mark_version);
     if (page_mark == (SLAB_PAGE_MARK_BASE + mc->mark_version)) {
       found_owner = true;
       break;
@@ -154,7 +155,8 @@ static void slab_dbg_check_address(void *addr)
   rwsem_up_read(&memcaches_rwlock);
   if (!found_owner) {
     BUG("Failed to locate memory cache owning by address %p\n"
-        "  -> [Page mark valude: %#x], SLAB_PAGE_MARK_BASE = %#x\n",
+        "  -> [Page mark valude: %#x]\n"
+        "  -> SLAB_PAGE_MARK_BASE = %#x\n",
         addr, page_mark, SLAB_PAGE_MARK_BASE);
   }
 }
@@ -714,6 +716,7 @@ static void prepare_memcache(memcache_t *cache, size_t object_size,
   cache->pages_per_slab = pages_per_slab;
   list_init_head(&cache->avail_slabs);
   list_init_head(&cache->full_slabs);
+  cache->usecount = 1;
 }
 
 /*
@@ -722,22 +725,22 @@ static void prepare_memcache(memcache_t *cache, size_t object_size,
  */
 static void register_memcache(memcache_t *memcache, const char *name)
 {
+  memcache_t *c;
+  bool added = false;
+  
   memcache_dbg_set_name(memcache, name);
   memcache_dbg_set_version(memcache);
   rwsem_down_write(&memcaches_rwlock);
-  if (likely(!list_is_empty(&memcaches_list))) {
-    memcache_t *c;
-
-    list_for_each_entry(&memcaches_list, c, memcache_node) {
-      if (c->object_size > memcache->object_size) {
-        list_add_before(&c->memcache_node, &memcache->memcache_node);
-        break;
-      }
+  list_for_each_entry(&memcaches_list, c, memcache_node) {
+    kprintf("R %s, ... %d\n", c->name, c->mark_version);
+    if (c->object_size > memcache->object_size) {
+      list_add_before(&c->memcache_node, &memcache->memcache_node);
+      added = true;
+      break;
     }
   }
-  else {
+  if (!added)
     list_add2tail(&memcaches_list, &memcache->memcache_node);
-  }
   
   rwsem_up_write(&memcaches_rwlock);
 }
@@ -966,8 +969,13 @@ memcache_t *create_memcache(const char *name, size_t size,
 
   prepare_memcache(memcache, size, pages);
   memcache->flags = flags;
-  memcache->usecount = 1;
   bit_clear(&memcache->flags, bitnumber(__SMCF_BIT_LOCK));
+  register_memcache(memcache, name);
+  
+  SLAB_VERBOSE(memcache, ">> Created memory cache %s. "
+               "[Size = %d, pages_per_slab = %d, mark = %#x]\n", memcache->name,
+               memcache->pages_per_slab, memcache->mark_version);
+
   if (!(flags & SMCF_LAZY)) {
     int c;
     slab_t *slab;
@@ -986,12 +994,7 @@ memcache_t *create_memcache(const char *name, size_t size,
       memcache->active_slabs[c] = slab;
     }
   }
-  
-  register_memcache(memcache, name);
-  SLAB_VERBOSE(memcache, ">> Created memory cache %s. "
-               "[Size = %d, pages_per_slab = %d, mark = %#x]\n", memcache->name,
-               memcache->pages_per_slab, memcache->mark_version);
-  
+    
 out:
   return memcache;
 
