@@ -95,8 +95,6 @@ void segment_not_present_fault_handler_impl(interrupt_stack_frame_err_t *stack_f
     kprintf_fault( "  [!!] #Segment not present exception raised !\n" );
 }
 
-static int __send_sigsegv_on_faults=0;
-
 void general_protection_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 {
   regs_t *regs=(regs_t *)(((uintptr_t)stack_frame)-sizeof(struct __gpr_regs)-8);
@@ -160,15 +158,14 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
       return;
     }
 
-    vmranges_print_tree_dbg(vmm);
     if (fixup != 0) {
       goto kernel_fault;
     }
   }
-  if (current_task()->siginfo.handlers->actions[SIGSEGV].a.sa_sigaction != SIG_DFL)
-    goto send_sigsegv;
-  if( __send_sigsegv_on_faults )
-    goto stop_cpu;
+
+#ifdef CONFIG_SEND_SIGSEGV_ON_FAULTS
+  goto send_sigsegv;
+#endif
 
   kprintf_fault("[CPU %d] Unhandled user-mode PF exception! Stopping CPU with error code=%d.\n\n",
                 cpu_id(), stack_frame->error_code);
@@ -196,17 +193,23 @@ stop_cpu:
     __dump_stack(stack_frame->old_rsp);
   }
 #endif /* CONFIG_DUMP_USTACK */
-  
+
   interrupts_disable();
   for(;;);
 
 send_sigsegv:
+  fault_dump_regs(regs,stack_frame->rip);                                                               
+  kprintf_fault( " Invalid address: %p\n", invalid_address );                                           
+  kprintf_fault( " RSP: %p\n", stack_frame->old_rsp);
+
   /* Send user the SIGSEGV signal. */
   INIT_USIGINFO_CURR(&siginfo);
   siginfo.si_signo=SIGSEGV;
   siginfo.si_code=SEGV_MAPERR;
   siginfo.si_addr=(void *)invalid_address;
 
+  kprintf_fault("[!!] Sending SIGSEGV to %d:%d ('%s')\n",
+                faulter->pid,faulter->tid,faulter->short_name);
   send_task_siginfo(faulter,&siginfo,true,NULL);
 }
 

@@ -38,6 +38,7 @@ struct memobj_info {
   enum memobj_life lifetype;  
   uint32_t flags;
   long backend_port;
+  long private;  
 };
 
 struct memobj_backend_info {

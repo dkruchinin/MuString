@@ -91,8 +91,9 @@ long sys_timer_create(clockid_t clockid,struct sigevent *evp,
 
   switch( kevp.sigev_notify ) {
     case SIGEV_SIGNAL_THREAD:
-      target=pid_to_task(kevp.tid);
+      target=lookup_task(current_task()->pid,kevp.tid,0);
       if( !target ) {
+        r=-ESRCH;
         goto free_id;
       }
       ksiginfo->target=target;
@@ -108,6 +109,12 @@ long sys_timer_create(clockid_t clockid,struct sigevent *evp,
   posix_insert_object(stuff,&ptimer->kpo,id);
   stuff->timers++;
   UNLOCK_POSIX_STUFF_W(stuff);
+
+#ifdef CONFIG_DEBUG_TIMERS
+  kprintf_fault("sys_timer_create() [%d:%d] created POSIX timer (%p) N %d %p\n",
+                current_task()->pid,current_task()->tid,ptimer,id,
+                &ptimer->ktimer);
+#endif
 
   return 0;
 free_target:

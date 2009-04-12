@@ -138,10 +138,21 @@ config FAULTCONS_SERIAL
 endchoice
 endmenu
 
+menu   "Fault processing"
+
+config SEND_SIGSEGV_ON_FAULTS
+       bool "Send SIGSEGV on memory/protection faults."
+       default n
+endmenu
+
 menu   "Debug options"
 
 config DEBUG
        bool "Enable general debugging."
+       default n
+
+config DEBUG_TIMERS
+       bool "Debug kernel timers."
        default n
 
 config DEBUG_IRQ_ACTIVITY

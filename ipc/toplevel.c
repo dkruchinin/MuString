@@ -63,7 +63,7 @@ long sys_open_channel(pid_t pid,ulong_t port,ulong_t flags)
 
 int sys_close_channel(ulong_t channel)
 {
-  return ipc_close_channel(current_task(),channel);
+  return ipc_close_channel(current_task()->ipc,channel);
 }
 
 long sys_create_port( ulong_t flags, ulong_t queue_size )
@@ -79,7 +79,7 @@ long sys_create_port( ulong_t flags, ulong_t queue_size )
 
 int sys_close_port(ulong_t port)
 {
-  return ipc_close_port(current_task(),port);
+  return ipc_close_port(current_task()->ipc,port);
 }
 
 static inline long __reply_iov(ulong_t port, ulong_t msg_id,
@@ -163,15 +163,17 @@ static inline long __send_iov_v(ulong_t channel,
   ipc_channel_t *c;
   long ret;
 
-  c = ipc_get_channel(current_task(), channel);
-  if (!c) {
-    return -EINVAL;
-  }
   if (!__valid_iovecs(snd_kiovecs, snd_numvecs)) {
     return -EFAULT;
   }
+
   if (rcv_kiovecs && !__valid_iovecs(rcv_kiovecs, rcv_numvecs)) {
     return -EFAULT;
+  }
+
+  c = ipc_get_channel(current_task(), channel);
+  if (!c) {
+    return -EINVAL;
   }
 
   ret = ipc_port_send_iov(c, snd_kiovecs, snd_numvecs, rcv_kiovecs, rcv_numvecs);

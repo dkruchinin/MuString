@@ -553,14 +553,19 @@ void process_sigitem_private(sigq_item_t *sigitem)
   UNLOCK_POSIX_STUFF_W(stuff);
 }
 
-long sys_sigwait(sigset_t *set,int *sig)
+long sys_sigwaitinfo(sigset_t *set,int *sig,usiginfo_t *info,
+                     timespec_t *timeout)
 {
   sigset_t kset;
-  int is,sidx,r;
+  int is,sidx,r=0;
   task_t *caller=current_task();
   signal_struct_t *sigstruct=&caller->siginfo;
   sigset_t *pending=&sigstruct->pending;
   sq_header_t *sh;
+
+  if( !sig && !info ) {
+    return -EFAULT;
+  }
 
   if( copy_from_user(&kset,set,sizeof(kset)) ) {
     return -EFAULT;
@@ -580,7 +585,7 @@ long sys_sigwait(sigset_t *set,int *sig)
   }
   UNLOCK_TASK_SIGNALS_INT(caller,is);
 
-  while(true) {
+  while( true ) {
     LOCK_TASK_SIGNALS_INT(caller,is);
     if( *pending & kset ) {
       sidx=first_signal_in_set(pending);
@@ -600,17 +605,29 @@ long sys_sigwait(sigset_t *set,int *sig)
       if( sigitem->kern_priv ) {
         process_sigitem_private(sigitem);
       }
+
+      if( sig ) {
+        r=copy_to_user(sig,&sidx,sizeof(*sig)) ? -EFAULT : 0;
+      }
+
+      if( !r && info ) {
+        r=copy_to_user(info,&sigitem->info,sizeof(*info)) ? -EFAULT : 0;
+      }
       free_sigqueue_item(sigitem);
-      r=copy_to_user(sig,&sidx,sizeof(*sig)) ? -EFAULT : 0;
       break;
     }
+
     if( deliverable_signals_present(&caller->siginfo) ) {
       /* Bad luck - we were interrupted by a different signal. */
-      r=-EINTR;
-      break;
+      r=-EINTR; /* Fallthrough. */
     }
     UNLOCK_TASK_SIGNALS_INT(caller,is);
-    put_task_into_sleep(caller);
+
+    if( r ) {
+      break;
+    } else {
+      put_task_into_sleep(caller);
+    }
   }
 
   /* Now block target signals again and recalculate pending signals. */

@@ -58,10 +58,6 @@ static void __exit_ipc(task_t *exiter) {
   task_ipc_t *ipc;
   task_ipc_priv_t *p;  
 
-  if( exiter->ipc ) {
-    close_ipc_resources(exiter->ipc);
-  }
-
   LOCK_TASK_MEMBERS(exiter);
   ipc=exiter->ipc;
   p=exiter->ipc_priv;
@@ -121,7 +117,6 @@ static void __flush_pending_uworks(task_t *exiter)
 static void __exit_resources(task_t *exiter,ulong_t flags)
 {
   if( !(flags & EF_DISINTEGRATE) ) {
-    /* Remove all our listeners. */
     exit_task_events(exiter);
   }
 }
@@ -173,9 +168,12 @@ repeat:
   mutex_unlock(&priv->thread_mutex);
 
   /* Stage 2: handle zombies. */
-  list_for_each(&zthreads,ln) {
-    thread=container_of(ln,task_t,child_list);
-    release_task_struct(thread);
+  if( !list_is_empty(&zthreads) ) {
+    event_yield_susp(&priv->ce.e);
+    list_for_each(&zthreads,ln) {
+      thread=container_of(ln,task_t,child_list);
+      release_task_struct(thread);
+    }
   }
 }
 
@@ -194,7 +192,7 @@ static void __wakeup_waiters(task_t *exiter,long exitval)
   } else {
     LOCK_TASK_STRUCT(exiter);
     exiter->jointee.exit_ptr=exitval;
-    ce=exiter->cwaiter;
+    ce=NULL; //exiter->cwaiter;
     exiter->cwaiter=__UNUSABLE_PTR;
     UNLOCK_TASK_STRUCT(exiter);
   }
@@ -260,40 +258,25 @@ void do_exit(int code,ulong_t flags,long exitval)
 
   __set_exiting_flag(exiter);
 
-  if( is_thread(exiter) || !(flags & EF_DISINTEGRATE) ) {
-    zombify_task(exiter);
-  }
-
-  if( !(flags & EF_DISINTEGRATE) ) {
-    /* Free sub-resources of this task in case it is really exiting. */
-
-    if( atomic_dec_and_test(&exiter->task_events->refcount) ) {
-      memfree(exiter->task_events);
-    }
-
-    if( !(is_thread(exiter)) ) {
-      __flush_pending_uworks(exiter);
-      task_event_notify(TASK_EVENT_TERMINATION);
-    }
-  }
-
-  clear_task_disintegration_request(exiter);
-
   if( !is_thread(exiter) ) { /* All process-related works are performed here. */
+    __kill_all_threads(exiter);
+
     if( !(flags & EF_DISINTEGRATE) ) {
       if (!is_kernel_thread(exiter)) {
         vmm_destroy(exiter->task_mm);
       }
 
+      __flush_pending_uworks(exiter);
       __exit_limits(exiter);
       __exit_ipc(exiter);
+      task_event_notify(TASK_EVENT_TERMINATION);
     }
-    __kill_all_threads(exiter);
 
     if( flags & EF_DISINTEGRATE ) {
       /* Prepare the final reincarnation event. */
       __clear_vmranges_tree(exiter->task_mm);
       event_initialize_task(&exiter->reinc_event,exiter);
+      clear_task_disintegration_request(exiter);
 
       if( !__notify_disintegration_done(exiter->uworks_data.disintegration_descr,0) ) {
         /* OK, folks: for now we have no attached resources and userspace.
@@ -342,6 +325,7 @@ void do_exit(int code,ulong_t flags,long exitval)
     __exit_resources(exiter,flags);
   }
 
+  zombify_task(exiter);
   __wakeup_waiters(exiter,exitval);
   sched_del_task(exiter);
   panic( "do_exit(): zombie task <%d:%d> is still running !\n",

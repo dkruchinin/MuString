@@ -26,7 +26,7 @@ void ipc_unref_channel(ipc_channel_t *channel,ulong_t count);
 void ipc_shutdown_channel(ipc_channel_t *channel);
 int ipc_open_channel(task_t *owner,task_t *server,ulong_t port, ulong_t flags);
 int ipc_open_channel_raw(ipc_gen_port_t *server_port, ulong_t flags, ipc_channel_t **out_channel);
-int ipc_close_channel(task_t *owner,ulong_t ch_id);
+int ipc_close_channel(struct __task_ipc *ipc,ulong_t ch_id);
 int ipc_channel_control(task_t *caller,int channel,ulong_t cmd, ulong_t arg);
 void ipc_destroy_channel(ipc_channel_t *channel);
 ipc_channel_t *ipc_clone_channel(ipc_channel_t *target,struct __task_ipc *newipc);

@@ -80,8 +80,6 @@ void release_task_ipc_priv(task_ipc_priv_t *priv);
 #define UNREF_IPC_ITEM(c)  atomic_dec(&c->use_count)
 
 void release_task_ipc(task_ipc_t *ipc);
-void close_ipc_resources(task_ipc_t *ipc);
-void dup_task_ipc_resources(task_ipc_t *ipc);
 void *allocate_ipc_memory(long size);
 void free_ipc_memory(void *addr,int size);
 

@@ -125,7 +125,7 @@ ipc_gen_port_t *ipc_get_port(task_t *task,ulong_t port);
 void ipc_put_port(ipc_gen_port_t *p);
 int ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
                    ulong_t reply_buf,ulong_t reply_len);
-int ipc_close_port(task_t *owner,ulong_t port);
+int ipc_close_port(struct __task_ipc *ipc,ulong_t port);
 
 extern ipc_port_msg_ops_t prio_port_msg_ops;
 extern ipc_port_ops_t prio_port_ops;

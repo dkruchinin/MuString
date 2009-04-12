@@ -45,6 +45,8 @@ typedef struct __timeval {
   ulong_t tv_nsec;  /* microseconds */
 } timeval_t;
 
+typedef struct __timeval timespec_t;
+
 typedef struct itimerspec {
   timeval_t it_interval,it_value;
 } itimerspec_t;
