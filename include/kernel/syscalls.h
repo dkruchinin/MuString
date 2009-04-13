@@ -81,6 +81,8 @@
 #define SC_FORK                42
 #define SC_GRANT_PAGES         43
 #define SC_WAITPID             44
+#define SC_ALLOC_DMA           45
+#define SC_FREE_DMA            46
 
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */

@@ -127,14 +127,11 @@ void memobj_subsystem_initialize(void)
   
   kprintf("[MM] Initializing memory objects subsystem...\n");  
   idx_allocator_init(&memobjs_ida, CONFIG_MEMOBJS_MAX);
-  kprintf("0\n");
   for (i = 0; i < NUM_RSRV_MEMOBJ_IDS; i++)
     idx_reserve(&memobjs_ida, i);
 
-  kprintf("1\n");
   memobjs_memcache = create_memcache("Mmemory objects cache", sizeof(memobj_t), 1,
                                      GENERAL_POOL_TYPE | SMCF_IMMORTAL | SMCF_LAZY);
-  kprintf("2\n");
   if (!memobjs_memcache)
     panic("memobj_subsystem_initialize: Can't create memory cache for memory objects. ENOMEM.");
 

@@ -93,18 +93,11 @@ page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
   page_frame_t *pages = NULL;
   mm_pool_t *pool;
 
-  if (!(flags & PAGES_POOL_MASK))
-    pool = POOL_GENERAL();
-  else if (flags & (AF_USER | AF_DMA)) {
-    if (flags & AF_USER)
-      pool = POOL_HIGHMEM();
-    else
-      pool = POOL_DMA();
-    if (!pool->is_active)
-      pool = POOL_GENERAL();
+  pool = get_mmpool_by_type(flags & MMPOOLS_MASK);
+  if (!pool) {
+    return NULL;
   }
-  else
-    pool = POOL_BOOTMEM();    
+
   if (!pool->is_active) {
     kprintf(KO_WARNING "alloc_pages: Can't allocate from pool \"%s\" (pool is no active)\n", pool->name);
     return NULL;
@@ -168,3 +161,27 @@ void free_pages_chain(page_frame_t *pages)
   free_page(pages);
 }
 
+uintptr_t sys_alloc_dma_pages(int num_pages)
+{
+  page_frame_t *pages;
+
+  pages = alloc_pages(num_pages, DMA_POOL_TYPE | AF_ZERO);
+  if (!pages)
+    return -ENOMEM;
+
+  return (uintptr_t)pframe_phys_addr(pages);
+}
+
+void sys_free_dma_pages(uintptr_t paddr, int num_pages)
+{
+  page_idx_t pidx = paddr >> PAGE_WIDTH, i;
+
+  if (!num_pages)
+    return;
+  for (i = 0; i < num_pages; i++) {
+    if (!page_idx_is_present(pidx + i))
+      return;
+
+    free_page(pframe_by_number(pidx + i));
+  }  
+}

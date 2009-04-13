@@ -686,10 +686,12 @@ static int tlsf_smp_hook(cpu_id_t cpuid, void *_tlsf)
   list_head_t h;
   list_node_t *iter, *safe;
 
-  if (likely(!idalloc_is_enabled()))
+  if (likely(!idalloc_is_enabled())) {
     cache = memalloc(sizeof(*cache));
-  else
+  }
+  else {
     cache = idalloc(sizeof(*cache));
+  }
   if (!cache)
     goto err;
 
@@ -698,8 +700,9 @@ static int tlsf_smp_hook(cpu_id_t cpuid, void *_tlsf)
   list_init_head(&h);
   tlsf->percpu[cpuid] = cache;
   pages = tlsf_alloc_pages(TLSF_CPUCACHE_PAGES, tlsf);
-  if (!pages)
+  if (!pages) {
     goto err;
+  }
 
   list_set_head(&h, &pages->chain_node);
   list_for_each_safe(&h, iter, safe) {
@@ -768,11 +771,18 @@ void tlsf_allocator_init(mm_pool_t *pool)
   build_tlsf_map(tlsf);
 
 #ifdef CONFIG_SMP
-  memset(&__percpu_hook, 0, sizeof(__percpu_hook));
-  __percpu_hook.hook = tlsf_smp_hook;
-  __percpu_hook.arg = tlsf;
-  __percpu_hook.name = "TLSF percpu";
-  smp_hook_register(&__percpu_hook);
+  /*
+   * FIXME DK: it's not very clear to distinguish general and dma
+   * pools in percpu caches field. This option must be configured
+   * during allocator initialization!
+   */
+  if (pool->type == GENERAL_POOL_TYPE) {
+    memset(&__percpu_hook, 0, sizeof(__percpu_hook));
+    __percpu_hook.hook = tlsf_smp_hook;
+    __percpu_hook.arg = tlsf;
+    __percpu_hook.name = "TLSF percpu";
+    smp_hook_register(&__percpu_hook);
+  }
 #endif /* CONFIG_SMP */
 
   kprintf("[MM] Pool \"%s\" initialized TLSF O(1) allocator\n", pool->name);

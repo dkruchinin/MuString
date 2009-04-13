@@ -34,13 +34,9 @@
 #include <mlibc/types.h>
 
 /* Allocation flags */
-#define AF_BMEM      0x01
-#define AF_DMA       0x02
-#define AF_ZERO      0x04
-#define AF_USER      0x08
-#define AF_ATOMIC    0x10
-
-#define PAGES_POOL_MASK (AF_BMEM | AF_DMA | AF_USER)
+#define AF_ZERO      (1 << MMPOOLS_SHIFT)
+#define AF_USER      (2 << MMPOOLS_SHIFT)
+#define AF_ATOMIC    (4 << MMPOOLS_SHIFT)
 
 /**
  * @typedef uint8_t pfalloc_flags_t
@@ -103,6 +99,8 @@ page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags);
  */
 void free_pages(page_frame_t *pages, page_idx_t num_pages);
 void free_pages_chain(page_frame_t *pages);
+uintptr_t sys_alloc_dma_pages(int num_pages);
+void sys_free_dma_pages(uintptr_t paddr, int num_pages);
 
 static inline void *alloc_pages_addr(int n, pfalloc_flags_t flags)
 {

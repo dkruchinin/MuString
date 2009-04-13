@@ -34,7 +34,7 @@ config NRCPUS
 
 config IOMMU
        bool "Use IOMMU"
-       default y
+       default n
 
 config GENARCH_MM
      def_bool y

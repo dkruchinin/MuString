@@ -49,6 +49,7 @@ static page_frame_t *idalloc_pages(page_idx_t npages, void *unused)
     return NULL;
 
   ASSERT(npages == 1);
+  kprintf("==> %d\n", lp->type);
   ASSERT(!lp->is_active);
   spinlock_lock(&idalloc_meminfo.lock);
   if (atomic_get(&lp->free_pages) < npages)
