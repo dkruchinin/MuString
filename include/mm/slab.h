@@ -186,6 +186,8 @@ void slab_allocator_init(void);
 memcache_t *create_memcache(const char *name, size_t size,
                             int pages, memcache_flags_t flags);
 
+int destroy_memcache(memcache_t *memcache);
+
 /**
  * @brief Allocate object from memory cache @a cache
  *
@@ -194,6 +196,8 @@ memcache_t *create_memcache(const char *name, size_t size,
  * @see memcache_t
  */
 void *alloc_from_memcache(memcache_t *cache, int alloc_flags);
+
+void *__memalloc(size_t size, int alloc_flags);
 
 /**
  * @brief Allocate @a size bytes from generic memory caches.

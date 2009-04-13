@@ -145,7 +145,6 @@ static void slab_dbg_check_address(void *addr)
 
   rwsem_down_read(&memcaches_rwlock);
   list_for_each_entry(&memcaches_list, mc, memcache_node) {
-      kprintf("... %s, %d\n", mc->name, mc->mark_version);
     if (page_mark == (SLAB_PAGE_MARK_BASE + mc->mark_version)) {
       found_owner = true;
       break;
@@ -181,13 +180,14 @@ static void slab_dbg_check_page(slab_t *slab, void *page_start)
   slab_unlock(slab);
 }
 #else
-#define __objrealaddr(obj, add) ((char *)(obj) + (add))
+#define __objrealaddr(obj, add) ((void *)((char *)(obj) + (add)))
 
 /* Get number of objects fitting in slabs of given memory cache */
 static inline int __calc_objects_per_slab(memcache_t *memcache)
 {
-  return (((uintptr_t)cache->pages_per_slab << PAGE_WIDTH) /
-          cache->object_size);
+  return (((uintptr_t)memcache->pages_per_slab << PAGE_WIDTH) /
+          memcache->object_size);
+
 }
 
 #define memcache_dbg_set_version(memcache)
@@ -265,7 +265,7 @@ inval:
 #ifdef CONFIG_DEBUG_SLAB
 #define SLAB_DBG_ASSERT(cond) ASSERT(cond)
 /* FIXME: DK */
-#define SLAB_VERBOSE(memcache, fmt, args...)            \
+#define SLAB_VERBOSE(__memcache, fmt, args...)          \
   do {                                                  \
     if (true) {                                         \
       kprintf("[SLAB VERBOSE] |%s|: ", __FUNCTION__);   \
@@ -344,10 +344,12 @@ static inline void __display_statistics(memcache_t *cache)
 #define __slab_get_by_addr(addr)                \
   __page2slab((page_frame_t *)virt_to_pframe((void *)PAGE_ALIGN_DOWN((uintptr_t)(addr))))
 
+#ifdef CONFIG_DEBUG_SLAB
 static char *__slab_stat_names[] = {
   "SLAB_EMPTY", "SLAB_PARTIAL", "SLAB_FULL", "SLAB_ACTIVE", "!!UNKNOWN!!" };
 #define __slab_state_to_string(stat)           \
   (__slab_stat_names[((stat) - 1) % 5])
+#endif /* CONFIG_DEBUG_SLAB */
 
 /***************************************************************
  * >>> Slab's freelist management functions
@@ -582,8 +584,6 @@ static void free_slab_object(slab_t *slab, void *obj)
   if (slab->state == SLAB_ACTIVE) {
     if (__get_percpu_slab(memcache) == slab) {
       slab_add_free_obj(slab, obj);
-      SLAB_VERBOSE(memcache, ">> free object %p into percpu slab %p (CPU №%d)]\n",
-                   obj, slab, cpu_id());
     }
     else {
       slab_lock(slab);
@@ -595,7 +595,7 @@ static void free_slab_object(slab_t *slab, void *obj)
       if (likely(slab->state == SLAB_ACTIVE)) {
         slab_add_free_obj_lazy(slab, obj);
         SLAB_VERBOSE(memcache, ">> free object %p into lazy freelist of "
-                     "percpu slab %p (CPU №%d)\n", obj, slab, cpu_id());
+                   "percpu slab %p (CPU №%d)\n", obj, slab, cpu_id());
       }
       else {
         goto free_to_inactive_slab;
@@ -624,8 +624,6 @@ static void free_slab_object(slab_t *slab, void *obj)
 
 free_to_inactive_slab:
   slab_add_free_obj(slab, obj);
-  SLAB_VERBOSE(memcache, ">> free object %p into %s slab %p\n", obj,
-               __slab_state_to_string(slab->state), slab);
 
   switch (slab->state) {
       case SLAB_FULL:
@@ -732,7 +730,6 @@ static void register_memcache(memcache_t *memcache, const char *name)
   memcache_dbg_set_version(memcache);
   rwsem_down_write(&memcaches_rwlock);
   list_for_each_entry(&memcaches_list, c, memcache_node) {
-    kprintf("R %s, ... %d\n", c->name, c->mark_version);
     if (c->object_size > memcache->object_size) {
       list_add_before(&c->memcache_node, &memcache->memcache_node);
       added = true;
@@ -912,6 +909,49 @@ void slab_allocator_init(void)
   __create_generic_caches();
 }
 
+int destroy_memcache(memcache_t *memcache)
+{
+  int c;
+  list_node_t *n, *safe;
+  page_frame_t *page;
+
+  if (unlikely(memcache->flags & SMCF_IMMORTAL))
+    return -EINVAL;
+  
+  rwsem_down_write(&memcaches_rwlock);
+  memcache->usecount--;
+  SLAB_DBG_ASSERT(memcache->usecount >= 0);
+  if (!memcache->usecount) {
+    list_del(&memcache->memcache_node);
+  }
+  else {
+    return 0;
+  }
+  
+  rwsem_up_write(&memcaches_rwlock);
+  /* Drop per-cpu slabs */
+  for_each_cpu(c) {
+    if (memcache->active_slabs[c])
+      destroy_slab(memcache->active_slabs[c]);
+  }
+
+  /* Destroy full slabs if any */
+  list_for_each_safe(&memcache->full_slabs, n, safe) {
+    page = list_entry(n, page_frame_t, node);
+    destroy_slab(__page2slab(page));
+  }
+
+  /* Destroy partial and empty slabs */
+  list_for_each_safe(&memcache->avail_slabs, n, safe) {
+    page = list_entry(n, page_frame_t, node);
+    destroy_slab(__page2slab(page));
+  }
+
+  /* Finally, destroy the memcache itself */
+  memfree(memcache);  
+  return 0;
+}
+
 #define MEMCACHE_MERGE_MASK (MMPOOLS_MASK | SMCF_UNIQUE)
 memcache_t *create_memcache(const char *name, size_t size,
                             int pages, memcache_flags_t flags)
@@ -998,48 +1038,9 @@ memcache_t *create_memcache(const char *name, size_t size,
 out:
   return memcache;
 
-  error:
-#if 0 /* FIXME DK */
-  if (memcache)    
-    destroy_memcache(memcache);
-#endif
-
+error:
+  destroy_memcache(memcache);
   return NULL;
-}
-
-int destroy_memcache(memcache_t *memcache)
-{
-#if 0 /* FIXME DK */
-  page_frame_t *pf;
-  slab_t *slab;
-
-  
-  if (memcache->flags & SMCF_GENERIC) {
-    kprintf(KO_WARNING "Attemption to destroy *generic* memory cache %p\n", cache);
-    return -EINVAL;
-  }
-  spinlock_lock(&cache->lock);
-  SLAB_VERBOSE("Destroying memory cache %s...\n", cache->dbg.name);
-  __unregister_memcache_dbg(cache);
-  list_for_each_entry(&cache->inuse_slabs, pf, node) {
-    __lock_slab_page(pf);
-    destroy_slab(slab);
-    __unlock_slab_page(pf);
-  }
-  if (atomic_get(&cache->npartial_slabs) || atomic_get(&cache->nempty_slabs)) {
-    list_for_each_entry(&cache->inuse_slabs, pf, node) {
-      __lock_slab_page(pf);
-      destroy_slab(slab);
-      __unlock_slab_page(pf);
-    }
-  }
-
-  __unregister_memcache_dbg(cache);
-  spinlock_unlock(&cache->lock);
-  memfree(cache);
-#endif
-
-  return 0;
 }
 
 void *alloc_from_memcache(memcache_t *memcache, int alloc_flags)
@@ -1059,7 +1060,6 @@ void *alloc_from_memcache(memcache_t *memcache, int alloc_flags)
     goto alloc_obj;
   }
 
-  kprintf("s3\n");
   /*
    * Check if there eixist some free objects in lazy freelist.
    * If so, we just swap objects from lazy list to slab freelist.
@@ -1086,15 +1086,12 @@ void *alloc_from_memcache(memcache_t *memcache, int alloc_flags)
                __slab_state_to_string(SLAB_FULL));
 
 take_new_slab:
-  kprintf("zzz\n");
   slab = try_get_avail_slab(memcache);
-  kprintf("ppp\n");
   if (slab) {
     memcache_unlock(memcache);
     goto alloc_obj;
   }
 
-  kprintf("ooo\n");
   __set_percpu_slab(memcache, NULL);
   memcache_unlock(memcache);
 
@@ -1153,8 +1150,8 @@ alloc_obj:
   obj = slab_get_free_obj(slab);
   interrupts_restore(irqstat);
 
-  SLAB_VERBOSE(memcache, ">> (%s) Allocated object %p from slab %p "
-               "(%d objects rest)\n", memcache->name, obj, slab, slab->nobjects);
+  /*SLAB_VERBOSE(memcache, ">> (%s) Allocated object %p from slab %p "
+    "(%d objects rest)\n", memcache->name, obj, slab, slab->nobjects);*/
   
   slab_dbg_check_page(slab, (void *)PAGE_ALIGN_DOWN((uintptr_t)obj));
   slab_dbg_check_object(slab, obj);
@@ -1170,6 +1167,8 @@ void *__memalloc(size_t size, int alloc_flags)
 {
   int idx = bit_find_msf(size);
 
+  if (!is_powerof2(size))
+    idx++;
   if ((idx < 0) || (idx > LAST_GENSLABS_POW2)) {
     SLAB_PRINT_ERROR(NULL, ">> Failed to allocate object of size %zd.\n"
                      "  --> ((idx < 0) || (idx > LAST_GENSLABS_POW2))\n",
@@ -1202,7 +1201,7 @@ void memfree(void *mem)
   free_slab_object(slab, mem);
 }
 
-#if 0
+#if 0 /* TODO DK! */
 #ifdef CONFIG_DEBUG_SLAB
 void slab_verbose_enable(void)
 {

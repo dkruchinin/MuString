@@ -208,7 +208,6 @@ int dup_task_sync_data(task_sync_data_t *sync_data)
 task_sync_data_t *allocate_task_sync_data(void)
 {
   task_sync_data_t *s=memalloc(sizeof(*s));
-
   if( s ) {
     memset(s,0,sizeof(*s));
     atomic_set(&s->use_count,1);
