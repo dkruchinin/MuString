@@ -155,6 +155,10 @@ config DEBUG_TIMERS
        bool "Debug kernel timers."
        default n
 
+config DEBUG_SIGNALS
+       bool "Debug all kernel signals-related activity."
+       default n
+
 config DEBUG_IRQ_ACTIVITY
        bool "Debug incoming hardware IRQs (also local timer and IPI) to debug console."
        depends on DEBUG_SERIAL_CONSOLE

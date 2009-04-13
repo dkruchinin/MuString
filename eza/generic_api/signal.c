@@ -530,6 +530,12 @@ void process_sigitem_private(sigq_item_t *sigitem)
    */
   posix_timer_t *ptimer=(posix_timer_t *)sigitem->kern_priv;
 
+#ifdef CONFIG_DEBUG_TIMERS
+  kprintf_fault("process_sigitem_private() [%d:%d]: Tick=%d, Processing timer %p\n",
+                current_task()->pid,current_task()->tid,system_ticks,
+                &ptimer->ktimer);
+#endif
+
   LOCK_POSIX_STUFF_W(stuff);
   if( ptimer->interval ) {
     ulong_t next_tick=ptimer->ktimer.time_x+ptimer->interval;
@@ -542,6 +548,12 @@ void process_sigitem_private(sigq_item_t *sigitem)
     } else {
       overrun=0;
     }
+
+#ifdef CONFIG_DEBUG_TIMERS
+    kprintf_fault("process_sigitem_private() [%d:%d]: Tick=%d, timer %p, next TX=%d\n",
+                  current_task()->pid,current_task()->tid,system_ticks,
+                  &ptimer->ktimer,next_tick);
+#endif
 
     /* Rearm this timer. We take only active timers into account. */
     ptimer->overrun=overrun;
@@ -562,6 +574,7 @@ long sys_sigwaitinfo(sigset_t *set,int *sig,usiginfo_t *info,
   signal_struct_t *sigstruct=&caller->siginfo;
   sigset_t *pending=&sigstruct->pending;
   sq_header_t *sh;
+  int dneeded=-1;
 
   if( !sig && !info ) {
     return -EFAULT;
@@ -577,20 +590,42 @@ long sys_sigwaitinfo(sigset_t *set,int *sig,usiginfo_t *info,
 
   /* First, unblock target signals and chek that caller has blocked them. */
   LOCK_TASK_SIGNALS_INT(caller,is);
+
+#ifdef CONFIG_DEBUG_SIGNALS
+  kprintf_fault("sys_sigwaitinfo() [%d:%d] <START> Kset=%p, Blocked=%p, Tick=%d, CHECK=%p\n",
+                current_task()->pid,current_task()->tid,kset,sigstruct->blocked,
+                system_ticks,kset & sigstruct->blocked);
+#endif
+
   if( (kset & sigstruct->blocked) != kset ) {
     r=-EINVAL;
     goto unlock_signals;
   } else {
     sigstruct->blocked &= ~kset;
   }
+
   UNLOCK_TASK_SIGNALS_INT(caller,is);
 
   while( true ) {
     LOCK_TASK_SIGNALS_INT(caller,is);
+
+#ifdef CONFIG_DEBUG_SIGNALS
+  kprintf_fault("sys_sigwaitinfo() [%d:%d] Tick=%d *pending=%p, Kset=%p\n",
+                current_task()->pid,current_task()->tid,
+                system_ticks,*pending,kset);
+#endif
+
     if( *pending & kset ) {
       sidx=first_signal_in_set(pending);
       sh=sigqueue_remove_item(&caller->siginfo.sigqueue,sidx,false);
       ASSERT(sh);
+
+#ifdef CONFIG_DEBUG_SIGNALS
+  kprintf_fault("sys_sigwaitinfo() [%d:%d] Tick=%d Signal matches ! Kset=%p, SIG=%d\n",
+                current_task()->pid,current_task()->tid,
+                system_ticks,kset,sidx);
+#endif
+
     } else {
       sh=NULL;
     }
@@ -617,8 +652,13 @@ long sys_sigwaitinfo(sigset_t *set,int *sig,usiginfo_t *info,
       break;
     }
 
-    if( deliverable_signals_present(&caller->siginfo) ) {
+    if( deliverable_signals_present(sigstruct) ) {
       /* Bad luck - we were interrupted by a different signal. */
+#ifdef CONFIG_DEBUG_SIGNALS
+  kprintf_fault("sys_sigwaitinfo() [%d:%d] Bad luck ! Got a different signal (pending=%p,blocked=%p), Tick=%d\n",
+                current_task()->pid,current_task()->tid,sigstruct->pending,
+                sigstruct->blocked,system_ticks);
+#endif
       r=-EINTR; /* Fallthrough. */
     }
     UNLOCK_TASK_SIGNALS_INT(caller,is);
@@ -633,8 +673,16 @@ long sys_sigwaitinfo(sigset_t *set,int *sig,usiginfo_t *info,
   /* Now block target signals again and recalculate pending signals. */
   LOCK_TASK_SIGNALS_INT(caller,is);
   sigstruct->blocked |= kset;
-  __update_pending_signals(caller);
+  dneeded=__update_pending_signals(caller);
 unlock_signals:
+
+#ifdef CONFIG_DEBUG_SIGNALS
+  kprintf_fault("sys_sigwaitinfo() [%d:%d] <END> Tick=%d, r=%d, Kset=%p (Blocked=%p, Pending=%p), DELIVERY=%d\n",
+                current_task()->pid,current_task()->tid,
+                system_ticks,r,kset,sigstruct->blocked,sigstruct->pending,
+                dneeded);
+#endif
+
   UNLOCK_TASK_SIGNALS_INT(caller,is);
   return r;
 }

@@ -94,12 +94,22 @@ static void __perform_default_action(int sig)
 {
   int sm=_BM(sig);
 
-  kprintf( "[!!] Default action for signal %d is: ",sig );
+#ifdef CONFIG_DEBUG_SIGNALS
+  kprintf_fault("[!!] [%d:%d] Default action for signal %d is: ",
+                current_task()->pid,current_task()->tid,sig);
+#endif
+
   if( sm & LETHAL_SIGNALS ) {
-    kprintf( "TERMINATE\n" );
+
+#ifdef CONFIG_DEBUG_SIGNALS
+    kprintf_fault("TERMINATE\n");
+#endif
     do_exit(EXITCODE(sig,0),0,0);
   }
-  kprintf( "IGNORE\n" );
+
+#ifdef CONFIG_DEBUG_SIGNALS
+    kprintf_fault("IGNORE\n");
+#endif
 }
 
 static void __handle_cancellation_request(int reason,uintptr_t kstack)
