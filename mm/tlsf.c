@@ -482,15 +482,16 @@ static page_frame_t *__get_page_from_cache(tlsf_t *tlsf)
 {
   page_frame_t *page;
   tlsf_percpu_cache_t *pcpu = tlsf->percpu[cpu_id()];
+  int irqstat;
 
   if (!pcpu || !pcpu->noc_pages)
     return NULL;
 
-  preempt_disable();
+  interrupts_save_and_disable(irqstat);
   page = list_entry(list_node_first(&pcpu->pages), page_frame_t, node);
   list_del(&page->node);
   pcpu->noc_pages--;
-  preempt_enable();
+  interrupts_restore(irqstat);
 
   return page;
 }
@@ -505,7 +506,7 @@ static void tlsf_free_pages(page_frame_t *pages, page_idx_t num_pages, void *dat
   tlsf_t *tlsf = data;
   page_frame_t *merged_block;
   page_idx_t page_idx = pframe_number(pages);
-  int i;
+  int i, irqstat;
 
   ASSERT(num_pages != 0);
   if (((num_pages + page_idx - 1) < tlsf->owner->first_page_id) ||
@@ -543,11 +544,11 @@ static void tlsf_free_pages(page_frame_t *pages, page_idx_t num_pages, void *dat
     return;
 
   pages_block_create(pages, num_pages - 1);
-  spinlock_lock(&tlsf->lock);
+  spinlock_lock_irqsave(&tlsf->lock, irqstat);
   merged_block = try_merge_left(tlsf, pages);
   merged_block = try_merge_right(tlsf, merged_block);
   pages_block_insert(tlsf, merged_block);
-  spinlock_unlock(&tlsf->lock);
+  spinlock_unlock_irqrestore(&tlsf->lock, irqstat);
 }
 
 static page_frame_t *tlsf_alloc_pages(page_idx_t n, void *data)
@@ -555,17 +556,17 @@ static page_frame_t *tlsf_alloc_pages(page_idx_t n, void *data)
   tlsf_t *tlsf = data;
   page_frame_t *block_head = NULL;
   tlsf_uint_t size;
-  int i;
+  int i, irqstat;
 
   if ((n >= MAX_BLOCK_SIZE) || (n > atomic_get(&tlsf->owner->free_pages)))
     goto out;
   if ((n == 1) && ((block_head = __get_page_from_cache(tlsf)) != NULL))
     goto init_block;
 
-  spinlock_lock(&tlsf->lock);
+  spinlock_lock_irqsave(&tlsf->lock, irqstat);
   block_head = find_suitable_block(tlsf, n);
   if (!block_head) {
-    spinlock_unlock(&tlsf->lock);
+      spinlock_unlock_irqrestore(&tlsf->lock, irqstat);
     goto out;
   }
 
@@ -575,7 +576,7 @@ static page_frame_t *tlsf_alloc_pages(page_idx_t n, void *data)
     pages_block_insert(tlsf, pages_block_split(tlsf, block_head, size - n));
 
   pages_block_destroy(block_head);
-  spinlock_unlock(&tlsf->lock);
+  spinlock_unlock_irqrestore(&tlsf->lock, irqstat);
 
   init_block:
   /* Now we free to build pages chain and set TLSF_PB_BUSY bit for each allocated page */
@@ -802,11 +803,11 @@ static void __validate_empty_sldi_dbg(tlsf_t *tlsf, int fldi, int sldi)
 void tlsf_validate_dbg(void *_tlsf)
 {
   tlsf_t *tlsf = _tlsf;
-  int fldi, sldi;
+  int fldi, sldi, irqstat;
   page_idx_t total_pgs = 0;
   mm_pool_t *parent_pool = tlsf->owner;
 
-  spinlock_lock(&tlsf->lock);
+  spinlock_lock_irqsave(&tlsf->lock, irqstat);
   for (fldi = 0; fldi < TLSF_FLD_SIZE; fldi++) {
     if (!__fld_is_avail(tlsf, fldi)) {
       /* Ok, given FLD is marked as free. Check if it's true */
@@ -872,6 +873,6 @@ void tlsf_validate_dbg(void *_tlsf)
           parent_pool->name, total_pgs, atomic_get(&parent_pool->free_pages));
   }
 
-  spinlock_unlock(&tlsf->lock);
+  spinlock_unlock_irqrestore(&tlsf->lock, irqstat);
 }
 #endif /* CONFIG_DEBUG_MM */
