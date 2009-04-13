@@ -167,8 +167,11 @@ uintptr_t sys_alloc_dma_pages(int num_pages)
   page_frame_t *pages;
 
   pages = alloc_pages(num_pages, DMA_POOL_TYPE | AF_ZERO);
-  if (!pages)
+  if (!pages) {
+    kprintf_fault("sys_alloc_dma_pages(): [%d:%d] failed to allocate %d pages !\n",
+                  current_task()->pid,current_task()->tid,num_pages);
     return -ENOMEM;
+  }
 
   return (uintptr_t)pframe_phys_addr(pages);
 }
