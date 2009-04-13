@@ -13,6 +13,5 @@ struct sigevent {
 #define INIT_SIGEVENT(e)                        \
   (e).sigev_notify=SIGEV_SIGNAL;               \
      (e).sigev_signo=SIGALRM                  \
-        
 
 #endif

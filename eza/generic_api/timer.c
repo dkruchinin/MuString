@@ -232,14 +232,14 @@ void process_timers(void)
 
 #ifdef CONFIG_DEBUG_TIMERS
         kprintf_fault("process_timers(): [CPU %d] Scheduling deffered actions for tick %d.\n",
-                      cpu_id(),tt->time_x);
+                      cpu_id(),system_ticks);
 #endif
 
         schedule_deffered_actions(&tt->actions);
 
 #ifdef CONFIG_DEBUG_TIMERS
         kprintf_fault("process_timers(): [CPU %d] All deffered actions for tick %d scheduled.\n",
-                cpu_id(),tt->time_x);
+                cpu_id(),system_ticks);
 #endif
         break;
       }
@@ -416,6 +416,13 @@ long add_timer(ktimer_t *t)
 
   LOCK_SW_TIMERS(is);
   if( t->time_x <= system_ticks  ) {
+
+#ifdef CONFIG_DEBUG_TIMERS
+    kprintf_fault("add_timer(<a>): [%d:%d] timer %p (TX=%d) expired upon insertion (Tick=%d)!\n",
+                  current_task()->pid,current_task()->tid,
+                  t,t->time_x,system_ticks);
+#endif
+
     r=-EAGAIN;
     goto out;
   }
@@ -489,6 +496,13 @@ long add_timer(ktimer_t *t)
   LOCK_MAJOR_TIMER_TICK(mt,is);
   if( t->time_x <= __last_processed_timer_tick  ) {
     r=-EAGAIN;
+
+#ifdef CONFIG_DEBUG_TIMERS
+    kprintf_fault("add_timer(<b>): [%d:%d] timer %p (TX=%d) expired upon insertion (Tick=%d)!\n",
+                  current_task()->pid,current_task()->tid,
+                  t,t->time_x,system_ticks);
+#endif
+
     goto out_unlock_tick;
   }
 

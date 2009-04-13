@@ -96,6 +96,13 @@ long sys_timer_create(clockid_t clockid,struct sigevent *evp,
         r=-ESRCH;
         goto free_id;
       }
+
+#ifdef CONFIG_DEBUG_TIMERS
+      kprintf_fault("sys_timer_create() [%d:%d] timer %d will target task %d:%d by signal %d\n",
+                    current_task()->pid,current_task()->tid,
+                    id,target->pid,target->tid);
+#endif
+
       ksiginfo->target=target;
       break;
   }
@@ -192,6 +199,12 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
   itimerspec_t tspec,kspec;
   ktimer_t *ktimer;
 
+#ifdef CONFIG_DEBUG_TIMERS
+  kprintf_fault("sys_timer_control(<BEGIN>) [%d:%d]: Tick=%d,(cmd=%d,id=%d)\n",
+                current_task()->pid,current_task()->tid,
+                system_ticks,cmd,id);
+#endif
+
   switch( cmd ) {
     case __POSIX_TIMER_SETTIME:
       /* Arguments are the same as for POSIX 'timer_settime()':
@@ -217,6 +230,11 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
         ktimer=&ptimer->ktimer;
         if( !(tspec.it_value.tv_sec | tspec.it_value.tv_nsec) ) {
           if( ktimer->time_x && posix_timer_active(ptimer) ) { /* Disarm active timer */
+#ifdef CONFIG_DEBUG_TIMERS
+            kprintf_fault("sys_timer_control() [%d:%d]: Tick=%d, deactivating timer %p:(P=%d) to %d\n",
+                          current_task()->pid,current_task()->tid,
+                          system_ticks,ktimer,ptimer->interval,tx);
+#endif
             deactivate_posix_timer(ptimer);
             delete_timer(ktimer);
           }
@@ -229,9 +247,30 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
           ptimer->interval=itx;
           activate_posix_timer(ptimer);
           if( ktimer->time_x ) { /* New time for active timer. */
+#ifdef CONFIG_DEBUG_TIMERS
+            kprintf_fault("sys_timer_control() [%d:%d] <RE-ARM> Tick=%d, timer=%p:(Tv=%d/%d,Pv=%d/%d,ABS=%d) to %d\n",
+                          current_task()->pid,current_task()->tid,
+                          system_ticks,ktimer,
+                          tspec.it_value.tv_sec,tspec.it_value.tv_nsec,
+                          tspec.it_interval.tv_sec,tspec.it_interval.tv_nsec,
+                          (arg1 & TIMER_ABSTIME) != 0,
+                          tx);
+#endif
+
             r=modify_timer(ktimer,tx);
           } else {
             TIMER_RESET_TIME(ktimer,tx);
+
+#ifdef CONFIG_DEBUG_TIMERS
+            kprintf_fault("sys_timer_control() <ARM> [%d:%d] Tick=%d, timer=%p:(Tv=%d/%d,Pv=%d/%d,ABS=%d) to %d\n",
+                          current_task()->pid,current_task()->tid,
+                          system_ticks,ktimer,
+                          tspec.it_value.tv_sec,tspec.it_value.tv_nsec,
+                          tspec.it_interval.tv_sec,tspec.it_interval.tv_nsec,
+                          (arg1 & TIMER_ABSTIME) != 0,
+                          tx);
+#endif
+
             r=add_timer(ktimer);
           }
         }
@@ -269,5 +308,11 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
   if( ptimer ) {
     release_posix_timer(ptimer);
   }
+
+#ifdef CONFIG_DEBUG_TIMERS
+  kprintf_fault("sys_timer_control(<END>) [%d:%d]: Tick=%d, (cmd=%d,id=%d), result=%d\n",
+                current_task()->pid,current_task()->tid,
+                system_ticks,cmd,id,r);
+#endif
   return r;
 }
