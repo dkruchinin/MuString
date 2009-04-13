@@ -57,11 +57,13 @@ static inline void __determine_page_mempool(page_frame_t *pframe)
 {
   mm_pool_t *pool;
 
-  if (pframe_number(pframe) < dma_pages)
+  if (pframe_number(pframe) < dma_pages) {
     pool = POOL_DMA();
-  else
+  }
+  else {
     pool = POOL_GENERAL();
-  
+  }
+
   mmpool_add_page(pool, pframe);
 }
 #else
@@ -191,7 +193,7 @@ static void build_page_frames_array(void)
     }
     if ((mmap->type != E820_USABLE) || is_kernel_page(page) ||
         (page->idx < LAST_BIOS_PAGE)) {
-      page->flags |= PF_RESERVED;
+      page->flags |= PF_RESERVED;      
     }
 
     __determine_page_mempool(page);

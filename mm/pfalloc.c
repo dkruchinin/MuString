@@ -95,6 +95,7 @@ page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
 
   pool = get_mmpool_by_type(flags & MMPOOLS_MASK);
   if (!pool) {
+    kprintf("No pool %d\n", flags & MMPOOLS_MASK);
     return NULL;
   }
 

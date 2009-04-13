@@ -57,13 +57,13 @@ typedef ulong_t page_idx_t;
  */
 typedef uint16_t page_flags_t;
 
-#define PF_RESERVED   (1 << MMPOOLS_SHIFT)
-#define PF_DIRTY      (1 << (MMPOOLS_SHIFT + 1))
-#define PF_COW        (1 << (MMPOOLS_SHIFT + 2))
-#define PF_SHARED     (1 << (MMPOOLS_SHIFT + 3))
-#define PF_SLAB       (1 << (MMPOOLS_SHIFT + 4))
-#define PF_PENDING    (1 << (MMPOOLS_SHIFT + 5))
-#define PF_LOCK       (1 << (MMPOOLS_SHIFT + 6))
+#define PF_RESERVED   (0x01 << MMPOOLS_SHIFT)
+#define PF_DIRTY      (0x02 << MMPOOLS_SHIFT)
+#define PF_COW        (0x04 << MMPOOLS_SHIFT)
+#define PF_SHARED     (0x08 << MMPOOLS_SHIFT)
+#define PF_SLAB       (0x10 << MMPOOLS_SHIFT)
+#define PF_PENDING    (0x20 << MMPOOLS_SHIFT)
+#define PF_LOCK       (0x40 << MMPOOLS_SHIFT)
 
 #define PF_CLEAR_MASK (PF_COW | PF_DIRTY | PF_SHARED | PF_SLAB | PF_PENDING)
 
