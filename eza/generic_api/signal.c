@@ -677,7 +677,7 @@ long sys_sigwaitinfo(sigset_t *set,int *sig,usiginfo_t *info,
 unlock_signals:
 
 #ifdef CONFIG_DEBUG_SIGNALS
-  kprintf_fault("sys_sigwaitinfo() [%d:%d] <END> Tick=%d, r=%d, Kset=0x%X (Blocked=%p, Pending=%p), DELIVERY=%d\n",
+  kprintf_fault("sys_sigwaitinfo() [%d:%d] <END> Tick=%d, r=%d, Kset=%p (Blocked=%p, Pending=%p), DELIVERY=%d\n",
                 current_task()->pid,current_task()->tid,
                 system_ticks,r,kset,sigstruct->blocked,sigstruct->pending,
                 dneeded);
