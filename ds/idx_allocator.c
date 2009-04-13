@@ -178,9 +178,8 @@ int idx_allocator_init(idx_allocator_t *ida, ulong_t idx_max)
   ida->size = bmap_sz / sizeof(ulong_t);
   if (likely(ida->size >= MIN_IDA_SIZE)) {
     if ((bmap_sz >= PAGE_SIZE) || (bmap_sz > SLAB_OBJECT_MAX_SIZE)) {
-      kprintf("alloc pages\n");
       page_frame_t *pf = alloc_pages(bmap_sz >> PAGE_WIDTH, AF_ZERO);
-      kprintf("ok!\n");
+
       if (!pf) {
         kprintf(KO_ERROR, "Can not allocate %d pages for bitmap. ENOMEM.\n", bmap_sz >> PAGE_WIDTH);
         goto error;
@@ -190,9 +189,7 @@ int idx_allocator_init(idx_allocator_t *ida, ulong_t idx_max)
     }
     else {
       ASSERT(bmap_sz < SLAB_OBJECT_MAX_SIZE);
-      kprintf("memalloc\n");
       ida->ids_bmap = memalloc(bmap_sz);
-      kprintf("ok!\n");
       if (!ida->ids_bmap) {
         kprintf(KO_ERROR "Can not allocate %d bytes for bitmap from slab. ENOMEM.\n", bmap_sz);
         goto error;
@@ -204,9 +201,7 @@ int idx_allocator_init(idx_allocator_t *ida, ulong_t idx_max)
   else
     ida->size = (ida->size > 0) ? (ida->size * sizeof(ulong_t)) : sizeof(ulong_t);
 
-  kprintf("memalloc 2\n");
   ida->main_bmap = memalloc(__get_main_bmap_size(ida));
-  kprintf("ok\n");
   if (!ida->main_bmap) {
     kprintf(KO_ERROR, "Can not allocate %zd bytes from slab.\n", __get_main_bmap_size(ida));
     goto error;

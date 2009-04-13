@@ -594,8 +594,9 @@ static void free_slab_object(slab_t *slab, void *obj)
        */
       if (likely(slab->state == SLAB_ACTIVE)) {
         slab_add_free_obj_lazy(slab, obj);
-        SLAB_VERBOSE(memcache, ">> free object %p into lazy freelist of "
-                   "percpu slab %p (CPU №%d)\n", obj, slab, cpu_id());
+        SLAB_VERBOSE(memcache, ">> (%s) free object %p into lazy freelist of "
+                     "percpu slab %p (CPU №%d)\n", memcache->name,
+                     obj, slab, cpu_id());
       }
       else {
         goto free_to_inactive_slab;
@@ -634,8 +635,8 @@ free_to_inactive_slab:
         slab_register_partial(memcache, slab);
         memcache->stat.npartial_slabs++;
         
-        SLAB_VERBOSE(memcache, ">> move slab %p from %s to %s state. "
-                     "Partial slabs: %d\n",
+        SLAB_VERBOSE(memcache, ">> (%s) move slab %p from %s to %s state. "
+                     "Partial slabs: %d\n", memcache->name,
                      slab, __slab_state_to_string(SLAB_FULL),
                      __slab_state_to_string(SLAB_PARTIAL),
                      memcache->stat.npartial_slabs);
@@ -662,8 +663,8 @@ free_to_inactive_slab:
           if (memcache->stat.nempty_slabs == MEMCACHE_EMPTYSLABS_MAX) {
             memcache->stat.nslabs--;
 
-            SLAB_VERBOSE(memcache, ">> drop slab %p(became %s from %s). "
-                         "%d empty slabs rest.\n", slab,
+            SLAB_VERBOSE(memcache, ">> (%s) drop slab %p(became %s from %s). "
+                         "%d empty slabs rest.\n", memcache->name, slab,
                          __slab_state_to_string(SLAB_EMPTY),
                          __slab_state_to_string(SLAB_PARTIAL),
                          memcache->stat.nempty_slabs);
@@ -679,8 +680,8 @@ free_to_inactive_slab:
             memcache->stat.nempty_slabs++;
             slab_register_empty(memcache, slab);
 
-            SLAB_VERBOSE(memcache, ">> move slab %p from %s to %s state. "
-                         "Empty slabs: %d\n", slab,
+            SLAB_VERBOSE(memcache, ">> (%s) move slab %p from %s to %s state. "
+                         "Empty slabs: %d\n", memcache->name, slab,
                          __slab_state_to_string(SLAB_PARTIAL),
                          __slab_state_to_string(SLAB_EMPTY),
                          memcache->stat.nempty_slabs);
