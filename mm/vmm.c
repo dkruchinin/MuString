@@ -124,19 +124,19 @@ void mm_initialize(void)
 
   mmpools_initialize();
   arch_mm_init();
-
-  mmpool_activate(POOL_BOOTMEM());
+  mmpool_activate(POOL_BOOTMEM());  
   old_flags = ptable_ops.alloc_flags;
   ptable_ops.alloc_flags = BOOTMEM_POOL_TYPE | AF_ZERO;
   if (initialize_rpd(&kernel_rpd, NULL))
     panic("mm_init: Can't initialize kernel root page directory!");
 
-  /* Now we can remap available memory */
+  /* Now we can remap available memory */  
   arch_mm_remap_pages();
-  ptable_ops.alloc_flags = old_flags;
+  ptable_ops.alloc_flags = old_flags;  
   for_each_mm_pool(pool) {
-    if (!atomic_get(&pool->free_pages) || (pool->type == BOOTMEM_POOL_TYPE))
+    if (!atomic_get(&pool->free_pages) || (pool->type == BOOTMEM_POOL_TYPE)) {
       continue;
+    }
 
     kprintf("activate pool %d %s\n", pool->type, pool->name);
     mmpool_activate(pool);

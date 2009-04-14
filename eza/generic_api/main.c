@@ -124,7 +124,7 @@ void main_routine(void) /* this function called from boostrap assembler code */
   /* Now we can continue initialization with properly initialized kernel
    * stack frame.
    */
-
+  
   main_routine_stage1();
 }
 

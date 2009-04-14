@@ -33,16 +33,16 @@
 #include <mlibc/types.h>
 
 extern int _kernel_start, _kernel_end;
-extern uintptr_t __kernel_first_free_addr;
+extern uintptr_t __kernel_first_free_vaddr;
 extern uintptr_t __uspace_top_vaddr;
 extern uintptr_t __kernel_va_base;
+extern uintptr_t __real_kernel_end;
 
 #define MIN_MEM_REQUIRED    _mb2b(8)                        /**< Minimum memory required for system */
 #define MIN_PAGES_REQUIRED  (MIN_MEM_REQUIRED >> PAGE_WIDTH) /**< Minimum number of pages that must be present in a system */
 
-#define KERNEL_START_PHYS   ((uintptr_t)&_kernel_start) /**/
-#define __KERNEL_END_PHYS   ((uintptr_t)&_kernel_end)
-#define KERNEL_END_PHYS     (PAGE_ALIGN(__kernel_first_free_addr))
+#define KERNEL_START_PHYS   ((uintptr_t)(BOOT_OFFSET - AP_BOOT_OFFSET))
+#define KERNEL_END_PHYS     (__real_kernel_end)
 #define IDENT_MAP_PAGES     (_mb2b(2) >> PAGE_WIDTH)
 #define USPACE_VA_TOP       (16UL << 40UL) /* 16 Terabytes */
 #define USPACE_VA_BOTTOM    0x1001000UL
@@ -55,11 +55,10 @@ static inline bool is_kernel_page(page_frame_t *page)
 {
   uintptr_t addr = (uintptr_t)pframe_to_virt(page);
 
-  if (addr >= KERNEL_START_PHYS)
-    return (addr <= KERNEL_END_PHYS);
-
-  return ((k2p(addr) >= (uintptr_t)(BOOT_OFFSET - AP_BOOT_OFFSET)) &&
-          (addr < KERNEL_START_PHYS));
+  return (((k2p(addr) >= (uintptr_t)(BOOT_OFFSET - AP_BOOT_OFFSET)) &&
+           (k2p(addr) < KERNEL_END_PHYS)) ||
+          ((addr >= (uintptr_t)page_frames_array) &&
+           (addr < __kernel_first_free_vaddr)));
 }
 
 static inline uintptr_t __allocate_vregion(ulong_t npages)

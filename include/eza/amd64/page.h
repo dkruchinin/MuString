@@ -32,7 +32,6 @@
 
 #ifdef __ASM__
 #define KERNEL_BASE   0xffffffff80000000
-#define KERNEL_OFFSET 0xffff800000000000
 
 #define k2p(p)  ((p) - KERNEL_BASE)
 #define p2k(p)  ((p) + KERNEL_BASE)
@@ -41,19 +40,9 @@
 #include <eza/arch/types.h>
 
 #define KERNEL_BASE   0xffffffff80000000UL
-#define KERNEL_OFFSET 0xffff800000000000UL
 
-#define k2p(p)       _k2p((uintptr_t)p)
-#define p2k_code(p)  (((uintptr_t)(p)) + KERNEL_BASE)
-#define p2k(p)       (((uintptr_t)(p)) + KERNEL_OFFSET)
-
-static inline uintptr_t _k2p(uintptr_t p)
-{
-  if(p > KERNEL_BASE)
-    return p - KERNEL_BASE;
-  else
-    return p - KERNEL_OFFSET;
-}
+#define k2p(p)       ((uintptr_t)p - KERNEL_BASE)
+#define p2k(p)       ((uintptr_t)p + KERNEL_BASE)
 
 #endif /* __ASM__ */
 #endif /* __ARCH_PAGE_H__ */
