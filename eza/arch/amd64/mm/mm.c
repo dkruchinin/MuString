@@ -43,7 +43,8 @@
 uint8_t e820count;
 page_frame_t *page_frames_array = NULL;
 page_idx_t num_phys_pages = 0;
-uintptr_t __kernel_first_free_addr = __KERNEL_END_PHYS;
+uintptr_t __kernel_first_free_vaddr = p2k((uintptr_t)&_kernel_end);
+uintptr_t __real_kernel_end = (uintptr_t)&_kernel_end;
 uintptr_t __uspace_top_vaddr = USPACE_VA_TOP;
 uintptr_t __kernel_va_base = KERNEL_BASE;
 uintptr_t __utrampoline_virt = 0;
@@ -89,7 +90,7 @@ static void verify_mapping(const char *descr, uintptr_t start_addr,
     idx++;
     start_addr += PAGE_SIZE;
   }
-  
+
   kprintf(" %*s\n", strlen(descr) + 14, "[OK]");
   return;
 
@@ -121,7 +122,7 @@ static void register_mandatory_mappings(void)
   utramp_mandmap.flags = KMAP_READ | KMAP_EXEC;
   vm_mandmap_register(&utramp_mandmap, "Utrampoline mapping");
 
-  memset(&swks_mandmap, 0, sizeof(swks_mandmap));  
+  memset(&swks_mandmap, 0, sizeof(swks_mandmap));
   swks_mandmap.virt_addr = __reserve_uspace_vregion(SWKS_PAGES);
   swks_mandmap.phys_addr = k2p(&swks);
   swks_mandmap.num_pages = SWKS_PAGES;
@@ -130,14 +131,14 @@ static void register_mandatory_mappings(void)
 }
 
 static void scan_phys_mem(void)
-{  
+{
   int idx;
   bool found;
   char *types[] = { "(unknown)", "(usable)", "(reserved)", "(ACPI reclaimable)",
                     "(ACPI NVS)", "(BAD)" };
   uintptr_t last_addr = 0;
 
-  kprintf("E820 memory map:\n"); 
+  kprintf("E820 memory map:\n");
   for(idx = 0, found = false; idx < e820count; idx++) {
     e820memmap_t *mmap = &e820table[idx];
     uintptr_t length = ((uintptr_t)mmap->length_high << 32) | mmap->length_low;
@@ -193,7 +194,7 @@ static void build_page_frames_array(void)
     }
     if ((mmap->type != E820_USABLE) || is_kernel_page(page) ||
         (page->idx < LAST_BIOS_PAGE)) {
-      page->flags |= PF_RESERVED;      
+      page->flags |= PF_RESERVED;
     }
 
     __determine_page_mempool(page);
@@ -214,13 +215,28 @@ void map_kernel_area(vmm_t *vmm)
 void arch_mm_init(void)
 {
   uintptr_t addr;
-
-  kprintf("[MM] Scanning physical memory...\n");
   scan_phys_mem();
+
   addr = server_get_end_phy_addr();
-  page_frames_array = addr ?
-    (page_frame_t *)PAGE_ALIGN(p2k_code(addr)) : (page_frame_t *)KERNEL_END_PHYS;  
-  __kernel_first_free_addr = (uintptr_t)page_frames_array + sizeof(page_frame_t) * num_phys_pages;
+  if (addr) {
+    __real_kernel_end = addr;
+  }
+
+  /*
+   * In case when IOMMU isn't used, we have to prepare
+   * DMA pages buffer(lying below 16M). Page frames array
+   * firs in some DMA pages. To prevent this situation
+   * we locate it after 16M.
+   */
+#ifdef CONFIG_IOMMU
+  page_frames_array = (page_frame_t *)PAGE_ALIGN(p2k(__real_kernel_end));
+#else
+  page_frames_array = (page_frame_t *)p2k(_mb2b(16));
+#endif /* CONFIG_IOMMU */
+
+  __kernel_first_free_vaddr = (uintptr_t)page_frames_array +
+    sizeof(page_frame_t) * num_phys_pages;
+  kprintf("=> %p .. %p\n", page_frames_array, __kernel_first_free_vaddr);
   build_page_frames_array();
 }
 
@@ -244,7 +260,7 @@ void arch_mm_remap_pages(void)
           KERNEL_BASE, num_phys_pages << PAGE_WIDTH, ret);
   }
 
-  /* Verify that mappings are valid. */  
+  /* Verify that mappings are valid. */
   verify_mapping("general mapping", KERNEL_BASE, num_phys_pages, 0);
 
   /* Now we should register our direct mapping area and kernel area
@@ -256,7 +272,7 @@ void arch_mm_remap_pages(void)
 
 
 void arch_smp_mm_init(cpu_id_t cpu)
-{  
+{
   load_cr3(pde_fetch(RPD_PAGEDIR(&kernel_rpd), 0));
 }
 

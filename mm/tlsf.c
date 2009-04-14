@@ -711,7 +711,7 @@ static int tlsf_smp_hook(cpu_id_t cpuid, void *_tlsf)
     bit_clear(&p->_private, TLSF_PB_BUSY);
     list_add2tail(&cache->pages, &p->node);
   }
-  
+
   cache->noc_pages = TLSF_CPUCACHE_PAGES;
   return 0;
 
@@ -862,7 +862,7 @@ void tlsf_validate_dbg(void *_tlsf)
       }
     }
   }
-  
+
 #ifdef CONFIG_SMP
   {
     cpu_id_t c;
@@ -870,13 +870,13 @@ void tlsf_validate_dbg(void *_tlsf)
     for_each_cpu(c) {
       if (!tlsf->percpu[c])
         continue;
-      
+
       ASSERT(tlsf->percpu[c]->noc_pages >= 0);
       total_pgs += tlsf->percpu[c]->noc_pages;
     }
   }
 #endif /* CONFIG_SMP */
-  
+
   if (total_pgs != atomic_get(&parent_pool->free_pages)) {
     panic("TLSF belonging to pool %s has inadequate number of free pages: "
           "%d, but pool itself tells us that there are %d pages available!",

@@ -96,15 +96,16 @@ void idalloc_init(mm_pool_t *pool)
 
   for_each_mm_pool(p) {
     if ((atomic_get(&p->free_pages) < CONFIG_IDALLOC_PAGES) ||
-        (p->type == pool->type)) {
+        (p->type == pool->type) || (pool->type == DMA_POOL_TYPE)) {
       continue;
     }
     if (!leeched_pool) {
       leeched_pool = p;
       continue;
     }
-    if (leeched_pool->first_page_id > p->first_page_id)
+    if (leeched_pool->first_page_id > p->first_page_id) {
       leeched_pool = p;
+    }
   }
 
   memset(&idalloc_meminfo, 0, sizeof(idalloc_meminfo));

@@ -858,9 +858,8 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr,
   }
   if (flags & (VMR_PHYS | VMR_POPULATE)) {
     err = memobj_method_call(memobj, populate_pages, vmr, addr, npages);
-    if (err) {
+    if (err)
       goto err;
-    }
   }
 
   /*
