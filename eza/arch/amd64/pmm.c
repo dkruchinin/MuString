@@ -96,6 +96,7 @@ void copy_tss(tss_t *dst_tss,tss_t *src_tss)
 {
   memset(dst_tss,0,sizeof(tss_t));
   dst_tss->rsp0=src_tss->rsp0;
+  dst_tss->ist1=src_tss->ist1; /* Copy stack slot for doublefault handler. */
 }
 
 /* misc functions for gdt & idt */
