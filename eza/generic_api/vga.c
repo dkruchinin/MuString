@@ -162,27 +162,6 @@ void vga_set_cursor_attrs(const uint8_t flags)
   return;
 }
 
-void vga_blinking(const bool action)
-{
-  uint16_t isr1_dp, isr1_save, atr_save;
-  
-  isr1_dp=vga_set_mode(VDP_ISR1,VGA_COLOR);
-  isr1_save=inb(isr1_dp);
-  atr_save=inb(VDP_ATR_RD);
-  outb(VAP_ATR_WR,AMCR);
-  __vregs.atr[AMCR]=inb(VDP_ATR_RD);
-
-  if(action && !(__vregs.atr[AMCR] & VGA_ABLINK_ENABLE))
-    outb(VAP_ATR_WR,__vregs.atr[AMCR] | VGA_ABLINK_ENABLE);
-  if(!action && (__vregs.atr[AMCR] & VGA_ABLINK_ENABLE))
-    outb(VAP_ATR_WR,__vregs.atr[AMCR] & VGA_ABLINK_DISABLE);
-
-  outb(VAP_ATR_WR, atr_save);
-  outb(isr1_dp, isr1_save);
-
-  return;
-}
-
 void vga_putch(uint16_t c)
 {
   uint16_t *where;

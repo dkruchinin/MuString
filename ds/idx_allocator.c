@@ -60,7 +60,7 @@ static inline size_t __get_main_bmap_size(idx_allocator_t *ida)
 ulong_t idx_allocate(idx_allocator_t *ida)
 {
   ulong_t id = IDX_INVAL;
-  long fnfi;
+  long fnfi = 0;
   size_t i, main_offs, main_sz;
 
   main_sz = __get_main_bmap_size(ida) / sizeof(ulong_t);

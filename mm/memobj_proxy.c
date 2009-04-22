@@ -26,8 +26,8 @@ static int proxy_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
   vmrange_t *serv_vmr;
   page_idx_t pidx;
   page_frame_t *page;
-  task_t *server;
-  ipc_channel_t *chan;
+  task_t *server = NULL;
+  ipc_channel_t *chan = NULL;
 
   ret = 0;
   spinlock_lock_read(&memobj->members_rwlock);

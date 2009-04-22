@@ -207,7 +207,7 @@ int rmap_unregister_anon(page_frame_t *page, vmm_t *vmm, uintptr_t addr)
 
 int rmap_unregister_mapping(page_frame_t *page, vmm_t *vmm, uintptr_t address)
 {
-  int ret;
+  int ret = 0;
   
   lock_page_frame(page, PF_LOCK);
   if (!(page->flags & (PF_SHARED | PF_COW))) {

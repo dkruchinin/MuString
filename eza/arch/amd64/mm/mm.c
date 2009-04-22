@@ -44,7 +44,7 @@ uint8_t e820count;
 page_frame_t *page_frames_array = NULL;
 page_idx_t num_phys_pages = 0;
 uintptr_t __kernel_first_free_vaddr = p2k((uintptr_t)&_kernel_end);
-uintptr_t __real_kernel_end = (uintptr_t)&_kernel_end;
+uintptr_t __real_kernel_end = k2p((uintptr_t)&_kernel_end);
 uintptr_t __uspace_top_vaddr = USPACE_VA_TOP;
 uintptr_t __kernel_va_base = KERNEL_BASE;
 uintptr_t __utrampoline_virt = 0;
@@ -69,7 +69,7 @@ static inline void __determine_page_mempool(page_frame_t *pframe)
 }
 #else
 static inline void __determine_page_mempool(page_frame_t *pframe)
-{
+{  
   mmpool_add_page(POOL_GENERAL(), pframe);
 }
 #endif /* CONFIG_IOMMU */
@@ -229,14 +229,13 @@ void arch_mm_init(void)
    * we locate it after 16M.
    */
 #ifdef CONFIG_IOMMU
-  page_frames_array = (page_frame_t *)PAGE_ALIGN(p2k(__real_kernel_end));
+  page_frames_array = (page_frame_t *)p2k(PAGE_ALIGN(__real_kernel_end));
 #else
   page_frames_array = (page_frame_t *)p2k(_mb2b(16));
 #endif /* CONFIG_IOMMU */
 
   __kernel_first_free_vaddr = (uintptr_t)page_frames_array +
     sizeof(page_frame_t) * num_phys_pages;
-  kprintf("=> %p .. %p\n", page_frames_array, __kernel_first_free_vaddr);
   build_page_frames_array();
 }
 

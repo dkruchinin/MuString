@@ -56,7 +56,7 @@ bool index_array_initialize(index_array_t *array, range_type_t range)
         index_array_entry_t *entry;
 
         for(item = 0;item < item_count; item++) {
-          char *area;
+          char *area = NULL;
 
           if( item % IA_ENTRIES_PER_PAGE == 0 ) {
             uint64_t *p64;

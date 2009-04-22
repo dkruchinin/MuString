@@ -179,6 +179,7 @@ int send_process_siginfo(pid_t pid,usiginfo_t *siginfo,void *kern_priv)
   list_node_t *ln;
   bool unlock_childs=false;
 
+  is1 = 0; /* to shut up gcc warning */
   if( !root ) {
     return -ESRCH;
   }
@@ -254,7 +255,7 @@ send_signal:
 
 int sys_kill(pid_t pid,int sig,usiginfo_t *sinfo)
 {
-  int r;
+  int r = 0;
   usiginfo_t k_siginfo;
 
   if( !valid_signal(sig) ) {

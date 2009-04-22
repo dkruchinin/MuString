@@ -197,7 +197,9 @@ stop_cpu:
   interrupts_disable();
   for(;;);
 
+#ifdef CONFIG_SEND_SIGSEGV_ON_FAULTS
 send_sigsegv:
+#endif /* CONFIG_SEND_SIGSEGV_ON_FAULTS */
   fault_dump_regs(regs,stack_frame->rip);                                                               
   kprintf_fault( " Invalid address: %p\n", invalid_address );                                           
   kprintf_fault( " RSP: %p\n", stack_frame->old_rsp);

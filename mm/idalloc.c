@@ -98,11 +98,11 @@ void idalloc_init(mm_pool_t *pool)
     if ((atomic_get(&p->free_pages) < CONFIG_IDALLOC_PAGES) ||
         (p->type == pool->type) || (pool->type == DMA_POOL_TYPE)) {
       continue;
-    }
+    }    
     if (!leeched_pool) {
       leeched_pool = p;
       continue;
-    }
+    }    
     if (leeched_pool->first_page_id > p->first_page_id) {
       leeched_pool = p;
     }
@@ -124,7 +124,7 @@ void idalloc_init(mm_pool_t *pool)
       pool->reserved_pages++;
       continue;
     }
-
+    
     list_add2tail(&idalloc_meminfo.avail_pages, &page->node);
     atomic_inc(&pool->free_pages);
     atomic_dec(&leeched_pool->free_pages);
@@ -132,7 +132,7 @@ void idalloc_init(mm_pool_t *pool)
       break;
     }
   }
-
+  
   if (atomic_get(&pool->free_pages) != CONFIG_IDALLOC_PAGES) {
     panic("Init-data(bootmem) allocator can not be initizlized! Leeched pool %s hasn't ehough(%d) pages!",
           leeched_pool->name, CONFIG_IDALLOC_PAGES);

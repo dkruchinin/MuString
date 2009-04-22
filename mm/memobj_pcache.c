@@ -211,7 +211,7 @@ static int handle_not_present_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
   pgoff_t offset = addr2pgoff(vmr, addr);
   struct pcache *pcache = memobj->private;
   page_frame_t *page;
-  int ret;
+  int ret = 0;
 
   if (!(pfmask & PFLT_WRITE))
     mmap_flags &= ~VMR_WRITE;

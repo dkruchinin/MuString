@@ -246,7 +246,6 @@ static void __server_task_runner(void *data)
   int r,sn;
   kconsole_t *kconsole=default_console();
   int delay=CONFIG_CORESERVERS_LAUNCH_DELAY > 300 ? CONFIG_CORESERVERS_LAUNCH_DELAY : 300;
-  uintptr_t p;
 
   if( i > 0 ) {
     kprintf("[LAUNCHER] Starting %d servers with delay %d. First user (non-NS) PID is %d\n",

@@ -386,7 +386,7 @@ static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
 
 int ipc_close_port(task_ipc_t *ipc,ulong_t port)
 {
-  ipc_gen_port_t *p;
+  ipc_gen_port_t *p = NULL;
   bool shutdown=false;
   int r;
 
@@ -441,7 +441,7 @@ long ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
   long r;
   task_ipc_t *ipc = get_task_ipc(owner);
   ulong_t id;
-  ipc_gen_port_t *port;
+  ipc_gen_port_t *port = NULL;
 
   if( !ipc ) {
     return -EINVAL;
@@ -512,8 +512,8 @@ out_unlock:
 
 long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
                        iovec_t *rcv_iov,ulong_t numvecs,ulong_t offset) {
-  ipc_port_message_t *msg;
-  long r;
+  ipc_port_message_t *msg = NULL;
+  long r = 0;
 
   IPC_LOCK_PORT_W(port);
   if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
@@ -655,7 +655,7 @@ long ipc_port_send_iov(ipc_channel_t *channel, iovec_t snd_kiovecs[], ulong_t sn
   ipc_gen_port_t *port = NULL;
   ipc_port_message_t *msg;
   ipc_buffer_t snd_bufs[MAX_IOVECS], rcv_bufs[MAX_IOVECS];
-  ulong_t msg_size, rcv_size;
+  ulong_t msg_size = 0, rcv_size = 0;
   long ret = 0;
 
   ret = __calc_msg_length(snd_kiovecs, snd_numvecs, &msg_size);
@@ -813,7 +813,7 @@ long ipc_port_send_iov_core(ipc_gen_port_t *port,
 long ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
                         iovec_t *reply_iov, uint32_t numvecs)
 {
-  ipc_port_message_t *msg;
+  ipc_port_message_t *msg = NULL;
   long r;
   size_t reply_len;
   

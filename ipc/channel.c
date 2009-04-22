@@ -102,7 +102,7 @@ int ipc_open_channel_raw(ipc_gen_port_t *server_port, ulong_t flags, ipc_channel
 
 void ipc_unref_channel(ipc_channel_t *channel,ulong_t c)
 {
-  bool shutdown;
+  bool shutdown = false;
   task_ipc_t *ipc=channel->ipc;
 
   if( !channel->ipc ) {

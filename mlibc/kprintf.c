@@ -156,7 +156,7 @@ size_t vsnprintf(char *dest, const size_t dsize, const char *fmt, va_list ap)
   struct fattrs fa;
 
   memset(&fa, 0, sizeof(fa));
-
+  c = 0; s = NULL;
   for(; *fmt != '\0'; fmt++) {
 	if((*fmt == '%') && !pers) {
 	  pers = true;
