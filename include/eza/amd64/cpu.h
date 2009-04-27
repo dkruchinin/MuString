@@ -83,8 +83,10 @@
 #define TSS_BASIC_SIZE  104
 #define TSS_IOMAP_SIZE  ((4*4096)+1)  /* 16k&nil for mapping */
 #define TSS_DEFAULT_LIMIT  (TSS_BASIC_SIZE-1)
-#define TSS_IOPORTS_PAGES  1
-#define TSS_IOPORTS_LIMIT  (PAGE_SIZE-1)
+#define TSS_IOPORTS_PAGES  2
+
+/* Reserve last 8 bits. */
+#define TSS_IOPORTS_LIMIT  (TSS_IOPORTS_PAGES*PAGE_SIZE*8-1-TSS_BASIC_SIZE-8)
 
 #define PTD_SELECTOR  1  /* LDT selector that refers to per-task data. */
 

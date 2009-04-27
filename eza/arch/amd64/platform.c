@@ -106,5 +106,5 @@ void arch_initialize_swks(void)
  /* According to the x86 programming manual, we must reserve
   * eight bits after the last available I/O port in all IOPMs.
   */ 
-	swks.ioports_available=(PAGE_SIZE-sizeof(tss_t)-1)*8;
+  swks.ioports_available=TSS_IOPORTS_LIMIT;
 }
