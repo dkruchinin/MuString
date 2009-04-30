@@ -241,3 +241,22 @@ void deschedule_deffered_action(deffered_irq_action_t *a)
   spinlock_unlock_irqrestore(&acts->lock,is);
 }
 
+/* Call this function every time when the priority of current process
+ * has changed.
+ */
+void update_deferred_actions(void)
+{
+  percpu_def_actions_t *acts=cpu_actions_host();
+  long is;
+  deffered_irq_action_t *action;
+
+  spinlock_lock_irqsave(&acts->lock,is);
+  if( !list_is_empty(&acts->pending_actions) ) {
+      action=container_of(list_node_first(&acts->pending_actions),
+                          deffered_irq_action_t,node);
+      if( current_task()->priority >= action->priority ) {
+        arch_sched_set_def_works_pending();
+      }
+    }
+  spinlock_unlock_irqrestore(&acts->lock,is);
+}

@@ -47,6 +47,7 @@
 #include <eza/arch/apic.h>
 #include <eza/arch/current.h>
 #include <eza/signal.h>
+#include <eza/def_actions.h>
 #include <config.h>
 
 /* Our own scheduler. */
@@ -375,6 +376,7 @@ get_next_task:
 
   if( need_switch ) {
       arch_activate_task(next);
+      update_deferred_actions();
   }
 
   if( ints_enabled ) {
