@@ -47,8 +47,6 @@
 #define get_fault_address(x) \
     __asm__ __volatile__( "movq %%cr2, %0" : "=r"(x) )
 
-#define NUM_STACKWORDS 5
-
 static bool __read_user_safe(uintptr_t addr,uintptr_t *val)
 {
   uintptr_t *p;
@@ -69,8 +67,8 @@ void __dump_stack(uintptr_t ustack)
   uintptr_t d;
 
   kprintf_fault("\nTop %d words of userspace stack (RSP=%p).\n\n",
-          NUM_STACKWORDS,ustack);
-  for(i=0;i<NUM_STACKWORDS;i++) {
+          CONFIG_NUM_STACKWORDS,ustack);
+  for(i=0;i<CONFIG_NUM_STACKWORDS;i++) {
     if( __read_user_safe(ustack,&d) ) {
       kprintf_fault("  <%p>\n",d);
     } else {
