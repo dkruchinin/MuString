@@ -69,6 +69,7 @@ static void cpu_setup_fpu(void)
 	       "movq %%rax, %%cr0;"
 	       "movq %%cr4, %%rax;"
 	       "bts $9, %%rax;"
+	       "bts $10, %%rax;"
 	       "movq %%rax, %%cr4;"
 	       :
 	       :
