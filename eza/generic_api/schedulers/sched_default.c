@@ -312,7 +312,8 @@ static int def_add_task(task_t *task)
 }
 
 #ifdef CONFIG_TRACE_CURRENT
-static tid_t __current_cpu_task[CONFIG_NRCPUS];
+static pid_t __current_cpu_task_pid[CONFIG_NRCPUS];
+static tid_t __current_cpu_task_tid[CONFIG_NRCPUS];
 #endif
 
 static void def_schedule(void)
@@ -369,7 +370,8 @@ get_next_task:
   }
 
 #ifdef CONFIG_TRACE_CURRENT
-  __current_cpu_task[cpu_id()]=next->tid;
+  __current_cpu_task_pid[cpu_id()]=next->pid;
+  __current_cpu_task_tid[cpu_id()]=next->tid;
 #endif
 
   __UNLOCK_CPU_SCHED_DATA(sched_data);
