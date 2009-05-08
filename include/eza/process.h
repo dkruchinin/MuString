@@ -47,6 +47,8 @@
 #define SYS_PR_CTL_GETPPID             0xD
 #define SYS_PR_CTL_GETTID              0xE
 #define SYS_PR_CTL_SET_SHORTNAME       0xF
+#define SYS_PR_CTL_SET_UIDGID          0x10
+#define SYS_PR_CTL_GET_UIDGID          0x11
 
 #define PTHREAD_CANCEL_ENABLE   1
 #define PTHREAD_CANCEL_DISABLE  0
@@ -110,5 +112,10 @@ void force_task_exit(task_t *target,int exit_value);
 void unhash_task(task_t *task);
 
 task_t *lookup_task_thread(task_t *p,tid_t tid);
+
+typedef struct __uidgid {
+  uid_t uid;
+  gid_t gid;
+} uidgid_t;
 
 #endif

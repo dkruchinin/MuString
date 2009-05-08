@@ -374,6 +374,7 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
 {
   task_event_ctl_arg te_ctl;
   long r;
+  uidgid_t uidgid;
 
   switch( cmd ) {
     case SYS_PR_CTL_SET_ENTRYPOINT:
@@ -428,6 +429,28 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
         return -EWOULDBLOCK;
       }
       return __disintegrate_task(target,arg);
+    case SYS_PR_CTL_GET_UIDGID:
+      LOCK_TASK_STRUCT(target);
+      uidgid.uid = target->uid;
+      uidgid.gid = target->gid;
+      UNLOCK_TASK_STRUCT(target);
+
+      if( copy_to_user((void *)arg,&uidgid,sizeof(uidgid)) ) {
+        return -EFAULT;
+      }
+      return 0;
+    case SYS_PR_CTL_SET_UIDGID:
+      if( !trusted_task(current_task()) ) {
+        return -EPERM;
+      }
+      if( copy_from_user(&uidgid,(void *)arg,sizeof(uidgid)) ) {
+        return -EFAULT;
+      }
+      LOCK_TASK_STRUCT(target);
+      target->uid = uidgid.uid;
+      target->gid = uidgid.gid;
+      UNLOCK_TASK_STRUCT(target);
+      return 0;
     case SYS_PR_CTL_REINCARNATE_TASK:
       return __reincarnate_task(target,arg);
     case SYS_PR_CTL_SET_CANCEL_STATE:
@@ -503,9 +526,9 @@ void force_task_exit(task_t *target,int exit_value)
   UNLOCK_TASK_STRUCT(target);
 }
 
-int sys_task_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
+long sys_task_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
 {
-  int r;
+  long r;
   task_t *task;
   ulong_t lookup_flags=0;
   task_t *caller=current_task();
@@ -515,6 +538,7 @@ int sys_task_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
       case SYS_PR_CTL_DISINTEGRATE_TASK:
       case SYS_PR_CTL_ADD_EVENT_LISTENER:
       case SYS_PR_CTL_DEL_EVENT_LISTENER:
+      case SYS_PR_CTL_SET_UIDGID:
         return -EINVAL;
     }
   }

@@ -163,7 +163,7 @@ long sys_create_task(ulong_t flags,task_creation_attrs_t *a);
  *    EFAULT - argument points to insufficient address in userspace;
  *    
  */
-int sys_task_control( pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg);
+long sys_task_control( pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg);
 
 
 

@@ -48,7 +48,7 @@ static inline bool capable(task_t *task, ulong_t capability )
 
 static inline bool trusted_task(task_t *task)
 {
-  return true;
+  return task->uid == 0;
 }
 
 #endif
