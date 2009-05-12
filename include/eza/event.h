@@ -20,7 +20,7 @@ typedef bool (*event_checker_t)(void *priv);
 typedef struct __event_t {
   spinlock_t __lock;
   struct __task_struct *task;
-  ulong_t flags;
+  ulong_t flags,waitcnt;
   void *private_data;
   event_checker_t ev_checker;
 } event_t;
@@ -35,7 +35,7 @@ typedef struct __countered_event {
 static inline void event_initialize_task(event_t *event,struct __task_struct *task)
 {
   spinlock_initialize(&event->__lock);
-  event->flags=0;
+  event->flags=event->waitcnt=0;
   event->task=task;
   event->ev_checker=NULL;
   event->private_data=NULL;
@@ -48,7 +48,7 @@ static inline void event_reset(event_t *event)
   long is;
 
   spinlock_lock_irqsave(&event->__lock,is);
-  event->flags=0;
+  event->flags=event->waitcnt=0;
   event->task=NULL;
   spinlock_unlock_irqrestore(&event->__lock,is);
 }
@@ -76,12 +76,18 @@ static inline void event_set_task(event_t *event,struct __task_struct *task)
 static bool event_defered_sched_handler(void *data)
 {
   event_t *t = (event_t*)data;
+  bool c;
 
   if( t->ev_checker ) {
-    return t->ev_checker(t->private_data);
+    c=t->ev_checker(t->private_data);
+  } else {
+    c=!(t->flags & EVENT_OCCURED);
   }
 
-  return !(t->flags & EVENT_OCCURED);
+  if( c ) {
+    t->waitcnt = 1;
+  }
+  return c;
 }
 
 static inline int event_yield_state(event_t *event,int state)
@@ -103,6 +109,7 @@ static inline int event_yield_state(event_t *event,int state)
     r=sched_change_task_state_deferred(t,state,ec,event);
 
     LOCK_EVENT(event,is);
+    event->waitcnt = 0;
     if( event->flags & EVENT_OCCURED ) {
       event->flags &= ~EVENT_OCCURED;
       r=0;
@@ -122,7 +129,7 @@ static inline void event_raise(event_t *event)
 {
   struct __task_struct *t;
   long is;
-  
+
   LOCK_EVENT(event,is);
   if( !event->ev_checker ) {
     if( !(event->flags & EVENT_OCCURED) ) {
@@ -135,8 +142,10 @@ static inline void event_raise(event_t *event)
   }
 
   if( t != NULL) {
-    sched_change_task_state(t,TASK_STATE_RUNNABLE);    
     event->flags |= EVENT_OCCURED;
+    if( event->waitcnt ) {
+      sched_change_task_state(t,TASK_STATE_RUNNABLE);
+    }
   }
   UNLOCK_EVENT(event,is);
 }

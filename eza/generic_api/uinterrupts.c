@@ -117,8 +117,17 @@ struct __userspace_events_data *allocate_task_uspace_events_data(void)
 
 static bool __irq_array_event_checker(void *priv)
 {
-  irq_event_mask_t *ev_mask=(irq_event_mask_t*)priv;
-  return *ev_mask == 0;
+  event_t *event = (event_t *)priv;
+  irq_counter_array_t *array = (irq_counter_array_t *)event->private_data;
+  irq_event_mask_t *ev_mask = array->event_mask;
+  bool c;
+
+  c = *ev_mask == 0;
+  if( c ) {
+    array->de.d._event.waitcnt = 1;
+  }
+
+  return c;
 }
 
 static irq_counter_array_t *__allocate_irq_counter_array(task_t *task,ulong_t nc)
@@ -132,7 +141,7 @@ static irq_counter_array_t *__allocate_irq_counter_array(task_t *task,ulong_t nc
     list_init_head(&array->counter_handlers);
     event_initialize(&array->de.d._event);
     event_set_checker(&array->de.d._event,__irq_array_event_checker,
-                      &array->event_mask);
+                      array);
 
     array->map_addr=NULL;
     array->event_mask=0;
