@@ -95,7 +95,6 @@ static int map_acpi_tables(uint32_t *phys_addrs, int naddrs, uintptr_t va, uint3
         int ret;
 		/* map needed physical memory */
         ret = mmap_kern(va, sidx, m, KMAP_KERN | KMAP_READ | KMAP_NOCACHE);
-        kprintf("ret = %d, va = %p\n", ret, va);
 	}
 	if (m > mapped_pages)
 		mapped_pages = m;
