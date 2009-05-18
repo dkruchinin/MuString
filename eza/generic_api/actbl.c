@@ -57,7 +57,7 @@ static bool phys_range_is_mapped(int start_idx, int n)
 	for (i = start_idx; i < j; i++) {
 		va = (uintptr_t)pframe_id_to_virt(i);
 		frame = pframe_by_number(i);
-		if (!mm_vaddr_is_mapped(&kernel_rpd, va))
+		if (!page_is_mapped(&kernel_rpd, PAGE_ALIGN_DOWN(va)))
 			break;
 	}
 
@@ -67,18 +67,18 @@ static bool phys_range_is_mapped(int start_idx, int n)
 static int map_acpi_tables(uint32_t *phys_addrs, int naddrs, uintptr_t va, uint32_t *base_addr)
 {
 	int i, m;
-	page_idx_t idx, sidx = 0x7FFFFFFF, eidx = -1;
+	long idx, sidx = 0x7FFFFFFF, eidx = -1;
 
 	for (i = 0; i < naddrs; i++) {
 		idx = phys_addrs[i] >> PAGE_WIDTH;
-
-		if (idx < sidx) {
-			if (eidx - idx >= MAX_MAPPED_PAGES)
+		if (idx < sidx) {            
+			if (eidx - idx >= MAX_MAPPED_PAGES) {
 				break;
+            }
 
 			sidx = idx;
-		}	
-		if (idx > eidx) {
+		}
+		if (idx > eidx) {            
 			if (idx - sidx >= MAX_MAPPED_PAGES)
 				break;
 
@@ -92,8 +92,9 @@ static int map_acpi_tables(uint32_t *phys_addrs, int naddrs, uintptr_t va, uint3
 	m = eidx - sidx + 1;
 	*base_addr = sidx << PAGE_WIDTH;
 	if (i) {
+        int ret;
 		/* map needed physical memory */
-        mmap_kern(va, sidx, m, KMAP_KERN | KMAP_READ);
+        ret = mmap_kern(va, sidx, m, KMAP_KERN | KMAP_READ | KMAP_NOCACHE);
 	}
 	if (m > mapped_pages)
 		mapped_pages = m;
@@ -148,12 +149,16 @@ static struct acpi_madt *find_madt(uint32_t *phys_addrs, int cnt, uintptr_t va)
 	while (i < cnt && madt == NULL) {
 		if (!phys_range_is_mapped(phys_addrs[i] >> PAGE_WIDTH, EXTRA_PAGES)) {
 			j = map_acpi_tables(phys_addrs + i, cnt - i, va, &base);
+            if (!j) {
+                break;
+            }
+            
 			p = (uint8_t*)va;
 		} else {
 			j = 1;
 			base = phys_addrs[i] & ~PAGE_MASK;
 			p = pframe_id_to_virt(phys_addrs[i] >> PAGE_WIDTH);
-		}	
+		}
 
 		for (j += i; i < j; i++) {
 			h = (struct acpi_tab_header*)(p + (phys_addrs[i] - base));
@@ -223,7 +228,7 @@ int get_acpi_lapic_info(uint32_t *lapic_base, uint8_t *lapic_ids, int size, int 
 	va1 = va + PAGE_SIZE * EXTRA_PAGES;	
 	s = rsdp->rsdt_addr >> PAGE_WIDTH;
 	if (!phys_range_is_mapped(s, EXTRA_PAGES)) {
-		if (mmap_kern(va, s, EXTRA_PAGES, KMAP_KERN | KMAP_READ) < 0)
+		if (mmap_kern(va, s, EXTRA_PAGES, KMAP_KERN | KMAP_READ | KMAP_NOCACHE) < 0)
 			return -ENOMEM;
 
 		p = (uint8_t*)va;
