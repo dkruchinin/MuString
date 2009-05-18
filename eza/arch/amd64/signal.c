@@ -239,7 +239,7 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
   } else {
     switch( reason ) {
       case __SYCALL_UWORK:
-        r=__setup_int_context(retcode,kstack,&sigitem->info,act,0,&pctx);
+        r=__setup_int_context(retcode,kstack,&sigitem->info,act,8,&pctx);
         break;
       case __INT_UWORK:
       case __XCPT_NOERR_UWORK:
@@ -347,9 +347,13 @@ long sys_sigreturn(uintptr_t ctx)
   struct __signal_context *uctx=(struct __signal_context *)ctx;
   long retcode;
   task_t *caller=current_task();
-  uintptr_t kctx=caller->kernel_stack.high_address-sizeof(struct __gpr_regs)-
-                 sizeof(struct __int_stackframe);
-  struct __int_stackframe *sframe=(struct __int_stackframe*)(kctx+sizeof(struct __gpr_regs));
+  /* Since RAX is now also saved upon entering system calls, we must take it into account
+   * as extra 'sizeof(long)' bytes on the stack.
+   */
+  uintptr_t kctx=(uintptr_t)caller->kernel_stack.high_address-sizeof(struct __gpr_regs)-
+                 sizeof(struct __int_stackframe) - sizeof(long);
+  struct __int_stackframe *sframe=(struct __int_stackframe*)((uintptr_t)caller->kernel_stack.high_address-
+                                   sizeof(struct __int_stackframe));
   uintptr_t skctx=kctx,retaddr;
   sigset_t sa_mask;
 
