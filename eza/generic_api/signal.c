@@ -576,6 +576,7 @@ long sys_sigwaitinfo(sigset_t *set,int *sig,usiginfo_t *info,
   sigset_t *pending=&sigstruct->pending;
   sq_header_t *sh;
   int dneeded=-1;
+  timespec_t ktv,*ptv;
 
   if( !sig && !info ) {
     return -EFAULT;
@@ -587,6 +588,18 @@ long sys_sigwaitinfo(sigset_t *set,int *sig,usiginfo_t *info,
 
   if( !kset || (kset & UNTOUCHABLE_SIGNALS) ) {
     return -EINVAL;
+  }
+
+  if( timeout ) {
+    if( copy_from_user(&ktv,timeout,sizeof(ktv)) ) {
+      return -EFAULT;
+    }
+    if( !timeval_is_valid(&ktv) ) {
+      return -EINVAL;
+    }
+    ptv=&ktv;
+  } else {
+    ptv=NULL;
   }
 
   /* First, unblock target signals and chek that caller has blocked them. */
@@ -667,7 +680,17 @@ long sys_sigwaitinfo(sigset_t *set,int *sig,usiginfo_t *info,
     if( r ) {
       break;
     } else {
-      put_task_into_sleep(caller);
+      if( ptv ) {
+        r=-EAGAIN;
+        if( !(ktv.tv_sec | ktv.tv_nsec) ) {
+          break;
+        }
+        if( !sleep(time_to_ticks(ptv)) ) {
+          break;
+        }
+      } else {
+        put_task_into_sleep(caller);
+      }
     }
   }
 

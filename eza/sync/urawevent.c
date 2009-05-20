@@ -28,6 +28,7 @@
 #include <mm/slab.h>
 #include <eza/arch/atomic.h>
 #include <eza/mutex.h>
+#include <eza/signal.h>
 
 #define __LOCK_EVENT(e) spinlock_lock(&(e)->__lock)
 #define __UNLOCK_EVENT(e) spinlock_unlock(&(e)->__lock)
@@ -50,6 +51,10 @@ static int __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
         wt.private=e;
         waitqueue_push_intr(&e->__wq,&wt);
 
+        if( task_was_interrupted(current_task()) ) {
+          waitqueue_delete(&wt,WQ_DELETE_SIMPLE);
+          return -EINTR;
+        }
         __LOCK_EVENT(e);
       }
       e->__ecount=0;
