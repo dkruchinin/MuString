@@ -139,12 +139,17 @@ static void __create_task_mm(task_t *task, int num)
 	  real_code_size+=esh.sh_size;
 	  last_offset=esh.sh_addr;
 	  last_sect_size=esh.sh_size;
-	} else if(esh.sh_flags & ESH_WRITE) {
-	  real_data_size+=esh.sh_size;
-	  if(real_data_offset==0) 
-	    real_data_offset=esh.sh_addr;
-	  last_data_offset=esh.sh_addr;
-	  last_data_size=esh.sh_size;
+	} else if((esh.sh_flags & ESH_WRITE)) {
+          /* Ignore non page-aligned sections that smell like .data, i.e.
+           * .got, .plt and others
+           */
+          if( !(esh.sh_addr & (PAGE_SIZE-1)) ) {
+            real_data_size+=esh.sh_size;
+            if(real_data_offset==0)
+              real_data_offset=esh.sh_addr;
+            last_data_offset=esh.sh_addr;
+            last_data_size=esh.sh_size;
+          }
 	} else { /* rodata */
 	  real_code_size+=esh.sh_size;
 	  last_offset=esh.sh_addr;
