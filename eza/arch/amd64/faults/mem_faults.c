@@ -155,7 +155,6 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
     if (!ret) {
       return;
     }
-
     if (fixup != 0) {
       goto kernel_fault;
     }

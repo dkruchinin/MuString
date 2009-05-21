@@ -725,6 +725,7 @@ void ttree_insert_placeful(ttree_cursor_t *cursor, void *item)
 {
   ttree_t *ttree = cursor->ttree;
   ttree_node_t *at_node, *n;
+  ttree_cursor_t tmp_cursor;
   void *key;
 
   TT_ASSERT_DBG(cursor->ttree != NULL);
@@ -756,6 +757,9 @@ void ttree_insert_placeful(ttree_cursor_t *cursor, void *item)
       increase_tnode_window(ttree, n, &cursor->idx);
       n->keys[cursor->idx] = key;
       key = tmp;
+
+      ttree_cursor_copy(&tmp_cursor, cursor);
+      cursor = &tmp_cursor;
       
       /*
        * If current node hasn't successor and right child
