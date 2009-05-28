@@ -356,6 +356,7 @@ long sys_wait_id(idtype_t idtype,id_t id,usiginfo_t *siginfo,int options)
 long sys_thread_wait(tid_t tid,void **value_ptr)
 {
   task_t *target,*caller=current_task();
+  task_t *tgleader;
   long r,exitval;
 
   if( !tid || tid == caller->tid ) {
@@ -370,6 +371,8 @@ long sys_thread_wait(tid_t tid,void **value_ptr)
   event_initialize_task(&caller->jointee.e,caller);
 
   LOCK_TASK_STRUCT(target);
+  tgleader=target->group_leader;
+
   if( target->cwaiter != __UNUSABLE_PTR ) {
     /* Only one waiter is available. */
     if( list_is_empty( &target->jointed ) ) {
@@ -383,7 +386,6 @@ long sys_thread_wait(tid_t tid,void **value_ptr)
     /* Target task has probably exited. So try to pick up its exit pointer
      * on a different manner.
      */
-    task_t *tgleader=target->group_leader;
     UNLOCK_TASK_STRUCT(target);
 
     LOCK_TASK_CHILDS(tgleader);
@@ -429,6 +431,17 @@ long sys_thread_wait(tid_t tid,void **value_ptr)
     }
     caller->jointee.exiter=NULL;
     UNLOCK_TASK_STRUCT(caller);
+
+    /* Remove target thread from the list. */
+    LOCK_TASK_CHILDS(tgleader);
+    LOCK_TASK_STRUCT(target);
+    if( list_node_is_bound(&target->child_list) &&
+        !(target->flags & TF_GCOLLECTED) ) {
+      tgleader->tg_priv->num_threads--;
+      list_del(&target->child_list);
+    }
+    UNLOCK_TASK_STRUCT(target);
+    UNLOCK_TASK_CHILDS(tgleader);
   }
 
 out_copy:
