@@ -31,13 +31,15 @@
 
 hw_timer_t i8254;
 
+#define PIT_DIVISOR ((PIT_OSC_FREQ + HZ / 2) / HZ)
+
 /*low level functions*/
 static void __arch_i8254_init(void)
 {
   outb(I8254_BASE+3,0x36);
   disable_hw_irq(0x0);
-  outb(I8254_BASE,(DCLOCK/CLOCK_HZ) & 0xf);
-  outb(I8254_BASE,(DCLOCK/CLOCK_HZ) >> 8);
+  outb(I8254_BASE,PIT_DIVISOR & 0xff);
+  outb(I8254_BASE,PIT_DIVISOR >> 8);
   enable_hw_irq(0x0);
 }
 
