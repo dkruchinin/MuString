@@ -26,11 +26,9 @@
 
 #define I8254_BASE  0x40
 
-#define DCLOCK  150000
-#define MAGIC_CLOCKN  1194 /*black magic, blackjek ...*/
-
-/*FIXME: HZ set outhere ... */
-#define CLOCK_HZ  100
+#define DCLOCK       150000
+#define PIT_OSC_FREQ 1193182
+#define MAGIC_CLOCKN 1193
 
 void i8254_init(void);
 uint64_t i8254_calibrate_delay_loop(void);
