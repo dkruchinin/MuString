@@ -74,7 +74,7 @@ static inline bool __valid_vmr_rights(vmrange_t *vmr, uint32_t pfmask)
 {
   return !(((pfmask & PFLT_WRITE) &&
             ((vmr->flags & (VMR_READ | VMR_WRITE)) == VMR_READ))
-           || (vmr->flags & VMR_NONE));
+           || (vmr->flags & VMR_NONE) || (pfmask & PFLT_NOEXEC));
 }
 
 /*

@@ -72,6 +72,7 @@ typedef uint16_t page_flags_t;
 #define PFLT_PROTECT     0x02
 #define PFLT_READ        0x04
 #define PFLT_WRITE       0x08
+#define PFLT_NOEXEC      0x10
 
 #define __page_aligned__ __attribute__((__aligned__(PAGE_SIZE)))
 

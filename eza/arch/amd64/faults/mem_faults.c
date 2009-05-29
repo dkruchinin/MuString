@@ -43,6 +43,7 @@
 #define PFAULT_WRITE(errcode) ((errcode) & 0x02)
 #define PFAULT_SVISOR(errcode) (((errcode) & 0x04) == 0)
 #define PFAULT_USER(errcode) ((errcode) & 0x04)
+#define PFAULT_NXE(errcode) ((errcode) & 0x10)
 
 #define get_fault_address(x) \
     __asm__ __volatile__( "movq %%cr2, %0" : "=r"(x) )
@@ -146,6 +147,8 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
 
     if (!PFAULT_READ(stack_frame->error_code))
       errmask |= PFLT_WRITE;
+    if (PFAULT_NXE(stack_frame->error_code))
+      errmask |= PFLT_NOEXEC;
     if (PFAULT_PROTECT(stack_frame->error_code))
       errmask |= PFLT_PROTECT;
     else
