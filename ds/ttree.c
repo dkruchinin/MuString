@@ -241,7 +241,7 @@ static inline void decrease_tnode_window(ttree_t *ttree, ttree_node_t *tnode, in
 }
 
 /*
- * generic single rotation procedure.
+ * generic single rotation procedrue.
  * side = TNODE_LEFT  - Right rotation
  * side = TNODE_RIGHT - Left rotation.
  * "target" will be set to the new root of rotated subtree.
@@ -830,13 +830,22 @@ void *ttree_delete_placeful(ttree_cursor_t *cursor)
   tnode = cursor->tnode;
   ret = ttree_key2item(ttree, tnode->keys[cursor->idx]);
   decrease_tnode_window(ttree, tnode, &cursor->idx);
+  if (unlikely(cursor->idx > tnode->max_idx)) {
+    if (cursor->idx <= ttree->keys_per_tnode - 1) {
+      cursor->state = TT_CSR_PENDING;
+    }
+    else {
+      ttree_cursor_next(cursor);
+    }
+  }
 
   /*
    * If after a key was removed, T*-tree node contains more than
    * minimum allowed number of items, the proccess is completed.
    */
-  if (tnode_num_keys(tnode) > min_tnode_entries(ttree))
+  if (tnode_num_keys(tnode) > min_tnode_entries(ttree)) {
     return ret;
+  }
   if (is_internal_node(tnode)) {
     int idx;
 
@@ -849,7 +858,7 @@ void *ttree_delete_placeful(ttree_cursor_t *cursor)
     increase_tnode_window(ttree, tnode, &idx);
     tnode->keys[idx] = n->keys[n->min_idx++];
     if (unlikely(cursor->idx > tnode->max_idx))
-      cursor->idx = tnode->max_idx;    
+      cursor->idx = tnode->max_idx;
     if (!tnode_is_empty(n) && is_leaf_node(n))
       return ret;
 
@@ -880,8 +889,9 @@ void *ttree_delete_placeful(ttree_cursor_t *cursor)
                tnode->keys + tnode->min_idx, sizeof(void *) * tnode_num_keys(tnode));
         tnode->min_idx += diff;
         tnode->max_idx += diff;
-        if (cursor->tnode == tnode)
+        if (cursor->tnode == tnode) {
           cursor->idx += diff;
+        }
       }
       memcpy(tnode->keys + tnode->max_idx + 1, n->keys + n->min_idx, sizeof(void *) * items);
       tnode->max_idx += items;

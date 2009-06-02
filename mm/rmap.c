@@ -212,9 +212,11 @@ int rmap_unregister_mapping(page_frame_t *page, vmm_t *vmm, uintptr_t address)
   lock_page_frame(page, PF_LOCK);
   if (!(page->flags & (PF_SHARED | PF_COW))) {
     if (unlikely(!page->rmap_anon)) {
+      kprintf("--> %p, page %#x\n", page->rmap_anon, pframe_number(page));
       kprintf(KO_WARNING "Can not unregister anonymous mapping (VMM's pid = %ld, addr = %p) "
               "for page #%x, because it hasn't \"rmap_anon\" field set.\n",
               vmm->owner->pid, address, pframe_number(page));
+      ret = -EINVAL;
       goto out;
     }
 

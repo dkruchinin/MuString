@@ -288,8 +288,8 @@ static int generic_insert_page(vmrange_t *vmr, page_frame_t *page,
   }
   if (pg_memobj && (pg_memobj != vmr->memobj)) {
     return -EINVAL;
-  }  
-  
+  }
+
   ret = mmap_one_page(&vmm->rpd, addr, pframe_number(page),
                       mmap_flags & KMAP_FLAGS_MASK);
   if (ret) {
@@ -318,8 +318,9 @@ static int generic_depopulate_pages(vmrange_t *vmr, uintptr_t va_from,
 {
   vmm_t *vmm = vmr->parent_vmm;
   page_idx_t pidx;
+  int ret;
   page_frame_t *page;
-  
+
   ASSERT(vmr->memobj == generic_memobj);
 
   pagetable_lock(&vmm->rpd);
@@ -333,7 +334,10 @@ static int generic_depopulate_pages(vmrange_t *vmr, uintptr_t va_from,
     if (likely(page_idx_is_present(pidx))) {
       page = pframe_by_number(pidx);
       if (!(vmr->flags & VMR_PHYS)) {
-        rmap_unregister_mapping(page, vmm, va_from);
+        ret = rmap_unregister_mapping(page, vmm, va_from);
+        if (ret) {
+          goto out;
+        }
       }
 
       unpin_page_frame(page);
@@ -343,6 +347,7 @@ eof_cycle:
     va_from += PAGE_SIZE;
   }
 
+out:
   pagetable_unlock(&vmm->rpd);
   return 0;
 }

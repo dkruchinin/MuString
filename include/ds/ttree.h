@@ -129,12 +129,12 @@ typedef struct __ttree_cursor {
 #define __validate_cursor_dbg(cursor)
 #else
 #define TT_ASSERT_DBG(cond) ASSERT(cond)
-#define __validate_cursor_dbg(cursor)                   \
-  do {                                                  \
-    TT_ASSERT_DBG((cursor)->ttree != NULL);             \
-    TT_ASSERT_DBG((cursor)->tnode != NULL);             \
-    TT_ASSERT_DBG(!tnode_is_empty((cursor)->tnode));    \
-    TT_ASSERT_DBG((cursor)->state != TT_CSR_UNTIED);    \
+#define __validate_cursor_dbg(cursor)                           \
+  do {                                                          \
+    TT_ASSERT_DBG((cursor)->ttree != NULL);                     \
+    TT_ASSERT_DBG((cursor)->tnode != NULL);                     \
+    TT_ASSERT_DBG(!tnode_is_empty((cursor)->tnode));            \
+    TT_ASSERT_DBG((cursor)->state != TT_CSR_UNTIED);            \
   } while (0)
 #endif /* CONFIG_DEBUG_TTREE */
 
@@ -444,7 +444,6 @@ void ttree_print(ttree_t *ttree, void (*fn)(ttree_node_t *tnode));
  * @see ttree_node_t
  */
 int ttree_check_depth_dbg(ttree_node_t *tnode);
-void ttree_display_cursor_dbg(ttree_cursor_t *cursor);
 #endif /* CONFIG_DEBUG_TTREE */
 
 /*

@@ -883,7 +883,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
   ttree_cursor_t cursor;
   uintptr_t va_to = va_from + ((uintptr_t)npages << PAGE_WIDTH);
   vmrange_t *vmr, *vmr_prev = NULL;
-
+  
   ASSERT_DBG(!(va_from & PAGE_MASK));
   ttree_cursor_init(&vmm->vmranges_tree, &cursor);
 
@@ -977,8 +977,9 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
     ttree_delete_placeful(&cursor);
     destroy_vmrange(vmr);
     vmr = NULL;
-    if (cursor.state != TT_CSR_TIED)
+    if (cursor.state != TT_CSR_TIED) {
       break;
+    }
 
     /*
      * Due the nature of T*-tree, after deletion by the cursor is done,
