@@ -45,7 +45,6 @@
 #define TLSF_CPUCACHE_PAGES 32 /*  */
 #define TLSF_FIRST_OFFSET   4  /**< TLSF first offset */
 
-
 #define TLSF_SLDS_MIN 2 /* Minimal number of SLDs in each FLD entry */
 #define TLSF_FLDS_MAX 10 /* Maximum number of FLDs */
 #define TLSF_FLD_BITMAP_SIZE TLSF_FLD_SIZE /* FLD bitmap size */
@@ -86,9 +85,11 @@ typedef struct tlsf {
     tlsf_node_t nodes[TLSF_SLD_SIZE]; /**< FLD nodes(i.e. SLDs) */
     int total_blocks;                 /**< Total number of available blocks in all nodes */
   } map[TLSF_FLD_SIZE];               /**< TLSF map that contains FLDs */
+
 #ifdef CONFIG_SMP
   tlsf_percpu_cache_t *percpu[CONFIG_NRCPUS];
 #endif /* CONFIG_SMP */
+
   spinlock_t lock;
   mm_pool_t *owner;                   /**< Type of pool that owns given TLSF allocator */
   uint8_t slds_bitmap[TLSF_SLD_BITMAP_SIZE];
