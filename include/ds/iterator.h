@@ -41,10 +41,10 @@
 #define __ITERATOR_H__
 
 #include <config.h>
-#include <mlibc/string.h>
-#include <mlibc/assert.h>
-#include <eza/kernel.h>
-#include <mlibc/types.h>
+#include <mstring/string.h>
+#include <mstring/assert.h>
+#include <mstring/kernel.h>
+#include <mstring/types.h>
 
 /**
  * @enum iter_state

@@ -25,7 +25,7 @@
 #ifndef __KERNEL_ELF_H__
 #define __KERNEL_ELF_H__
 
-#include <eza/arch/types.h>
+#include <arch/types.h>
 
 #define EI_NIDENT  16
 

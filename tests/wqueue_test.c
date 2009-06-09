@@ -1,9 +1,9 @@
 #include <test.h>
-#include <eza/waitqueue.h>
+#include <mstring/waitqueue.h>
 #include <kernel/syscalls.h>
-#include <eza/task.h>
-#include <eza/arch/atomic.h>
-#include <eza/arch/types.h>
+#include <mstring/task.h>
+#include <arch/atomic.h>
+#include <arch/types.h>
 
 #define WQ_TEST_ID "Wait queue test"
 #define WQ_NPRIORS 16

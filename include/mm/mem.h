@@ -5,10 +5,10 @@
 #include <mm/page.h>
 #include <mm/pfalloc.h>
 #include <mm/mmpool.h>
-#include <eza/spinlock.h>
-#include <eza/arch/mm.h>
-#include <eza/arch/ptable.h>
-#include <mlibc/types.h>
+#include <sync/spinlock.h>
+#include <arch/mm.h>
+#include <arch/ptable.h>
+#include <mstring/types.h>
 
 struct __vmm;
 typedef struct __rpd {

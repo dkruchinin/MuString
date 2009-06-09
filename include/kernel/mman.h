@@ -24,7 +24,7 @@
 #ifndef __KERNEL_MMAN_H__
 #define __KERNEL_MMAN_H__
 
-#include <eza/arch/types.h>
+#include <arch/types.h>
 
 #define NOFD  (1 << 24)
 

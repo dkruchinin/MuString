@@ -1,0 +1,17 @@
+mainmenu "MuString microkernel"
+
+choice
+      prompt "Select processor architecture"
+      
+config AMD64
+       bool "AMD64"
+
+endchoice
+
+if AMD64
+source "kernel/arch/amd64/Kconfig"
+endif
+
+source "kernel/mm/Kconfig"
+source "kernel/Kconfig"
+source "kernel/ipc/Kconfig"

@@ -17,17 +17,17 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2009 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * eza/sync/rwsem_test.c: Read-Write semaphore test.
+ * mstring/sync/rwsem_test.c: Read-Write semaphore test.
  */
 
 #include <test.h>
-#include <eza/rwsem.h>
-#include <eza/waitqueue.h>
+#include <sync/rwsem.h>
+#include <mstring/waitqueue.h>
 #include <kernel/syscalls.h>
-#include <eza/task.h>
-#include <eza/scheduler.h>
-#include <eza/arch/atomic.h>
-#include <eza/arch/types.h>
+#include <mstring/task.h>
+#include <mstring/scheduler.h>
+#include <arch/atomic.h>
+#include <arch/types.h>
 
 #define RWSEM_TEST_ID "RW semaphore test"
 #define NUM_WRITERS 5

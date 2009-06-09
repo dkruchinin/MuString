@@ -21,32 +21,32 @@
  */
 
 #include <config.h>
-#include <eza/kernel.h>
-#include <mlibc/kprintf.h>
-#include <eza/smp.h>
-#include <eza/arch/scheduler.h>
-#include <eza/arch/types.h>
-#include <eza/task.h>
-#include <eza/scheduler.h>
-#include <eza/swks.h>
-#include <mlibc/string.h>
-#include <eza/arch/preempt.h>
-#include <eza/spinlock.h>
+#include <mstring/kernel.h>
+#include <mstring/kprintf.h>
+#include <mstring/smp.h>
+#include <arch/scheduler.h>
+#include <arch/types.h>
+#include <mstring/task.h>
+#include <mstring/scheduler.h>
+#include <mstring/swks.h>
+#include <mstring/string.h>
+#include <arch/preempt.h>
+#include <sync/spinlock.h>
 #include <ipc/ipc.h>
 #include <ipc/port.h>
-#include <eza/arch/asm.h>
-#include <eza/arch/preempt.h>
+#include <arch/asm.h>
+#include <arch/preempt.h>
 #include <kernel/syscalls.h>
-#include <eza/uinterrupt.h>
+#include <mstring/uinterrupt.h>
 #include <ipc/poll.h>
-#include <eza/gc.h>
+#include <mstring/gc.h>
 #include <ipc/channel.h>
 #include <test.h>
 #include <mm/slab.h>
-#include <eza/errno.h>
-#include <eza/spinlock.h>
-#include <eza/arch/spinlock.h>
-#include <eza/arch/profile.h>
+#include <mstring/errno.h>
+#include <sync/spinlock.h>
+#include <arch/spinlock.h>
+#include <arch/profile.h>
 
 #define TEST_ID "Userspace synchronization tests"
 

@@ -38,9 +38,9 @@
 
 #include <config.h>
 #include <ds/iterator.h>
-#include <eza/cpucache.h>
-#include <mlibc/stddef.h>
-#include <mlibc/types.h>
+#include <mstring/cpucache.h>
+#include <mstring/stddef.h>
+#include <mstring/types.h>
 
 #define TTREE_DEFAULT_NUMKEYS (L1_CACHE_SIZE / sizeof(void *)) /**< Default number of keys per T*-tree node */
 #define TNODE_ITEMS_MIN 2         /**< Minimum allowable number of keys per T*-tree node */

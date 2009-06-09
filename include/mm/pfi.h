@@ -26,8 +26,8 @@
 
 #include <ds/iterator.h>
 #include <mm/page.h>
-#include <mlibc/types.h>
-#include <eza/arch/ptable.h>
+#include <mstring/types.h>
+#include <arch/ptable.h>
 
 /****************
  * PF_ITER_INDEX

@@ -29,8 +29,8 @@
 #include <ds/list.h>
 #include <mm/page.h>
 #include <mm/memobjctl.h>
-#include <mlibc/types.h>
-#include <eza/spinlock.h>
+#include <mstring/types.h>
+#include <sync/spinlock.h>
 
 #ifndef CONFIG_MEMOBJS_MAX
 #define CONFIG_MEMOBJS_MAX (PAGE_SIZE << 4)

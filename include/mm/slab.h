@@ -32,13 +32,13 @@
 
 #include <config.h>
 #include <ds/list.h>
-#include <mlibc/stddef.h>
+#include <mstring/stddef.h>
 #include <mm/page.h>
 #include <mm/mmpool.h>
-#include <eza/smp.h>
-#include <eza/spinlock.h>
-#include <eza/arch/atomic.h>
-#include <mlibc/types.h>
+#include <mstring/smp.h>
+#include <sync/spinlock.h>
+#include <arch/atomic.h>
+#include <mstring/types.h>
 
 #define MEMCACHE_EMPTYSLABS_MAX  (CONFIG_NRCPUS)
 

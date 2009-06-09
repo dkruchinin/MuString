@@ -1,7 +1,7 @@
 #ifndef __MSTRING_MEMOBJCTL_H__
 #define __MSTRING_MEMOBJCTL_H__
 
-#include <mlibc/types.h>
+#include <mstring/types.h>
 
 typedef unsigned long memobj_id_t;
 

@@ -22,16 +22,16 @@
 
 #ifndef __ASM__
 
-#include <eza/arch/types.h>
+#include <arch/types.h>
 #include <ipc/port.h>
-#include <eza/task.h>
+#include <mstring/task.h>
 #include <ipc/port.h>
-#include <eza/time.h>
+#include <mstring/time.h>
 #include <ipc/poll.h>
 #include <ipc/ipc.h>
-#include <eza/sync.h>
-#include <eza/signal.h>
-#include <eza/kcontrol.h>
+#include <mstring/sync.h>
+#include <mstring/signal.h>
+#include <mstring/kcontrol.h>
 
 #endif
 

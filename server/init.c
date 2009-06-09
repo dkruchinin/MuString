@@ -21,24 +21,24 @@
  *
  */
 
-#include <eza/arch/types.h>
-#include <eza/scheduler.h>
-#include <eza/process.h>
-#include <eza/arch/mm.h>
+#include <arch/types.h>
+#include <mstring/scheduler.h>
+#include <mstring/process.h>
+#include <arch/mm.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
 #include <mm/vmm.h>
 #include <mm/rmap.h>
-#include <eza/arch/elf.h>
-#include <eza/kconsole.h>
-#include <eza/errno.h>
+#include <arch/elf.h>
+#include <mstring/kconsole.h>
+#include <mstring/errno.h>
 #include <kernel/elf.h>
-#include <mlibc/kprintf.h>
+#include <mstring/kprintf.h>
 #include <server.h>
-#include <mlibc/unistd.h>
-#include <eza/process.h>
-#include <eza/ptd.h>
-#include <eza/gc.h>
+#include <mstring/unistd.h>
+#include <mstring/process.h>
+#include <mstring/ptd.h>
+#include <mstring/gc.h>
 #include <config.h>
 #include <mm/page.h>
 

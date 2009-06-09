@@ -5,8 +5,8 @@
 #include <ds/list.h>
 #include <mm/page.h>
 #include <mm/vmm.h>
-#include <eza/rwsem.h>
-#include <mlibc/types.h>
+#include <sync/rwsem.h>
+#include <mstring/types.h>
 
 struct __memobj;
 typedef struct __rmap_group_head {

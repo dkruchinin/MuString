@@ -31,7 +31,7 @@
 #define __PFALLOC_H__ 
 
 #include <mm/page.h>
-#include <mlibc/types.h>
+#include <mstring/types.h>
 
 /* Allocation flags */
 #define AF_ZERO      (1 << MMPOOLS_SHIFT)

@@ -1,13 +1,13 @@
 define echo-header
-	$(Q)$(ECHO) "[*] $(1)"
+	$(Q)$(ECHO) "*** $(1) ***"
 endef
 
 define echo-action
-	$(Q)$(ECHO) "   [$(1)] $(2)"
+	$(Q)$(ECHO) " [$(1)] $(2)"
 endef
 
 define echo-section
-	$(Q)$(ECHO) "  [$(1)] $(2)"
+	$(Q)$(ECHO) "[$(1)] $(2)"
 endef
 
 define collect_objects
@@ -15,8 +15,8 @@ define collect_objects
 endef
 
 define create_symlinks
-	$(Q)$(shell [ -e $(BUILD_ROOT)/include/eza/arch ] && $(RM) -f $(BUILD_ROOT)/include/eza/arch)
-	$(Q)$(LN) -snf $(ARCH) include/eza/arch
+	$(Q)$(shell [ -e $(BUILD_ROOT)/include/arch ] && $(RM) -f $(BUILD_ROOT)/include/arch)
+	$(Q)$(LN) -snf $(BUILD_ROOT)/kernel/arch/$(ARCH)/include $(BUILD_ROOT)/include/arch
 endef
 
 define show_archs

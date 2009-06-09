@@ -41,7 +41,7 @@
 #ifndef __IDX_ALLOCATOR_H__
 #define __IDX_ALLOCATOR_H__
 
-#include <mlibc/types.h>
+#include <mstring/types.h>
 
 #define BYTES_PER_ITEM 64 /**< Number of bytes per one entry of a second-level bitmap */
 #define WORDS_PER_ITEM (BYTES_PER_ITEM / sizeof(ulong_t)) /**< Number of machine words(ulong_t) per second-level bitmap item */

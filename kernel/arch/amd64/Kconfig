@@ -1,0 +1,37 @@
+config ARCH
+       string
+       default "amd64"
+
+menu "AMD64 processor features"
+     depends on AMD64
+
+config APIC
+       bool "Use APIC"
+       default y
+       help
+         Select this option if you want to use APIC instead of
+         old-fation PIC
+
+config SMP
+       default y
+       bool "Symmetric multi-processing support"
+       select APIC
+
+config NRCPUS
+       int "Maximum number of CPUs (2-64)" if SMP
+       range 2 64 if SMP
+       default "2" if SMP
+       default "1" if !SMP
+       help
+         Here you may specify number of CPUs supported by the kernel.
+         You may enter any number between 2 and 64.
+
+config IOMMU
+       bool "Use IOMMU"
+       default n
+
+config GENARCH_MM
+     def_bool y
+     bool "Use generic page table operations"
+
+endmenu

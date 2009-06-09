@@ -33,10 +33,10 @@
 #include <config.h>
 #include <ds/iterator.h>
 #include <ds/list.h>
-#include <mlibc/stddef.h>
-#include <mlibc/types.h>
-#include <eza/arch/page.h>
-#include <eza/arch/atomic.h>
+#include <mstring/stddef.h>
+#include <mstring/types.h>
+#include <arch/page.h>
+#include <arch/atomic.h>
 
 #define MMPOOLS_MASK  0x07
 #define MMPOOLS_SHIFT 3

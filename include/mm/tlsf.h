@@ -32,13 +32,13 @@
 
 #include <config.h>
 #include <ds/list.h>
-#include <mlibc/stddef.h>
+#include <mstring/stddef.h>
 #include <mm/page.h>
 #include <mm/mmpool.h>
 #include <mm/pfalloc.h>
-#include <eza/spinlock.h>
-#include <eza/smp.h>
-#include <mlibc/types.h>
+#include <sync/spinlock.h>
+#include <mstring/smp.h>
+#include <mstring/types.h>
 
 #define TLSF_FLD_SIZE       8  /**< TLSF first level directory size */
 #define TLSF_SLD_SIZE       4  /**< TLSF second level directory size */

@@ -25,8 +25,8 @@
 #define  __IPC_BUFFER__
 
 #include <mm/page.h>
-#include <eza/arch/types.h>
-#include <eza/arch/atomic.h>
+#include <arch/types.h>
+#include <arch/atomic.h>
 
 typedef struct __ipc_buffer {
   page_idx_t *chunks;

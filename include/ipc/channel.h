@@ -1,10 +1,10 @@
 #ifndef __IPC_CHANNEL__
 #define __IPC_CHANNEL__
 
-#include <eza/arch/types.h>
-#include <eza/task.h>
-#include <eza/spinlock.h>
-#include <eza/arch/atomic.h>
+#include <arch/types.h>
+#include <mstring/task.h>
+#include <sync/spinlock.h>
+#include <arch/atomic.h>
 #include <ipc/port.h>
 #include <ds/list.h>
 

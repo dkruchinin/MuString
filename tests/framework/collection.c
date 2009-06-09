@@ -1,5 +1,5 @@
-#include <mlibc/kprintf.h>
-#include <eza/arch/types.h>
+#include <mstring/kprintf.h>
+#include <arch/types.h>
 #include <test.h>
 #include <ds/list.h>
 #include <mm/slab.h>

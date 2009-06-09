@@ -25,14 +25,14 @@
 #define __MMPOOL_H__
 
 #include <config.h>
-#include <mlibc/assert.h>
+#include <mstring/assert.h>
 #include <ds/list.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
-#include <eza/spinlock.h>
-#include <mlibc/kprintf.h>
-#include <eza/arch/atomic.h>
-#include <eza/arch/types.h>
+#include <sync/spinlock.h>
+#include <mstring/kprintf.h>
+#include <arch/atomic.h>
+#include <arch/types.h>
 
 #define MMPOOLS_MAX   4
 

@@ -24,7 +24,7 @@
 #ifndef __SERVER_H__
 #define __SERVER_H__
 
-#include <mlibc/types.h>
+#include <mstring/types.h>
 
 #define MAX_PRIVBOOT_SERVERS  24
 

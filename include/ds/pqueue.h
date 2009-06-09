@@ -25,8 +25,8 @@
 
 #include <config.h>
 #include <ds/list.h>
-#include <eza/spinlock.h>
-#include <mlibc/types.h>
+#include <sync/spinlock.h>
+#include <mstring/types.h>
 
 typedef long prio_t;
 

@@ -43,8 +43,8 @@
 #include <config.h>
 #include <mm/mmpool.h>
 #include <mm/page.h>
-#include <eza/spinlock.h>
-#include <eza/arch/types.h>
+#include <sync/spinlock.h>
+#include <arch/types.h>
 
 #define IDALLOC_CAN_ALLOC_PAGES   0x01
 #define IDALLOC_CAN_ALLOC_CHUNKS  0x02

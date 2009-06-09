@@ -32,8 +32,8 @@
 #include <mm/pfalloc.h>
 #include <mm/memobj.h>
 #include <mm/mem.h>
-#include <mlibc/types.h>
-#include <eza/rwsem.h>
+#include <mstring/types.h>
+#include <sync/rwsem.h>
 
 #ifdef CONFIG_DEBUG_MM
 #define VMM_DBG_NAME_LEN 128

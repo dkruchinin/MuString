@@ -5,7 +5,7 @@
 #include <mm/memobj.h>
 #include <mm/pfalloc.h>
 #include <kernel/syscalls.h>
-#include <mlibc/types.h>
+#include <mstring/types.h>
 
 #define VMA_TEST_ID "VMA test"
 

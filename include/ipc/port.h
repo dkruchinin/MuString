@@ -24,15 +24,15 @@
 #ifndef __IPC_PORT__
 #define __IPC_PORT__
 
-#include <eza/arch/types.h>
-#include <eza/mutex.h>
-#include <eza/task.h>
-#include <eza/spinlock.h>
-#include <eza/arch/atomic.h>
+#include <arch/types.h>
+#include <sync/mutex.h>
+#include <mstring/task.h>
+#include <sync/spinlock.h>
+#include <arch/atomic.h>
 #include <ds/idx_allocator.h>
 #include <ds/list.h>
-#include <eza/waitqueue.h>
-#include <eza/event.h>
+#include <mstring/waitqueue.h>
+#include <mstring/event.h>
 #include <ipc/buffer.h>
 #include <ipc/poll.h>
 

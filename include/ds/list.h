@@ -28,9 +28,9 @@
 #ifndef __LIST_H__
 #define __LIST_H__ 
 
-#include <mlibc/stddef.h>
-#include <mlibc/assert.h>
-#include <eza/milestones.h>
+#include <mstring/stddef.h>
+#include <mstring/assert.h>
+#include <mstring/milestones.h>
 
 /**
  * @typedef struct __list_node list_node_t

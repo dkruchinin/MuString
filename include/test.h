@@ -1,7 +1,7 @@
 #ifndef __TEST_H__
 #define  __TEST_H__
 
-#include <eza/arch/types.h>
+#include <arch/types.h>
 #include <ds/list.h>
 
 typedef struct __test_framework {

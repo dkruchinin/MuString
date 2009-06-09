@@ -1,12 +1,12 @@
 #ifndef __IPC_H__
 #define  __IPC_H__
 
-#include <eza/arch/types.h>
-#include <eza/mutex.h>
-#include <eza/arch/atomic.h>
+#include <arch/types.h>
+#include <sync/mutex.h>
+#include <arch/atomic.h>
 #include <ds/idx_allocator.h>
-#include <eza/spinlock.h>
-#include <eza/arch/arch_ipc.h>
+#include <sync/spinlock.h>
+#include <arch/arch_ipc.h>
 #include <ipc/channel.h>
 #include <ipc/port.h>
 

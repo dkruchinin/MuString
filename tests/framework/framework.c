@@ -1,14 +1,14 @@
 #include <config.h>
-#include <eza/kernel.h>
-#include <mlibc/kprintf.h>
-#include <eza/smp.h>
-#include <eza/arch/scheduler.h>
-#include <eza/arch/types.h>
-#include <eza/task.h>
+#include <mstring/kernel.h>
+#include <mstring/kprintf.h>
+#include <mstring/smp.h>
+#include <arch/scheduler.h>
+#include <arch/types.h>
+#include <mstring/task.h>
 #include <test.h>
-#include <eza/swks.h>
-#include <eza/arch/interrupt.h>
-#include <eza/time.h>
+#include <mstring/swks.h>
+#include <arch/interrupt.h>
+#include <mstring/time.h>
 
 #define LOOP_STEP 300
 

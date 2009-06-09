@@ -3,7 +3,7 @@
 
 #include <config.h>
 #include <ipc/channel.h>
-#include <mlibc/types.h>
+#include <mstring/types.h>
 
 typedef enum __mm_event {
   MMEV_PAGE_FAULT   = 0x01,

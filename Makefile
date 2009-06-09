@@ -24,7 +24,7 @@ HOSTLD := ld
 # HOSTLDFLAGS
 
 GREP := grep
-GMAP := eza/gmap.py
+GMAP := scripts/gmap.py
 LN := ln
 RM := rm
 CP := cp
@@ -57,11 +57,15 @@ export BUILD_ROOT ARCH NOCOLOR OBJECTS
 export KERNELVERSION
 
 include include/Makefile.inc
-
 -include .config
--include eza/arch/$(ARCH)/Makefile.inc
 
-GENERICS = eza mm mlibc ipc server ds
+ifdef CONFIG_ARCH
+ARCH := $(shell echo $(CONFIG_ARCH) | sed 's|"||g')
+endif
+
+-include kernel/arch/$(ARCH)/Makefile.inc
+
+GENERICS = kernel server
 ifeq ($(CONFIG_TEST),y)
 GENERICS += tests
 endif
@@ -100,7 +104,7 @@ clean_%:
 
 clean:
 	$(Q)$(RM) -rf $(ODIR)
-	$(Q)$(RM) -f muielf vmuielf boot.img
+	$(Q)$(RM) -f muielf vmuielf boot.img $(BUILD_ROOT)/include/arch
 	$(Q)$(MAKE) -C. $(addprefix clean_, $(GENERICS))
 
 clean_host:
@@ -116,7 +120,7 @@ distclean: clean_host clean cleanconf
 $(ODIR)/rmap.o: $(ODIR)/rmap.bin
 	$(call create_rmap)
 
-$(ODIR)/kernel.ld: $(BUILD_ROOT)/eza/arch/$(ARCH)/kernel.ld.S
+$(ODIR)/kernel.ld: $(BUILD_ROOT)/kernel/arch/$(ARCH)/src/kernel.ld.S
 	$(call echo-action,"CPP","$<")
 	$(Q)$(CC) $(CFLAGS) $(INCLUDE) -D__ASM__ -E -x c $< | $(GREP) -v "^\#" > $@
 
@@ -178,15 +182,13 @@ $(VERFILE):
 config: host
 	$(Q)$(MKDIR) -p $(BUILD_ROOT)/include/config
 	$(Q)$(MAKE) -C kbuild conf BUILD_ROOT=$(BUILD_ROOT)
-	$(Q)$(BUILD_ROOT)/kbuild/conf $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
-	$(Q)$(ECHO) "ARCH=$(arch)" >> .config
+	$(Q)$(BUILD_ROOT)/kbuild/conf $(BUILD_ROOT)/kernel/arch/Kconfig
 
 menuconfig: host
 	$(Q)$(MKDIR) -p $(BUILD_ROOT)/include/config
 	$(Q)$(MAKE) mconf -C kbuild BUILD_ROOT=$(BUILD_ROOT)
-	$(Q)$(BUILD_ROOT)/kbuild/mconf $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
-	$(Q)$(BUILD_ROOT)/kbuild/conf -s $(BUILD_ROOT)/eza/arch/$(arch)/Kconfig
-	$(Q)$(ECHO) "ARCH=$(arch)" >> .config
+	$(Q)$(BUILD_ROOT)/kbuild/mconf $(BUILD_ROOT)/kernel/arch/Kconfig
+	$(Q)$(BUILD_ROOT)/kbuild/conf -s $(BUILD_ROOT)/kernel/arch/Kconfig
 
 help:
 	$(Q)$(ECHO) "USAGE: make [action] [OPTIONS] [VARIABLES]"

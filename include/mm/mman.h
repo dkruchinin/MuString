@@ -1,7 +1,7 @@
 #ifndef __MSTRING_MMAN_H__
 #define __MSTRING_MMAN_H__
 
-#include <mlibc/types.h>
+#include <mstring/types.h>
 
 enum mman_prot {
   PROT_NONE    = 0x01,

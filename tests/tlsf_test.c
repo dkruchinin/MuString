@@ -29,9 +29,9 @@
 #include <mm/mmpool.h>
 #include <mm/vmm.h>
 #include <mm/tlsf.h>
-#include <eza/task.h>
+#include <mstring/task.h>
 #include <kernel/syscalls.h>
-#include <mlibc/types.h>
+#include <mstring/types.h>
 
 #define TLSF_TEST_ID "TLSF test"
 

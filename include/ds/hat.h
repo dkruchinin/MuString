@@ -27,7 +27,7 @@
 #define __HAT_H__
 
 #include <config.h>
-#include <mlibc/types.h>
+#include <mstring/types.h>
 
 #define HAT_BUCKET_SHIFT 6
 #define HAT_BUCKET_SLOTS (1UL << HAT_BUCKET_SHIFT)

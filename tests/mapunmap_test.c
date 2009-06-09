@@ -28,9 +28,9 @@
 #include <mm/pfalloc.h>
 #include <mm/vmm.h>
 #include <mm/pfi.h>
-#include <eza/task.h>
+#include <mstring/task.h>
 #include <kernel/syscalls.h>
-#include <mlibc/types.h>
+#include <mstring/types.h>
 
 #define MAPUNMAP_TEST_ID "Map/Unmap test"
 #define TC_MAP_ADDR PAGE_ALIGN((KERNEL_BASE + ((ulong_t)num_phys_pages << PAGE_WIDTH) * 2))

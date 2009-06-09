@@ -21,8 +21,8 @@
  *
  */
 
-#include <eza/arch/types.h>
-#include <mlibc/kprintf.h>
+#include <arch/types.h>
+#include <mstring/kprintf.h>
 #include <server.h>
 
 uint32_t server_get_num(void)

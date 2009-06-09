@@ -25,7 +25,7 @@
 #ifndef __IPC_POLL_H__
 #define  __IPC_POLL_H__
 
-#include <eza/arch/types.h>
+#include <arch/types.h>
 
 #define POLLIN        0x1  /* Data may be read without blocking. */
 #define POLLRDNORM    0x2  /* Normal data may be read without blocking. */
