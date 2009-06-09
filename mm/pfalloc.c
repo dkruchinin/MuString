@@ -94,6 +94,7 @@ page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
   mm_pool_t *pool;
 
   pool = get_mmpool_by_type(flags & MMPOOLS_MASK);
+  ASSERT(n > 0);
   if (!pool) {
     kprintf("No pool %d\n", flags & MMPOOLS_MASK);
     return NULL;
@@ -133,7 +134,7 @@ page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
   }
 
   /* done */
-  out:
+out:
   return pages;
 }
 
@@ -166,6 +167,10 @@ uintptr_t sys_alloc_dma_pages(int num_pages)
 {
   page_frame_t *pages;
 
+  if (unlikely(!num_pages)) {
+    return -EINVAL;
+  }
+  
   pages = alloc_pages(num_pages, DMA_POOL_TYPE | AF_ZERO);
   if (!pages) {
     pages=alloc_pages(num_pages, AF_ZERO);
