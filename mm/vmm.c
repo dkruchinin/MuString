@@ -150,6 +150,10 @@ void mm_initialize(void)
     kprintf(" | %-8s %-8s %-8s |\n", "Total", "Free", "Reserved");
     kprintf(" | %-8d %-8d %-8d |\n", pool->total_pages,
             atomic_get(&pool->free_pages), pool->reserved_pages);
+    if (pool->type != DMA_POOL_TYPE && pool->type != BOOTMEM_POOL_TYPE) {
+        pool->allocator.dump(pool->allocator.alloc_ctx);
+        for (;;);
+    }
   }
 
   kprintf("[MM] All pages were successfully remapped.\n");

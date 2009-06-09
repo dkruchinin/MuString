@@ -27,8 +27,8 @@
  * @author Dan Kruchinin
  */
 
-#ifndef __TLSF_H__
-#define __TLSF_H__
+#ifndef __MSTRING_TLSF_H__
+#define __MSTINRG_TLSF_H__
 
 #include <config.h>
 #include <ds/list.h>
@@ -40,19 +40,19 @@
 #include <eza/smp.h>
 #include <mlibc/types.h>
 
-#define TLSF_FLD_SIZE       5  /**< TLSF first level directory size */
+#define TLSF_FLD_SIZE       8  /**< TLSF first level directory size */
 #define TLSF_SLD_SIZE       4  /**< TLSF second level directory size */
 #define TLSF_CPUCACHE_PAGES 32 /*  */
 #define TLSF_FIRST_OFFSET   4  /**< TLSF first offset */
 
 
 #define TLSF_SLDS_MIN 2 /* Minimal number of SLDs in each FLD entry */
-#define TLSF_FLDS_MAX 8 /* Maximum number of FLDs */
+#define TLSF_FLDS_MAX 10 /* Maximum number of FLDs */
 #define TLSF_FLD_BITMAP_SIZE TLSF_FLD_SIZE /* FLD bitmap size */
 #define TLSF_SLD_BITMAP_SIZE round_up((TLSF_FLD_SIZE * TLSF_SLD_SIZE), 8) /* SLD bitmap size */
 
 #ifdef CONFIG_SMP
-typedef struct __tlsf_percpu_cache {
+typedef struct tlsf_percpu_cache {
   int noc_pages;     /**< Number of pages in cache */
   list_head_t pages; /**< List of available pages */
 } tlsf_percpu_cache_t;
@@ -64,8 +64,8 @@ typedef struct __tlsf_percpu_cache {
  * containing information about each SLD node in
  * the FLD that owns given node.
  */
-typedef struct __tlsf_node {
-  int blocks_no;      /**< Total number of page blocks in node */
+typedef struct tlsf_node {
+  int num_blocks;     /**< Total number of page blocks in node */
   int max_avail_size; /**< Size of max available block */
   list_head_t blocks; /**< The list of all blocks in node */
 } tlsf_node_t;
@@ -81,7 +81,7 @@ typedef uint8_t tlsf_bitmap_t;
  * TLSF allocator structure containing
  * all TLSF-allocator-specific information.
  */
-typedef struct __tlsf {
+typedef struct tlsf {
   struct {
     tlsf_node_t nodes[TLSF_SLD_SIZE]; /**< FLD nodes(i.e. SLDs) */
     int total_blocks;                 /**< Total number of available blocks in all nodes */
@@ -107,4 +107,4 @@ void tlsf_validate_dbg(void *_tlsf);
 #define tlsf_validate_dbg(_tlsf)
 #endif /* CONFIG_MM_DEBUG */
 
-#endif /* __TLSF_H__ */
+#endif /* __MSTRING_TLSF_H__ */

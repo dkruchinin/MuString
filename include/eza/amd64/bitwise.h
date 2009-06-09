@@ -17,8 +17,7 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * include/eza/arch/bitwise.h: AMD64-specific bitwise operations
- *
+ * AMD64-specific bitwise operations.
  */
 
 /**
@@ -29,8 +28,8 @@
  * @author Dan Kruchinin
  */
 
-#ifndef __ARCH_BITWISE_H__
-#define __ARCH_BITWISE_H__
+#ifndef __MSTRING_ARCH_BITWISE_H__
+#define __MSTRING_ARCH_BITWISE_H__
 
 #include <mlibc/types.h>
 
@@ -64,14 +63,14 @@ static always_inline void arch_bit_toggle(volatile void *bitmap, int bit)
 
 #define ARCH_BIT_TEST
 /* not atomic */
-static always_inline int arch_bit_test(volatile void *bitmap, int bitno)
+static inline int arch_bit_test(volatile void *bitmap, long bitno)
 {
-  int ret;
+  int ret = 0;
 
-  __asm__ volatile ("bt %1, %2\n\t"
-                    "sbb %0, %0"
-                    : "=r" (ret)
-                    : "Ir" (bitno), "m" (*(volatile unsigned long *)bitmap));
+  __asm__ volatile ("btq %1, %2\n\t"
+                    "sbbl %0, %0\n"
+                    : "+r" (ret)
+                    : "ir" (bitno), "m" (*(volatile ulong_t *)bitmap));
 
   return ret;
 }
@@ -102,41 +101,50 @@ static always_inline int arch_bit_test_and_clear(volatile void *bitmap, int bit)
 }
 
 #define ARCH_BIT_FIND_LSF
-static always_inline long arch_bit_find_lsf(unsigned long word)
+static inline long arch_bit_find_lsf(unsigned long word)
 {
-  __asm__ ("bsf %1, %2\n\t"
-           : "=r" (word)
-           : "r" (word), "r" ((long)-1));
+  long ret = -1;
+  
+  __asm__ volatile ("bsf %1, %0\n"
+                    : "+r" (ret)
+                    : "m" (word));
 
-  return word;
+  return ret;
 }
 
 #define ARCH_ZERO_BIT_FIND_LSF
 static always_inline long arch_zero_bit_find_lsf(unsigned long word)
 {
-  __asm__ ("bsf %1, %2\n\t"
-           : "=r" (word)
-           : "r" (~word), "r" ((long)-1));
+  long ret = -1;
+  
+  __asm__ volatile ("bsf %1, %0\n"
+                    : "+r" (ret)
+                    : "r" (~word));
 
-  return word;
+  return ret;
 }
 
 #define ARCH_BIT_FIND_MSF
 static always_inline long arch_bit_find_msf(unsigned long word)
 {
-  __asm__ ("bsr %1, %2\n\t"
-           : "=r" (word)
-           : "r" (word), "r" ((long)-1));
-  return word;
+  long ret = -1;
+  
+  __asm__ volatile ("bsr %1, %0\n"
+                    : "+r" (ret)
+                    : "m" (word));
+  
+  return ret;
 }
 
 #define ARCH_ZERO_BIT_FIND_MSF
 static always_inline long arch_zero_bit_find_msf(unsigned long word)
 {
-  __asm__ ("bsr %1, %2\n\t"
-           : "=r" (word)
-           : "r" (~word), "r" ((long)-1));
-  return word;
+  long ret = -1;
+  
+  __asm__ volatile ("bsr %1, %0\n\t"
+                    : "+r" (ret)
+                    : "r" (~word));
+  return ret;
 }
 
 #define ARCH_BITS_OR
@@ -159,4 +167,4 @@ static always_inline void arch_bits_and(volatile void *word, unsigned long mask)
                     : "memory");
 }
 
-#endif /* __ARCH_BITWISE_H__ */
+#endif /* __MSTRING_ARCH_BITWISE_H__ */
