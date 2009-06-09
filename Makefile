@@ -9,7 +9,6 @@ endif
 
 KERNELVERSION := $(KERNEL_MAJOR_VER).$(KERNEL_MIDDLE_VER).$(KERNEL_MINOR_VER)
 VERFILE := include/version.h
-ODIR := vmjari_objs
 OBJECTS :=
 CC := $(TOOLCHAIN)gcc
 AR := $(TOOLCHAIN)ar
@@ -63,36 +62,46 @@ ifdef CONFIG_ARCH
 ARCH := $(shell echo $(CONFIG_ARCH) | sed 's|"||g')
 endif
 
--include kernel/arch/$(ARCH)/Makefile.inc
+ODIR := mstring_dumps
+SCRIPTS_DIR := $(BUILD_ROOT)/scripts
+ARCH_DIR := $(BUILD_ROOT)/kernel/arch/$(ARCH)
+ARCH_COM_DIR := $(BUILD_ROOT)/kernel/arch/common
 
 GENERICS = kernel server
 ifeq ($(CONFIG_TEST),y)
 GENERICS += tests
 endif
 
-.PHONY: all vmuielf rmap.bin collect_objects
-all: host vmuielf bootimage
+all: host vmuielf
+
+-include kernel/arch/$(ARCH)/Makefile.inc
 
 host:
 	$(call echo-header,"kbuild")
 	$(Q)$(MAKE) all -C kbuild BUILD_ROOT=$(BUILD_ROOT)
 
-vmuielf: prepare $(addprefix generic_, $(GENERICS)) muielf
-	$(call echo-label,"OBJCOPY","$@")
-	$(Q)$(OBJCOPY) -O binary muielf $@
+vmuielf: muielf
+	$(call echo-label,"OBJCOPY",$< -> $@)
+	$(Q)$(OBJCOPY) -O binary $< $@
 
-check_config:
-ifeq ($(shell [ -f $(BUILD_ROOT)/.config ] && echo "ok"),)
-	$(Q)$(MAKE) help_config
-endif
+muielf: mkbins collect_objects $(ODIR)/kernel.ld
+	$(call echo-header,"$@")
+	$(call echo-action,"LD",$@)
+	$(Q)$(LD) -T $(ODIR)/kernel.ld $(LDFLAGS) -q $(OBJECTS) -o $@ -Map $(ODIR)/muielf.map
+	$(Q)$(OBJDUMP) -t $(OBJECTS) > $(ODIR)/muielf.objdump
 
-prepare: check_config $(VERFILE)
-	$(Q)$(call create_symlinks)
+mkbins: check_config prepare $(addprefix generic_, $(GENERICS))
+
+prepare: include/arch
 	$(Q)$(MKDIR) -p $(ODIR)
 
-muielf: $(addprefix $(ODIR)/, kernel.ld rmap.o)	
-	$(call echo-action,"LD","$^")
-	$(Q)$(LD) -T $(ODIR)/kernel.ld $(LDFLAGS) $(OBJECTS) $(ODIR)/rmap.o -o $@ -Map $(ODIR)/muielf.map
+include/arch:
+	$(Q)$(LN) -s $(BUILD_ROOT)/kernel/arch/$(ARCH)/include $(BUILD_ROOT)/include/arch
+
+check_config:
+ifeq ($(shell [ -f $(BUILD_ROOT)/.config ] && echo "y"),)
+	$(Q)$(MAKE) help_config
+endif
 
 generic_%:
 	$(call echo-header,"$(subst generic_,,$@)")
@@ -120,26 +129,10 @@ distclean: clean_host clean cleanconf
 $(ODIR)/rmap.o: $(ODIR)/rmap.bin
 	$(call create_rmap)
 
-$(ODIR)/kernel.ld: $(BUILD_ROOT)/kernel/arch/$(ARCH)/src/kernel.ld.S
-	$(call echo-action,"CPP","$<")
-	$(Q)$(CC) $(CFLAGS) $(INCLUDE) -D__ASM__ -E -x c $< | $(GREP) -v "^\#" > $@
-
 collect_objects:
 	$(eval OBJECTS := $(call collect_objects))
 
-$(ODIR)/rmap.bin: collect_objects $(ODIR)/kernel.ld	
-	$(call pre_linking_action)	
-	$(call echo-action,"LD","Linking all together...")
-	$(Q)$(LD) -T $(ODIR)/kernel.ld $(LDFLAGS) -q $(OBJECTS) -o $@ -Map $(ODIR)/mui.pre.map	
-	$(Q)$(OBJDUMP) -t $(OBJECTS) > $(ODIR)/mui.objdump
-	$(Q)$(GMAP) $(addprefix $(ODIR)/, mui.pre.map mui.objdump rmap.bin)
-	$(call echo-action,"MK","Regeneration...")
-	$(call post_linking_action)
-	$(Q)$(LD) -T $(ODIR)/kernel.ld $(LDFLAGS) $(OBJECTS) $(ODIR)/emapo.o -o $@ -Map $(ODIR)/mui.pre.map
-	$(Q)$(OBJDUMP) -t $(OBJECTS) > $(ODIR)/mui.objdump	
-	$(Q)$(GMAP) $(addprefix $(ODIR)/, mui.pre.map mui.objdump rmap.bin)
-
-bootimage: vmuielf
+image: vmuielf
 ifneq ($(NOBUILDIMG),y) 
 # Creates a 20 MB bootable FAT HD image: 44 tracks, 16 heads, 63 sectors
 	@dd if=/dev/zero of=boot.img count=44352 bs=512
@@ -213,7 +206,6 @@ help_config:
 	$(Q)$(ECHO) "Before building kernel you should configure it"
 	$(Q)$(ECHO) "Run make [config or menuconfig] arch=<your_arch>"
 	$(Q)$(ECHO) "Supported architectures:"
-	$(call show_archs)
 	$(Q)$(ECHO)
 	$(Q)exit 2
 

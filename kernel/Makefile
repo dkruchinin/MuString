@@ -1,0 +1,1 @@
+obj-y += ds generic ipc mm posix sync arch/$(ARCH)/src
