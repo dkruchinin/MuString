@@ -51,28 +51,10 @@ uintptr_t __utrampoline_virt = 0;
 
 static vm_mandmap_t ident_mandmap, utramp_mandmap, swks_mandmap;
 
-#ifndef CONFIG_IOMMU
-static page_idx_t dma_pages = 0;
-
-static inline void __determine_page_mempool(page_frame_t *pframe)
-{
-  mm_pool_t *pool;
-
-  if (pframe_number(pframe) < dma_pages) {
-    pool = POOL_DMA();
-  }
-  else {
-    pool = POOL_GENERAL();
-  }
-
-  mmpool_add_page(pool, pframe);
-}
-#else
 static inline void __determine_page_mempool(page_frame_t *pframe)
 {  
   mmpool_add_page(POOL_GENERAL(), pframe);
 }
-#endif /* CONFIG_IOMMU */
 
 #ifdef CONFIG_DEBUG_MM
 static void verify_mapping(const char *descr, uintptr_t start_addr,
@@ -161,11 +143,6 @@ static void scan_phys_mem(void)
     panic("No valid E820 memory maps found for main physical memory area!");
   if(!num_phys_pages || (num_phys_pages < MIN_PAGES_REQUIRED))
     panic("Insufficient E820 memory map found for main physical memory area!");
-
-#ifndef CONFIG_IOMMU
-  /* Setup DMA zone. */
-  dma_pages = _mb2b(16) >> PAGE_WIDTH;
-#endif /* CONFIG_IOMMU */
 }
 
 static void build_page_frames_array(void)
@@ -222,18 +199,7 @@ void arch_mm_init(void)
     __real_kernel_end = addr;
   }
 
-  /*
-   * In case when IOMMU isn't used, we have to prepare
-   * DMA pages buffer(lying below 16M). Page frames array
-   * firs in some DMA pages. To prevent this situation
-   * we locate it after 16M.
-   */
-#ifdef CONFIG_IOMMU
   page_frames_array = (page_frame_t *)p2k(PAGE_ALIGN(__real_kernel_end));
-#else
-  page_frames_array = (page_frame_t *)p2k(_mb2b(16));
-#endif /* CONFIG_IOMMU */
-
   __kernel_first_free_vaddr = (uintptr_t)page_frames_array +
     sizeof(page_frame_t) * num_phys_pages;
   build_page_frames_array();

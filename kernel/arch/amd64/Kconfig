@@ -26,10 +26,6 @@ config NRCPUS
          Here you may specify number of CPUs supported by the kernel.
          You may enter any number between 2 and 64.
 
-config IOMMU
-       bool "Use IOMMU"
-       default n
-
 config GENARCH_MM
      def_bool y
      bool "Use generic page table operations"
