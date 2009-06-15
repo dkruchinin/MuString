@@ -1161,6 +1161,8 @@ out:
   return ret;
 }
 
+#define MMAP_SIZE_LIMIT _mb2b(1024UL)
+
 long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
 {
   task_t *victim_task = NULL;
@@ -1182,6 +1184,10 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
   vmm = victim_task->task_mm;
   if (copy_from_user(&margs, uargs, sizeof(margs))) {
     ret = -EFAULT;
+    goto out;
+  }
+  if (unlikely(PAGE_ALIGN(margs.size) >= MMAP_SIZE_LIMIT)) {
+    ret = -E2BIG;
     goto out;
   }
 
