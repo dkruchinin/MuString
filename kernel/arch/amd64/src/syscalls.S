@@ -22,8 +22,8 @@
  */
 
 #include <arch/context.h>
+#include <arch/seg.h>
 #include <mstring/errno.h>
-#include <arch/cpu.h>
 
 .global syscall_point
 
@@ -100,9 +100,9 @@ syscall_point:
 	 */
 	subq $HW_INTERRUPT_CTX_SIZE,%rsp
 	movq %rcx,HW_INTERRUPT_CTX_RIP_OFFT(%rsp)
-	movq $USER_SELECTOR(UTEXT_DES),HW_INTERRUPT_CTX_CS_OFFT(%rsp)
+	movq $(GDT_SEL(UCODE_DESCR) | SEG_DPL_USER),HW_INTERRUPT_CTX_CS_OFFT(%rsp)
 
-	movq $USER_SELECTOR(UDATA_DES),HW_INTERRUPT_CTX_SS_OFFT(%rsp)
+	movq $(GDT_SEL(UDATA_DESCR) | SEG_DPL_USER),HW_INTERRUPT_CTX_SS_OFFT(%rsp)
 	movq %gs:CPU_SCHED_STAT_USTACK_OFFT,%rcx
 	movq %rcx,HW_INTERRUPT_CTX_RSP_OFFT(%rsp)
 	subq $8,%rsp /* Simulate 'push %rax' */

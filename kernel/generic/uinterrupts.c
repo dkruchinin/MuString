@@ -189,9 +189,9 @@ long sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   caller=current_task();
 
   LOCK_TASK_VM(caller);
-  pfn = ptable_ops.vaddr2page_idx(task_get_rpd(caller), addr, NULL);
+  pfn = vaddr_to_pidx(task_get_rpd(caller), addr);
   if(pfn != PAGE_IDX_INVAL) {
-    pframe = pframe_by_number(pfn);
+    pframe = pframe_by_id(pfn);
     pin_page_frame(pframe);
     kaddr=pframe_to_virt(pframe);
   }

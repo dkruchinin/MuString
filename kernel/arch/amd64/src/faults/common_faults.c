@@ -26,9 +26,9 @@
 #include <arch/page.h>
 #include <arch/fault.h>
 #include <arch/interrupt.h>
-#include <mstring/kernel.h>
+#include <mstring/panic.h>
 #include <mstring/kprintf.h>
-#include <arch/mm.h>
+#include <arch/mem.h>
 #include <arch/fault.h>
 #include <mstring/smp.h>
 #include <mstring/kconsole.h>

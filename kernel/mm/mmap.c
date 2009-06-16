@@ -24,7 +24,6 @@
 #include <config.h>
 #include <ds/list.h>
 #include <ds/ttree.h>
-#include <ds/iterator.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
 #include <mm/slab.h>
@@ -38,6 +37,8 @@
 #include <mstring/usercopy.h>
 #include <mstring/kprintf.h>
 #include <mstring/types.h>
+
+#define INVALID_ADDRESS (~0UL)
 
 /* kernel root page directory */
 rpd_t kernel_rpd;
@@ -259,7 +260,7 @@ static void fix_vmrange_holes_after_insertion(vmm_t *vmm, vmrange_t *vmrange,
                 vmrange->bounds.space_end, vmrange->hole_size,
                 USPACE_VA_TOP - vmrange->bounds.space_end);
 
-    vmrange->hole_size = USPACE_VA_TOP - vmrange->bounds.space_end;
+    vmrange->hole_size = USPACE_VADDR_TOP - vmrange->bounds.space_end;
   }
 }
 
@@ -289,7 +290,7 @@ int vm_mandmaps_roll(vmm_t *target_mm)
     pidx = mandmap->phys_addr >> PAGE_WIDTH;
     va = mandmap->virt_addr;
     while (va < va_to) {
-      status = mmap_one_page(&target_mm->rpd, va, pidx, mandmap->flags);
+      status = mmap_page(&target_mm->rpd, va, pidx, mandmap->flags);
       if (status) {
         VMM_VERBOSE("[%s] Failed to map page %#x to %p in "
                     "mandatory mapping %s! [RET = %d]\n",
@@ -299,7 +300,7 @@ int vm_mandmaps_roll(vmm_t *target_mm)
       }
 
       if (likely(page_idx_is_present(pidx)))
-        pin_page_frame(pframe_by_number(pidx));
+        pin_page_frame(pframe_by_id(pidx));
 
       va += PAGE_SIZE;
       pidx++;
@@ -486,7 +487,7 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
            addr < vmr->bounds.space_end; addr += PAGE_SIZE) {
 
         pagetable_lock(&src->rpd);
-        pidx = vaddr2page_idx(&src->rpd, addr);
+        pidx = vaddr_to_pidx(&src->rpd, addr);
         if (pidx == PAGE_IDX_INVAL) {
           pagetable_unlock(&src->rpd);
           continue;
@@ -499,7 +500,7 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
            * be remapped in src's address space with "read-only" rights.
            */
 
-          page = pframe_by_number(pidx);
+          page = pframe_by_id(pidx);
           if ((vmr->flags & (VMR_WRITE | VMR_PRIVATE)) ==
               (VMR_WRITE | VMR_PRIVATE)) {
             mmap_flags &= ~VMR_WRITE;
@@ -540,13 +541,13 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
             goto clone_failed_unlock;
           }
 
-          page = pframe_by_number(pidx);
+          page = pframe_by_id(pidx);
           copy_page_frame(new_page, page);
           new_page->offset = page->offset;
           pidx = pframe_number(new_page);
         }
 
-        page = pframe_by_number(pidx);
+        page = pframe_by_id(pidx);
         pin_page_frame(page);
         ret = memobj_method_call(new_vmr->memobj, insert_page, new_vmr,
                                  page, addr, mmap_flags);
@@ -582,7 +583,7 @@ clone_failed:
 uintptr_t find_free_vmrange(vmm_t *vmm, uintptr_t length,
                             ttree_cursor_t *cursor)
 {
-  uintptr_t start = USPACE_VA_BOTTOM;
+  uintptr_t start = USPACE_VADDR_BOTTOM;
   vmrange_t *vmr;
   ttree_node_t *tnode = NULL;
   int i = 0;
@@ -1001,7 +1002,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
   if (likely(vmr_prev != NULL)) {
     /* vmr_prev is highest VM range in an address space */
     if (unlikely(vmr == NULL)) {
-      vmr_prev->hole_size = USPACE_VA_TOP - vmr_prev->bounds.space_end;
+      vmr_prev->hole_size = USPACE_VADDR_TOP - vmr_prev->bounds.space_end;
     }
     else {
       vmr_prev->hole_size = vmr->bounds.space_start -
@@ -1030,7 +1031,7 @@ int __fault_in_user_page(vmrange_t *vmrange, uintptr_t addr,
     vmr_mask |= VMR_WRITE;
 
   pagetable_lock(&vmm->rpd);
-  pidx = __vaddr2page_idx(&vmm->rpd, addr, &pde);
+  pidx = __vaddr_to_pidx(&vmm->rpd, addr, &pde);
   if (pidx != PAGE_IDX_INVAL) {
     /*
      * If page by given address is already mapped with valid
@@ -1058,7 +1059,7 @@ int __fault_in_user_page(vmrange_t *vmrange, uintptr_t addr,
    * vmm semaphore, so after fault is handled and page is present in the table,
    * it can not be unmapped while semaphore is downed/
    */
-  pidx = __vaddr2page_idx(&vmm->rpd, addr, &pde);
+  pidx = __vaddr_to_pidx(&vmm->rpd, addr, &pde);
   ASSERT(pidx != PAGE_IDX_INVAL);
 
 out:
@@ -1118,7 +1119,7 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
     }
 
     if (callback) {
-      callback(vmr, pframe_by_number(pidx), data);
+      callback(vmr, pframe_by_id(pidx), data);
     }
 
     va += PAGE_SIZE;
@@ -1354,14 +1355,14 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
      * All pages current task is granting to somebody must be present.
      * We're not going fault on each of them.
      */
-    pidx = vaddr2page_idx(&current->task_mm->rpd, va_from);
+    pidx = vaddr_to_pidx(&current->task_mm->rpd, va_from);
     if (pidx == PAGE_IDX_INVAL) {
       ret = -EFAULT;
       pagetable_unlock(&current->task_mm->rpd);
       goto unlock_current;
     }
 
-    page = pframe_by_number(pidx);
+    page = pframe_by_id(pidx);
     /* Delete page from source's VM range. Source process */
     ret = memobj_method_call(vmr->memobj, delete_page, vmr, page);
     if (ret) {
@@ -1397,7 +1398,7 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
     }
 
     pagetable_lock(&target->task_mm->rpd);
-    pidx = vaddr2page_idx(&target->task_mm->rpd, target_addr);
+    pidx = vaddr_to_pidx(&target->task_mm->rpd, target_addr);
 
     /*
      * If some page is already mapped to given address (it doesn't

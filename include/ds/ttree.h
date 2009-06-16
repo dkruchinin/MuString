@@ -37,7 +37,6 @@
 #define __TTREE_H__
 
 #include <config.h>
-#include <ds/iterator.h>
 #include <mstring/cpucache.h>
 #include <mstring/stddef.h>
 #include <mstring/types.h>

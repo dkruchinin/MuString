@@ -30,7 +30,7 @@
 #include <mstring/kprintf.h>
 #include <arch/scheduler.h>
 #include <mstring/types.h>
-#include <mstring/kernel.h>
+#include <mstring/panic.h>
 #include <arch/task.h>
 #include <arch/preempt.h>
 #include <mstring/process.h>

@@ -27,12 +27,11 @@
  * 2) In the first kilobyte of EBDA
  */
 
-#include <arch/types.h>
 #include <mm/page.h>
-#include <mm/idalloc.h>
 #include <mm/vmm.h>
 #include <mstring/errno.h>
 #include <mstring/actbl.h>
+#include <mstring/types.h>
 
 #define BIOS_ROM 0xE0000
 #define BIOS_ROM_SIZE 0x20000
@@ -45,7 +44,6 @@
 #define EXTRA_PAGES 4
 
 static int mapped_pages = 0;
-extern idalloc_meminfo_t idalloc_meminfo;
 extern page_frame_t *kernel_root_pagedir;
 
 static bool phys_range_is_mapped(int start_idx, int n)
@@ -56,8 +54,8 @@ static bool phys_range_is_mapped(int start_idx, int n)
 
 	for (i = start_idx; i < j; i++) {
 		va = (uintptr_t)pframe_id_to_virt(i);
-		frame = pframe_by_number(i);
-		if (!page_is_mapped(&kernel_rpd, PAGE_ALIGN_DOWN(va)))
+		frame = pframe_by_id(i);
+		if (!page_is_mapped(KERNEL_ROOT_PDIR(), PAGE_ALIGN_DOWN(va)))
 			break;
 	}
 

@@ -20,8 +20,8 @@
  * mstring/amd64/sched/task.c: AMD64-specific tasks-related functions.
  */
 
-#include <ds/iterator.h>
 #include <kernel/syscalls.h>
+#include <mm/mem.h>
 #include <mstring/task.h>
 #include <arch/context.h>
 #include <mstring/string.h>
@@ -29,18 +29,17 @@
 #include <mstring/kprintf.h>
 #include <mm/page.h>
 #include <mm/vmm.h>
-#include <mm/pfi.h>
 #include <mstring/errno.h>
 #include <mstring/string.h>
 #include <mstring/smp.h>
 #include <mm/pfalloc.h>
-#include <mstring/kernel.h>
+#include <mstring/panic.h>
 #include <mstring/scheduler.h>
 #include <arch/scheduler.h>
 #include <arch/current.h>
+#include <arch/seg.h>
 #include <mstring/process.h>
 #include <arch/context.h>
-#include <arch/profile.h>
 #include <arch/ptable.h>
 #include <config.h>
 
@@ -64,13 +63,13 @@ static void __setup_arch_segment_regs(arch_context_t *ctx,
   uint64_t fs,es,gs,ds;
 
   if( priv == TPL_KERNEL ) {
-    fs=KERNEL_SELECTOR(KDATA_DES);
+    fs=GDT_SEL(KDATA_DESCR);
     es=fs;
     gs=fs;
     ds=fs;
   } else {
-    fs=USER_SELECTOR(PTD_SELECTOR) | 0x4; /* First selector in LDT. */
-    es=USER_SELECTOR(UDATA_DES);
+    fs=GDT_SEL(PTD_SELECTOR) | SEG_DPL_USER | 0x4; /* First selector in LDT. */
+    es=GDT_SEL(UDATA_DESCR) | SEG_DPL_USER;
     gs=es;
     ds=es;
   }
@@ -89,7 +88,7 @@ static void __arch_setup_ctx(task_t *newtask,uint64_t rsp,
  
   ctx->rsp = rsp;
   /* Setup CR3 */
-  ctx->cr3 = k2p((uintptr_t)pframe_to_virt(RPD_PAGEDIR(task_get_rpd(newtask))));
+  ctx->cr3 = KVIRT_TO_PHYS((uintptr_t)task_get_rpd(newtask)->root_dir);
   ctx->user_rsp = 0;
 
   /* Default TSS value which means: use per-CPU TSS. */
@@ -131,10 +130,8 @@ void initialize_idle_tasks(void)
       panic( "initialize_idle_task(): Can't setup scheduler details !" );
     }
 
-
     /* Initialize page tables to default kernel page directory. */
-    ptable_ops.clone_rpd(&task->rpd, &kernel_rpd);
-
+    task->rpd.root_dir = KERNEL_ROOT_PDIR()->root_dir;
     /* Initialize kernel stack.
      * Since kernel stacks aren't properly initialized, we can't use standard
      * API that relies on 'cpu_id'.
@@ -156,18 +153,20 @@ void initialize_idle_tasks(void)
             panic("Can't map kernel stack for idle task !");
         }
     }
-    /* Setup arch-specific task context. */
+
     __arch_setup_ctx(task,0,TPL_KERNEL);
   }
 
+  /* Setup arch-specific task context. */  
+  
   /* Now initialize per-CPU scheduler statistics. */
   cpu = 0;
   for_each_percpu_var(sched_stat,cpu_sched_stat) {
     sched_stat->cpu = cpu;
     sched_stat->current_task = idle_tasks[cpu];
     sched_stat->kstack_top = idle_tasks[cpu]->kernel_stack.high_address;
-    sched_stat->kernel_ds = KERNEL_SELECTOR(KDATA_DES);
-    sched_stat->user_ds = USER_SELECTOR(UDATA_DES);
+    sched_stat->kernel_ds = GDT_SEL(KDATA_DESCR);
+    sched_stat->user_ds = GDT_SEL(UDATA_DESCR) | SEG_DPL_USER;
     cpu++;
   }
 }
@@ -226,8 +225,8 @@ static uint64_t __setup_kernel_task_context(task_t *task)
   memset( regs, 0, sizeof(regs_t) );
 
   /* Now setup selectors so them reflect kernel space. */
-  regs->int_frame.cs = KERNEL_SELECTOR(KTEXT_DES);
-  regs->int_frame.old_ss = KERNEL_SELECTOR(KDATA_DES);
+  regs->int_frame.cs = GDT_SEL(KCODE_DESCR);
+  regs->int_frame.old_ss = GDT_SEL(KDATA_DESCR);
   regs->int_frame.rip = (uint64_t)kernel_thread_helper;
 
   /* When kernel threads start execution, their 'userspace' stacks are equal
@@ -246,8 +245,8 @@ static uint64_t __setup_user_task_context(task_t *task)
   memset( regs, 0, sizeof(regs_t) );
 
   /* Now setup selectors so them reflect user space. */
-  regs->int_frame.cs = USER_SELECTOR(UTEXT_DES);
-  regs->int_frame.old_ss = USER_SELECTOR(UDATA_DES);
+  regs->int_frame.cs = GDT_SEL(UCODE_DESCR) | SEG_DPL_USER;
+  regs->int_frame.old_ss = GDT_SEL(UDATA_DESCR) | SEG_DPL_USER;
   regs->int_frame.rip = 0;
   regs->int_frame.old_rsp = 0;
   regs->int_frame.rflags = USER_RFLAGS;
@@ -258,8 +257,8 @@ static uint64_t __setup_user_task_context(task_t *task)
 /* NOTE: This function doesn't reload LDT ! */
 static void __setup_user_ldt( uintptr_t ldt )
 {
-  descriptor_t *ldt_root=(descriptor_t*)ldt;
-  descriptor_t *ldt_dsc;
+  segment_descr_t *ldt_root=(segment_descr_t*)ldt;
+  segment_descr_t *ldt_dsc;
 
   if( !ldt ) {
     return;
@@ -271,8 +270,8 @@ static void __setup_user_ldt( uintptr_t ldt )
 
   /* Setup default PTD descriptor. */
   ldt_dsc=&ldt_root[PTD_SELECTOR];
-  descriptor_set_base(ldt_dsc,0);
-  ldt_dsc->access=AR_PRESENT | AR_DATA | AR_WRITEABLE | (1 << 2) | DPL_USPACE;
+  seg_descr_setup(ldt_dsc, SEG_TYPE_LDT, SEG_DPL_USER,
+                  0, 0, SEG_FLG_PRESENT);
 }
 
 static void __apply_task_exec_attrs(regs_t *regs,exec_attrs_t *exec_attrs,
@@ -345,7 +344,7 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
 
   if( priv == TPL_USER ) {
       /* Allocate LDT for this task. */
-    task_ctx->ldt_limit=LDT_ITEMS*sizeof(descriptor_t);
+    task_ctx->ldt_limit=LDT_ITEMS*sizeof(segment_descr_t);
     task_ctx->ldt=(uintptr_t)memalloc(task_ctx->ldt_limit);
 
     if( !task_ctx->ldt ) {
@@ -394,16 +393,16 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
     case SYS_PR_CTL_SET_PERTASK_DATA:
       arch_ctx=(arch_context_t*)&task->arch_context[0];
       if( arch_ctx->ldt ) {
-        descriptor_t *ldt_dsc=(descriptor_t*)arch_ctx->ldt;
+        segment_descr_t *ldt_dsc=(segment_descr_t*)arch_ctx->ldt;
         ldt_dsc=&ldt_dsc[PTD_SELECTOR];
 
         arch_ctx->per_task_data=arg;
-        descriptor_set_base(ldt_dsc,arg);
-        ldt_dsc->access=AR_PRESENT | AR_DATA | AR_WRITEABLE | (1 << 2) | DPL_USPACE;
+        seg_descr_setup(ldt_dsc, SEG_TYPE_LDT, SEG_DPL_USER,
+                        0, (uint32_t)arg, SEG_FLG_PRESENT);
 
         interrupts_disable();
         if( task == current_task() ) {
-          load_ldt(cpu_id(),arch_ctx->ldt,arch_ctx->ldt_limit);
+          load_ldt(cpu_id(),(void *)arch_ctx->ldt,arch_ctx->ldt_limit);
         }
         interrupts_enable();
       } else {
@@ -455,7 +454,7 @@ void arch_activate_task(task_t *to)
 
   /* Setup LDT for new task. */
   if( to_ctx->ldt ) {
-    load_ldt(to->cpu,to_ctx->ldt,to_ctx->ldt_limit);
+    load_ldt(to->cpu,(void *)to_ctx->ldt,to_ctx->ldt_limit);
   }
 
 #ifdef CONFIG_TEST

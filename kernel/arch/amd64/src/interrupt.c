@@ -27,7 +27,7 @@
 #include <mstring/time.h>
 #include <arch/8259.h>
 #include <arch/apic.h>
-#include <mstring/kernel.h>
+#include <mstring/panic.h>
 #include <arch/interrupt.h>
 #include <mstring/smp.h>
 #include <arch/smp.h>

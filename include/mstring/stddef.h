@@ -19,14 +19,15 @@
  */
 
 /**
- * @file include/mstring/stddef.h
+ * @file include/mlibc/stddef.h
  * Contains widely used macros.
  */
 
-#ifndef __STDDEF_H__
-#define __STDDEF_H__
+#ifndef __MSTRING_STDDEF_H__
+#define __MSTRING_STDDEF_H__
 
 #include <mstring/bitwise.h>
+#include <mstring/types.h>
 
 #ifndef offsetof
 /**
@@ -62,8 +63,14 @@
 #define ABS(x) (((x) < 0) ? -(x) : (x))
 #define MIN(a,b) ((a)<(b) ? (a) : (b) )
 #define MAX(a,b) ((a)>(b) ? (a) : (b) )
-#define pow2(num)      bit_find_msf(num)
-#define bitnumber(po2) bit_find_msf(po2)
+#define BITNUM(po2)    bit_find_msf(po2)
 #define ARRAY_SIZE(a)  (sizeof((a))/sizeof((a)[0]))
+
+#define B2KB(b)   ((b) >> 10)
+#define B2MB(b)   ((b) >> 20)
+#define KB2B(kb)  ((kb) << 10)
+#define KB2MB(kb) ((kb) >> 10)
+#define MB2B(mb)  ((mb) << 20)
+#define MB2KB(mb) ((mb) << 10)
 
 #endif /* __STDDEF_H__ */

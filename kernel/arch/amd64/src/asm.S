@@ -26,8 +26,8 @@
 
 #include <arch/context.h>
 #include <arch/page.h>
+#include <arch/seg.h>
 #include <arch/current.h>
-#include <arch/cpu.h>
         
 .code64
 
@@ -183,7 +183,7 @@ no_preemption_in_interrupt:
   /* Now let's see if we need to check for userspace works. */
   mov (%rsp), %rbx
   add $INT_FULL_OFFSET_TO_CS,%rbx
-  cmp $KERNEL_SELECTOR(KTEXT_DES),(%rbx)
+  cmp $GDT_SEL(KCODE_DESCR),(%rbx)
   je dont_check_int_works
 
   /* Userspace interrupts, need to check for userspace works. */
@@ -214,7 +214,7 @@ no_preemption_in_interrupt:
 dont_check_int_works:
   RESTORE_ALL
   /* Now we can enable interrupts. */
-  cmp $KERNEL_SELECTOR(KTEXT_DES),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)
+  cmp $GDT_SEL(KCODE_DESCR),INT_STACK_EXTRA_PUSHES+INT_STACK_FRAME_CS_OFFT(%rsp)
   je ret_from_int
 
   /* If we have come from user space, restore %gs and %ds.
@@ -236,7 +236,7 @@ ret_from_int:
   popq %rax
 
   /* Make sure IF is set after returning from interrupt context. */
-  orq $RFLAGS_IF,HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
+  orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
   iretq
 
 return_from_syscall:
@@ -277,7 +277,7 @@ divide_by_zero_fault_handler:
   movl $0x0,%eax
 common_exception_path:
   /* Since %rax is on the stack, we must add 8 bytes. */
-  cmp $KERNEL_SELECTOR(KTEXT_DES),8+INT_STACK_FRAME_CS_OFFT(%rsp)
+  cmp $GDT_SEL(KCODE_DESCR),8+INT_STACK_FRAME_CS_OFFT(%rsp)
   je common_exception_path_kern
   swapgs
 common_exception_path_kern:
@@ -303,7 +303,7 @@ common_exception_path_kern:
   /* Now let's see if we need to check for userspace works. */
   mov (%rsp), %rbx
   add $INT_FULL_OFFSET_TO_CS,%rbx
-  cmp $KERNEL_SELECTOR(KTEXT_DES),(%rbx)
+  cmp $GDT_SEL(KCODE_DESCR),(%rbx)
   je dont_check_common_exception_uworks
 
   /* Process deferred userspace-related works */
@@ -315,7 +315,7 @@ common_exception_path_kern:
 dont_check_common_exception_uworks:
   RESTORE_ALL
   cli
-  cmp $KERNEL_SELECTOR(KTEXT_DES),8+INT_STACK_FRAME_CS_OFFT(%rsp)
+  cmp $GDT_SEL(KCODE_DESCR),8+INT_STACK_FRAME_CS_OFFT(%rsp)
   je common_exception_path_kern_ret
   RESTORE_USER_SEGMENT_REGISTERS
   swapgs
@@ -327,7 +327,7 @@ error_code_exception_path:
   /* Since %rax is saved on the stack, we must add 8 bytes in
    * addition to 8 bytes that contain error code.
    */
-  cmp $KERNEL_SELECTOR(KTEXT_DES),16+INT_STACK_FRAME_CS_OFFT(%rsp)
+  cmp $GDT_SEL(KCODE_DESCR),16+INT_STACK_FRAME_CS_OFFT(%rsp)
   je error_code_exception_path_kern
   swapgs
 error_code_exception_path_kern:
@@ -347,7 +347,7 @@ error_code_exception_path_kern:
   /* Now let's see if we need to check for userspace works. */
   mov (%rsp), %rbx
   add $INT_FULL_OFFSET_TO_CS_ERR,%rbx
-  cmp $KERNEL_SELECTOR(KTEXT_DES),(%rbx)
+  cmp $GDT_SEL(KCODE_DESCR),(%rbx)
   je dont_check_err_exception_uworks
 
   /* Userspace interrupts, need to check for userspace works. */
@@ -365,7 +365,7 @@ dont_check_err_exception_uworks:
   RESTORE_ALL
 
   cli
-  cmp $KERNEL_SELECTOR(KTEXT_DES),16+INT_STACK_FRAME_CS_OFFT(%rsp)
+  cmp $GDT_SEL(KCODE_DESCR),16+INT_STACK_FRAME_CS_OFFT(%rsp)
   je error_code_exception_path_kern_ret
   RESTORE_USER_SEGMENT_REGISTERS
   swapgs
@@ -418,13 +418,11 @@ doublefault_fault_handler:
    */
   movq %rsp,%rdi
   call doublefault_fault_handler_impl
-1:
-  jmp 1b /* Spin forever. */
 
 invalid_tss_fault_handler:
   push %rax
   movl $10,%eax
-  jmp common_exception_path
+  jmp common_exception_path        
 
 segment_not_present_fault_handler:
   push %rax
@@ -442,6 +440,8 @@ general_protection_fault_handler:
   jmp error_code_exception_path
 
 page_fault_fault_handler:
+1:
+        jmp 1b
   push %rax
   movl $14,%eax
   jmp error_code_exception_path

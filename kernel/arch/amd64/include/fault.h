@@ -29,6 +29,7 @@
 #include <arch/page.h>
 #include <arch/interrupt.h>
 #include <arch/context.h>
+#include <arch/seg.h>
 #include <mstring/task.h>
 
 enum __fault_ids {
@@ -100,7 +101,7 @@ static inline long get_userspace_ip(task_t *task)
 }
 
 #define kernel_fault(stack_frame) \
-    (stack_frame->cs == gdtselector(KTEXT_DES))
+    (stack_frame->cs == GDT_SEL(KCODE_DESCR))
 
 uint64_t fixup_fault_address(uint64_t fault_address);
 #endif

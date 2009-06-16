@@ -15,19 +15,15 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
- * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
- * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
- *
- * mstring/generic_api/panic.: implementation of the kernel insufficient state handler,
- *                         the 'panic()' routine.
  *
  */
 
 #include <mstring/stdarg.h>
 #include <mstring/kprintf.h>
-#include <mstring/kernel.h>
 #include <mstring/kconsole.h>
 #include <mstring/interrupt.h>
+#include <mstring/panic.h>
+#include <mstring/types.h>
 
 #define PANIC_BUF_SIZE 1024
 

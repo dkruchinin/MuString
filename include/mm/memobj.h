@@ -112,7 +112,7 @@ extern memobj_t *generic_memobj;
 #define memobj_method_call(memobj, method, args...)                     \
   ({ int __ret = -ECANCELED;                                            \
      if (likely(!atomic_bit_test(&(memobj)->flags,                      \
-                                 bitnumber(MMO_FLG_INACTIVE)))) {       \
+                                 BITNUM(MMO_FLG_INACTIVE)))) {          \
        if (likely((memobj)->mops->method != NULL)) {                    \
          __ret = (memobj)->mops->method(args);                          \
        }                                                                \

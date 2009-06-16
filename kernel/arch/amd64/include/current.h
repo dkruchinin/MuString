@@ -20,14 +20,13 @@
  *
  */
 
-#ifndef __AMD64_CURRENT_H__
-#define __AMD64_CURRENT_H__ 
+#ifndef __ARCH_MSTRING_CURRENT_H__
+#define __ARCH_MSTRING_CURRENT_H__ 
 
 #ifndef __ASM__
-
+#include <config.h>
 #include <mstring/stddef.h>
 #include <mstring/types.h>
-#include <arch/cpu.h>
 
 struct __task_struct;
 
@@ -121,11 +120,14 @@ static inline void arch_sched_reset_def_works_pending(void)
   reset_css_task_flag(CPU_SCHED_DEF_WORKS_F_IDX);
 }
 
-extern cpu_sched_stat_t __percpu_var_cpu_sched_stat[];
+extern cpu_sched_stat_t __percpu_var_cpu_sched_stat[CONFIG_NRCPUS];
 
 static inline void arch_sched_set_cpu_need_resched(cpu_id_t cpu)
 {
-  __percpu_var_cpu_sched_stat[cpu].flags |= (1<< (CPU_SCHED_NEED_RESCHED_F_IDX));
+  cpu_sched_stat_t *sched_stat;
+
+  sched_stat = &__percpu_var_cpu_sched_stat[cpu];
+  sched_stat->flags |= (1<< (CPU_SCHED_NEED_RESCHED_F_IDX));
 }
 
 static inline bool current_task_needs_resched(void)

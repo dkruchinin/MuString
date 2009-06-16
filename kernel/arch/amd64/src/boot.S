@@ -1,434 +1,226 @@
 /*
- * This program is free software; you can redistribute it and/or modify
+ * This program is free software ; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation ; either version 2 of the License, or
  * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * but WITHOUT ANY WARRANTY ; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
+ * along with this program ; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * Originaly based on amd64/boot/boot.S from HelenOS written by:
- *  Copyright (C) 2005 Ondrej Palkovsky
- *  Copyright (C) 2006 Martin Decky
- * Modified by:
- *  (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2009 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * /mstring/amd64/boot.S: boostrap for amd64 with base init and long mode 
- *                    switching
- *
+ * Boot process for AMD64
  */
-
+        
 
 #include <config.h>
-#include <arch/boot.h>
-#include <arch/e820map.h>
 #include <arch/page.h>
+#include <arch/boot.h>
+#include <arch/pt_defs.h>
+#include <arch/msr.h>
 #include <arch/cpu.h>
-	
-#define START_STACK	(BOOT_OFFSET - BOOT_STACK_SIZE)
-#define PTL_NO_EXEC        (1<<63)
-#define PTL_ACCESSED       (1<<5)
-#define PTL_CACHE_DISABLE  (1<<4)
-#define PTL_CACHE_THROUGH  (1<<3)
-#define PTL_USER           (1<<2)
-#define PTL_WRITABLE       (1<<1)
-#define PTL_PRESENT        1
-#define PTL_2MB_PAGE       (1<<7)
-#define _PTL_ENTRIES       512
-#define PTL0_ENTRIES_ARCH  _PTL_ENTRIES
-#define PTL1_ENTRIES_ARCH  _PTL_ENTRIES
-#define PTL2_ENTRIES_ARCH  _PTL_ENTRIES
-#define PTL3_ENTRIES_ARCH  _PTL_ENTRIES
-#define PTL0_SIZE_ARCH     PAGE_SIZE
-#define PTL1_SIZE_ARCH     PAGE_SIZE
-#define PTL2_SIZE_ARCH     PAGE_SIZE
-#define PTL3_SIZE_ARCH     PAGE_SIZE
-	
-.section K_TEXT_START, "ax"
 
+.set KTEXT_SEG,   8
+.set KDATA_SEG,   16
+.set KTEXT32_SEG, 24
+
+.section bootstrap_text, "ax"
 .code32
+.globl  start, _start, start32, start64, kernel_main, smp_start32
 .align 4
-.global multiboot_image_start
+
 multiboot_header:
-	.long MULTIBOOT_HEADER_MAGIC
-	.long MULTIBOOT_HEADER_FLAGS
-	.long -(MULTIBOOT_HEADER_MAGIC + MULTIBOOT_HEADER_FLAGS) /* checksum */
-	.long multiboot_header
-	.long unmapped_ktext_start
-	.long 0
-	.long 0
-	.long multiboot_image_start /* start point */
+        .long MULTIBOOT_HEADER_MAGIC
+        .long MULTIBOOT_HEADER_FLAGS
+        .long -(MULTIBOOT_HEADER_MAGIC + MULTIBOOT_HEADER_FLAGS)
+        .long multiboot_header
+        .long __bootstrap_start
+        .long 0
+        .long 0
+        .long start
 
-multiboot_image_start:
-	movl $START_STACK, %esp			/* initialize stack pointer */
-	lgdtl bootstrap_gdtr			/* initialize Global Descriptor Table register */
+_start:
+start:
+        movl $kernel_jump_addr, %edx
+        movl $KVIRT_TO_PHYS(kernel_main), 0(%edx)
+        addl $(KERNEL_OFFSET & 0xFFFFFFFF), 0(%edx)
+        movl $(KERNEL_OFFSET >> 32), 4(%edx)
+start32:        
+        cli /* make sure that interrupts are disabled */
 
-	movw $gdtselector(KDATA_DES), %cx
-	movw %cx, %es
-	movw %cx, %ds				/* kernel data + stack */
-	movw %cx, %ss
-	/* Simics seems to remove hidden part of GS on entering user mode
-	 * when _visible_ part of GS does not point to user-mode segment */
-	movw $gdtselector(UDATA_DES), %cx
-	movw %cx, %fs
-	movw %cx, %gs
-	
-	jmpl $gdtselector(KTEXT32_DES), $multiboot_meeting_point
-	multiboot_meeting_point:
-	
-	movl %eax, grub_eax			/* save parameters from GRUB */
-	movl %ebx, grub_ebx
-	
-	/* Protected 32-bit. We want to reuse the code-seg descriptor,
-	 * the Default operand size must not be 1 when entering long mode */
-	
-	movl $(INTEL_CPUID_EXTENDED), %eax  /* now we need to check varios cpu features*/
- 	cpuid
- 	cmp $(INTEL_CPUID_EXTENDED), %eax
-	ja extended_cpuid_supported
-		
-		movl $extended_cpuid_msg, %esi
-		jmp error_halt
-	
-	extended_cpuid_supported:
-	
-	movl $(AMD_CPUID_EXTENDED), %eax
-	cpuid
-	bt $(AMD_EXT_LONG_MODE), %edx
- 	jc long_mode_supported
-		
-		movl $long_mode_msg, %esi
-		jmp error_halt
+        /* save multiboot info pointer */
+        movl %ebx, KVIRT_TO_PHYS(multiboot_info_ptr)
+        /* and multiboot magic value */
+        movl %eax, KVIRT_TO_PHYS(multiboot_magic)
 
-	long_mode_supported:
-	
-	bt $(AMD_EXT_NOEXECUTE), %edx
-	jc noexecute_supported
-	
-		movl $noexecute_msg, %esi
-		jmp error_halt
-	
-	noexecute_supported:
-	
-	movl $(INTEL_CPUID_STANDARD), %eax
-	cpuid
-	bt $(INTEL_FXSAVE), %edx
- 	jc fx_supported
-	
-		movl $fx_msg, %esi
-		jmp error_halt
-	
-	fx_supported:
-	
-	bt $(INTEL_SSE2), %edx
- 	jc sse2_supported
-	
-		movl $sse2_msg, %esi
-		jmp error_halt
-	
-	sse2_supported:
-		
-	/* Enable 64-bit page translation entries - CR4.PAE = 1.
-	 * Paging is not enabled until after long mode is enabled */
-	
-	movl %cr4, %eax
-	btsl $5, %eax
-	movl %eax, %cr4
+smp_start32:    
+        movl $kernel_stack, %esp
 
-	/* Set up paging tables */
-	
-	leal ptl_0, %eax
-	movl %eax, %cr3
-	
-	/* Enable long mode */
-	
-	movl $EFER_MSR_NUM, %ecx			/* EFER MSR number */
-	rdmsr						/* Read EFER */
-	btsl $AMD_LME_FLAG, %eax			/* Set LME = 1 */
-	wrmsr						/* Write EFER */
-	
-	/* Enable paging to activate long mode (set CR0.PG = 1) */
-	
-	movl %cr0, %eax
-	btsl $31, %eax
-	movl %eax, %cr0
-	
-	/* At this point we are in compatibility mode */
-	
-	jmpl $gdtselector(KTEXT_DES), $start64
+        /* Check  */
+        movl $0x80000000, %eax
+        cpuid
+        cmpl $0x80000000, %eax
+        jbe no_long_mode
+
+        movl $0x80000001, %eax
+        cpuid
+        btl $29, %edx
+        jnc no_long_mode
+        
+        lgdt boot_gdt_descr
+
+        movl $KDATA_SEG, %eax
+        movl %eax, %ds
+        movl %eax, %es
+        movl %eax, %fs
+        movl %eax, %gs
+
+        /* Enable 64-bit page translation-table by setting CR4.PAE = 1 */
+        movl %cr4, %eax
+        orl $CR4_PAE, %eax
+        movl %eax, %cr4
+
+        /*
+         * Create the long-mode page tables, and initialize the 64-bit CR3
+         * to point to the base of PML4 containing 4M identity mapping and higher-half
+         * kernel mapping.
+         */
+        movl $pml4_base, %eax
+        movl %eax, %cr3
+
+        /* Enable long mode (set EFER.LME = 1) */
+        movl $MSR_EFER, %ecx
+        rdmsr
+        btsl $EFER_LME, %eax
+        wrmsr
+
+        /* Enable paging to activate long mode */
+        movl %cr0, %eax
+        orl $CR0_PG, %eax
+        movl %eax, %cr0
+
+        jmpl $KTEXT_SEG, $start64
 
 .code64
 start64:
-	movq $(p2k(START_STACK)), %rsp
-	movl grub_eax, %eax
-	movl grub_ebx, %ebx
-	
-	cmpl $MULTIBOOT_LOADER_MAGIC, %eax		/* compare GRUB signature */
-	je valid_boot
-		
-		xorl %ecx, %ecx				/* no memory size or map available */
-		movl %ecx, e820count
-		
-		jmp invalid_boot
-		
-	valid_boot:
-		
-		movl (%ebx), %eax			/* ebx = physical address of struct multiboot_info */
-		
-		bt $3, %eax				/* mbi->flags[3] (mods_count, mods_addr valid) */
-		jc mods_valid
-			
-			xorq %rcx, %rcx
-			movq %rcx, init
-			jmp mods_end
-		
-		mods_valid:
-		
-		xorq %rcx, %rcx
-		movl 20(%ebx), %ecx			/* mbi->mods_count */
-		movq %rcx, init
-		
-		cmpl $0, %ecx
-		je mods_end
-		
-		movl 24(%ebx), %esi			/* mbi->mods_addr */
-		movq $init, %rdi
-		
-		mods_loop:
-			
-			xorq %rdx, %rdx
-			movl 0(%esi), %edx		/* mods->mod_start */
-			/*movq $0xffff800000000000, %r10*/
-			addq %r10, %rdx
-			movq %rdx, 8(%rdi)
-			
-			xorq %rdx, %rdx
-			movl 4(%esi), %edx
-			subl 0(%esi), %edx		/* mods->mod_end - mods->mod_start */
-			movq %rdx, 16(%rdi)
-			
-			addl $16, %esi
-			addq $16, %rdi
-			
-			loop mods_loop
-			
-		mods_end:
-		bt $6, %eax				/* mbi->flags[6] (mmap_length, mmap_addr valid)	*/
-		jc mmap_valid
-			
-			xorl %edx, %edx
-			jmp mmap_invalid
-			
-		mmap_valid:
-		movl 44(%ebx), %ecx			/* mbi->mmap_length */
-		movl 48(%ebx), %esi			/* mbi->mmap_addr */
-		movq $e820table, %rdi
-		xorl %edx, %edx
-		
-		mmap_loop:
-			cmpl $0, %ecx
-			jle mmap_end
-			
-			movl 4(%esi), %eax		/* mmap->base_addr_low */
-			movl %eax, (%rdi)
-			
-			movl 8(%esi), %eax		/* mmap->base_addr_high */
-			movl %eax, 4(%rdi)
-			
-			movl 12(%esi), %eax		/* mmap->length_low */
-			movl %eax, 8(%rdi)
-			
-			movl 16(%esi), %eax		/* mmap->length_high */
-			movl %eax, 12(%rdi)
-			
-			movl 20(%esi), %eax		/* mmap->type */
-			movl %eax, 16(%rdi)
-			
-			movl (%esi), %eax		/* mmap->size */
-			addl $0x4, %eax
-			addl %eax, %esi
-			subl %eax, %ecx
-			addq $E820MAP_E820_RECORDSIZE, %rdi
-			incl %edx
-			jmp mmap_loop
-		
-		mmap_end:
-		
-		mmap_invalid:
-		movl %edx, e820count
-		
-	invalid_boot:
-#ifdef CONFIG_SMP
-	/* we're need to copy all bootstrap routines below 1024k */
-	movq $BOOT_OFFSET, %rsi
-	movq $AP_BOOT_OFFSET, %rdi
-	movq $_hardcoded_unmapped_size, %rcx
-	cld
-	rep movsb
+        
+        movq $PHYS_TO_KVIRT(kernel_stack), %rsp
+        movq kernel_jump_addr, %rax
+        callq *%rax
+        cli
+        hlt
 
-#endif
+.code32
+no_long_mode:
+        movl $no_long_mode_msg, %esi
+	    movl $0xb8000, %edi			/* base of EGA text mode memory */
+	    xorl %eax, %eax
+	
+	    movw $0x3d4, %dx			/* read bits 8 - 15 of the cursor address */
+	    movb $0xe, %al
+	    outb %al, %dx
+	
+	    movw $0x3d5, %dx
+	    inb %dx, %al
+	    shl $8, %ax
+	
+	    movw $0x3d4, %dx			/* read bits 0 - 7 of the cursor address */
 
-	call main_routine   /* call normal C code,uff */
+	    movb $0xf, %al
+	    outb %al, %dx
 	
-	cli
-	hlt
-
-
-/* Print string from %esi to EGA display (in red) and halt */
-error_halt:
-	movl $0xb8000, %edi			/* base of EGA text mode memory */
-	xorl %eax, %eax
+	    movw $0x3d5, %dx
+	    inb %dx, %al
 	
-	movw $0x3d4, %dx			/* read bits 8 - 15 of the cursor address */
-	movb $0xe, %al
-	outb %al, %dx
-	
-	movw $0x3d5, %dx
-	inb %dx, %al
-	shl $8, %ax
-	
-	movw $0x3d4, %dx			/* read bits 0 - 7 of the cursor address */
-	movb $0xf, %al
-	outb %al, %dx
-	
-	movw $0x3d5, %dx
-	inb %dx, %al
-	
-	cmp $1920, %ax
-	jbe cursor_ok
+	    cmp $1920, %ax
+	    jbe cursor_ok
 		movw $1920, %ax			/* sanity check for the cursor on the last line */
-	cursor_ok:
+cursor_ok:	
+	    movw %ax, %bx
+        
+	    shl $1, %eax
+	    addl %eax, %edi
 	
-	movw %ax, %bx
-	shl $1, %eax
-	addl %eax, %edi
-	
-	movw $0x0c00, %ax			/* black background, light red foreground */
-	cld
-	
-	ploop:
+	    movw $0x0c00, %ax			/* black background, light red foreground */
+	    cld	
+ploop:
 		lodsb
 		cmp $0, %al
 		je ploop_end
 		stosw
 		inc %bx	
 		jmp ploop
-	ploop_end:
+ploop_end:	
+	    movw $0x3d4, %dx			/* write bits 8 - 15 of the cursor address */
+	    movb $0xe, %al
+	    outb %al, %dx
 	
-	movw $0x3d4, %dx			/* write bits 8 - 15 of the cursor address */
-	movb $0xe, %al
-	outb %al, %dx
+	    movw $0x3d5, %dx
+	    movb %bh, %al
+	    outb %al, %dx
 	
-	movw $0x3d5, %dx
-	movb %bh, %al
-	outb %al, %dx
+	    movw $0x3d4, %dx			/* write bits 0 - 7 of the cursor address */
+	    movb $0xf, %al
+	    outb %al, %dx
 	
-	movw $0x3d4, %dx			/* write bits 0 - 7 of the cursor address */
-	movb $0xf, %al
-	outb %al, %dx
-	
-	movw $0x3d5, %dx
-	movb %bl, %al
-	outb %al, %dx
-		
-	cli
-	hlt
-				
+	    movw $0x3d5, %dx
+	    movb %bl, %al
+	    outb %al, %dx
 
-.section K_INI_PTLS, "aw", @progbits
+        /* and finally spin forever */
+1:
+        jmp 1b
+        
+.section bootstrap_data, "aw"
 
-/*
- * Macro for generating initial page table contents.
- * cnt	Number of entries to generate. Must be multiple of 8.
- * g	Number of GB that will be added to the mapping.
- */
-.macro ptl2gen cnt g 
-.if \cnt
-	ptl2gen "\cnt - 8" \g 
-	.quad ((\cnt - 8) * 0x200000) + (\g * 1024 * 1024 * 1024) | (PTL_WRITABLE | PTL_PRESENT | PTL_2MB_PAGE)
-	.quad ((\cnt - 7) * 0x200000) + (\g * 1024 * 1024 * 1024) | (PTL_WRITABLE | PTL_PRESENT | PTL_2MB_PAGE)
-	.quad ((\cnt - 6) * 0x200000) + (\g * 1024 * 1024 * 1024) | (PTL_WRITABLE | PTL_PRESENT | PTL_2MB_PAGE)
-	.quad ((\cnt - 5) * 0x200000) + (\g * 1024 * 1024 * 1024) | (PTL_WRITABLE | PTL_PRESENT | PTL_2MB_PAGE)
-	.quad ((\cnt - 4) * 0x200000) + (\g * 1024 * 1024 * 1024) | (PTL_WRITABLE | PTL_PRESENT | PTL_2MB_PAGE)
-	.quad ((\cnt - 3) * 0x200000) + (\g * 1024 * 1024 * 1024) | (PTL_WRITABLE | PTL_PRESENT | PTL_2MB_PAGE)
-	.quad ((\cnt - 2) * 0x200000) + (\g * 1024 * 1024 * 1024) | (PTL_WRITABLE | PTL_PRESENT | PTL_2MB_PAGE)
-	.quad ((\cnt - 1) * 0x200000) + (\g * 1024 * 1024 * 1024) | (PTL_WRITABLE | PTL_PRESENT | PTL_2MB_PAGE)
-.endif
-.endm
+.globl kernel_jump_addr
+kernel_jump_addr:
+        .quad 0
+        
+boot_gdt_descr:
+        .word boot_gdt_end - boot_gdt_table
+        .long boot_gdt_table
 
-/* Page table for pages in the first gigabyte. */
-.align 4096
-.global ptl_2_0g
-ptl_2_0g:	
-	ptl2gen 512 0
-
-/* Page table for pages in the second gigabyte. */
-.align 4096
-.global ptl_2_1g
-ptl_2_1g:
-	ptl2gen 512 1
-
-/* Page table for pages in the third gigabyte. */
-.align 4096
-.global ptl_2_2g
-ptl_2_2g:
-	ptl2gen 512 2
-
-/* Page table for pages in the fourth gigabyte. */
-.align 4096
-.global ptl_2_3g
-ptl_2_3g:
-	ptl2gen 512 3
+boot_gdt_table:
+        .quad   0x0000000000000000  /* NULL descriptor */        
+        .quad   0x00af9a000000ffff  /* Code segment */
+        .quad   0x008f92000000ffff  /* Data segment */
+        .quad   0x00cf9a000000ffff  /* 32bit Code segment */
+boot_gdt_end:
 
 .align 4096
-.global ptl_1
-ptl_1:
-	/* Identity mapping for [0; 4G) */
-	.quad ptl_2_0g + (PTL_WRITABLE | PTL_PRESENT)
-	.quad ptl_2_1g + (PTL_WRITABLE | PTL_PRESENT) 
-	.quad ptl_2_2g + (PTL_WRITABLE | PTL_PRESENT)
-	.quad ptl_2_3g + (PTL_WRITABLE | PTL_PRESENT)
-	.fill 506, 8, 0
-	/* Mapping of [0; 1G) at -2G */
-	.quad ptl_2_0g + (PTL_WRITABLE | PTL_PRESENT)
-	.fill 1, 8, 0
-	
+.global pd_base
+pd_base:
+        .quad (PDE_PRESENT | PDE_RW | PDE_PS)
+        .quad 0x200000 + (PDE_PRESENT | PDE_RW | PDE_PS)
+        .fill 510, 8, 0
+
 .align 4096
-.global ptl_0
-ptl_0:
-	.quad ptl_1 + (PTL_WRITABLE | PTL_PRESENT)
-	.fill 255,8,0
-	.quad ptl_1 + (PTL_WRITABLE | PTL_PRESENT)
-	.fill 254,8,0
-	.quad ptl_1 + (PTL_WRITABLE | PTL_PRESENT)
+.global pdp_base
+pdp_base:
+        .quad pd_base + (PDE_PRESENT | PDE_RW)
+        .fill 509, 8, 0
+        .quad pd_base + (PDE_PRESENT | PDE_RW)
+        .quad 0x0000000000000000
 
-.section K_DATA_START, "aw", @progbits
-
-.global bootstrap_gdtr
-bootstrap_gdtr:
-	.word gdtselector(GDT_ITEMS)
-	.long k2p(gdt)
-
-grub_eax:
-	.long 0
-
-grub_ebx:
-	.long 0
-
-extended_cpuid_msg:
-	.asciz "Extended CPUID not supported. System halted."
-long_mode_msg:
-	.asciz "64 bit long mode not supported. System halted."
-noexecute_msg:
-	.asciz "No-execute pages not supported. System halted."
-fx_msg:
-	.asciz "FXSAVE/FXRESTORE instructions not supported. System halted."
-sse2_msg:
-	.asciz "SSE2 instructions not supported. System halted."
+.align 4096
+.global pml4_base
+pml4_base:
+        .quad pdp_base + (PDE_PRESENT | PDE_RW)
+        .fill 510, 8, 0        
+        .quad pdp_base + (PDE_PRESENT | PDE_RW)
+        
+/* 4K bootstrap kernel stack */
+.fill 512, 8, 0
+.global kernel_stack
+kernel_stack:
+no_long_mode_msg:
+        .asciz "FATAL ERROR: CPU doesn't support 64-bit long mode!"

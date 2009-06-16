@@ -27,8 +27,7 @@
 #include <mm/mmpool.h>
 #include <mm/page.h>
 #include <mm/tlsf.h>
-#include <mm/idalloc.h>
-#include <mstring/kernel.h>
+#include <mstring/panic.h>
 #include <arch/atomic.h>
 #include <arch/types.h>
 
@@ -42,9 +41,6 @@ void mmpools_initialize(void)
   memset(mm_pools, 0, sizeof(*mm_pools) * MMPOOLS_MAX);
   for (i = 0; i < MMPOOLS_MAX; i++) {
     switch (i) {
-        case BOOTMEM_POOL_TYPE:
-          mm_pools[i].name = "Bootmem";
-          break;
         case GENERAL_POOL_TYPE:
           mm_pools[i].name = "General";
           break;
@@ -53,6 +49,9 @@ void mmpools_initialize(void)
           break;
         case HIGHMEM_POOL_TYPE:
           mm_pools[i].name = "Highmem";
+          break;
+        case BOOTMEM_POOL_TYPE:
+          mm_pools[i].name = "Bootmem";
           break;
         default:
           panic("Unknown memory pool type: %d\n", i);
@@ -86,9 +85,6 @@ void mmpool_activate(mm_pool_t *pool)
       case GENERAL_POOL_TYPE: case DMA_POOL_TYPE:
         tlsf_allocator_init(pool);
         tlsf_validate_dbg(pool->allocator.alloc_ctx);
-        break;
-      case BOOTMEM_POOL_TYPE:
-        idalloc_init(pool);
         break;
       default:
         panic("Unknown memory pool type: %d!", pool->type);

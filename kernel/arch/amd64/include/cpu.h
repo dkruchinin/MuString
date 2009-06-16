@@ -15,242 +15,188 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
- * (c) Copyright 2005,2008 Tirra <tirra.newly@gmail.com>
  * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
- *
- * include/mstring/amd64/cpu.h: defines used for cpu and cpuid functionality, also
- *                          used in bootstrap and cpu identification
  *
  */
 
-#ifndef __ARCH_CPU_H__
-#define __ARCH_CPU_H__
-
-/* specific amd flags and registers */
-#define AMD_MSR_STAR    0xc0000081 /* msr */
-#define AMD_MSR_LSTAR   0xc0000082
-#define AMD_MSR_SFMASK  0xc0000084
-#define AMD_MSR_FS      0xc0000100
-#define AMD_MSR_GS      0xc0000101
-#define AMD_MSR_GS_KRN  0xc0000102
-#define EFER_MSR_NUM    0xc0000080
-/* flags */
-#define AMD_SCE_FLAG    0
-#define AMD_LME_FLAG    8
-#define AMD_LMA_FLAG    10
-#define AMD_FFXSR_FLAG  14
-#define AMD_NXE_FLAG    11
-
-#define RFLAGS_IF  (1<<9)
-#define RFLAGS_RF  (1<<16)
-
-/* cpuid stuff */
-/* feature flags */
-#define AMD_CPUID_EXTENDED   0x80000001 /* amd64 */
-#define AMD_EXT_NOEXECUTE    20
-#define AMD_EXT_LONG_MODE    29
-#define INTEL_CPUID_STANDARD 0x00000001 /* intel */
-#define INTEL_CPUID_EXTENDED 0x80000000
-#define INTEL_SSE2           26
-#define INTEL_FXSAVE         24
-
-#define IDT_ITEMS  256  /* interrupt descriptors */
-#define GDT_ITEMS  10   /* GDT */
-
-#define NIL_DES  0  /* nil(null) descriptor */
-#define KTEXT_DES    1 /* kernel space */
-#define KDATA_DES    2
-#define UDATA_DES    3 /* user space */
-#define UTEXT_DES    4
-#define KTEXT32_DES  5 /* it's requered while bootstrap in 32bit mode */
-#define TSS_DES      6
-
-#define PL_KERNEL  0
-#define PL_USER    3
-
-#define AR_PRESENT    (1<<7)  /* avialable*/
-#define AR_DATA       (2<<3)
-#define AR_CODE       (3<<3)
-#define AR_WRITEABLE  (1<<1)
-#define AR_READABLE   (1<<1)
-#define AR_TSS        (0x9)   /* task state segment */
-#define AR_INTR       (0xe)   /* interrupt */
-#define AR_TRAP       (0xf)
-
-#define DPL_KERNEL  (PL_KERNEL<<5)
-#define DPL_USPACE  (PL_USER<<5)
-
-#define TSS_BASIC_SIZE  104
-#define TSS_IOMAP_SIZE  ((4*4096)+1)  /* 16k&nil for mapping */
-#define TSS_DEFAULT_LIMIT  (TSS_BASIC_SIZE-1)
-#define TSS_IOPORTS_PAGES  2
-
-/* Reserve last 8 bits. */
-#define TSS_IOPORTS_LIMIT  (TSS_IOPORTS_PAGES*PAGE_SIZE*8-1-TSS_BASIC_SIZE-8)
-
-#define PTD_SELECTOR  1  /* LDT selector that refers to per-task data. */
-
-#define IO_PORTS        (IDT_ITEMS*1024)
-#define LDT_DES      8
-#define LDT_ITEMS  2    /* Default number of LDT entries (must include 'nil') */
-#define AR_LDT        (0x2)   /* 64-bit LDT descriptor */
-
-/* bootstrap macros */
-#define idtselector(des)  ((des) << 4)
-#define gdtselector(des)  ((des) << 3)
-
-/* Macros for defining task selectors. */
-#define USER_SELECTOR(s) (gdtselector(s) | PL_USER)
-#define KERNEL_SELECTOR(s) gdtselector(s)
-
-#ifndef __ASM__
+#ifndef __MSTRING_ARCH_CPU_H__
+#define __MSTRING_ARCH_CPU_H__
 
 #include <config.h>
-#include <arch/page.h>
-#include <arch/types.h>
 
-typedef uint32_t cpu_id_t;
+/**************
+ * CR0 register
+ */
+#define CR0_PE 0x00000001 /* Protection enabled */
+#define CR0_MP 0x00000002 /* Monitor coprocessor */
+#define CR0_EM 0x00000004 /* Emulation */
+#define CR0_TS 0x00000008 /* Task switched */
+#define CR0_ET 0x00000010 /* Extension type */
+#define CR0_NE 0x00000020 /* Numeric error */
+#define CR0_WP 0x00010000 /* Write protect */
+#define CR0_AM 0x00040000 /* Alignment mask */
+#define CR0_NW 0x20000000 /* Not writethrough */
+#define CR0_CD 0x40000000 /* Cache disable */
+#define CR0_PG 0x80000000 /* Paging */
 
-typedef enum __prot_ring {
-  PROT_RING_0 = 0,
-  PROT_RING_1 = 1,
-  PROT_RING_2 = 2,
-  PROT_RING_3 = 3,
-} prot_ring_t;
+/***************
+ * CR3 register
+ */
+#define CR3_PWT 0x0008 /* Page-Level Writethrough */
+#define CR3_PCD 0x0010 /* Page-Level Cache Disable */
 
-typedef enum __ist_stack_frame {
-  IST_STACK_SLOT_1 = 1,
-  IST_STACK_SLOT_2,
-  IST_STACK_SLOT_3,
-  IST_STACK_SLOT_4,
-  IST_STACK_SLOT_5,
-  IST_STACK_SLOT_6,
-  IST_STACK_SLOT_7,
-} ist_stack_frame_t;
+#ifdef CONFIG_AMD64
+#define CR3_PTABLE_SHIFT 12
+#define CR3_PTABLE_MASK  0xffffffffffU
+#else /* CONFIG_AMD64 */
+#ifndef CONFIG_PAE
+#define CR3_PTABLE_SHIFT 12
+#define CR3_PTABLE_MASK  0xfffffU
+#else /* !CONFIG_PAE */
+#define CR3_PTABLE_SHIFT 5
+#define CR3_PTABLE_MASK  0x7ffffffU
+#endif /* CONFIG_PAE */
+#endif /* !CONFIG_AMD64 */
 
-struct __descriptor { /* global descriptor */
-  unsigned limit_0_15: 16;
-  unsigned base_0_15: 16;
-  unsigned base_16_23: 8;
-  unsigned access: 8;
-  unsigned limit_16_19: 4;
-  unsigned available: 1;
-  unsigned longmode: 1;
-  unsigned special: 1;
-  unsigned granularity : 1;
-  unsigned base_24_31: 8;
-} __attribute__ ((packed));
-typedef struct __descriptor descriptor_t;
+/***************
+ * CR4 register
+ */
+#define CR4_VME        0x0001 /* Virtual-8086 Mode Extensions */
+#define CR4_PVI        0x0002 /* Protected-Mode Virtual Interrupts */
+#define CR4_TSD        0x0004 /* Time Stamp Disable */
+#define CR4_DE         0x0008 /* Debugging Extension */
+#define CR4_PSE        0x0010 /* Page Size Extension */
+#define CR4_PAE        0x0020 /* Physical-Address Extension */
+#define CR4_MCE        0x0040 /* Machine Check Enable */
+#define CR4_PGE        0x0080 /* Page-Global Enable */
+#define CR4_PCE        0x0100 /* Performance-Monitoring Counter Enable */
+#define CR4_OSFXSR     0x0200 /* Operating System FXSAVE/FXRSTOR Support */
+#define CR4_OSXMMEXCPT 0x0400 /* Operating System Unmasked Exception Support */
 
-struct __tss_descriptor { /* task state segments descriptor */
-  unsigned limit_0_15: 16;
-  unsigned base_0_15: 16;
-  unsigned base_16_23: 8;
-  unsigned type: 4;
-  unsigned : 1;
-  unsigned dpl : 2;
-  unsigned present : 1;
-  unsigned limit_16_19: 4;
-  unsigned available: 1;
-  unsigned : 2;
-  unsigned granularity : 1;
-  unsigned base_24_31: 8;
-  unsigned base_32_63 : 32;
-  unsigned  : 32;
-} __attribute__ ((packed));
-typedef struct __tss_descriptor tss_descriptor_t;
+/***************
+ * rFLAGS register
+ */
+#define RFLAGS_CF   0x000001 /* Carry Flag */
+#define RFLAGS_PF   0x000004 /* Parity Flag */
+#define RFLAGS_AF   0x000010 /* Auxiliary Flag */
+#define RFLAGS_ZF   0x000040 /* Zero flag */
+#define RFLAGS_SF   0x000080 /* Sign Flag */
+#define RFLAGS_TF   0x000100 /* Trap flag */
+#define RFLAGS_IF   0x000200 /* Interrupt flag */
+#define RFLAGS_DF   0x000400 /* Direction flag */
+#define RFLAGS_OF   0x000800 /* Overflow flag */
+#define RFLAGS_NT   0x004000 /* Nested Task */
+#define RFLAGS_RF   0x010000 /* Resume flag */
+#define RFLAGS_VM   0x020000 /* Virtual-8086 Mode */
+#define RFLAGS_AC   0x040000 /* Alignment Check */
+#define RFLAGS_VIF  0x080000 /* Virtual Interrupt Flag */
+#define RFLAGS_VIP  0x100000 /* Virtual Interrupt Pending */
+#define RFLAGS_ID   0x200000 /* ID flag */
 
-typedef struct __tss_descriptor ldt_descriptor_t;
+#define RFLAGS_IOPL_SHIFT 12
+#define RFLAGS_IOPL_MASK  0x03
 
-struct __intrdescriptor { /* interrupt descriptor */
-  unsigned offset_0_15: 16;
-  unsigned selector: 16;
-  unsigned ist: 3;
-  unsigned unused: 5;
-  unsigned type: 5;
-  unsigned dpl: 2;
-  unsigned present: 1;
-  unsigned offset_16_31: 16;
-  unsigned offset_32_63: 32;
-  unsigned  : 32;
-} __attribute__ ((packed));
-typedef struct __intrdescriptor idescriptor_t;
+#ifndef __ASM__
+#include <arch/msr.h>
+#include <mstring/types.h>
 
-#ifdef CONFIG_SMP
-#define __percpu__ /*__attribute__((__section__(".percpu_data")))*/
-#else
-#define __percpu__
-#endif /* CONFIG_SMP */
+struct cpu;
+typedef struct arch_cpu {
+  uint32_t apic_id;
+} arch_cpu_t;
 
-struct __ptr_16_64 { /* area with 16bit size limitation */
-  uint16_t limit;
-  uint64_t base;
-} __attribute__ ((packed));
-typedef struct __ptr_16_64 ptr_16_64_t;
-                                                                                   
-struct __ptr_16_32 { /* area with 16bit size limitation (32bit compatibility) */
-  uint16_t limit;
-  uint32_t base;
-} __attribute__ ((packed));
-typedef struct __ptr_16_32 ptr_16_32_t;
+static inline void cpuid(uint32_t *eax, uint32_t *ebx,
+                         uint32_t *ecx, uint32_t *edx)
+{
+  __asm__ volatile ("cpuid\n"                    
+                    : "=a" (*eax), "=b" (*ebx),
+                      "=c" (*ecx), "=d" (*edx)
+                    : "a" (*eax));
+}
 
-struct __tss { /* TSS definion structure */
-  uint32_t reserve1;
-  uint64_t rsp0;
-  uint64_t rsp1;
-  uint64_t rsp2;
-  uint64_t reserve2;
-  uint64_t ist1;
-  uint64_t ist2;
-  uint64_t ist3;
-  uint64_t ist4;
-  uint64_t ist5;
-  uint64_t ist6;
-  uint64_t ist7;
-  uint64_t reserve3;
-  uint16_t reserve4;
-  uint16_t iomap_base;
-  uint8_t iomap[];
-} __attribute__ ((packed));
-typedef struct __tss tss_t;
+#define CURRENT_CPU() ((struct cpu *)msr_read(MSR_KERN_GS_BASE))
 
-/* external functions and global vars(pmm.c) */
-extern descriptor_t gdt[CONFIG_NRCPUS][GDT_ITEMS];
-extern idescriptor_t idt[];
-extern ptr_16_64_t gdtr;
-extern ptr_16_32_t boot_gdt; /* GDT during boot */
-extern ptr_16_32_t prot_gdt; /* GDT while protected mode */
-extern tss_t *tssp; /* TSS */
+static inline void arch_set_current_cpu(struct cpu *cur_cpu)
+{
+  msr_write(MSR_KERN_GS_BASE, (uintptr_t)cur_cpu);
+}
 
-/* initing functions */
-extern void arch_pmm_init(cpu_id_t cpu);
-extern void idt_init(void);
-extern void tss_init(tss_t *tp);
+#ifdef CONFIG_AMD64
+static inline uint64_t rflags_read(void)
+{
+  uint64_t ret;
+  __asm__ volatile ("pushfq\n\t"
+                    "popq %0\n"
+                    : "=r" (ret));
 
-/* context switching - related functions. */
-void load_tss(cpu_id_t cpu,tss_t *new_tss,uint16_t limit);
-void copy_tss(tss_t *dst_tss,tss_t *src_tss);
-void load_ldt(cpu_id_t cpu,uintptr_t ldt,uint16_t limit);
+  return ret;
+}
 
-/* gdt related misc functions */
-extern void gdt_tss_setbase(descriptor_t *p,uintptr_t baddre);
-extern void gdt_tss_setlim(descriptor_t *p,uint32_t lim);
-/* idt realted misc functions */
-extern void idt_set_offset(idescriptor_t *p,uintptr_t off);
+static inline void rflags_write(uint64_t val)
+{
+  __asm__ volatile ("pushq %0\n\t"
+                    "popfq\n"
+                    :: "r" (val));
+}
 
-extern tss_t *get_cpu_tss(cpu_id_t cpu);
+#define __READ_CRx(x)                           \
+  static inline uint64_t read_cr##x(void)       \
+  {                                             \
+    uint64_t ret;                               \
+    __asm__ volatile ("movq %%cr" #x ", %0\n"   \
+                      : "=r" (ret));            \
+    return ret;                                 \
+  }
 
-/* Functions for dealing with traps and gates. */
-int install_trap_gate( uint32_t slot, uintptr_t handler,
-                       prot_ring_t dpl, ist_stack_frame_t ist );
-int install_interrupt_gate( uint32_t slot, uintptr_t handler,
-                            prot_ring_t dpl, ist_stack_frame_t ist );
-void descriptor_set_base(descriptor_t *d,uint32_t base);
+#define __WRITE_CRx(x)                          \
+  static inline void write_cr##x(uint64_t val)  \
+  {                                             \
+    __asm__ volatile ("movq %0, %%cr" #x "\n" \
+                      :: "r" (val));          \
+  }
+#else /* CONFIG_AMD64 */
+static inline uint32_t rflags_read(void)
+{
+  uint32_t ret;
+  __asm__ volatile ("pushfd\n\t"
+                    "popl %0\n"
+                    : "=r" (ret));
+  return ret;
+}
 
-/* varios CPU functions from cpu.c */
-void arch_cpu_init(cpu_id_t cpu);
+static inline void rflags_write(uint32_t val)
+{
+  __asm__ volatile ("pushl %0\n\t"
+                    "popfd\n"
+                    :: "r" (val));
+}
+
+#define __READ_CRx(x)                           \
+  static inline uint32_t read_cr##x(void)       \
+  {                                             \
+    uint32_t ret;                               \
+    __asm__ volatile ("movl %%cr" #x ", %0\n"   \
+                      : "=r" (ret));            \
+    return ret;                                 \
+  }
+
+#define __WRITE_CRx(x)                          \
+  static inline void write_cr##x(uint32_t val)  \
+  {                                             \
+    __asm__ volatile ("movl %0, %%cr" #x "\n"   \
+                      :: "r" (val));            \
+  }
+#endif /* !CONFIG_AMD64 */
+
+__READ_CRx(0)
+__READ_CRx(2)
+__READ_CRx(3)
+__READ_CRx(4)
+
+__WRITE_CRx(0)
+__WRITE_CRx(2)
+__WRITE_CRx(3)
+__WRITE_CRx(4)
 
 #endif /* !__ASM__ */
-
-#endif /* __ARCH_CPU_H__ */
-
+#endif /* __MSTRING_ARCH_CPU_H__ */

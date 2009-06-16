@@ -19,11 +19,21 @@ OBJCOPY := $(TOOLCHAIN)objcopy
 
 HOSTCC := gcc
 HOSTLD := ld
-# HOSTCFLAGS
-# HOSTLDFLAGS
+
+-include .config
+
+ifdef CONFIG_ARCH
+ARCH := $(shell echo $(CONFIG_ARCH) | sed 's|"||g')
+endif
+
+ODIR := mstring_dumps
+SCRIPTS_DIR := $(BUILD_ROOT)/scripts
+ARCH_DIR := $(BUILD_ROOT)/kernel/arch/$(ARCH)
+ARCH_COM_DIR := $(BUILD_ROOT)/kernel/arch/common
 
 GREP := grep
-GMAP := scripts/gmap.py
+GMAP := $(SCRIPTS_DIR)/gmap.py
+MKLINKS := $(SCRIPTS_DIR)/mklinks.sh
 LN := ln
 RM := rm
 CP := cp
@@ -52,20 +62,10 @@ export CC LD AR OBJDUMP OBJCOPY GMAP GREP CPP AS ECHO
 export HOSTCC HOSTLD HOSTCFLAGS HOSTLDFLAGS
 export GREP MAKE LN RM GMAP MKDIR CP
 export CFLAGS LDFLAGS INCLUDE
-export BUILD_ROOT ARCH NOCOLOR OBJECTS
+export BUILD_ROOT ARCH ARCH_DIR ARCH_COM_DIR OBJECTS
 export KERNELVERSION
 
 include include/Makefile.inc
--include .config
-
-ifdef CONFIG_ARCH
-ARCH := $(shell echo $(CONFIG_ARCH) | sed 's|"||g')
-endif
-
-ODIR := mstring_dumps
-SCRIPTS_DIR := $(BUILD_ROOT)/scripts
-ARCH_DIR := $(BUILD_ROOT)/kernel/arch/$(ARCH)
-ARCH_COM_DIR := $(BUILD_ROOT)/kernel/arch/common
 
 GENERICS = kernel server
 ifeq ($(CONFIG_TEST),y)
@@ -94,6 +94,8 @@ mkbins: check_config prepare $(addprefix generic_, $(GENERICS))
 
 prepare: include/arch
 	$(Q)$(MKDIR) -p $(ODIR)
+	$(Q)$(MKLINKS) clear
+	$(Q)$(MKLINKS) create
 
 include/arch:
 	$(Q)$(LN) -s $(BUILD_ROOT)/kernel/arch/$(ARCH)/include $(BUILD_ROOT)/include/arch
@@ -114,6 +116,7 @@ clean_%:
 clean:
 	$(Q)$(RM) -rf $(ODIR)
 	$(Q)$(RM) -f muielf vmuielf boot.img $(BUILD_ROOT)/include/arch
+	$(Q)$(MKLINKS) clear
 	$(Q)$(MAKE) -C. $(addprefix clean_, $(GENERICS))
 
 clean_host:
@@ -122,7 +125,7 @@ clean_host:
 
 cleanconf:
 	$(call echo-header,"Cleaning configs")
-	$(Q)$(RM) -rf .config include/autoconf.h include/config/* $(VERFILE)
+	$(Q)$(RM) -rf .config include/config.h include/config/ $(VERFILE)
 
 distclean: clean_host clean cleanconf
 

@@ -22,14 +22,15 @@
  *
  */
 
-#ifndef __SMP_H__
-#define __SMP_H__
+#ifndef __MSTRING_SMP_H__
+#define __MSTRING_SMP_H__
 
 #include <config.h>
-#include <mstring/kprintf.h>
-#include <mstring/types.h>
 #include <arch/cpu.h>
 #include <arch/scheduler.h>
+#include <mstring/kprintf.h>
+#include <mstring/panic.h>
+#include <mstring/types.h>
 
 extern volatile cpu_id_t online_cpus;
 
@@ -74,7 +75,7 @@ static inline void smp_hooks_fire(cpu_id_t cpuid)
 #endif /* CONFIG_SMP */
 
 #define PER_CPU_VAR(name)                       \
-  __percpu_var_##name[CONFIG_NRCPUS] __percpu__
+  __percpu_var_##name[CONFIG_NRCPUS]
 
 #define raw_percpu_get_var(name, cpu)           \
   ({ __percpu_var_##name + (cpu); })
@@ -112,5 +113,5 @@ static inline bool is_cpu_online(cpu_id_t cpu)
 
 #define ONLINE_CPUS_MASK  (online_cpus & ((1<<CONFIG_NRCPUS)-1) )
 
-#endif /* __SMP_H__ */
+#endif /* __MSTRING_SMP_H__ */
 

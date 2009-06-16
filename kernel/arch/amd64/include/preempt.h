@@ -20,12 +20,12 @@
  *
  */
 
-#ifndef __ARCH_PREEMPT_H__
-#define __ARCH_PREEMPT_H__
+#ifndef __ARCH_MSTRING_PREEMPT_H__
+#define __ARCH_MSTRING_PREEMPT_H__
 
-#include <arch/types.h>
 #include <arch/current.h>
 #include <arch/interrupt.h>
+#include <mstring/types.h>
 
 extern void schedule(void);
 extern volatile cpu_id_t online_cpus;

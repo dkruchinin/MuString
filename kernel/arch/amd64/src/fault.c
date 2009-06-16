@@ -25,10 +25,11 @@
 #include <arch/types.h>
 #include <arch/page.h>
 #include <arch/fault.h>
+#include <arch/seg.h>
 #include <arch/interrupt.h>
-#include <mstring/kernel.h>
+#include <arch/mem.h>
+#include <mstring/panic.h>
 #include <mstring/kprintf.h>
-#include <arch/mm.h>
 #include <mstring/smp.h>
 
 /* Markers of exception table. */
@@ -84,16 +85,12 @@ uint64_t fixup_fault_address(uint64_t fault_address)
 
 void install_fault_handlers(void)
 {
-  int r;
   struct __fault_descr_t *fd=faults_to_install;
 
   /* Install all known fault handlers. */
   while( fd->handler ) {
-    r = install_interrupt_gate(fd->slot,(uintptr_t)fd->handler,
-                               PROT_RING_0,fd->ist);
-    if( r != 0 ) {
-      panic( "Can't install fault handler #%d", fd->slot );
-    }
+    idt_install_gate(fd->slot, SEG_TYPE_INTR, SEG_DPL_KERNEL,
+                     (uintptr_t)fd->handler, fd->ist);
     fd++;
   }
 }

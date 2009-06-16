@@ -29,9 +29,9 @@
 #include <arch/interrupt.h>
 #include <mm/vmm.h>
 #include <mm/page.h>
-#include <mstring/kernel.h>
+#include <mstring/panic.h>
 #include <mstring/kprintf.h>
-#include <arch/mm.h>
+#include <arch/mem.h>
 #include <mstring/smp.h>
 #include <mstring/kconsole.h>
 #include <arch/context.h>
@@ -51,7 +51,7 @@
 static bool __read_user_safe(uintptr_t addr,uintptr_t *val)
 {
   uintptr_t *p;
-  page_idx_t pidx = ptable_ops.vaddr2page_idx(task_get_rpd(current_task()), addr, NULL);
+  page_idx_t pidx = vaddr_to_pidx(task_get_rpd(current_task()), addr);
 
   if( pidx == PAGE_IDX_INVAL ) {
     return false;

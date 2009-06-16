@@ -1,18 +1,37 @@
-#ifndef __GENARCH_PTABLE_H__
-#define __GENARCH_PTABLE_H__
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
+ *
+ */
 
-#include <ds/iterator.h>
-#include <mm/page.h>
-#include <mm/mem.h>
-#include <arch/ptable.h>
+#ifndef __MSTRING_ARCH_PTABLE_H__
+#define __MSTRING_ARCH_PTABLE_H__
+
+#include <arch/pt_defs.h>
 #include <mstring/types.h>
 
-int generic_ptable_map(rpd_t *rpd, uintptr_t va_from, page_idx_t npages,
-                       page_frame_iterator_t *pfi, ptable_flags_t flags, bool pin_pages);
-void generic_ptable_unmap(rpd_t *rpd, uintptr_t va_from, page_idx_t npages, bool unpin_pages);
-page_idx_t generic_vaddr2page_idx(rpd_t *rpd, uintptr_t vaddr, pde_t **pde);
-page_frame_t *generic_create_pagedir(void);
-int generic_map_page(rpd_t *rpd, uintptr_t addr, page_idx_t pidx, ptable_flags_t flags);
-void generic_unmap_page(rpd_t *rpd, uintptr_t addr);
+struct __rpd;
+extern ptable_flags_t __ptbl_allowed_flags_mask;
 
-#endif /* __GENARCH_PTABLE_H__ */
+page_idx_t ptable_vaddr_to_pidx(struct __rpd *rpd, uintptr_t vaddr,
+                                /* OUT */ pde_t **retpde);
+int ptable_map_page(struct __rpd *rpd, uintptr_t addr,
+                    page_idx_t pidx, ptable_flags_t flags);
+void ptable_unmap_page(struct __rpd *rpd, uintptr_t addr);
+
+#endif /* __MSTRING_ARCH_PTABLE_H__ */

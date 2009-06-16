@@ -31,7 +31,6 @@
 #define __PAGE_H__
 
 #include <config.h>
-#include <ds/iterator.h>
 #include <ds/list.h>
 #include <mstring/stddef.h>
 #include <mstring/types.h>
@@ -115,63 +114,59 @@ typedef struct __page_frame {
 extern page_frame_t *page_frames_array; /**< An array of all available physical pages */
 extern page_idx_t num_phys_pages;       /**< Number of physical pages in system */
 
-/**
- * @struct page_frame_iterator_t
- * Page frame iterator
- * @see DEFINE_ITERATOR
- */
-DEFINE_ITERATOR(page_frame,
-                int error;
-                page_idx_t pf_idx;);
-
-/**
- * Page frame iterator supported types
- * @see DEFINE_ITERATOR_TYPES
- */
-DEFINE_ITERATOR_TYPES(page_frame,
-                      PF_ITER_INDEX,  /**< Index-based iterator */
-                      PF_ITER_LIST,   /**< List-based iterator */
-                      PF_ITER_PTABLE, /**< Page table iterator */
-                      );
-
 static inline bool page_idx_is_present(page_idx_t page_idx)
 {
   return (page_idx <= num_phys_pages);
 }
 
-static inline void *pframe_to_virt(page_frame_t *frame)
+static inline page_idx_t pframe_number(page_frame_t *page)
 {
-  return (void *)(KERNEL_BASE + (frame->idx << PAGE_WIDTH));
+  return (page_idx_t)(page - page_frames_array);
 }
 
-static inline page_idx_t pframe_number(page_frame_t *frame)
+static inline page_frame_t *pframe_by_id(page_idx_t page_idx)
 {
-  return frame->idx;
+  return (page_frames_array + page_idx);
 }
 
-static inline page_frame_t *pframe_by_number(page_idx_t idx)
+static inline void *pframe_id_to_virt(page_idx_t page_idx)
 {
-  return (page_frames_array + idx);
+  return (void *)PHYS_TO_KVIRT((uintptr_t)page_idx << PAGE_WIDTH);
 }
 
-static inline void *pframe_phys_addr(page_frame_t *frame)
+static inline void *pframe_id_to_phys(page_idx_t page_idx)
 {
-  return (void *)((uintptr_t)frame->idx << PAGE_WIDTH);
-}
-
-static inline void *pframe_id_to_virt( page_idx_t idx )
-{
-  return (void *)(KERNEL_BASE + (idx << PAGE_WIDTH));
+  return (void *)((uintptr_t)page_idx << PAGE_WIDTH);
 }
 
 static inline page_idx_t virt_to_pframe_id(void *virt)
 {
-  return ((uintptr_t)virt - KERNEL_BASE) >> PAGE_WIDTH;
+  return (KVIRT_TO_PHYS(virt) >> PAGE_WIDTH);
 }
 
-static inline page_frame_t *virt_to_pframe(void *addr)
+static inline page_idx_t phys_to_pframe_id(void *phys)
 {
-  return pframe_by_number(virt_to_pframe_id(addr));
+  return ((uintptr_t)phys >> PAGE_WIDTH);
+}
+
+static inline void *pframe_to_virt(page_frame_t *page)
+{
+  return (void *)PHYS_TO_KVIRT((uintptr_t)(page - page_frames_array) << PAGE_WIDTH);
+}
+
+static inline void *pframe_to_phys(page_frame_t *page)
+{
+  return (void *)((uintptr_t)(page - page_frames_array) << PAGE_WIDTH);
+}
+
+static inline page_frame_t *virt_to_pframe(void *virt)
+{
+  return (page_frames_array + virt_to_pframe_id(virt));
+}
+
+static inline page_frame_t *phys_to_pframe(void *phys)
+{
+  return (page_frames_array + phys_to_pframe_id(phys));
 }
 
 static inline void clear_page_frame(page_frame_t *page)
@@ -190,6 +185,7 @@ static inline void clear_page_frame(page_frame_t *page)
  * @param block_size - Number of pages in block
  */
 #ifndef ARCH_PAGE_MEMNULL
+#include <mstring/string.h>
 static inline void pframes_memnull(page_frame_t *start, int block_size)
 {
   memset(pframe_to_virt(start), 0, PAGE_SIZE * block_size);

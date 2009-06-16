@@ -1,75 +1,65 @@
-/* amd64 linker script 
- * preprocessed while compilation
- */
-
-#include <config.h>
-#include <arch/boot.h>
 #include <arch/page.h>
 
 OUTPUT_FORMAT("elf64-x86-64")
+OUTPUT_ARCH("i386:x86-64")
+ENTRY(_start)
 
 SECTIONS {
-	.unmapped BOOT_OFFSET: AT (0) {
-		unmapped_ktext_start = .;
-		*(K_TEXT_START);
-		unmapped_ktext_end = .;
+         . = KPHYS_START;
+         __bootstrap_start = .;
+         bootstrap_text : AT(ADDR(bootstrap_text) - KPHYS_START)
+         {
+                *(bootstrap_text);
+         }
 
-		unmapped_kdata_start = .;
-		*(K_DATA_START);
-		*(K_INI_PTLS);
-		unmapped_kdata_end = .;
-	}
+         bootstrap_data : AT(ADDR(bootstrap_data) - KPHYS_START)
+         {
+                *(bootstrap_data);                                
+         }
 
-    _low_kernel_end = p2k(BOOT_OFFSET) + SIZEOF(.unmapped);
+         . = ALIGN(0x1000);
+         __bootstrap_end = .;
+         . = KERNEL_OFFSET + __bootstrap_end;
+         .text : AT(ADDR(.text) - KERNEL_OFFSET - KPHYS_START)
+         {
+                *(.text);
+         }
 
+         .data : AT(ADDR(.data) - KERNEL_OFFSET - KPHYS_START)
+         {
+                *(.data);
+                *(.rodata);
+         }
 
-	.mapped(_low_kernel_end) : AT (SIZEOF(.unmapped)) {        
-        _kernel_start = .;
-		ktext_start = .;
-		*(.text);
-		ktext_end = .;
+         __bss_start = .;
+         .bss : AT(ADDR(.bss) - KERNEL_OFFSET - KPHYS_START)
+         {
+                *(.bss);
+         }
 
-		kdata_start = .;
-		*(.data);		/* initialized data */
-		*(.rodata*);		/* string literals */
-		hardcoded_load_address = .;
-		QUAD(p2k(BOOT_OFFSET));
-		hardcoded_ktext_size = .;
-		QUAD(ktext_end - ktext_start + (unmapped_ktext_end - unmapped_ktext_start));
-		hardcoded_kdata_size = .;
-		QUAD(kdata_end - kdata_start + (unmapped_kdata_end - unmapped_kdata_start));
-		hardcoded_unmapped_ktext_size = .;
-		QUAD(unmapped_ktext_end - unmapped_ktext_start);
-		hardcoded_unmapped_kdata_size = .;
-		QUAD(unmapped_kdata_end - unmapped_kdata_start);
-		*(COMMON);		/* global variables */
+         __bss_end = .;
+         . = ALIGN(0x1000);
+         __init_start = .;
 
-		*(.eh_frame);
+         initdata : AT(ADDR(initdata) - KERNEL_OFFSET - KPHYS_START)
+         {
+                *(initdata);
+         }
 
-                __ex_table_start = .;
-		*(.ex_table);
-		__ex_table_end = .;
+         initcode : AT(ADDR(initcode) - KERNEL_OFFSET - KPHYS_START)
+         {
+                *(initcode);
+         }
 
-		symbol_table = .;
-		*(symtab.*);            /* Symbol table, must be LAST symbol!*/
+         . = ALIGN(0x1000);
+         __init_end = .;
 
-		*(.bss);		/* uninitialized static variables */
+         /DISCARD/ :
+         {
+                *(.comment);
+                *(.ehframe*);
+                *(.eh_frame*);
+         }
 
-		kdata_end = .;
-        _kernel_end = .;
-	}
-
-#ifdef CONFIG_SMP
-/*
-  *  .percpu_data (kdata_end) : AT (k2p(kdata_end)) {
-  *     *(.percpu_data);
-  *     _kernel_end = .;
-  *  }
-    */
-
-    _hardcoded_unmapped_size = (unmapped_ktext_end - unmapped_ktext_start) + (unmapped_kdata_end - unmapped_kdata_start);
-    ap_boot = unmapped_ap_boot - BOOT_OFFSET + AP_BOOT_OFFSET;
-    ap_gdtr = unmapped_ap_gdtr - BOOT_OFFSET + AP_BOOT_OFFSET;
-    protected_ap_gdtr = p2k(ap_gdtr);
-#endif  
+         _kernel_end = .;
 }

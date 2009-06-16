@@ -41,6 +41,11 @@ typedef uint32_t bit_idx_t;
 typedef uint64_t off_t;
 typedef uint64_t pgoff_t;
 
+struct table_reg {
+  uint16_t limit;
+  uint64_t base;
+} __attribute__ ((packed));
+
 #define TYPE_LONG_SHIFT  6
 #define BITS_PER_LONG    64
 #define BYTES_PER_LONG   8

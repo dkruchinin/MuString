@@ -29,8 +29,8 @@
 #include <arch/types.h>
 #include <arch/asm.h>
 #include <arch/apic.h>
+#include <arch/seg.h>
 #include <arch/interrupt.h>
-#include <arch/gdt.h>
 #include <mstring/kprintf.h>
 #include <mstring/unistd.h>
 #include <mstring/string.h>
@@ -38,28 +38,30 @@
 #include <arch/smp.h>
 
 #ifdef CONFIG_SMP
+int ap_boot_start, ap_boot_end,
+    kernel_jump_addr, ap_jmp_rip;
 
 void arch_smp_init(int ncpus)
 {
-  ptr_16_64_t gdtr;
   int i=1,r=0;
+  char *ap_code = (char *)0x9000;
+  size_t size = &ap_boot_end - &ap_boot_start;
+
+  *(uint64_t *)&kernel_jump_addr = (uint64_t)main_smpap_routine;
+  *(uint32_t *)&ap_jmp_rip = (uint32_t)((uint64_t)smp_start32 & 0xffffffffU);
+  memcpy(ap_code, &ap_boot_start, size);
 
   /* ok setup new gdt */
   while(i<ncpus) {
-    protected_ap_gdtr.limit=GDT_ITEMS * sizeof(struct __descriptor);
-		memcpy(gdt[i], gdt[0], sizeof(descriptor_t) * GDT_ITEMS);
-    protected_ap_gdtr.base=((uintptr_t)&gdt[i][0]-0xffffffff80000000);
-    gdtr.base=(uint64_t)&gdt[i];
-    
     if (apic_send_ipi_init(i))
-			panic("Can't send init interrupt\n");
+        panic("Can't send init interrupt\n");
 		
-		/* wait maximum 1 second for the start of the next cpu */
-		for (r = 0; (r < 100) && !is_cpu_online(i); r++)
-			atom_usleep(10000);
+    /* wait maximum 1 second for the start of the next cpu */
+    for (r = 0; (r < 100) && !is_cpu_online(i); r++)
+        atom_usleep(10000);
 
-		if (r == 100)
-			panic("CPU %d did not start!\n", i);
+    if (r == 100)
+        panic("CPU %d did not start!\n", i);
 
     i++;
   }

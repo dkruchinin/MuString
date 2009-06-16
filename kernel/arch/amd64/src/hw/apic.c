@@ -32,14 +32,14 @@
 #include <arch/asm.h>
 #include <arch/apic.h>
 #include <arch/interrupt.h>
-#include <arch/gdt.h>
 #include <mstring/kprintf.h>
 #include <mstring/unistd.h>
 #include <mstring/string.h>
 #include <mstring/bitwise.h>
+#include <mstring/panic.h>
 #include <arch/interrupt.h>
 #include <arch/smp.h>
-#include <arch/mm.h>
+#include <arch/mem.h>
 
 /*
  * Black mages from intel and amd wrote that
@@ -183,7 +183,7 @@ static int __local_apic_chkerr(void)
   if (esr.tx_accept_err) { i++; kprintf("[LA] Transfer failed.\n"); }
   if (esr.rx_accept_err) { i++; kprintf("[LA] IPI is not accepted by any CPU.\n"); }
   if (esr.tx_illegal_vector) { i++; kprintf("[LA] Illegal transfer vector.\n"); }
-  if (esr.rx_illegal_vector) { kprintf("[LA] Illegal receive vector.\n"); }
+  if (esr.rx_illegal_vector) { i++; kprintf("[LA] Illegal receive vector.\n"); }
   if (esr.reg_illegal_addr){ i++; kprintf("[LA] Illegal register address.\n"); }
 
   return i;
@@ -532,8 +532,9 @@ int apic_send_ipi_init(int cpu)
   local_apic->icr1.reg=icr1.reg;  
 
   atom_usleep(20);
-  if (local_apic->esr.reg != 0 && __local_apic_chkerr())
+  if (__local_apic_chkerr()) {
     return -1;
+  }
 
   icr1=local_apic->icr1;
   icr1.tx_mode=TXMODE_INIT;
@@ -544,13 +545,13 @@ int apic_send_ipi_init(int cpu)
   icr1.vector=0;
   local_apic->icr1.reg=icr1.reg;  
   atom_usleep(10000);
-  if ( local_apic->esr.reg != 0 &&__local_apic_chkerr())
-		return -1;
-
+  if (__local_apic_chkerr()) {
+    return -1;
+  }
 
   for(i=0;i<2;i++) { /* if we're have APIC not from 80486DX or higher, we're need to send it twice */
     icr1=local_apic->icr1;
-    icr1.vector=(uint8_t)(((uintptr_t) ap_boot) >> 12);
+    icr1.vector=(uint8_t)phys_to_pframe_id((void *)0x9000);
     icr1.tx_mode=TXMODE_STARTUP;
     icr1.rx_mode=DMODE_PHY;
     icr1.level=0x1;
@@ -558,14 +559,16 @@ int apic_send_ipi_init(int cpu)
     icr1.shorthand=0x0;
     local_apic->icr1.reg=icr1.reg;  
     atom_usleep(200);
-    if (local_apic->esr.reg != 0 && __local_apic_chkerr())
-			return -1;
+    if (__local_apic_chkerr()) {
+      return -1;
+    }
   }
 
-  if (__local_apic_chkerr())
-		ret = -1;
+  if (__local_apic_chkerr()) {
+    ret = -1;
+  }
 
-	return ret;
+  return ret;
 }
 
 int apic_broadcast_ipi_vector(uint8_t vector)

@@ -181,7 +181,7 @@ uintptr_t sys_alloc_dma_pages(int num_pages)
     }
   }
 
-  return (uintptr_t)pframe_phys_addr(pages);
+  return (uintptr_t)pframe_to_phys(pages);
 }
 
 void sys_free_dma_pages(uintptr_t paddr, int num_pages)
@@ -194,6 +194,6 @@ void sys_free_dma_pages(uintptr_t paddr, int num_pages)
     if (!page_idx_is_present(pidx + i))
       return;
 
-    free_page(pframe_by_number(pidx + i));
+    free_page(pframe_by_id(pidx + i));
   }  
 }

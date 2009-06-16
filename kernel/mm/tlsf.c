@@ -28,20 +28,20 @@
  */
 
 #include <config.h>
+#include <arch/atomic.h>
 #include <ds/list.h>
+#include <mm/page.h>
+#include <mm/mmpool.h>
+#include <mm/pfalloc.h>
+#include <mm/ealloc.h>
+#include <mm/tlsf.h>
+#include <sync/spinlock.h>
 #include <mstring/string.h>
 #include <mstring/assert.h>
 #include <mstring/stddef.h>
 #include <mstring/bitwise.h>
 #include <mstring/types.h>
-#include <mm/page.h>
-#include <mm/mmpool.h>
-#include <mm/pfalloc.h>
-#include <mm/idalloc.h>
-#include <mm/tlsf.h>
-#include <sync/spinlock.h>
 #include <mstring/errno.h>
-#include <arch/atomic.h>
 
 /*
  * Main concept:
@@ -307,7 +307,7 @@ static inline page_frame_t *__left_neighbour(page_frame_t *block_head)
 {
   page_frame_t *page;
 
-  page = pframe_by_number(pframe_number(block_head) - 1);
+  page = pframe_by_id(pframe_number(block_head) - 1);
   if (!bit_test(&page->_private, TLSF_PB_TAIL) ||
       (page->pool_type != block_head->pool_type) || (page->flags & PF_RESERVED))
     return NULL;
@@ -346,7 +346,7 @@ static page_frame_t *pages_block_split(tlsf_t *tlsf, page_frame_t *block_head, t
   page_frame_t *new_block;
 
   pages_block_destroy(block_head);
-  new_block = pframe_by_number(pframe_number(block_head) + offset);
+  new_block = pframe_by_id(pframe_number(block_head) + offset);
   pages_block_create(block_head, offset - 1);
   pages_block_create(new_block, split_size - 1);
   return new_block;
@@ -604,7 +604,7 @@ static void build_tlsf_map(tlsf_t *tlsf)
 {
   int i, j;
   page_idx_t npages = tlsf->owner->total_pages;
-  page_frame_t *pages = pframe_by_number(tlsf->owner->first_page_id);
+  page_frame_t *pages = pframe_by_id(tlsf->owner->first_page_id);
 
   /* initialize TLSF map */
   for (i = 0; i < TLSF_FLD_SIZE; i++) {
@@ -675,7 +675,6 @@ static void tlsf_memdump(void *_tlsf)
 }
 
 #ifdef CONFIG_SMP
-#include <mm/slab.h>
 #include <mstring/smp.h>
 
 static smp_hook_t __percpu_hook;
@@ -688,14 +687,10 @@ static int tlsf_smp_hook(cpu_id_t cpuid, void *_tlsf)
   list_head_t h;
   list_node_t *iter, *safe;
 
-  if (likely(!idalloc_is_enabled())) {
-    cache = memalloc(sizeof(*cache));
+  cache = ealloc_space(sizeof(*cache));
+  if (!cache) {
+    return ERR(ret);
   }
-  else {
-    cache = idalloc(sizeof(*cache));
-  }
-  if (!cache)
-    goto err;
 
   memset(cache, 0, sizeof(*cache));
   list_init_head(&cache->pages);
@@ -703,7 +698,7 @@ static int tlsf_smp_hook(cpu_id_t cpuid, void *_tlsf)
   tlsf->percpu[cpuid] = cache;
   pages = tlsf_alloc_pages(TLSF_CPUCACHE_PAGES, tlsf);
   if (!pages) {
-    goto err;
+    return ERR(ret);
   }
 
   list_set_head(&h, &pages->chain_node);
@@ -716,14 +711,6 @@ static int tlsf_smp_hook(cpu_id_t cpuid, void *_tlsf)
 
   cache->noc_pages = TLSF_CPUCACHE_PAGES;
   return 0;
-
-  err:
-  if (cache && !idalloc_is_enabled()) {
-    memfree(cache);
-    tlsf->percpu[cpuid] = NULL;
-  }
-
-  return ret;
 }
 
 #endif /* CONFIG_SMP */
@@ -746,9 +733,11 @@ void tlsf_allocator_init(mm_pool_t *pool)
   tlsf_t *tlsf;
   long free_pages;
 
-  tlsf = idalloc(sizeof(*tlsf));
-  if (!tlsf)
-    panic("Can not allocate %zd bytes for TLSF usign idalloc allocator!", sizeof(*tlsf));
+  tlsf = ealloc_space(sizeof(*tlsf));
+  if (!tlsf) {
+    panic("Can not allocate %zd bytes for TLSF usign "
+          "idalloc allocator!", sizeof(*tlsf));
+  }
 
   ASSERT(atomic_get(&pool->free_pages) > 0);
   memset(tlsf, 0, sizeof(*tlsf));

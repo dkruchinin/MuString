@@ -34,4 +34,8 @@ config GENARCH_MM
      def_bool y
      bool "Use generic page table operations"
 
+config EMU
+     bool "Make MuiString for running on emulator"
+     default y
+
 endmenu

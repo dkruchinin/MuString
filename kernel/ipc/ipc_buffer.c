@@ -75,7 +75,7 @@ void ipc_release_buffer_pages(ipc_buffer_t *bufs, uint32_t numbufs)
 
   for (i = 0; i < numbufs; i++) {
     for (j = 0; j < bufs[i].num_chunks; j++) {
-      unpin_page_frame(pframe_by_number(bufs[i].chunks[j]));
+      unpin_page_frame(pframe_by_id(bufs[i].chunks[j]));
     }
   }
 }
@@ -149,7 +149,7 @@ int ipc_setup_buffer_pages(iovec_t *iovecs, uint32_t numvecs, page_idx_t *idx_ar
 outerror:
   while (i >= 0) {
     for (; buf_data.chunk_num; buf_data.pchunk--, buf_data.chunk_num--) {
-      unpin_page_frame(pframe_by_number(*buf_data.pchunk));
+      unpin_page_frame(pframe_by_id(*buf_data.pchunk));
     }
 
     buf--;

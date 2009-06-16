@@ -15,35 +15,29 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
- * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
- * (c) Copyright 2009 Dan Kruchinin <dk@jarios.org>
- *
- * include/mstring/amd64/page.h: functions and definions for working with paging
- *                           on amd64
  *
  */
 
-#ifndef __ARCH_PAGE_H__
-#define __ARCH_PAGE_H__
+#ifndef __MSTRING_ARCH_PAGE_H__
+#define __MSTRING_ARCH_PAGE_H__
 
-#define PAGE_WIDTH    12
-#define PAGE_SIZE     (1 << PAGE_WIDTH)
+/* Physical address where kernel starts from. */
+#define KPHYS_START   0x100000
+#define PAGE_SIZE     4096
 #define PAGE_MASK     (PAGE_SIZE - 1)
+#define PAGE_WIDTH    12
 
 #ifdef __ASM__
-#define KERNEL_BASE   0xffffffff80000000
+#define KERNEL_OFFSET 0xffffffff80000000
 
-#define k2p(p)  ((p) - KERNEL_BASE)
-#define p2k(p)  ((p) + KERNEL_BASE)
+#define PHYS_TO_KVIRT(phys_addr) ((phys_addr) + KERNEL_OFFSET)
+#define KVIRT_TO_PHYS(virt_addr) ((virt_addr) - KERNEL_OFFSET)
+#else /* __ASM__ */
+#define KERNEL_OFFSET 0xffffffff80000000UL
 
-#else
-#include <arch/types.h>
+#define PHYS_TO_KVIRT(phys_addr) ((uintptr_t)(phys_addr) + KERNEL_OFFSET)
+#define KVIRT_TO_PHYS(virt_addr) ((uintptr_t)(virt_addr) - KERNEL_OFFSET)
+#endif /* ! __ASM__ */
 
-#define KERNEL_BASE   0xffffffff80000000UL
-
-#define k2p(p)       ((uintptr_t)p - KERNEL_BASE)
-#define p2k(p)       ((uintptr_t)p + KERNEL_BASE)
-
-#endif /* __ASM__ */
-#endif /* __ARCH_PAGE_H__ */
+#endif /* __MSTRING_ARCH_PAGE_H__ */
 

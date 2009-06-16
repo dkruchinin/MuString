@@ -37,7 +37,7 @@
 #include <ipc/poll.h>
 
 #define IPC_BUFFERED_PORT_LENGTH  PAGE_SIZE
-#define MAX_PORT_MSG_LENGTH  _mb2b(2)
+#define MAX_PORT_MSG_LENGTH  MB2B(2)
 
 /* Common port flags. */
 #define IPC_PORT_SHUTDOWN     0x800 /**< Port is under shutdown. */

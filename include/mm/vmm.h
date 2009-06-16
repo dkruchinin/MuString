@@ -25,7 +25,6 @@
 #define __VMM_H__
 
 #include <config.h>
-#include <ds/iterator.h>
 #include <ds/list.h>
 #include <ds/ttree.h>
 #include <mm/page.h>
@@ -45,29 +44,22 @@
 struct __task_struct;
 
 typedef enum __vmrange_flags {
-  VMR_NONE         = 0x0001,
-  VMR_READ         = 0x0002,
-  VMR_WRITE        = 0x0004,
-  VMR_EXEC         = 0x0008,  
-  VMR_NOCACHE      = 0x0010,
-  VMR_FIXED        = 0x0020,
-  VMR_ANON         = 0x0040,
-  VMR_PRIVATE      = 0x0080,
-  VMR_SHARED       = 0x0100,
-  VMR_PHYS         = 0x0200,
-  VMR_STACK        = 0x0400,
-  VMR_POPULATE     = 0x0800,
-  VMR_CANRECPAGES  = 0x1000,
-  VMR_GATE         = 0x2000,
+  VMR_NONE         = KMAP_KERN,
+  VMR_READ         = KMAP_READ,
+  VMR_WRITE        = KMAP_WRITE,
+  VMR_EXEC         = KMAP_EXEC,
+  VMR_NOCACHE      = KMAP_NOCACHE,
+  VMR_FIXED        = (0x001 << KMAP_OFFSET),
+  VMR_ANON         = (0x002 << KMAP_OFFSET),
+  VMR_PRIVATE      = (0x004 << KMAP_OFFSET),
+  VMR_SHARED       = (0x008 << KMAP_OFFSET),
+  VMR_PHYS         = (0x010 << KMAP_OFFSET),
+  VMR_STACK        = (0x020 << KMAP_OFFSET),
+  VMR_POPULATE     = (0x040 << KMAP_OFFSET),
+  VMR_CANRECPAGES  = (0x080 << KMAP_OFFSET),
+  VMR_GATE         = (0x100 << KMAP_OFFSET),
 } vmrange_flags_t;
 
-typedef vmrange_flags_t kmap_flags_t;
-
-#define KMAP_KERN     VMR_NONE
-#define KMAP_READ     VMR_READ
-#define KMAP_WRITE    VMR_WRITE
-#define KMAP_EXEC     VMR_EXEC
-#define KMAP_NOCACHE  VMR_NOCACHE
 #define KMAP_FLAGS_MASK (KMAP_KERN | KMAP_READ | KMAP_WRITE | KMAP_EXEC | KMAP_NOCACHE)
 
 enum {

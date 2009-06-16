@@ -25,7 +25,6 @@
 #include <mstring/stddef.h>
 #include <mstring/string.h>
 #include <mm/page.h>
-#include <mm/idalloc.h>
 #include <mm/pfalloc.h>
 #include <mm/slab.h>
 #include <sync/spinlock.h>
@@ -58,9 +57,9 @@ static void free_slab_object(slab_t *slab, void *obj);
 
 /* memory cache locking API */
 #define memcache_lock(cache)                            \
-  spinlock_lock_bit(&(cache)->flags, bitnumber(__SMCF_BIT_LOCK))
+  spinlock_lock_bit(&(cache)->flags, BITNUM(__SMCF_BIT_LOCK))
 #define memcache_unlock(cache)                              \
-  spinlock_unlock_bit(&(cache)->flags, bitnumber(__SMCF_BIT_LOCK))
+  spinlock_unlock_bit(&(cache)->flags, BITNUM(__SMCF_BIT_LOCK))
 
 /* SLAB locking API */
 #define __lock_slab_page(pg)                    \
@@ -519,7 +518,7 @@ static slab_t *create_new_slab(memcache_t *memcache, int alloc_flags)
   slab_t *new_slab = NULL;
   pfalloc_flags_t pfa_flags = 0;
 
-  pfa_flags |= (!!(alloc_flags & SAF_ATOMIC) << bitnumber(AF_ATOMIC));
+  pfa_flags |= (!!(alloc_flags & SAF_ATOMIC) << BITNUM(AF_ATOMIC));
   if (likely(memcache != &slabs_memcache)) {
     int ret;
 
@@ -810,7 +809,7 @@ static void __create_heart_cache(memcache_t *cache, size_t size,
    */
   prepare_memcache(cache, size, GENERIC_SLAB_PAGES);
   cache->flags = GENERAL_POOL_TYPE | SMCF_IMMORTAL | SMCF_UNIQUE;
-  bit_clear(&cache->flags, bitnumber(__SMCF_BIT_LOCK));
+  bit_clear(&cache->flags, BITNUM(__SMCF_BIT_LOCK));
   
   /*
    * avail_slabs list holds all slabs that may be used for
@@ -1010,7 +1009,7 @@ memcache_t *create_memcache(const char *name, size_t size,
 
   prepare_memcache(memcache, size, pages);
   memcache->flags = flags;
-  bit_clear(&memcache->flags, bitnumber(__SMCF_BIT_LOCK));
+  bit_clear(&memcache->flags, BITNUM(__SMCF_BIT_LOCK));
   register_memcache(memcache, name);
   
   SLAB_VERBOSE(memcache, ">> Created memory cache %s. "

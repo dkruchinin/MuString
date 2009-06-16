@@ -31,7 +31,7 @@
 #include <mm/vmm.h>
 #include <mstring/kprintf.h>
 #include <mstring/string.h>
-#include <arch/mm.h>
+#include <arch/mem.h>
 
 /* Here it is ! */
 swks_t __page_aligned__ swks;

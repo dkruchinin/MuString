@@ -28,7 +28,6 @@
 
 #include <config.h>
 #include <arch/types.h>
-#include <arch/mbarrier.h>
 #include <arch/bitwise.h>
 #include <arch/asm.h>
 #include <mstring/raw_sync.h>

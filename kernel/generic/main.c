@@ -25,21 +25,16 @@
 #include <config.h>
 #include <mm/vmm.h>
 #include <mm/slab.h>
-#include <mstring/kconsole.h>
 #include <mstring/kprintf.h>
 #include <server.h>
 #include <mstring/smp.h>
 #include <arch/task.h>
 #include <mstring/interrupt.h>
 #include <mstring/scheduler.h>
-#include <arch/fault.h>
 #include <arch/platform.h>
 #include <mstring/swks.h>
 #include <arch/scheduler.h>
-#include <arch/preempt.h>
 #include <arch/smp.h>
-#include <arch/apic.h>
-#include <arch/atomic.h>
 #include <ipc/ipc.h>
 #include <mstring/resource.h>
 #include <arch/interrupt.h>
@@ -90,23 +85,11 @@ static void main_routine_stage1(void)
   idle_loop();
 }
 
-static long krsp;
-void main_routine(void) /* this function called from boostrap assembler code */
-{    
-  kconsole_t *kcons = default_console();
-  __asm__ volatile("movq %%rsp, %0" : "=r" (krsp));
-
-  /* After initializing memory stuff, the master CPU should perform
-   * the final initializations.
-   */
-
-  arch_cpu_init(0);
-  install_fault_handlers();
+void kernel_main(void)
+{
+  arch_init();
   initialize_irqs();
 
-  kcons->init();  
-  kcons->enable();
-  kprintf("STACK = %p\n", krsp);
   kprintf("[MB] Modules: %d\n",init.c);
   mm_initialize();
   slab_allocator_init();
@@ -154,9 +137,6 @@ void main_smpap_routine(void)
 
   /* Perform generic CPU initialization. Memory will be initialized later. */
   arch_cpu_init(cpu);
-
-  /* Ramap physical memory using page directory preparead be master CPU. */
-  arch_smp_mm_init(cpu);
 
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.

@@ -28,6 +28,7 @@
 #include <mstring/string.h>
 #include <mstring/stddef.h>
 #include <mstring/assert.h>
+#include <mstring/errno.h>
 #include <mstring/types.h>
 
 /*

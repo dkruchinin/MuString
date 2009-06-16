@@ -34,7 +34,7 @@ static memcache_t *buckets_cache = NULL;
 
 static inline int index2heigh(ulong_t idx)
 {
-  return (pow2(idx) / HAT_BUCKET_SHIFT);
+  return (BITNUM(idx) / HAT_BUCKET_SHIFT);
 }
 
 static inline int index2slot_id(ulong_t idx, int heigh)

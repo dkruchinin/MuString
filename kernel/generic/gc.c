@@ -23,7 +23,7 @@
 #include <arch/types.h>
 #include <mstring/task.h>
 #include <mstring/smp.h>
-#include <mstring/kernel.h>
+#include <mstring/panic.h>
 #include <mstring/process.h>
 #include <mstring/gc.h>
 #include <mm/slab.h>

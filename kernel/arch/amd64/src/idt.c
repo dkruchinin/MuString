@@ -1,10 +1,10 @@
-#include <arch/types.h>
-#include <mstring/interrupt.h>
-#include <arch/interrupt.h>
-#include <mstring/idt.h>
 #include <arch/asm.h>
+#include <arch/interrupt.h>
 #include <sync/spinlock.h>
+#include <mstring/interrupt.h>
+#include <mstring/idt.h>
 #include <mstring/errno.h>
+#include <mstring/types.h>
 
 #define AMD64_IDT_ENTRIES 256
 
@@ -47,7 +47,6 @@ static bool __is_active_vector(irq_t vec)
 
 static int __install_handler(idt_handler_t h, irq_t vec)
 {
-  int r;
   amd64_idt_entry_t *e;
 
   if(h == NULL || vec >= AMD64_IDT_ENTRIES || vec < IRQ_BASE) {
@@ -55,15 +54,11 @@ static int __install_handler(idt_handler_t h, irq_t vec)
   }
 
   LOCK_AMD_IDT;
-  e = &amd64_idt_table.idt_entries[vec]; 
-  r = install_interrupt_gate(vec,(uintptr_t)h,0,0);
-  if(r == 0) {
-    e->available = false;
-  } else {
-    e->available = true;
-  }
+  e = &amd64_idt_table.idt_entries[vec];
+  idt_set_gate(vec, h);
+  e->available = true;
   UNLOCK_AMD_IDT;
-  return r;
+  return 0;
 }
 
 static int __free_handler(irq_t vec)

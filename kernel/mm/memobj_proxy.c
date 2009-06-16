@@ -89,18 +89,18 @@ static int proxy_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
   }
   
   pagetable_lock(&serv_vmm->rpd);
-  pidx = vaddr2page_idx(&serv_vmm->rpd, rcvaddr);
+  pidx = vaddr_to_pidx(&serv_vmm->rpd, rcvaddr);
   if (pidx == PAGE_IDX_INVAL) {
     ret = -EFAULT;
     pagetable_unlock(&serv_vmm->rpd);
     goto out_unlock_srv;
   }
 
-  page = pframe_by_number(pidx);
+  page = pframe_by_id(pidx);
   pin_page_frame(page);
   pagetable_unlock(&serv_vmm->rpd);
   pagetable_lock(&cli_vmm->rpd);
-  ret = mmap_one_page(&cli_vmm->rpd, addr, pframe_number(page), vmr->flags);
+  ret = mmap_page(&cli_vmm->rpd, addr, pframe_number(page), vmr->flags);
   if (ret) {
     unpin_page_frame(page);
     pagetable_unlock(&cli_vmm->rpd);
@@ -145,14 +145,14 @@ static int proxy_depopulate_pages(vmrange_t *vmr, uintptr_t va_from, uintptr_t v
   
   while (va_from < va_to) {
     pagetable_lock(&vmm->rpd);
-    pidx = vaddr2page_idx(&vmm->rpd, va_from);
+    pidx = vaddr_to_pidx(&vmm->rpd, va_from);
     if (pidx == PAGE_IDX_INVAL) {
       pagetable_unlock(&vmm->rpd);
       goto eof_cycle;
     }
 
-    page = pframe_by_number(pidx);
-    munmap_one_page(&vmm->rpd, va_from);
+    page = pframe_by_id(pidx);
+    munmap_page(&vmm->rpd, va_from);
     rmap_unregister_mapping(page, vmm, va_from);
     pagetable_unlock(&vmm->rpd);
     if (vmm != server->task_mm) {
@@ -211,7 +211,7 @@ static int proxy_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npage
     list_del(n);
     p->flags |= PF_SHARED;
     pin_page_frame(p);
-    ret = mmap_one_page(&vmm->rpd, addr, pframe_number(p), vmr->flags);
+    ret = mmap_page(&vmm->rpd, addr, pframe_number(p), vmr->flags);
     if (ret) {
       unpin_page_frame(p);
       pagetable_unlock(&vmm->rpd);

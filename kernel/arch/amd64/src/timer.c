@@ -34,8 +34,6 @@ extern void i8254_suspend(void);
 
 void arch_timer_init(void)
 {
-  int i;
-
   i8254_init();
 
   kprintf("[LW] Calibrating delay loop ... ");

@@ -82,7 +82,7 @@ static inline int __mmap_page_paranoic(memobj_t *memobj, vmm_t *vmm, page_frame_
     goto out;
   }
 
-  ret = mmap_one_page(&vmm->rpd, addr, pframe_number(page), mmap_flags);
+  ret = mmap_page(&vmm->rpd, addr, pframe_number(page), mmap_flags);
   if (!ret) {
     PCACHE_DBG("#PF handled on %p: page %#x, offset %#x\n",
                addr, pframe_number(page), page->offset);
@@ -368,7 +368,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr,
     pde_t *pde;
     
     pagetable_lock(&vmm->rpd);
-    pidx = __vaddr2page_idx(&vmm->rpd, addr, &pde);
+    pidx = __vaddr_to_pidx(&vmm->rpd, addr, &pde);
     if (unlikely(pidx == PAGE_IDX_INVAL)) {
       /*
        * It's possible that other thread of a process has unmapped
@@ -387,12 +387,12 @@ static int pcache_handle_page_fault(vmrange_t *vmr,
         return 0;
       }
 
-      page = pframe_by_number(pidx);
+      page = pframe_by_id(pidx);
       if (likely(!(vmr->flags & VMR_PRIVATE))) {
         rwsem_down_read(&pcache->rwlock);
         ASSERT_DBG(hat_lookup(&pcache->pagecache, offset) != NULL);
         
-        ret = mmap_one_page(&vmm->rpd, addr, pframe_number(page), vmr->flags);
+        ret = mmap_page(&vmm->rpd, addr, pframe_number(page), vmr->flags);
         if (!ret) {
           lock_page_frame(page, PF_LOCK);
           ret = rmap_register_shared(memobj, page, vmm, addr);
@@ -423,7 +423,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr,
         rmap_unregister_shared(page, vmm, addr);
         unpin_page_frame(page);
 
-        ret = mmap_one_page(&vmm->rpd, addr, pframe_number(new_page), vmr->flags);
+        ret = mmap_page(&vmm->rpd, addr, pframe_number(new_page), vmr->flags);
         if (!ret) {
           lock_page_frame(new_page, PF_LOCK);
           ret = rmap_register_anon(new_page, vmm, addr);

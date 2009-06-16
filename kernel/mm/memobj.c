@@ -57,7 +57,8 @@ static void __init_kernel_memobjs(void)
 {
   int ret;
 
-  ret = memobj_create(MMO_NTR_GENERIC, 0, USPACE_VA_TOP >> PAGE_WIDTH, NULL);  
+  ret = memobj_create(MMO_NTR_GENERIC, 0,
+                      USPACE_VADDR_TOP >> PAGE_WIDTH, NULL);  
   if (ret)
     panic("Can't create generic memory object: [ERROR %d]", ret);
 }
@@ -274,7 +275,7 @@ int sys_memobj_create(struct memobj_info *user_mmo_info)
     return -EINVAL;
 
   /* Compose memory object flags */
-  memobj_flags = (1 << pow2(mmo_info.lifetype)) & MMO_LIFE_MASK;
+  memobj_flags = (1 << BITNUM(mmo_info.lifetype)) & MMO_LIFE_MASK;
   memobj_flags |= (mmo_info.flags << MMO_FLAGS_SHIFT) & MMO_FLAGS_MASK;
   if (!(memobj_flags & MMO_LIFE_MASK) ||
       (mmo_info.size & PAGE_MASK) || !mmo_info.size) {

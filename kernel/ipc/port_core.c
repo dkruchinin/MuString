@@ -72,7 +72,7 @@ static int __calc_msg_length(iovec_t iovecs[], ulong_t num_iovecs, ulong_t *size
   for (msg_size = 0, i = 0; i < num_iovecs; i++) {
     msg_size += iovecs[i].iov_len;
     if (msg_size > MAX_PORT_MSG_LENGTH)
-      return -E2BIG;
+      return ERR(-E2BIG);
   }
 
   *size = msg_size;

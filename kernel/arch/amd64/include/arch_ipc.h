@@ -1,7 +1,7 @@
-#ifndef __AMD64_ARCH_IPC__
-#define  __AMD64_ARCH_IPC__
+#ifndef __MSTRING_ARCH_IPC_H__
+#define __MSTRING_ARCH_IPC_H__
 
-#include <arch/types.h>
+#include <mstring/types.h>
 
 #define ARCH_IPC_PORT_64_BIT_REGS 14
 #define ARCH_IPC_PORT_128_BIT_REGS 16
@@ -12,4 +12,4 @@ typedef struct __arch_ipc_port_ctx {
   char regs128[ARCH_IPC_PORT_128_BIT_SIZE];
 } arch_ipc_port_ctx_t;
 
-#endif
+#endif /* __MSTRING_ARCH_IPC_H__ */

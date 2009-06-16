@@ -368,8 +368,11 @@ static int __initialize_task_mm(task_t *orig, task_t *target, task_creation_flag
 {
   int ret = 0;
   
-  if (!orig || priv == TPL_KERNEL)
-    ptable_ops.clone_rpd(task_get_rpd(target), &kernel_rpd);
+  if (!orig || priv == TPL_KERNEL) {
+    /* FIXME DK: This arch-dependent code must be removed out from here */
+    rpd_t *rpd = task_get_rpd(target);
+    rpd->root_dir = KERNEL_ROOT_PDIR()->root_dir;
+  }
   else if (flags & CLONE_MM) {
     target->task_mm = orig->task_mm;
   }

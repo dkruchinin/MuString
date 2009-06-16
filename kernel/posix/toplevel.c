@@ -27,7 +27,6 @@
 #include <mstring/usercopy.h>
 #include <mstring/signal.h>
 #include <arch/interrupt.h>
-#include <arch/profile.h>
 #include <mstring/process.h>
 #include <mstring/kconsole.h>
 

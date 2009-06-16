@@ -24,13 +24,11 @@
  *
  */
 
-#ifndef __ASM_H__
-#define __ASM_H__
+#ifndef __MSTRING_ARCH_ASM_H__
+#define __MSTRING_ARCH_ASM_H__
 
 #include <config.h>
 #include <arch/page.h>
-#include <arch/cpu.h>
-#include <arch/ptable.h>
 #include <mstring/types.h>
 
 extern void set_efer_flag(int flag);
@@ -65,7 +63,7 @@ static inline void outb(uint16_t port, uint8_t val)
                       : : "a" (val), "Nd" (port));
 }
 
-static inline void gdtr_load(struct __ptr_16_64 *gdtr_reg)
+static inline void gdtr_load(struct table_reg *gdtr_reg)
 {
   asm volatile("lgdtq %0\n" : : "m" (*gdtr_reg));
 }
@@ -75,12 +73,12 @@ static inline void ldtr_load(long ldtr_reg)
   asm volatile( "lldt %0\n" : : "r"((short)ldtr_reg));
 }
 
-static inline void gdtr_store(struct __ptr_16_64 *gdtr_reg)
+static inline void gdtr_store(struct table_reg *gdtr_reg)
 {
   asm volatile("sgdtq %0\n" : : "m" (*gdtr_reg));
 }
 
-static inline void idtr_load(struct __ptr_16_64 *idtr_reg)
+static inline void idtr_load(struct table_reg *idtr_reg)
 {
   asm volatile("lidtq %0\n" : : "m" (*idtr_reg));
 }
@@ -88,26 +86,6 @@ static inline void idtr_load(struct __ptr_16_64 *idtr_reg)
 static inline void tr_load(uint16_t s)
 {
   asm volatile("ltr %0" : : "r" (s));
-}
-
-/* MSR and others */
-
-/* write msr */
-static inline void write_msr(uint32_t msr,uint64_t v)
-{
-  __asm__ volatile (
-		    "wrmsr;" : : "c" (msr),"a" ((uint32_t) v),"d" ((uint32_t)(v >> 32))
-		    );
-}
-
-/* just read msr */
-static inline uint64_t read_msr(uint32_t msr)
-{
-  uint32_t ax,dx;
-
-  __asm__ volatile ("rdmsr;" : "=a" (ax), "=d" (dx) : "c" (msr));
-
-  return ((uint64_t)dx << 32) | ax;
 }
 
 /* Load RSP with a given value. It MUST NOT be a function since after
@@ -118,46 +96,6 @@ static inline uint64_t read_msr(uint32_t msr)
      "mov %%rax,%%rsp\n" \
      :: "a" (sp) )
 
-/* CR3 management. See manual for details about 'PCD' and 'PWT' fields. */
-#if 0
-static inline void load_cr3(uintptr_t phys_addr, uint8_t pcd, uint8_t pwt)
-{
-  uintptr_t cr3_val = (((pwt & 1) << 3) | ((pcd & 1) << 4));
-  
-  /* Normalize new PML4 base. */
-  phys_addr >>= PAGE_WIDTH;
 
-  /* Setup 20 lowest bits of the PML4 base. */
-  cr3_val |= ((phys_addr & 0xfffff) << PAGE_WIDTH);
-
-  /* Setup highest 20 bits of the PML4 base. */
-  cr3_val |= ((phys_addr & (uintptr_t)0xfffff00000) << PAGE_WIDTH);
-  
-  __asm__ volatile("movq %0, %%cr3" :: "r" (cr3_val));
-}
-#endif
-
-static inline long read_cr3(void)
-{
-  long ret;
-  __asm__ volatile("movq %%cr3, %0\n\t"
-                   : "=r" (ret));
-
-  return ret;
-}
-
-static inline void write_cr3(long val)
-{
-  __asm__ volatile("movq %0, %%cr3\n\t"
-                   :: "r" (val));
-}
-
-struct __pde;
-
-static inline void load_cr3(struct __pde *pde)
-{
-  write_cr3(k2p(pde));
-}
-
-#endif /* __ASM_H__ */
+#endif /* __MSTRING_ARCH_ASM_H__ */
 

@@ -25,8 +25,8 @@
 #include <config.h>
 #include <mstring/kprintf.h>
 #include <mstring/scheduler.h>
-#include <mstring/kernel.h>
 #include <mstring/smp.h>
+#include <mstring/panic.h>
 #include <arch/scheduler.h>
 #include <arch/types.h>
 #include <arch/bits.h>
@@ -47,7 +47,6 @@
 #include <mstring/kconsole.h>
 #include <mstring/gc.h>
 #include <mstring/time.h>
-#include <arch/profile.h>
 #include <mstring/sched_default.h>
 
 extern void initialize_idle_tasks(void);

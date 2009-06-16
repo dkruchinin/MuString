@@ -21,15 +21,15 @@
  */
 
 #include <mm/pfalloc.h>
-#include <mstring/kernel.h>
 #include <arch/bits.h>
 #include <mstring/errno.h>
 #include <mstring/kprintf.h>
 #include <mstring/stddef.h>
+#include <mstring/panic.h>
 #include <arch/page.h>
 #include <mstring/task.h>
 #include <mstring/kstack.h>
-#include <arch/mm.h>
+#include <arch/mem.h>
 
 static kernel_stack_allocator_context_t main_stack_ctx;
 
@@ -108,7 +108,7 @@ int allocate_kernel_stack(kernel_stack_t *stack)
     stack->low_address = stack->high_address - KERNEL_STACK_SIZE;
     stack->id = idx;
   } else {
-    stack->high_address = KERNEL_INVALID_ADDRESS;
+    stack->high_address = 0;
     stack->id = INVALID_STACK_ID;
   }
 

@@ -24,7 +24,7 @@
 #include <kernel/syscalls.h>
 #include <mstring/smp.h>
 #include <mstring/process.h>
-#include <mstring/kernel.h>
+#include <mstring/panic.h>
 #include <mstring/task.h>
 #include <ipc/ipc.h>
 #include <mstring/security.h>

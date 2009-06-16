@@ -21,12 +21,13 @@
  *                                constants, types and inlines.
  */
 
-#ifndef __AMD64_INTERRUPT_H__
-#define __AMD64_INTERRUPT_H__ 
+#ifndef __MSTRING_ARCH_INTERRUPT_H__
+#define __MSTRING_ARCH_INTERRUPT_H__ 
 
 #include <arch/asm.h>
-#include <arch/types.h>
 #include <arch/current.h>
+#include <arch/seg.h>
+#include <mstring/types.h>
 
 #define HZ  1000 /* Timer frequency. */
 #define IRQ_BASE 32 /* First vector in IDT for IRQ #0. */
@@ -43,6 +44,7 @@
 //#endif
 
 typedef uint64_t ipl_t;
+typedef uint8_t irqvec_t;
 
 /* AMD 64 interrupt/exception stack frame */
 typedef struct __interrupt_stack_frame {
@@ -60,6 +62,12 @@ typedef struct __interrupt_stack_frame_err {
   (struct __gpr_regs *)(((uintptr_t)(s))-sizeof(struct __gpr_regs)-8)
 
 extern volatile cpu_id_t online_cpus;
+
+static inline void idt_set_gate(irqvec_t vecnum, void *handler)
+{
+  idt_install_gate(vecnum, SEG_TYPE_INTR,
+                   SEG_DPL_KERNEL, (uintptr_t)handler, 0);
+}
 
 static inline ipl_t interrupts_read(void)
 {

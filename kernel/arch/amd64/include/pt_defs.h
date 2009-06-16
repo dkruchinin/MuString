@@ -17,37 +17,38 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * include/mstring/amd64/ptable.h - AMD64-specific page-table management API
- *
+ * AMD64 page table constants and definitions
  */
 
-#ifndef __ARCH_PTABLE_H__
-#define __ARCH_PTABLE_H__
+#ifndef __MSTRING_ARCH_PT_DEFS_H__
+#define __MSTRING_ARCH_PT_DEFS_H__
 
+#include <config.h>
+
+#define PDE_PRESENT 0x0001 /**< PDE is present. I.e. corresponding page content is holding in main memory */
+#define PDE_RW      0x0002 /**< PDE is accessible for read and write operations */
+#define PDE_US      0x0004 /**< User/suptervisor flag. If set, PDE is accessible from user-space. */
+#define PDE_PWT     0x0008 /**< Page-Level Writethrough. When bit is set,
+                              page has writeback caching policy and writethrough otherwise */
+#define PDE_PCD     0x0010 /**< Page-Level Cache Disable. When bit is set, page is not cacheable. */
+#define PDE_ACC     0x0020 /**< This bit indicates whether the page-translation table or
+                              physical page to which this entry points has been accessed */
+#define PDE_DIRTY   0x0040 /**< Indicates whether the page-translation table or physical page to which this
+                              entry points has been written. */
+#define PDE_PS      0x0080 
+#define PDE_GLOBAL  0x0100 /**< The TLB entry for a global page (G=1) is not invalidated when CR3 is loaded */
+#define PDE_PAT     0x1000 /**< Page-Attribute Table. See “Page-Attribute Table Mechanism” on page 193
+                              of AMD architecture programmers manual vol. 2 for more info. */
+#define PDE_NX      0x2000 /**< When the NX bit is set to 1, code cannot be executed from the mapped
+                              physical pages. See “No Execute (NX) Bit” on page 143 of AMD architecture programmers
+                              manual vol. 2 for more info. */
+#ifndef __ASM__
 #include <mm/page.h>
-#include <arch/spinlock.h>
-#include <arch/types.h>
-
-typedef enum __ptable_flags {
-  PDE_PRESENT = 0x0001, /**< PDE is present. I.e. corresponding page content is holding in main memory */
-  PDE_RW      = 0x0002, /**< PDE is accessible for read and write operations */
-  PDE_US      = 0x0004, /**< User/suptervisor flag. If set, PDE is accessible from user-space. */
-  PDE_PWT     = 0x0008, /**< Page-Level Writethrough. When bit is set,
-                           page has writeback caching policy and writethrough otherwise */
-  PDE_PCD     = 0x0010, /**< Page-Level Cache Disable. When bit is set, page is not cacheable. */
-  PDE_ACC     = 0x0020, /**< This bit indicates whether the page-translation table or
-                          physical page to which this entry points has been accessed */
-  PDE_DIRTY   = 0x0040, /**< Indicates whether the page-translation table or physical page to which this
-                           entry points has been written. */
-  PDE_GLOBAL  = 0x0100, /**< The TLB entry for a global page (G=1) is not invalidated when CR3 is loaded */
-  PDE_PAT     = 0x1000, /**< Page-Attribute Table. See “Page-Attribute Table Mechanism” on page 193
-                           of AMD architecture programmers manual vol. 2 for more info. */
-  PDE_NX      = 0x2000, /**< When the NX bit is set to 1, code cannot be executed from the mapped
-                           physical pages. See “No Execute (NX) Bit” on page 143 of AMD architecture programmers
-                           manual vol. 2 for more info. */
-} ptable_flags_t;
+#include <arch/page.h>
+#include <mstring/types.h>
 
 typedef uint32_t pde_idx_t;
+typedef uint16_t ptable_flags_t;
 
 /* default flags for all page table directories */
 #define PTABLE_DEF_PDIR_FLAGS (PDE_RW | PDE_US)
@@ -57,7 +58,7 @@ typedef uint32_t pde_idx_t;
  * @brief Root page directory structures (AMD64-specific)
  */
 
-#define RPD_PAGEDIR(rpd) ((page_frame_t *)(rpd)->root_dir)
+#define ROOT_PDIR_PAGE(rpd) ((rpd)->root_dir)
 
 /**
  * @struct pde_t
@@ -72,7 +73,7 @@ typedef struct __pde {
   unsigned flags      :12;
   unsigned base_0_19  :20;
   unsigned base_20_39 :20;
-  unsigned avail      :11;
+  unsigned count      :11;
   unsigned nx          :1;
 } __attribute__((packed)) pde_t;
 
@@ -80,8 +81,17 @@ typedef struct __pde {
 #define PTABLE_LEVEL_FIRST 0     /**< Level of the lowest pde */
 #define PTABLE_LEVEL_LAST  3     /**< Level of the highest pde */
 
+#define pagedir_set_ref(pde, val)               \
+    ((pde)->count = (val))
+#define pagedir_get_ref(pde)                    \
+    ((pde)->count)
+#define pagedir_ref(pde)                        \
+    ((pde)->count++)
+#define pagedir_unref(pde)                      \
+    ((pde)->count--)
+
 #define pde_is_present(pde) (!!((pde)->flags & PDE_PRESENT))
-#define pde_is_kmapped(pde) (!((pde)->flags & PDE_US))
+#define pde_set_not_present(pde) ((pde)->flags &= ~PDE_PRESENT)
 
 /**
  * @brief Translate virtual address to PDE index.
@@ -134,8 +144,6 @@ static inline void pde_save(pde_t *pde, page_idx_t page_idx, ptable_flags_t flag
   pde_set_flags(pde, flags | PDE_PRESENT);
 }
 
-#define pde_set_not_present(pde) ((pde)->flags &= ~PDE_PRESENT)
-
 /**
  * @brief Get PDE flags
  * @param pde - A pointer to pde flags will be readed from
@@ -156,14 +164,19 @@ static inline page_idx_t pde_fetch_page_idx(pde_t *pde)
   return ((pde_idx_t)pde->base_0_19 | ((pde_idx_t)pde->base_20_39 << 20));
 }
 
+static inline void *pde_get_current_dir(pde_t *pde)
+{
+  return (void *)PAGE_ALIGN_DOWN(pde);
+}
+
 /**
  * @brief Fetch subdirectory("subPDE") from a given pde
  * @param pde - A pointer to pde_t
  * @return A pointer to page frame that is a subdirectory of @a pde.
  */
-static inline page_frame_t *pde_fetch_subdir(pde_t *pde)
+static inline void *pde_fetch_subdir(pde_t *pde)
 {
-  return pframe_by_number(pde_fetch_page_idx(pde));
+  return pframe_id_to_virt(pde_fetch_page_idx(pde));
 }
 
 /**
@@ -172,9 +185,9 @@ static inline page_frame_t *pde_fetch_subdir(pde_t *pde)
  * @param eidx - Child PDE index in the page directory @a dir
  * @return A pointer to child pde
  */
-static inline pde_t *pde_fetch(page_frame_t *dir, pde_idx_t eidx)
+static inline pde_t *pde_fetch(void *dir, pde_idx_t eidx)
 {
-  return ((pde_t *)pframe_to_virt(dir) + eidx);
+  return ((pde_t *)dir + eidx);
 }
 
 
@@ -193,7 +206,8 @@ static inline uintptr_t pde_get_addrs_range(int pde_level)
  * @param kmap_flags - Kerenel map flags
  * @return Page table flags
  */
-ptable_flags_t kmap_to_ptable_flags(uint32_t kmap_flags);
+ptable_flags_t kmap_to_ptable_flags(ulong_t kmap_flags);
 uint32_t ptable_to_kmap_flags(ptable_flags_t flags);
 
-#endif /* __ARCH_PTABLE_H__ */
+#endif /* __ASM__ */
+#endif /* __MSTRING_ARCH_PT_DEFS__ */

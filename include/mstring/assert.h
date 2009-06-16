@@ -26,7 +26,6 @@
 #define __ASSERT_H__
 
 #include <config.h>
-#include <mstring/kernel.h>
 #include <arch/assert.h>
 
 #ifdef CONFIG_DEBUG

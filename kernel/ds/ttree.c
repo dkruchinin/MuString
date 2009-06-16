@@ -27,7 +27,6 @@
  */
 
 #include <config.h>
-#include <ds/iterator.h>
 #include <ds/ttree.h>
 #include <mm/slab.h>
 #include <mstring/string.h>

@@ -24,7 +24,7 @@
 #include <arch/types.h>
 #include <mstring/scheduler.h>
 #include <mstring/process.h>
-#include <arch/mm.h>
+#include <arch/mem.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
 #include <mm/vmm.h>
@@ -44,6 +44,7 @@
 
 long initrd_start_page,initrd_num_pages;
 
+#define USER_STACK_SIZE 16
 #ifndef CONFIG_TEST
 
 static int mmap_core(vmm_t *vmm, uintptr_t addr, page_idx_t first_page,
@@ -58,11 +59,11 @@ static int mmap_core(vmm_t *vmm, uintptr_t addr, page_idx_t first_page,
   ASSERT(vmr != NULL);
   pagetable_lock(&vmm->rpd);
   for (i = 0; i < npages; i++, first_page++, addr += PAGE_SIZE) {
-    ret = mmap_one_page(&vmm->rpd, addr, first_page, flags);
+    ret = mmap_page(&vmm->rpd, addr, first_page, flags);
     if (ret)
       goto out;
     if (likely(page_idx_is_present(first_page))) {
-      page = pframe_by_number(first_page);
+      page = pframe_by_id(first_page);
       pin_page_frame(page);
       lock_page_frame(page, PF_LOCK);
       rmap_register_anon(page, vmm, addr);
@@ -186,11 +187,11 @@ static void __create_task_mm(task_t *task, int num)
   /*  kprintf("elf entry -> %p\n",ehead.e_entry); */
 
   /*remap pages*/
-  r = vmrange_map(generic_memobj, vmm, USPACE_VA_BOTTOM, text_size, VMR_READ | VMR_EXEC | VMR_PRIVATE | VMR_FIXED, 0);
+  r = vmrange_map(generic_memobj, vmm, USPACE_VADDR_BOTTOM, text_size, VMR_READ | VMR_EXEC | VMR_PRIVATE | VMR_FIXED, 0);
   if (!PAGE_ALIGN(r))
     panic("Server [#%d]: Failed to create VM range for \"text\" section. (ERR = %d)", num, r);
 
-  r = mmap_core(vmm, USPACE_VA_BOTTOM, code >> PAGE_WIDTH, text_size, KMAP_READ | KMAP_EXEC);
+  r = mmap_core(vmm, USPACE_VADDR_BOTTOM, code >> PAGE_WIDTH, text_size, KMAP_READ | KMAP_EXEC);
   if (r)
     panic("Server [#%d]: Failed to map \"text\" section. (ERR = %d)", num, r);
 
@@ -214,13 +215,13 @@ static void __create_task_mm(task_t *task, int num)
     }
   }
 
-  r = vmrange_map(generic_memobj, vmm, USPACE_VA_TOP - 0x40000, USER_STACK_SIZE,
+  r = vmrange_map(generic_memobj, vmm, USPACE_VADDR_TOP - 0x40000, USER_STACK_SIZE,
                   VMR_READ | VMR_WRITE | VMR_STACK | VMR_PRIVATE | VMR_POPULATE | VMR_FIXED, 0);
   /*r = mmap_core(task_get_rpd(task), USPACE_VA_TOP-0x40000, pframe_number(stack), USER_STACK_SIZE, KMAP_READ | KMAP_WRITE);*/
   if (!PAGE_ALIGN(r))
     panic("Server [#%d]: Failed to create VM range for stack. (ERR = %d)", num, r);
   /* Now allocate stack space for per-task user data. */
-  ustack_top=USPACE_VA_TOP-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH);
+  ustack_top=USPACE_VADDR_TOP-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH);
   ustack_top-=PER_TASK_DATA_SIZE;
   ptd=user_to_kernel_vaddr(task_get_rpd(task),ustack_top);
   if( !ptd ) {

@@ -23,7 +23,6 @@
  */
 
 #include <config.h>
-#include <ds/iterator.h>
 #include <arch/types.h>
 #include <arch/apic.h>
 #include <mstring/interrupt.h>

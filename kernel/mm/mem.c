@@ -21,17 +21,22 @@
  *
  */
 
-#include <ds/iterator.h>
 #include <ds/list.h>
+#include <arch/mem.h>
 #include <mm/page.h>
 #include <mm/mmpool.h>
 #include <mm/pfalloc.h>
-#include <mm/idalloc.h>
 #include <mm/vmm.h>
 #include <mm/mem.h>
 #include <mm/memobj.h>
 #include <mm/rmap.h>
+#include <mstring/panic.h>
+#include <mstring/assert.h>
 #include <mstring/types.h>
+
+rpd_t kernel_root_pdir;
+page_frame_t *page_frames_array;
+page_idx_t num_phys_pages;
 
 #ifdef CONFIG_DEBUG_MM
 static inline void __check_one_frame(mm_pool_t *p, page_frame_t *pf)
@@ -116,23 +121,34 @@ static void __validate_mmpools_dbg(void)
 #define __validate_mmpools_dbg()
 #endif /* CONFIG_DEBUG_MM */
 
+static void *allocate_pagedir(void)
+{
+  page_frame_t *page = alloc_page(AF_ZERO);
+  
+  if (!page) {
+    return NULL;
+  }
+
+  return pframe_to_virt(page);
+}
+
+static void free_pagedir(void *pdir)
+{
+  ASSERT(pdir != NULL);
+  free_page(virt_to_pframe(pdir));
+}
+
 void mm_initialize(void)
 {
   mm_pool_t *pool;
   int activated_pools = 0;
-  pfalloc_flags_t old_flags;
 
   mmpools_initialize();
-  arch_mm_init();
-  mmpool_activate(POOL_BOOTMEM());
-  old_flags = ptable_ops.alloc_flags;
-  ptable_ops.alloc_flags = BOOTMEM_POOL_TYPE | AF_ZERO;
-  if (initialize_rpd(&kernel_rpd, NULL))
-    panic("mm_init: Can't initialize kernel root page directory!");
+  arch_mem_init();
 
-  /* Now we can remap available memory */
-  arch_mm_remap_pages();
-  ptable_ops.alloc_flags = old_flags;  
+  pt_ops.alloc_pagedir = allocate_pagedir;
+  pt_ops.free_pagedir = free_pagedir;
+  
   for_each_mm_pool(pool) {
     if (!atomic_get(&pool->free_pages) || (pool->type == BOOTMEM_POOL_TYPE)) {
       continue;
@@ -180,7 +196,7 @@ int handle_copy_on_write(vmrange_t *vmr, uintptr_t addr,
   ASSERT_DBG((addr >= vmr->bounds.space_start) &&
              (addr < vmr->bounds.space_end));
 
-  pidx = vaddr2page_idx(&vmm->rpd, addr);
+  pidx = vaddr_to_pidx(&vmm->rpd, addr);
 
   /*
    * Check if another thread hasn't already made all work itself.
@@ -203,7 +219,7 @@ int handle_copy_on_write(vmrange_t *vmr, uintptr_t addr,
   unlock_page_frame(src_page, PF_LOCK);
   unpin_page_frame(src_page);
 
-  ret = mmap_one_page(&vmm->rpd, addr, pframe_number(dst_page), vmr->flags);
+  ret = mmap_page(&vmm->rpd, addr, pframe_number(dst_page), vmr->flags);
   if (ret)
     return ret;
 
@@ -275,14 +291,14 @@ int mmap_kern(uintptr_t va_from, page_idx_t first_page, pgoff_t npages, long fla
   pgoff_t i;
   int ret = 0;
 
-  pagetable_lock(&kernel_rpd);
+  pagetable_lock(KERNEL_ROOT_PDIR());
   for (i = 0; i < npages; i++, va_from += PAGE_SIZE, first_page++) {    
-    ret = mmap_one_page(&kernel_rpd, va_from, first_page, flags);
+    ret = mmap_page(KERNEL_ROOT_PDIR(), va_from, first_page, flags);
     if (ret)
       goto out;
   }
 
 out:
-  pagetable_unlock(&kernel_rpd);
+  pagetable_unlock(KERNEL_ROOT_PDIR());
   return ret;
 }

@@ -25,16 +25,15 @@
 
 #include <mstring/smp.h>
 #include <arch/current.h>
-#include <arch/asm.h>
+#include <arch/msr.h>
 #include <mstring/task.h>
-#include <arch/cpu.h>
 
 extern cpu_sched_stat_t PER_CPU_VAR(cpu_sched_stat);
 
 #define arch_activate_idle_task(cpu) \
   { register task_t *t = idle_tasks[cpu]; \
-    write_msr(AMD_MSR_GS,0); \
-    write_msr(AMD_MSR_GS_KRN,(uint64_t)raw_percpu_get_var(cpu_sched_stat,cpu)); \
+    msr_write(MSR_GS_BASE,0); \
+    msr_write(MSR_KERN_GS_BASE,(uint64_t)raw_percpu_get_var(cpu_sched_stat,cpu)); \
     __asm__ __volatile__( "swapgs" );                                           \
     load_stack_pointer(t->kernel_stack.high_address-128);                       \
   }

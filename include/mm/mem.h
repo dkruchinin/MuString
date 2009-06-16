@@ -1,13 +1,34 @@
-#ifndef __MEM_H__
-#define __MEM_H__
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
+ *
+ */
+
+#ifndef __MSTRING_MEM_H__
+#define __MSTRING_MEM_H__
 
 #include <config.h>
+#include <arch/mem.h>
+#include <arch/ptable.h>
 #include <mm/page.h>
 #include <mm/pfalloc.h>
 #include <mm/mmpool.h>
 #include <sync/spinlock.h>
-#include <arch/mm.h>
-#include <arch/ptable.h>
 #include <mstring/types.h>
 
 struct __vmm;
@@ -17,19 +38,19 @@ typedef struct __rpd {
   struct __vmm *vmm;
 } rpd_t;
 
-typedef struct __ptable_ops {
-  int (*initialize_rpd)(rpd_t *rpd);
-  void (*deinitialize_rpd)(rpd_t *rpd);
-  void (*clone_rpd)(rpd_t *clone, rpd_t *src);
-  int (*mmap_one_page)(rpd_t *rpd, uintptr_t vaddr,
-                       page_idx_t pidx, ptable_flags_t flags);
-  void (*munmap_one_page)(rpd_t *rpd, uintptr_t vaddr);
-  page_idx_t (*vaddr2page_idx)(rpd_t *rpd, uintptr_t vaddr,
-                               /* OUT */ pde_t **retpde);
-  pfalloc_flags_t alloc_flags;
-} ptable_ops_t;
+struct pt_ops {
+  int (*map_page)(rpd_t *rpd, uintptr_t vaddr,
+                  page_idx_t pidx, ptable_flags_t flags);
+  void (*unmap_page)(rpd_t *rpd, uintptr_t vaddr);
+  page_idx_t (*vaddr_to_pidx)(rpd_t *rpd, uintptr_t vaddr,
+                              /* OUT */ pde_t **retpde);
+  void *(*alloc_pagedir)(void);
+  void (*free_pagedir)(void *pdir);
+  int (*root_pdir_init_arch)(rpd_t *rpd);
+  void (*root_pdir_deinit_arch)(rpd_t *rpd);
+};
 
-extern ptable_ops_t ptable_ops;
+extern struct pt_ops pt_ops;
 
 #define pagetable_lock(rpd) spinlock_lock(&(rpd)->rpd_lock)
 #define pagetable_unlock(rpd) spinlock_unlock(&(rpd)->rpd_lock)
@@ -38,40 +59,59 @@ static inline int initialize_rpd(rpd_t *rpd, struct __vmm *vmm)
 {
   spinlock_initialize(&rpd->rpd_lock);
   rpd->vmm = vmm;
-  return ptable_ops.initialize_rpd(rpd);
+  return pt_ops.root_pdir_init_arch(rpd);
 }
 
 static inline void deinitialize_rpd(rpd_t *rpd)
-{
-  ptable_ops.deinitialize_rpd(rpd);
+{  
+  pt_ops.root_pdir_deinit_arch(rpd);
 }
 
-static inline int mmap_one_page(rpd_t *rpd, uintptr_t va,
-                                page_idx_t pidx, ulong_t flags)
+extern rpd_t kernel_root_pdir;
+extern struct pt_ops pt_ops;
+
+typedef enum kmap_flags {
+  KMAP_KERN    = 0x01,
+  KMAP_READ    = 0x02,
+  KMAP_WRITE   = 0x04,
+  KMAP_EXEC    = 0x08,
+  KMAP_NOCACHE = 0x10,
+} kmap_flags_t;
+
+#define KMAP_OFFSET 5
+#define KERNEL_ROOT_PDIR() (&kernel_root_pdir)
+
+INITCODE void mem_init(void);
+rpd_t *root_pdir_allocate(void);
+void root_pdir_free(rpd_t *rpd);
+
+
+static inline int mmap_page(rpd_t *rpd, uintptr_t addr,
+                            page_idx_t pidx, kmap_flags_t flags)
 {
-  return ptable_ops.mmap_one_page(rpd, va, pidx, kmap_to_ptable_flags(flags));
+  return pt_ops.map_page(rpd, addr, pidx,
+                         kmap_to_ptable_flags(flags));
 }
 
-static inline void munmap_one_page(rpd_t *rpd, uintptr_t va)
+static inline void munmap_page(rpd_t *rpd, uintptr_t addr)
 {
-  ptable_ops.munmap_one_page(rpd, va);
+  pt_ops.unmap_page(rpd, addr);
 }
 
-
-static inline page_idx_t __vaddr2page_idx(rpd_t *rpd,
-                                          uintptr_t addr, pde_t **pde)
+static inline page_idx_t __vaddr_to_pidx(rpd_t *rpd, uintptr_t addr,
+                                         /* OUT */ pde_t **pde)
 {
-  return ptable_ops.vaddr2page_idx(rpd, addr, pde);
+  return pt_ops.vaddr_to_pidx(rpd, addr, pde);
 }
 
-static inline page_idx_t vaddr2page_idx(rpd_t *rpd, uintptr_t addr)
+static inline int vaddr_to_pidx(rpd_t *rpd, uintptr_t addr)
 {
-  return __vaddr2page_idx(rpd, addr, NULL);
+  return __vaddr_to_pidx(rpd, addr, NULL);
 }
 
 static inline bool page_is_mapped(rpd_t *rpd, uintptr_t va)
 {
-  return (vaddr2page_idx(rpd, va) != PAGE_IDX_INVAL);
+  return (vaddr_to_pidx(rpd, va) != PAGE_IDX_INVAL);
 }
 
 static inline void unpin_page_frame(page_frame_t *pf)
@@ -92,30 +132,30 @@ static inline void pin_page_frame(page_frame_t *pf)
 static inline bool valid_user_address_range(uintptr_t va_start,
                                             uintptr_t length)
 {
-    return ((va_start >= USPACE_VA_BOTTOM) &&
-            ((va_start + length) <= USPACE_VA_TOP));
+    return ((va_start >= USPACE_VADDR_BOTTOM) &&
+            ((va_start + length) <= USPACE_VADDR_TOP));
 }
 
 static inline void *user_to_kernel_vaddr(rpd_t *rpd, uintptr_t addr)
-{
-  page_idx_t idx = ptable_ops.vaddr2page_idx(rpd, addr, NULL);
+{  
+  page_idx_t idx;
 
+  idx = vaddr_to_pidx(rpd, addr);
   if (idx == PAGE_IDX_INVAL)
     return NULL;
 
-  return ((char *)pframe_to_virt(pframe_by_number(idx)) +
+  return ((char *)pframe_to_virt(pframe_by_id(idx)) +
           (addr - PAGE_ALIGN_DOWN(addr)));
 }
 
 #define lock_page_frame(p, bit)                 \
-  spinlock_lock_bit(&(p)->flags, bitnumber(bit))
+  spinlock_lock_bit(&(p)->flags, BITNUM(bit))
 #define unlock_page_frame(p, bit)               \
-  spinlock_unlock_bit(&(p)->flags, bitnumber(bit))
+  spinlock_unlock_bit(&(p)->flags, BITNUM(bit))
 
-extern rpd_t kernel_rpd;
 struct __vmrange;
 
 int mmap_kern(uintptr_t va_from, page_idx_t first_page, pgoff_t npages, long flags);
 int handle_copy_on_write(struct __vmrange *vmr, uintptr_t addr,
                          page_frame_t *dst_page, page_frame_t *src_page);
-#endif /* __MEM_H__ */
+#endif /* __MSTRING_MEM_H__ */

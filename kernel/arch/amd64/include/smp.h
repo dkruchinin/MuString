@@ -21,21 +21,22 @@
  *
  */
 
-#ifndef __EZA_SMP_H__
-#define __EZA_SMP_H__
+#ifndef __MSTRING_ARCH_SMP_H__
+#define __MSTRING_ARCH_SMP_H__
 
-#include <arch/types.h>
-#include <arch/gdt.h>
+#include <arch/seg.h>
+#include <mstring/types.h>
 
-#ifdef CONFIG_SMP
+extern int ap_boot_start, ap_boot_end,
+    kernel_jump_addr, ap_jmp_rip;
+
 extern void ap_boot(void);
-extern ptr_16_32_t protected_ap_gdtr;
+extern void smp_start32(void);
+extern void main_smpap_routine(void);
 void arch_smp_init(int ncpus);
 
 void smp_local_timer_interrupt_handler(void);
 void smp_scheduler_interrupt_handler(void);
 
-#endif /* CONFIG_SMP */
-
-#endif /* __EZA_SMP_H__ */
+#endif /* __MSTRING_ARCH_SMP_H__ */
 

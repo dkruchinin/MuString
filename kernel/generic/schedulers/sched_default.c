@@ -39,7 +39,6 @@
 #include <arch/interrupt.h>
 #include <mstring/security.h>
 #include <mstring/interrupt.h>
-#include <arch/profile.h>
 #include <arch/preempt.h>
 #include <arch/asm.h>
 #include <mstring/kconsole.h>

@@ -20,7 +20,7 @@
  * mstring/generic_api/idletask.c: generic idle tasks-related functions.
  */
 
-#include <mstring/kernel.h>
+#include <config.h>
 #include <mstring/task.h>
 #include <mstring/swks.h>
 #include <mstring/smp.h>

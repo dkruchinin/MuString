@@ -26,9 +26,9 @@
 #include <arch/page.h>
 #include <arch/fault.h>
 #include <arch/interrupt.h>
-#include <mstring/kernel.h>
+#include <mstring/panic.h>
 #include <mstring/kprintf.h>
-#include <arch/mm.h>
+#include <arch/mem.h>
 #include <mstring/smp.h>
 
 void divide_by_zero_fault_handler_impl(interrupt_stack_frame_t *stack_frame)

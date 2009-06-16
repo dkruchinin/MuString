@@ -54,14 +54,14 @@ static int __mmap_one_phys_page(vmm_t *vmm, page_idx_t pidx,
     return -EBUSY;
   }
 
-  ret = mmap_one_page(&vmm->rpd, addr, pidx, flags);
+  ret = mmap_page(&vmm->rpd, addr, pidx, flags);
   if (ret) {
     GMO_DBG("(pid %ld) Failed to mmap one physical page %#x "
             "to address %p. [RET = %d]\n", vmm->owner->pid, pidx, addr, ret);
     return ret;
   }
   if (likely(page_idx_is_present(pidx))) {
-    page_frame_t *p = pframe_by_number(pidx);
+    page_frame_t *p = pframe_by_id(pidx);
 
     pin_page_frame(p);
     p->offset = pidx;
@@ -84,7 +84,7 @@ static int __mmap_one_anon_page(vmm_t *vmm, page_frame_t *page,
     return -EBUSY;
   }
 
-  ret = mmap_one_page(&vmm->rpd, addr, pframe_number(page), flags);
+  ret = mmap_page(&vmm->rpd, addr, pframe_number(page), flags);
   if (ret) {
     GMO_DBG("(pid %ld) Failed to mmap one anonymous page "
             "%#x to address %p. [RET = %d]\n", vmm->owner->pid,
@@ -102,7 +102,7 @@ static int __mmap_one_anon_page(vmm_t *vmm, page_frame_t *page,
             "just mapped to %p page %#x. [RET = %d]\n",
             vmm->owner->pid, addr, pframe_number(page), ret);
 
-    munmap_one_page(&vmm->rpd, addr);
+    munmap_page(&vmm->rpd, addr);
     unpin_page_frame(page);
   }
 
@@ -162,7 +162,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
     page_idx_t pidx;
 
     pagetable_lock(&vmm->rpd);
-    pidx = __vaddr2page_idx(&vmm->rpd, addr, &pde);
+    pidx = __vaddr_to_pidx(&vmm->rpd, addr, &pde);
     if (unlikely(pidx == PAGE_IDX_INVAL)) {
       ret = -EFAULT;
       goto out_unlock;
@@ -172,14 +172,14 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
       goto out_unlock;
     }
 
-    page = pframe_by_number(pidx);
+    page = pframe_by_id(pidx);
     if (likely(!(page->flags & PF_COW))) {
       /*
        * Just remap page with rights we've been asked.
        * TODO DK: mark page as dirty.
        */
 
-      ret = mmap_one_page(&vmm->rpd, addr, pidx, vmr->flags);
+      ret = mmap_page(&vmm->rpd, addr, pidx, vmr->flags);
     }
     else { /* Handle copy-on-write */
       page_frame_t *new_page;
@@ -204,7 +204,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
       }
 
       unpin_page_frame(page);
-      ret = mmap_one_page(&vmm->rpd, addr, pframe_number(new_page), vmr->flags);
+      ret = mmap_page(&vmm->rpd, addr, pframe_number(new_page), vmr->flags);
       if (likely(!ret)) {
         ret = rmap_register_mapping(vmr->memobj, new_page, vmm, addr);
       }
@@ -290,7 +290,7 @@ static int generic_insert_page(vmrange_t *vmr, page_frame_t *page,
     return -EINVAL;
   }
 
-  ret = mmap_one_page(&vmm->rpd, addr, pframe_number(page),
+  ret = mmap_page(&vmm->rpd, addr, pframe_number(page),
                       mmap_flags & KMAP_FLAGS_MASK);
   if (ret) {
     GMO_DBG("[%d] Failed to insert(mmap) page %#x in VM range [%p, %p) by "
@@ -309,7 +309,7 @@ static int generic_delete_page(vmrange_t *vmr, page_frame_t *page)
   uintptr_t addr = pgoff2addr(vmr, page->offset);
 
   ASSERT(vmr->memobj == memobj_from_page(page));
-  munmap_one_page(&vmr->parent_vmm->rpd, addr);
+  munmap_page(&vmr->parent_vmm->rpd, addr);
   return rmap_unregister_mapping(page, vmr->parent_vmm, addr);
 }
 
@@ -325,14 +325,14 @@ static int generic_depopulate_pages(vmrange_t *vmr, uintptr_t va_from,
 
   pagetable_lock(&vmm->rpd);
   while (va_from < va_to) {
-    pidx = vaddr2page_idx(&vmm->rpd, va_from);
+    pidx = vaddr_to_pidx(&vmm->rpd, va_from);
     if (pidx == PAGE_IDX_INVAL) {
       goto eof_cycle;
     }
 
-    munmap_one_page(&vmm->rpd, va_from);
+    munmap_page(&vmm->rpd, va_from);
     if (likely(page_idx_is_present(pidx))) {
-      page = pframe_by_number(pidx);
+      page = pframe_by_id(pidx);
       if (!(vmr->flags & VMR_PHYS)) {
         ret = rmap_unregister_mapping(page, vmm, va_from);
         if (ret) {

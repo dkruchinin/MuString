@@ -202,13 +202,13 @@
    popq %rax; \
 
 #define ENTER_INTERRUPT_CTX(label,extra_pushes) \
-	cmp $KERNEL_SELECTOR(KTEXT_DES),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ;\
-	je label; \
-        swapgs ;  \
-        SAVE_AND_LOAD_SEGMENT_REGISTERS         \
-label:	;\
-	incq %gs:CPU_SCHED_STAT_IRQCNT_OFFT ;\
-	SAVE_ALL ;\
+	cmp $GDT_SEL(KCODE_DESCR),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ;\
+	je label;                                                           \
+    swapgs ;                                                            \
+    SAVE_AND_LOAD_SEGMENT_REGISTERS             \
+    label:	;                                   \
+	incq %gs:CPU_SCHED_STAT_IRQCNT_OFFT ;       \
+	SAVE_ALL ;                                  \
 	sti
 
 #define COMMON_INTERRUPT_EXIT_PATH \
@@ -219,7 +219,7 @@ label:	;\
 #ifndef __ASM__
 
 #include <mstring/types.h>
-#include <arch/cpu.h>
+#include <arch/seg.h>
 
 #define KERNEL_RFLAGS (DEFAULT_RFLAGS_VALUE | (3 << RFLAGS_IOPL_BIT))
      /* The most sensetive bits in RFLAGS.  */
