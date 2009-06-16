@@ -2,7 +2,7 @@
 include include/Makefile.inc
 -include $(BUILD_ROOT)/$(target)/Makefile
 
-OBJDIR := $(target)/objects
+OBJDIR := $(target)/binaries
 objs := $(addprefix $(OBJDIR)/, $(filter %.o,$(obj-y)))
 dirs := $(filter-out %.o, $(obj-y))
 

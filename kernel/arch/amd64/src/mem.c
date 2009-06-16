@@ -20,9 +20,10 @@
  */
 
 #include <config.h>
+#include <server.h>
 #include <arch/init.h>
 #include <arch/ptable.h>
-#include <arch/asm.h>
+#include <arch/cpu.h>
 #include <arch/msr.h>
 #include <arch/cpufeatures.h>
 #include <mm/page.h>
@@ -337,6 +338,7 @@ static INITCODE void configure_mmpools(void)
 INITCODE void arch_mem_init(void)
 {
   ulong_t phys_mem_bytes = KB2B(mb_info->mem_upper + 1024);
+  uintptr_t srv_addr;
 
   if (phys_mem_bytes < MIN_MEM_REQUIRED) {
     panic("Mstring kernel launches on systems with at least %dM of RAM. "
@@ -351,14 +353,20 @@ INITCODE void arch_mem_init(void)
    */
   scan_phys_mem();
 
-  /* Find out an address where pages can be allocated from */
   SET_KERNEL_END(PAGE_ALIGN((uintptr_t)&_kernel_end));
+  kprintf(KO_INFO "Kernel size: %ldK\n",
+          B2KB(KERNEL_END_PHYS - 1024));
+  srv_addr = server_get_end_phy_addr();
+  if (srv_addr) {
+    kprintf(KO_INFO "Services size: %ldK\n",
+            B2KB(srv_addr - KERNEL_END_PHYS));
+    SET_KERNEL_END(PAGE_ALIGN(srv_addr));
+  }
+  
+  /* Find out an address where pages can be allocated from */  
   space_rest = phys_mem_bytes - PAGE_ALIGN(KERNEL_END_PHYS) - 1024;
   ptable_mem_start =  (char *)KERNEL_END_VIRT;
   
-  kprintf(KO_INFO "Kernel size: %dK\n",
-          B2KB(KERNEL_END_PHYS - 1024));
-
   /*
    * Initialize early memory allocator for page allocation
    * during system boot process.

@@ -1162,7 +1162,7 @@ out:
   return ret;
 }
 
-#define MMAP_SIZE_LIMIT _mb2b(1024UL)
+#define MMAP_SIZE_LIMIT MB2B(1024UL)
 
 long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
 {

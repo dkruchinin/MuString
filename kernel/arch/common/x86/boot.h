@@ -42,6 +42,13 @@ typedef struct multiboot_info {
   uint32_t mmap_addr;     /* physical address of memory map buffer */
 } __attribute__ ((packed)) multiboot_info_t;
 
+typedef struct multiboot_module {
+  uint32_t mod_start;
+  uint32_t mod_end;
+  uint32_t string;
+  uint32_t reserved;
+} __attribute__ ((packed)) multiboot_mod_t;
+
 typedef enum e820_mem_type {
   E820_USABLE   = 1,
   E820_RESERVED = 2,

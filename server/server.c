@@ -21,19 +21,26 @@
  *
  */
 
-#include <arch/types.h>
-#include <mstring/kprintf.h>
+/*
+ * FIXME: server related stuff is arch-dependent for now
+ * There must be generic server runner abstraction, even though
+ * the code in server directore is amd64 and x86 dependent and it must
+ * be moved to a proper place in the source tree.
+ */
 #include <server.h>
+#include <arch/boot.h>
+#include <mstring/kprintf.h>
+#include <mstring/types.h>
 
 uint32_t server_get_num(void)
 {
-  return init.c;
+  return mb_info->mods_count;
 }
 
 uintptr_t server_get_start_phy_addr(void)
 {
   if(server_get_num()>0) 
-    return init.server[0].addr;
+    return mb_info->mods_addr;
   else
     return 0;
 }
