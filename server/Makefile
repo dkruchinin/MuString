@@ -1,2 +1,2 @@
-obj-y += server.o init.o
+obj-y += init.o
 

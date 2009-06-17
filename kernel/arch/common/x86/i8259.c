@@ -23,10 +23,10 @@
  */
 
 #include <config.h>
-#include <mstring/interrupt.h>
-#include <arch/8259.h>
-#include <arch/types.h>
+#include <arch/i8259.h>
 #include <arch/asm.h>
+#include <mstring/interrupt.h>
+#include <mstring/types.h>
 
 static void i8259a_disable_all(void)
 {

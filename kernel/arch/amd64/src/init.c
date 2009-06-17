@@ -1,4 +1,5 @@
 #include <config.h>
+#include <server.h>
 #include <arch/boot.h>
 #include <arch/seg.h>
 #include <arch/msr.h>
@@ -76,6 +77,7 @@ static INITCODE void init_cpu_features(void)
   write_cr4(val);
 }
 
+
 INITCODE void arch_cpu_init(cpu_id_t cpu)
 {
   init_cpu_features();
@@ -101,4 +103,5 @@ INITCODE void arch_init(void)
   multiboot_init();
   arch_cpu_init(0);
   install_fault_handlers();
+  arch_servers_init();
 }

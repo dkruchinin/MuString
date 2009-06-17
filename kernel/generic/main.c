@@ -41,13 +41,6 @@
 #include <mstring/gc.h>
 #include <mstring/signal.h>
 
-init_t init={ /* initially created for userspace task, requered for servers loading */
-   .c=0
-};
-
-/* current context safe */
-context_t crsc;
-
 extern void initialize_common_hardware(void);
 extern void initialize_timer(void);
 
@@ -72,6 +65,7 @@ static void main_routine_stage1(void)
    * the other CPUs.
    */
   setup_time();
+  for (;;);
   interrupts_enable();
   initialize_swks();
 
@@ -90,7 +84,6 @@ void kernel_main(void)
   arch_init();
   initialize_irqs();
 
-  kprintf("[MB] Modules: %d\n",init.c);
   mm_initialize();
   slab_allocator_init();
   vmm_initialize();

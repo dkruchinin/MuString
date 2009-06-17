@@ -77,6 +77,7 @@ static void __setup_arch_segment_regs(arch_context_t *ctx,
   ctx->es = es;
   ctx->gs = gs;
   ctx->ds = ds;
+
 }
 
 static void __arch_setup_ctx(task_t *newtask,uint64_t rsp,
@@ -397,8 +398,8 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
         ldt_dsc=&ldt_dsc[PTD_SELECTOR];
 
         arch_ctx->per_task_data=arg;
-        seg_descr_setup(ldt_dsc, SEG_TYPE_LDT, SEG_DPL_USER,
-                        0, (uint32_t)arg, SEG_FLG_PRESENT);
+        seg_descr_setup(ldt_dsc, SEG_TYPE_DATA, SEG_DPL_USER,
+                        (uint32_t)arg, 0, SEG_FLG_PRESENT);
 
         interrupts_disable();
         if( task == current_task() ) {
@@ -438,7 +439,7 @@ void arch_activate_task(task_t *to)
   arch_context_t *to_ctx = (arch_context_t*)&to->arch_context[0];
   arch_context_t *from_ctx = (arch_context_t*)&(current_task()->arch_context[0]);
   tss_t *tss=to_ctx->tss;
-  uint16_t tss_limit;  
+  uint16_t tss_limit;
 
   if( !tss ) {
     tss=get_cpu_tss(to->cpu);
@@ -448,7 +449,8 @@ void arch_activate_task(task_t *to)
   }
 
   /* We should setup TSS to reflect new task's kernel stack. */
-  tss->rsp0 = to->kernel_stack.high_address;
+  tss->rsp0 = to->kernel_stack.high_address;  
+  
   /* Reload TSS. */
   load_tss(to->cpu,tss,tss_limit);
 

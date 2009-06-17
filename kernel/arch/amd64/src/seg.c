@@ -20,7 +20,8 @@ static char ist_stacks[TSS_USED_ISTS][IST_STACK_SIZE] __page_aligned__;
 static void __install_tss(struct tss_descr *descr, int type, uint8_t dpl,
                           uint64_t base, uint32_t limit, uint8_t flags)
 {
-  seg_descr_setup(&descr->seg_low, type, dpl, base, limit, flags);
+  seg_descr_setup(&descr->seg_low, type, dpl,
+                  base & 0xffffffffU, limit, flags);
   descr->seg_high.base_rest = (base >> 32) & 0xffffffffU;
   descr->seg_high.ignored = 0;
 }
@@ -30,14 +31,15 @@ static void tss_init(tss_t *tssp)
   int i;
   
   memset(tssp, 0, sizeof(*tssp));
-  for (i = 0; i < TSS_NUM_ISTS; i++) {
+  tssp->ist1 = (uint64_t)&ist_stacks[0];
+  /*for (i = 0; i < TSS_NUM_ISTS; i++) {
     if (i < TSS_USED_ISTS) {
       tssp->ists[i] = (uint64_t)&ist_stacks[i];
     }
     else {
       tssp->ists[i] = 0;
     }
-  }
+    }*/
   
   tssp->iomap_base = TSS_BASIC_SIZE;
 }
@@ -54,7 +56,8 @@ INITCODE void idt_install_gate(int slot, uint8_t type, uint8_t dpl,
   idt_descr->offset_high = (handler >> 32) & 0xffffffffU;
   idt_descr->selector = GDT_SEL(KCODE_DESCR);
   idt_descr->ist = ist;
-  idt_descr->flags = type | (dpl << SEG_DPL_SHIFT) | (SEG_FLG_PRESENT << 7);
+  idt_descr->flags = type | ((dpl & 0x03) << SEG_DPL_SHIFT)
+      | (SEG_FLG_PRESENT << 7);
   idt_descr->ignored0 = idt_descr->ignored1 = 0;
 }
 
@@ -63,6 +66,8 @@ INITCODE void arch_seg_init(cpu_id_t cpu)
 {
   gdtr_t gdtr;
 
+  memset(&gdt[cpu], 0, sizeof(gdt[cpu]));
+  
   /* Null segment */
   seg_descr_setup(&gdt[cpu][NULL_DESCR], 0, 0, 0, 0, 0);
 
@@ -85,12 +90,15 @@ INITCODE void arch_seg_init(cpu_id_t cpu)
   /* Kerne 32bit code segment */
   seg_descr_setup(&gdt[cpu][KCODE32_DESCR], SEG_TYPE_CODE, SEG_DPL_KERNEL,
                   0, 0xfffff, SEG_FLG_PRESENT | SEG_FLG_OPSIZE | SEG_FLG_GRAN);
+  {
+      *(uint64_t *)&gdt[cpu][UCODE_DESCR] = 0xaff8000000ffffUL;
+      *(uint64_t *)&gdt[cpu][UDATA_DESCR] = 0xeff7000000ffffUL;
+  }
   
   /* TSS initialization */
   tss_init(&tss[cpu]);
   gdt_install_tss((tss_descr_t *)&gdt[cpu][TSS_DESCR], SEG_DPL_KERNEL,
-                  (uint64_t)&tss[cpu], TSS_BASIC_SIZE,
-                  SEG_FLG_PRESENT | SEG_FLG_GRAN);
+                  (uint64_t)&tss[cpu], TSS_BASIC_SIZE, SEG_FLG_PRESENT);
 
   gdtr.limit = sizeof(gdt) / CONFIG_NRCPUS;
   gdtr.base = (uint64_t)&gdt[cpu][0];
@@ -108,7 +116,7 @@ INITCODE void arch_idt_init(void)
   idtr_load(&idtr);
 }
 
-void seg_descr_setup(segment_descr_t *seg_descr, uint8_t type,
+ void seg_descr_setup(segment_descr_t *seg_descr, uint8_t type,
                      uint8_t dpl, uint32_t base,
                      uint32_t limit, uint8_t flags)
 {
@@ -131,6 +139,8 @@ void load_ldt(cpu_id_t cpuid, void *ldt, uint32_t limit)
 
 void load_tss(cpu_id_t cpuid, void *tss, uint32_t limit)
 {
+  tss_descr_t *tssd;
+  
   gdt_install_tss((tss_descr_t *)&gdt[cpuid][TSS_DESCR], SEG_DPL_KERNEL,
                   (uintptr_t)tss, limit, SEG_FLG_PRESENT);
   tr_load(GDT_SEL(TSS_DESCR));
@@ -142,6 +152,7 @@ void copy_tss(tss_t *dst_tss, tss_t *src_tss)
   dst_tss->rsp0 = src_tss->rsp0;
 
   /* Copy stack slot for doublefault handler. */
-  dst_tss->ists[0] = src_tss->ists[0];
+  //dst_tss->ists[0] = src_tss->ists[0];
+  dst_tss->ist1 = src_tss->ist1;
 }
 

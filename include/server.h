@@ -21,31 +21,28 @@
  *
  */
 
-#ifndef __SERVER_H__
-#define __SERVER_H__
+#ifndef __MSTRING_SERVER_H__
+#define __MSTRING_SERVER_H__
 
 #include <mstring/types.h>
 
-#define MAX_PRIVBOOT_SERVERS  24
-
-typedef struct __init_server {
+typedef struct init_server {
   uintptr_t addr; /* start address of the server loaded via boot loader */
-  size_t size; /* it's size */
+  size_t size;   /* it's size */
+  char *name;
 } init_server_t;
 
-typedef struct __init_type {
-  ulong_t c; /* # of servers */
-  init_server_t server[MAX_PRIVBOOT_SERVERS];
-} init_t; /* general init servers structure */
+struct server_ops {
+  int (*get_num_servers)(void);
+  uintptr_t (*get_start_addr)(void);
+  uintptr_t (*get_end_addr)(void);
+  void (*get_server_by_num)(int num, /* OUT */ init_server_t *serv);
+};
 
-extern init_t init;
-
-/* functions */
-uint32_t server_get_num(void); /* get real number of servers */
-uintptr_t server_get_start_phy_addr(void); /* get start physical address */
-uintptr_t server_get_end_phy_addr(void); /* get end physical address */
+extern struct server_ops *server_ops;
 
 /* initing servers */
-void server_run_tasks(void);
+INITCODE void arch_servers_init(void);
+INITCODE void server_run_tasks(void);
 
-#endif /* __SERVER_H__ */
+#endif /* __MSTRING_SERVER_H__ */

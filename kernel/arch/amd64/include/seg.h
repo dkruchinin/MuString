@@ -32,13 +32,13 @@
 #define NULL_DESCR    0
 #define KCODE_DESCR   1
 #define KDATA_DESCR   2
-#define UCODE_DESCR   3
-#define UDATA_DESCR   4
+#define UDATA_DESCR   3
+#define UCODE_DESCR   4
 #define KCODE32_DESCR 5
 #define TSS_DESCR     6
 #define LDT_DESCR     8
 
-#define LDT_ITEMS     2
+#define LDT_ITEMS      2
 #define SEG_DPL_SHIFT  5
 #define SEG_DPL_KERNEL 0
 #define SEG_DPL_USER   3
@@ -109,7 +109,14 @@ typedef struct tss {
   uint64_t rsp1;
   uint64_t rsp2;
   uint64_t ignored1;
-  uint64_t ists[TSS_NUM_ISTS];
+  uint64_t ist1;
+  uint64_t ist2;
+  uint64_t ist3;
+  uint64_t ist4;
+  uint64_t ist5;
+  uint64_t ist6;
+  uint64_t ist7;
+  //uint64_t ists[TSS_NUM_ISTS];
   uint64_t ignored2;
   uint16_t ignored3;
   uint16_t iomap_base;
@@ -121,7 +128,7 @@ struct tss_descr {
   struct {
     uint32_t base_rest;
     uint32_t ignored;
-  } seg_high;
+  } seg_high __attribute__ ((packed));
 } __attribute__ ((packed));
 
 typedef struct table_reg gdtr_t;
@@ -151,7 +158,7 @@ static inline tss_t *get_cpu_tss(cpu_id_t cpuid)
 
 static inline void seg_descr_set_base(segment_descr_t *descr, uint32_t base)
 {
-  descr->base_address_low = base & 0xfffff;
+  descr->base_address_low = base & 0xffffff;
   descr->base_address_high = (base >> 24) & 0xff;
 }
 

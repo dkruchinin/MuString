@@ -26,7 +26,7 @@
 #include <mm/page.h>
 #include <mm/vmm.h>
 #include <mstring/interrupt.h>
-#include <arch/8259.h>
+#include <arch/i8259.h>
 #include <arch/i8254.h>
 #include <arch/types.h>
 #include <arch/asm.h>

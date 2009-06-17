@@ -200,8 +200,15 @@ boot_gdt_end:
 .global pd_base
 pd_base:
         .quad (PDE_PRESENT | PDE_RW | PDE_PS)
-        .quad 0x200000 + (PDE_PRESENT | PDE_RW | PDE_PS)
-        .fill 510, 8, 0
+        .quad 0x0200000 + (PDE_PRESENT | PDE_RW | PDE_PS)
+        .quad 0x0400000 + (PDE_PRESENT | PDE_RW | PDE_PS)
+        .quad 0x0600000 + (PDE_PRESENT | PDE_RW | PDE_PS)
+        .quad 0x0800000 + (PDE_PRESENT | PDE_RW | PDE_PS)
+        .quad 0x0A00000 + (PDE_PRESENT | PDE_RW | PDE_PS)
+        .quad 0x0C00000 + (PDE_PRESENT | PDE_RW | PDE_PS)
+        .quad 0x0E00000 + (PDE_PRESENT | PDE_RW | PDE_PS)
+        .quad 0x1000000 + (PDE_PRESENT | PDE_RW | PDE_PS)
+        .fill 503, 8, 0
 
 .align 4096
 .global pdp_base

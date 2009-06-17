@@ -356,11 +356,12 @@ INITCODE void arch_mem_init(void)
   SET_KERNEL_END(PAGE_ALIGN((uintptr_t)&_kernel_end));
   kprintf(KO_INFO "Kernel size: %ldK\n",
           B2KB(KERNEL_END_PHYS - 1024));
-  srv_addr = server_get_end_phy_addr();
+  
+  srv_addr = server_ops->get_end_addr();
   if (srv_addr) {
     kprintf(KO_INFO "Services size: %ldK\n",
             B2KB(srv_addr - KERNEL_END_PHYS));
-    SET_KERNEL_END(PAGE_ALIGN(srv_addr));
+    SET_KERNEL_END(PAGE_ALIGN(PHYS_TO_KVIRT(srv_addr)));
   }
   
   /* Find out an address where pages can be allocated from */  
@@ -399,7 +400,7 @@ INITCODE void arch_mem_init(void)
 INITCODE void arch_cpu_enable_paging(void)
 {
   void *pml4_base = KERNEL_ROOT_PDIR()->root_dir;
-    
+
   write_cr3(KVIRT_TO_PHYS(pml4_base));
   enable_nx();
 }

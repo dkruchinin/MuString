@@ -25,7 +25,7 @@
 #include <mstring/scheduler.h>
 #include <mstring/interrupt.h>
 #include <mstring/time.h>
-#include <arch/8259.h>
+#include <arch/i8259.h>
 #include <arch/apic.h>
 #include <mstring/panic.h>
 #include <arch/interrupt.h>

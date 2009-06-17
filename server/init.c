@@ -43,6 +43,7 @@
 #include <mm/page.h>
 
 long initrd_start_page,initrd_num_pages;
+struct server_ops *server_ops = NULL;
 
 #define USER_STACK_SIZE 16
 #ifndef CONFIG_TEST
@@ -78,7 +79,7 @@ out:
   return ret;
 }
 
-static void __create_task_mm(task_t *task, int num)
+static void __create_task_mm(task_t *task, int num, init_server_t *srv)
 {
   vmm_t *vmm = task->task_mm;
   uintptr_t code;
@@ -95,10 +96,10 @@ static void __create_task_mm(task_t *task, int num)
   int i;
   per_task_data_t *ptd;
 
-  code_size=init.server[num].size>>PAGE_WIDTH; /*it's a code size in pages */
+  code_size = srv->size>>PAGE_WIDTH;
   code_size++;
 
-  code=init.server[num].addr; /* we're have a physical address of code here */
+  code = srv->addr;
   code>>=PAGE_WIDTH; /* get page number */
   pp=pframe_id_to_virt(code);
     /**
@@ -170,10 +171,10 @@ static void __create_task_mm(task_t *task, int num)
 /*  kprintf("Data: real size: %d, last offset= %p, last section size= %d\nData offset: %p\n",
 	  real_data_size,last_data_offset,last_data_size,real_data_offset);*/
   /* calculate text */
-  code=init.server[num].addr+0x1000;
+  code = srv->addr + 0x1000;
   text_size=real_code_size>>PAGE_WIDTH;
   if(real_code_size%PAGE_SIZE)    text_size++;
-  data_bss=init.server[num].addr+real_data_offset-0x1000000;
+  data_bss = srv->addr + real_data_offset-0x1000000;
 /*  kprintf("data bss: %p\n text: %p\n",data_bss,code);*/
   data_size=real_data_size>>PAGE_WIDTH;
   if(real_data_size%PAGE_SIZE)    data_size++;
@@ -224,6 +225,7 @@ static void __create_task_mm(task_t *task, int num)
   ustack_top=USPACE_VADDR_TOP-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH);
   ustack_top-=PER_TASK_DATA_SIZE;
   ptd=user_to_kernel_vaddr(task_get_rpd(task),ustack_top);
+  kprintf("STACK: %p\n", USPACE_VADDR_TOP - 0x40000);
   if( !ptd ) {
     panic("Server [#%d]: Invalid address: %p", num, ustack_top);
   }
@@ -247,12 +249,14 @@ static void __create_task_mm(task_t *task, int num)
 
 static void __server_task_runner(void *data)
 {
-  int i=server_get_num(),a;
+  int i,a;
   task_t *server;
+  init_server_t srv;
   int r,sn;
   kconsole_t *kconsole=default_console();
   int delay=CONFIG_CORESERVERS_LAUNCH_DELAY > 300 ? CONFIG_CORESERVERS_LAUNCH_DELAY : 300;
 
+  i = server_ops->get_num_servers();
   if( i > 0 ) {
     kprintf("[LAUNCHER] Starting %d servers with delay %d. First user (non-NS) PID is %d\n",
             i,delay,2*CONFIG_NRCPUS+3);
@@ -262,10 +266,16 @@ static void __server_task_runner(void *data)
 
   for(sn=0,a=0;a<i;a++) {
     char *modvbase;
-
-    modvbase=pframe_id_to_virt(init.server[a].addr>>PAGE_WIDTH);
-
-    kprintf("[LAUNCHER] Starting server: %d.\n",a);
+    
+    server_ops->get_server_by_num(a, &srv);
+    if (srv.name != NULL) {
+      kprintf("[LAUNCHER] Starting server: %s\n", srv.name);
+    }
+    else {
+      kprintf("[LAUNCHER] Starting server: %d.\n", a);
+    }
+    
+    modvbase=pframe_id_to_virt(srv.addr>>PAGE_WIDTH);
     if( *(uint32_t *)modvbase == ELF_MAGIC ) { /* ELF module ? */
       ulong_t t;
 
@@ -287,15 +297,16 @@ static void __server_task_runner(void *data)
         }
       }
 
-      __create_task_mm(server,a);
+      __create_task_mm(server, a, &srv);
 
 #ifdef CONFIG_CORESERVERS_PERCPU_LAUNCH
       t=sn % CONFIG_NRCPUS;
 
-      if( t != cpu_id() ) {
+      if( t != cpu_id() ){ 
         sched_move_task_to_cpu(server,t);
       }
 #endif
+
       r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
       if( r ) {
         panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);
@@ -307,8 +318,8 @@ static void __server_task_runner(void *data)
         panic("Only one instance of initial RAM disk is allowed !");
       }
 
-      initrd_start_page=init.server[a].addr>>PAGE_WIDTH;
-      initrd_num_pages=PAGE_ALIGN(init.server[a].size)>>PAGE_WIDTH;
+      initrd_start_page=srv.addr>>PAGE_WIDTH;
+      initrd_num_pages=PAGE_ALIGN(srv.size)>>PAGE_WIDTH;
     } else {
       panic("Unrecognized kernel module N %d !\n",a+1);
     }
@@ -319,6 +330,7 @@ static void __server_task_runner(void *data)
 
 void server_run_tasks(void)
 {
+  ASSERT(server_ops != NULL);
   if( kernel_thread(__server_task_runner,NULL,NULL) ) {
     panic("Can't launch a Core Servers runner !");
   }

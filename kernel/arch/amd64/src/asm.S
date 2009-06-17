@@ -227,8 +227,8 @@ userspace_ret_from_int:
   /* Restore user segment registers. */
   RESTORE_USER_SEGMENT_REGISTERS
 
-  /* Now restore user %gs */
   cli
+  /* Now restore user %gs */  
   mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
   swapgs
   mov %eax,%gs
@@ -331,7 +331,7 @@ error_code_exception_path:
   je error_code_exception_path_kern
   swapgs
 error_code_exception_path_kern:
-  sti  
+  //sti  
   SAVE_ALL
   /* Now we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to
@@ -440,8 +440,7 @@ general_protection_fault_handler:
   jmp error_code_exception_path
 
 page_fault_fault_handler:
-1:
-        jmp 1b
+1:      jmp 1b
   push %rax
   movl $14,%eax
   jmp error_code_exception_path

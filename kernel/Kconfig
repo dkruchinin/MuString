@@ -1,5 +1,15 @@
 menu "Common MuString settings"
 
+config MAX_SRV_MBS
+       int "Enter limit(in megabytes) of services total size."
+       range 1 32
+       default 16
+       help
+       This option restricts max. total size(in megabytes) of services 
+       loaded with kernel from bootloader. These services are allways sit 
+       in memory and they can not be removed out from there. So their summary
+       size shouldn't be too big.
+
 config ALWAYS_INLINE
        bool "Enable always inline functions"
        default y
