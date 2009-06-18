@@ -31,16 +31,15 @@ static void tss_init(tss_t *tssp)
   int i;
   
   memset(tssp, 0, sizeof(*tssp));
-  tssp->ist1 = (uint64_t)&ist_stacks[0];
-  /*for (i = 0; i < TSS_NUM_ISTS; i++) {
+  for (i = 0; i < TSS_NUM_ISTS; i++) {
     if (i < TSS_USED_ISTS) {
       tssp->ists[i] = (uint64_t)&ist_stacks[i];
     }
     else {
       tssp->ists[i] = 0;
     }
-    }*/
-  
+  }
+
   tssp->iomap_base = TSS_BASIC_SIZE;
 }
 
@@ -148,6 +147,5 @@ void copy_tss(tss_t *dst_tss, tss_t *src_tss)
   dst_tss->rsp0 = src_tss->rsp0;
 
   /* Copy stack slot for doublefault handler. */
-  //dst_tss->ists[0] = src_tss->ists[0];
-  dst_tss->ist1 = src_tss->ist1;
+  dst_tss->ists[0] = src_tss->ists[0];
 }
