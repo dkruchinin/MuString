@@ -512,9 +512,3 @@ hi_level_fault_handlers:
 .quad reserved_fault_handler_impl              /* 29 */
 .quad security_exception_fault_handler_impl    /* 30 */
 .quad reserved_fault_handler_impl              /* 31 */
-
-.align 0x1000
-.globl mytestcode, mytestend
-mytestcode:
-1:      jmp 1b
-mytestend:      
