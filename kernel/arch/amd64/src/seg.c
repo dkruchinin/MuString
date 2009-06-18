@@ -156,8 +156,6 @@ void load_ldt(cpu_id_t cpuid, void *ldt, uint32_t limit)
 
 void load_tss(cpu_id_t cpuid, void *tss, uint32_t limit)
 {
-  tss_descr_t *tssd;
-  
   gdt_install_tss((tss_descr_t *)&gdt[cpuid][TSS_DESCR], SEG_DPL_KERNEL,
                   (uintptr_t)tss, limit, SEG_FLG_PRESENT);
   tr_load(GDT_SEL(TSS_DESCR));

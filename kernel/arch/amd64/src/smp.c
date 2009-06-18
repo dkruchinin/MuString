@@ -46,9 +46,20 @@ void arch_smp_init(int ncpus)
   int i=1,r=0;
   char *ap_code = (char *)0x9000;
   size_t size = &ap_boot_end - &ap_boot_start;
+  struct ap_config *apcfg;
 
+  /* FIXME DK: real-mode page must be reserved dynamically during mm initialization. */
+  apcfg = (struct ap_config *)&ap_config;
+  apcfg->page_addr = 0x9000;
+  apcfg->jmp_rip = (uint32_t)((uint64_t)smp_start32 & 0xffffffffU);
+  apcfg->gdtr.base += apcfg->page_addr;
+  memcpy(&apcfg->gdt[APGDT_KCOFF_DESCR], &apcfg->gdt[APGDT_KCNORM_DESCR],
+         sizeof(uint64_t));
+  apcfg->gdt[APGDT_KCOFF_DESCR] |= (uint64_t)apcfg->page_addr << 16;
+
+  /* Change bootstrap entry point (from kernel_main to main_smpap_routine) */
   *(uint64_t *)&kernel_jump_addr = (uint64_t)main_smpap_routine;
-  *(uint32_t *)&ap_jmp_rip = (uint32_t)((uint64_t)smp_start32 & 0xffffffffU);
+  /* And finally copy AP initialization code to the proper place */
   memcpy(ap_code, &ap_boot_start, size);
 
   /* ok setup new gdt */

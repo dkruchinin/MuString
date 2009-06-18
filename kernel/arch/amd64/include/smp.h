@@ -24,11 +24,25 @@
 #ifndef __MSTRING_ARCH_SMP_H__
 #define __MSTRING_ARCH_SMP_H__
 
+#define AP_OFFSET(x) ((x) - ap_boot_start)
+#define APGDT_KCNORM_DESCR 1
+#define APGDT_KCOFF_DESCR  2
+
+#ifndef __ASM__
 #include <arch/seg.h>
 #include <mstring/types.h>
 
-extern int ap_boot_start, ap_boot_end,
-    kernel_jump_addr, ap_jmp_rip;
+struct ap_config {
+  uint32_t jmp_rip;
+  uint32_t page_addr;
+  uint64_t gdt[3];
+  struct {
+    uint16_t limit;
+    uint32_t base;
+  } __attribute__ ((packed)) gdtr;
+} __attribute__ ((packed));
+
+extern int ap_boot_start, ap_boot_end, ap_config;
 
 extern void ap_boot(void);
 extern void smp_start32(void);
@@ -38,5 +52,6 @@ void arch_smp_init(int ncpus);
 void smp_local_timer_interrupt_handler(void);
 void smp_scheduler_interrupt_handler(void);
 
+#endif /* __ASM__ */
 #endif /* __MSTRING_ARCH_SMP_H__ */
 
