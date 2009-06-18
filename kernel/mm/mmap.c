@@ -1412,7 +1412,6 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
      * just removed from the caller's address range.
      */
     if (pidx != PAGE_IDX_INVAL) {
-        kprintf("TARGET ADDR = %p, pidx = %d\n", target_addr, pidx);
       pagetable_unlock(&target->task_mm->rpd);
       unpin_page_frame(page);
       ret = -EBUSY;
@@ -1437,7 +1436,6 @@ unlock_target:
   rwsem_up_read(&target->task_mm->rwsem);
 
   release_task_struct(target);
-  kprintf("RET = %d\n", ret);
   return ret;
 }
 

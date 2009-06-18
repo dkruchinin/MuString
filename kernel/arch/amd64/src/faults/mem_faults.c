@@ -114,7 +114,7 @@ kernel_fault:
                 cpu_id(), stack_frame->rip, stack_frame->error_code);
 stop_cpu:  
   fault_dump_regs(regs,stack_frame->rip);
-  //show_stack_trace(stack_frame->old_rsp);
+  show_stack_trace(stack_frame->old_rsp);
 #ifdef CONFIG_DUMP_USTACK
   if (!kernel_fault(stack_frame))
     __dump_user_stack(stack_frame->old_rsp);
@@ -186,7 +186,7 @@ stop_cpu:
   kprintf_fault( " RSP: %p\n", stack_frame->old_rsp);
 
   if( kernel_fault(stack_frame) ) {
-    ;//show_stack_trace(stack_frame->old_rsp);
+    show_stack_trace(stack_frame->old_rsp);
   }
 #ifdef CONFIG_DUMP_USPACE_STACK
   else {
