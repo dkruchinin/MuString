@@ -70,9 +70,7 @@ static void serial_cons_display_char(const char c)
   if( serial_console.is_enabled ) {
     long is;
 
-    LOCK_SERIAL_CONSOLE(is);
     serial_write_char(c);
-    UNLOCK_SERIAL_CONSOLE(is);
   }
 }
 

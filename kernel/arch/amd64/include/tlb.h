@@ -24,10 +24,11 @@
 #ifndef __ARCH_TLB_H__
 #define __ARCH_TLB_H__
 
-#include <mstring/types.h>
-#include <mstring/task.h>
 #include <arch/ptable.h>
 #include <arch/asm.h>
+#include <arch/cpu.h>
+#include <mstring/task.h>
+#include <mstring/types.h>
 
 static inline void __tlb_flush(void)
 {

@@ -205,7 +205,6 @@
 	cmp $GDT_SEL(KCODE_DESCR),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ;\
 	je label;                                                           \
     swapgs ;                                                            \
-1:  jmp 1b;                                                             \
     SAVE_AND_LOAD_SEGMENT_REGISTERS                                     \
     label:	;                                                           \
 	incq %gs:CPU_SCHED_STAT_IRQCNT_OFFT ;                               \

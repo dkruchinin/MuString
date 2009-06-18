@@ -28,4 +28,6 @@ void map_kernel_area(struct __vmm *vmm);
 void arch_smp_mm_init(cpu_id_t cpu); /* FIXME DK: remove after cleanup */
 uintptr_t __allocate_vregion(page_idx_t num_pages);
 
+extern void  __userspace_trampoline_codepage(void);
+
 #endif /* __MSTRING_ARCH_MEM_H__ */

@@ -271,7 +271,7 @@ static void __setup_user_ldt( uintptr_t ldt )
 
   /* Setup default PTD descriptor. */
   ldt_dsc=&ldt_root[PTD_SELECTOR];
-  seg_descr_setup(ldt_dsc, SEG_TYPE_LDT, SEG_DPL_USER,
+  seg_descr_setup(ldt_dsc, SEG_TYPE_DATA, SEG_DPL_USER,
                   0, 0, SEG_FLG_PRESENT);
 }
 
@@ -351,6 +351,7 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
     if( !task_ctx->ldt ) {
       return -ENOMEM;
     }
+    
     __setup_user_ldt(task_ctx->ldt);
   }
 
@@ -394,7 +395,7 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
     case SYS_PR_CTL_SET_PERTASK_DATA:
       arch_ctx=(arch_context_t*)&task->arch_context[0];
       if( arch_ctx->ldt ) {
-        segment_descr_t *ldt_dsc=(segment_descr_t*)arch_ctx->ldt;
+        segment_descr_t *ldt_dsc=(segment_descr_t*)arch_ctx->ldt;        
         ldt_dsc=&ldt_dsc[PTD_SELECTOR];
 
         arch_ctx->per_task_data=arg;
@@ -405,6 +406,7 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
         if( task == current_task() ) {
           load_ldt(cpu_id(),(void *)arch_ctx->ldt,arch_ctx->ldt_limit);
         }
+        
         interrupts_enable();
       } else {
         r=-EINVAL;
@@ -430,6 +432,7 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
       r=-EINVAL;
       break;
   }
+
   return r;
 }
 
@@ -449,7 +452,7 @@ void arch_activate_task(task_t *to)
   }
 
   /* We should setup TSS to reflect new task's kernel stack. */
-  tss->rsp0 = to->kernel_stack.high_address;  
+  tss->rsp0 = to->kernel_stack.high_address;
   
   /* Reload TSS. */
   load_tss(to->cpu,tss,tss_limit);
@@ -460,8 +463,8 @@ void arch_activate_task(task_t *to)
   }
 
 #ifdef CONFIG_TEST
-  kprintf( "**  ACTIVATING TASK: %d:%p (CPU: %d) **\n",
-           to->pid,rsp,to->cpu);
+  kprintf( "**  ACTIVATING TASK: %d:%d (CPU: %d) **\n",
+           to->pid,to->tid,to->cpu);
 #endif
   
   /* Let's jump ! */

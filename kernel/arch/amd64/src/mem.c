@@ -32,6 +32,7 @@
 #include <mm/ealloc.h>
 #include <mm/vmm.h>
 #include <sync/spinlock.h>
+#include <mstring/swks.h>
 #include <mstring/kprintf.h>
 #include <mstring/stddef.h>
 #include <mstring/bitwise.h>
@@ -43,6 +44,7 @@
 multiboot_info_t *mb_info;
 page_idx_t num_phys_pages;
 uintptr_t __kernel_end;
+uintptr_t __utrampoline_virt;
 
 static SPINLOCK_DEFINE(vregion_lock);
 static uintptr_t vregion_cur_ptr = KERNEL_OFFSET;
@@ -73,7 +75,6 @@ static INITDATA uintptr_t last_usable_addr;
 #define E820_MMAP_NEXT(mmap)                    \
   (e820memmap_t *)((uintptr_t)(mmap) + (mmap)->size + sizeof((mmap)->size))
 
-#define CONFIG_DEBUG
 #ifdef CONFIG_DEBUG
 static void INITCODE verify_mapping(const char *descr, page_idx_t pidx,
                                         page_idx_t npages, uintptr_t addr)
@@ -111,6 +112,31 @@ static INITCODE void enable_nx(void)
     __ptbl_allowed_flags_mask |= PDE_NX;
     efer_set_feature(EFER_NXE);
   }
+}
+
+static INITCODE void register_mandatory_mappings(void)
+{
+  memset(&ident_mandmap, 0, sizeof(ident_mandmap));
+  ident_mandmap.virt_addr = 0x1000;
+  ident_mandmap.phys_addr = 0x1000;
+  ident_mandmap.num_pages = IDENT_MAP_PAGES - 1;
+  ident_mandmap.flags = KMAP_READ | KMAP_KERN;
+  vm_mandmap_register(&ident_mandmap, "Identity mapping");
+
+  memset(&utramp_mandmap, 0, sizeof(utramp_mandmap));
+  __utrampoline_virt = USPACE_VADDR_TOP + PAGE_SIZE;//__reserve_uspace_vregion(1);
+  utramp_mandmap.virt_addr = __utrampoline_virt;
+  utramp_mandmap.phys_addr = KVIRT_TO_PHYS((uintptr_t)__userspace_trampoline_codepage);
+  utramp_mandmap.num_pages = 1;
+  utramp_mandmap.flags = KMAP_READ | KMAP_EXEC;
+  vm_mandmap_register(&utramp_mandmap, "Utrampoline mapping");
+
+  memset(&swks_mandmap, 0, sizeof(swks_mandmap));
+  swks_mandmap.virt_addr = USPACE_VADDR_TOP + PAGE_SIZE + (SWKS_PAGES * PAGE_SIZE);//__reserve_uspace_vregion(SWKS_PAGES);
+  swks_mandmap.phys_addr = KVIRT_TO_PHYS(&swks);
+  swks_mandmap.num_pages = SWKS_PAGES;
+  swks_mandmap.flags = KMAP_READ;
+  vm_mandmap_register(&swks_mandmap, "SWKS mapping");
 }
 
 static INITCODE void *boottime_alloc_pdir(void)
@@ -162,9 +188,10 @@ struct pt_ops pt_ops = {
   .root_pdir_deinit_arch = root_pdir_deinit_arch,
 };
 
-static inline bool is_kernel_varange(uintptr_t pa_start, uintptr_t pa_end)
+static inline bool is_kernel_page(page_frame_t *page)
 {
-  return ((pa_start > KERNEL_END_PHYS) && (pa_end >= KERNEL_END_PHYS));
+  return ((uintptr_t)pframe_to_phys(page) < KERNEL_END_PHYS);
+  //return (/*(pa_start >= 0/*KVIRT_TO_PHYS(&__bootstrap_start)) && */(pa_end <= KERNEL_END_PHYS));
 }
 
 static INITCODE void __map_kmem(page_idx_t pidx, page_idx_t npages,
@@ -250,9 +277,7 @@ static INITCODE void scan_phys_mem(void)
 
     kprintf("BIOS-e820: %#.10lx - %#.10lx %s\n", mmap->base_address,
             mmap->base_address + mmap->length, mem_types[mmap->type]);
-    if ((mmap->type == E820_USABLE) && 
-        !is_kernel_varange(mmap->base_address,
-                           mmap->base_address + mmap->length)) {
+    if (mmap->type == E820_USABLE) {
       last_usable_addr = mmap->base_address + mmap->length;
     }
 
@@ -279,17 +304,17 @@ static INITCODE void build_page_frames_array(void)
   mmap = (e820memmap_t *)((uintptr_t)mb_info->mmap_addr);
   while (mmap->base_address < last_usable_addr) {
     reserved = 0;
-    if ((mmap->type != E820_USABLE) ||
-        is_kernel_varange(mmap->base_address,
-                          mmap->base_address + mmap->length)) {
+    end = mmap->base_address + mmap->length;
+    if (mmap->type != E820_USABLE) {
       reserved++;
     }
-
-    end = mmap->base_address + mmap->length;
+    
     while ((uintptr_t)pframe_id_to_phys(pidx) < end) {
       page = &page_frames_array[pidx++];
       memset(page, 0, sizeof(*page));
-      page->flags = reserved << BITNUM(PF_RESERVED);
+      if (reserved || is_kernel_page(page)) {
+        page->flags = PF_RESERVED;
+      }
       if ((uintptr_t)pframe_to_phys(page) < MB2B(4096UL)) {
         //pool = mmpool_by_type(lowmem_pool);
         pool = POOL_GENERAL();  
@@ -351,11 +376,11 @@ INITCODE void arch_mem_init(void)
    * Determine how much physical memory is available and
    * how much is usable.
    */
-  scan_phys_mem();
-
   SET_KERNEL_END(PAGE_ALIGN((uintptr_t)&_kernel_end));
+  scan_phys_mem();
+  
   kprintf(KO_INFO "Kernel size: %ldK\n",
-          B2KB(KERNEL_END_PHYS - 1024));
+          B2KB(KERNEL_END_PHYS) - 1024);
   
   srv_addr = server_ops->get_end_addr();
   if (srv_addr) {
@@ -395,6 +420,7 @@ INITCODE void arch_mem_init(void)
   kprintf(KO_INFO "Page frames array size: %dK\n",
           B2KB(KERNEL_END_VIRT - (uintptr_t)page_frames_array));
   configure_mmpools();
+  register_mandatory_mappings();
 }
 
 INITCODE void arch_cpu_enable_paging(void)

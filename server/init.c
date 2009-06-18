@@ -225,7 +225,6 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
   ustack_top=USPACE_VADDR_TOP-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH);
   ustack_top-=PER_TASK_DATA_SIZE;
   ptd=user_to_kernel_vaddr(task_get_rpd(task),ustack_top);
-  kprintf("STACK: %p\n", USPACE_VADDR_TOP - 0x40000);
   if( !ptd ) {
     panic("Server [#%d]: Invalid address: %p", num, ustack_top);
   }

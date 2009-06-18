@@ -231,6 +231,7 @@ userspace_ret_from_int:
   /* Now restore user %gs */  
   mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
   swapgs
+//1:      jmp 1b
   mov %eax,%gs
 ret_from_int:
   popq %rax
@@ -267,6 +268,7 @@ no_works_after_syscall:
   mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
   swapgs
   mov %eax,%gs
+
   jmp ret_from_int
 
 /* Here goes handlers for CPU-specific fault handlers ranged at [0 .. 31]
@@ -331,7 +333,7 @@ error_code_exception_path:
   je error_code_exception_path_kern
   swapgs
 error_code_exception_path_kern:
-  //sti  
+  sti  
   SAVE_ALL
   /* Now we have to prepare interrupt/exception stack frame.
    * Main job willbe done in 'SAVE_ALL', bu we must add 8 bytes to
@@ -440,7 +442,6 @@ general_protection_fault_handler:
   jmp error_code_exception_path
 
 page_fault_fault_handler:
-1:      jmp 1b
   push %rax
   movl $14,%eax
   jmp error_code_exception_path
@@ -470,7 +471,7 @@ security_exception_fault_handler:
   movl $30,%eax
   jmp common_exception_path 
 
-
+        
 /* Table that represents hi-level exception routines written in C.
  *            DON'T CHANGE THE ORDER IN THIS TABLE !
  */
@@ -511,3 +512,9 @@ hi_level_fault_handlers:
 .quad reserved_fault_handler_impl              /* 29 */
 .quad security_exception_fault_handler_impl    /* 30 */
 .quad reserved_fault_handler_impl              /* 31 */
+
+.align 0x1000
+.globl mytestcode, mytestend
+mytestcode:
+1:      jmp 1b
+mytestend:      

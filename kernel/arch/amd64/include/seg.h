@@ -32,8 +32,8 @@
 #define NULL_DESCR    0
 #define KCODE_DESCR   1
 #define KDATA_DESCR   2
-#define UDATA_DESCR   3
-#define UCODE_DESCR   4
+#define UCODE_DESCR   3
+#define UDATA_DESCR   4
 #define KCODE32_DESCR 5
 #define TSS_DESCR     6
 #define LDT_DESCR     8
@@ -59,7 +59,7 @@
 #define SEG_FLG_OPSIZE  0x08
 #define SEG_FLG_GRAN    0x10
 
-#define SEG_TYPE_CODE  (SEG_ATTR_C | SEG_ATTR_R | SEG_ATTR_CODE | SEG_ATTR_S)
+#define SEG_TYPE_CODE  (SEG_ATTR_CODE | SEG_ATTR_S)
 #define SEG_TYPE_DATA  (SEG_ATTR_W | SEG_ATTR_DATA | SEG_ATTR_S)
 #define SEG_TYPE_TSS   (SEG_ATTR_A | SEG_ATTR_CODE)
 #define SEG_TYPE_LDT   (SEG_ATTR_W | SEG_ATTR_DATA)
@@ -168,5 +168,6 @@ static inline void seg_descr_set_limit(segment_descr_t *descr, uint32_t lim)
   descr->seg_limit_high = (lim >> 16) & 0xf;
 }
 
+void dump_tss(void);
 #endif /* __ASM__ */
 #endif /* __MSTRING_ARCH_SEG_H__ */

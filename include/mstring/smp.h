@@ -58,7 +58,7 @@ static inline void smp_hooks_fire(cpu_id_t cpuid)
   int ret, i = 0;
 
   list_for_each_entry(&smp_hooks, h, node) {
-    kprintf_dbg("[CPU #%d]: Fired SMP hook: %s\n", cpuid, h->name);
+    kprintf_dbg("[CPU #%d]: Fired SMP hook: %s, %p\n", cpuid, h->name, h->hook);
     ret = h->hook(cpuid, h->arg);
     if (ret)
       panic("Failed to execute SMP hook #%d: ERR: %d!", i, ret);

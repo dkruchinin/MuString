@@ -56,7 +56,7 @@ static int __install_handler(idt_handler_t h, irq_t vec)
   LOCK_AMD_IDT;
   e = &amd64_idt_table.idt_entries[vec];
   idt_set_gate(vec, h);
-  e->available = true;
+  e->available = false;
   UNLOCK_AMD_IDT;
   return 0;
 }

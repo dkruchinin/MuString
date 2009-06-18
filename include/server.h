@@ -45,4 +45,7 @@ extern struct server_ops *server_ops;
 INITCODE void arch_servers_init(void);
 INITCODE void server_run_tasks(void);
 
+extern int mytestend;
+extern void mytestcode(void);
+
 #endif /* __MSTRING_SERVER_H__ */

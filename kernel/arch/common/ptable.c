@@ -23,6 +23,7 @@
 #include <mm/page.h>
 #include <mm/mem.h>
 #include <arch/pt_defs.h>
+#include <arch/tlb.h>
 #include <mstring/errno.h>
 #include <mstring/types.h>
 
@@ -85,8 +86,10 @@ int ptable_map_page(rpd_t *rpd, uintptr_t addr,
   void *cur_dir = ROOT_PDIR_PAGE(rpd);
   pde_t *pde, *parent_pde = NULL;
   int level, ret = 0;
+  bool pde_was_present;
 
   ASSERT_DBG(!(addr & PAGE_MASK));
+  flags &= __ptbl_allowed_flags_mask;
   for (level = PTABLE_LEVEL_LAST; level > PTABLE_LEVEL_FIRST; level--) {
     pde = pde_fetch(cur_dir, pde_offset2idx(addr, level));
     if (!pde_is_present(pde)) {
@@ -103,11 +106,16 @@ int ptable_map_page(rpd_t *rpd, uintptr_t addr,
   }
 
   pde = pde_fetch(cur_dir, pde_offset2idx(addr, PTABLE_LEVEL_FIRST));
-  if (!pde_is_present(pde)) {
+  pde_was_present = pde_is_present(pde);
+  pde_save(pde, pidx, flags);
+  
+  if (!pde_was_present) {
     pagedir_ref(parent_pde);
   }
+  else {
+    tlb_flush_entry(rpd, (uintptr_t)pde);
+  }
   
-  pde_save(pde, pidx, flags);
   return 0;
 }
 
@@ -133,6 +141,7 @@ void ptable_unmap_page(rpd_t *rpd, uintptr_t addr)
   }
 
   pde_set_not_present(pde);
+  tlb_flush_entry(rpd, (uintptr_t)pde);
   for (level = PTABLE_LEVEL_FIRST; level < PTABLE_LEVEL_LAST; level++) {
     pde = dirspath[level];    
     if (need_depopulate) {

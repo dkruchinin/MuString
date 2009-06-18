@@ -49,16 +49,16 @@ INITCODE void idt_install_gate(int slot, uint8_t type, uint8_t dpl,
 {
   intr_descr_t *idt_descr;
 
-  ASSERT((slot >= 0) && (slot < IDT_ITEMS));
-  idt_descr = &idt[slot];  
+  ASSERT((slot >= 0) && (slot < IDT_ITEMS));  
+  idt_descr = &idt[slot];
+  memset(idt_descr, 0, sizeof(*idt_descr));
   idt_descr->offset_low = handler & 0xffff;
   idt_descr->offset_midd = (handler >> 16) & 0xffff;
   idt_descr->offset_high = (handler >> 32) & 0xffffffffU;
   idt_descr->selector = GDT_SEL(KCODE_DESCR);
-  idt_descr->ist = ist;
+  idt_descr->ist = ist & 0x03;
   idt_descr->flags = type | ((dpl & 0x03) << SEG_DPL_SHIFT)
       | (SEG_FLG_PRESENT << 7);
-  idt_descr->ignored0 = idt_descr->ignored1 = 0;
 }
 
 
@@ -66,7 +66,7 @@ INITCODE void arch_seg_init(cpu_id_t cpu)
 {
   gdtr_t gdtr;
 
-  memset(&gdt[cpu], 0, sizeof(gdt[cpu]));
+  memset(&gdt[cpu][0], 0, sizeof(gdt[cpu]));
   
   /* Null segment */
   seg_descr_setup(&gdt[cpu][NULL_DESCR], 0, 0, 0, 0, 0);
@@ -81,7 +81,7 @@ INITCODE void arch_seg_init(cpu_id_t cpu)
 
   /* User code segment */
   seg_descr_setup(&gdt[cpu][UCODE_DESCR], SEG_TYPE_CODE, SEG_DPL_USER,
-                   0, 0xfffff, SEG_FLG_PRESENT | SEG_FLG_64BIT | SEG_FLG_GRAN);
+                  0, 0xfffff, SEG_FLG_PRESENT | SEG_FLG_64BIT | SEG_FLG_GRAN);
 
   /* User data segment */
   seg_descr_setup(&gdt[cpu][UDATA_DESCR], SEG_TYPE_DATA, SEG_DPL_USER,
@@ -90,15 +90,11 @@ INITCODE void arch_seg_init(cpu_id_t cpu)
   /* Kerne 32bit code segment */
   seg_descr_setup(&gdt[cpu][KCODE32_DESCR], SEG_TYPE_CODE, SEG_DPL_KERNEL,
                   0, 0xfffff, SEG_FLG_PRESENT | SEG_FLG_OPSIZE | SEG_FLG_GRAN);
-  {
-      *(uint64_t *)&gdt[cpu][UCODE_DESCR] = 0xaff8000000ffffUL;
-      *(uint64_t *)&gdt[cpu][UDATA_DESCR] = 0xeff7000000ffffUL;
-  }
   
   /* TSS initialization */
   tss_init(&tss[cpu]);
   gdt_install_tss((tss_descr_t *)&gdt[cpu][TSS_DESCR], SEG_DPL_KERNEL,
-                  (uint64_t)&tss[cpu], TSS_BASIC_SIZE, SEG_FLG_PRESENT);
+                  (uint64_t)&tss[cpu], TSS_DEFAULT_LIMIT, SEG_FLG_PRESENT);
 
   gdtr.limit = sizeof(gdt) / CONFIG_NRCPUS;
   gdtr.base = (uint64_t)&gdt[cpu][0];
@@ -155,4 +151,3 @@ void copy_tss(tss_t *dst_tss, tss_t *src_tss)
   //dst_tss->ists[0] = src_tss->ists[0];
   dst_tss->ist1 = src_tss->ist1;
 }
-

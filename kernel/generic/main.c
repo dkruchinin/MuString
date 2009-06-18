@@ -64,8 +64,7 @@ static void main_routine_stage1(void)
    * receive interrups from the other CPUs via LAPIC upon unleashing
    * the other CPUs.
    */
-  setup_time();
-  for (;;);
+  setup_time();  
   interrupts_enable();
   initialize_swks();
 
@@ -83,17 +82,17 @@ void kernel_main(void)
 {
   arch_init();
   initialize_irqs();
-
+  
   mm_initialize();
-  slab_allocator_init();
+  slab_allocator_init();  
   vmm_initialize();
   initialize_scheduler();
-
+  
   initialize_timer();
   
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.
-   */
+   */  
   arch_activate_idle_task(0);
   /* Now we can continue initialization with properly initialized kernel
    * stack frame.
@@ -109,8 +108,8 @@ static void main_smpap_routine_stage1(cpu_id_t cpu)
 
   /* We're online. */
   set_cpu_online(cpu,1);
+  
   sched_add_cpu(cpu);
-
   interrupts_enable();
 
   spawn_percpu_threads();
@@ -133,7 +132,7 @@ void main_smpap_routine(void)
 
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.
-   */
+   */  
   arch_activate_idle_task(cpu);
   cpu++;
 

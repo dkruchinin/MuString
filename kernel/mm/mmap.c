@@ -258,7 +258,7 @@ static void fix_vmrange_holes_after_insertion(vmm_t *vmm, vmrange_t *vmrange,
     VMM_VERBOSE("%s(L) [%p, %p): old hole size: %ld, new hole size: %ld\n",
                 vmm_get_name_dbg(vmm), vmrange->bounds.space_start,
                 vmrange->bounds.space_end, vmrange->hole_size,
-                USPACE_VA_TOP - vmrange->bounds.space_end);
+                USPACE_VADDR_TOP - vmrange->bounds.space_end);
 
     vmrange->hole_size = USPACE_VADDR_TOP - vmrange->bounds.space_end;
   }
@@ -1412,6 +1412,7 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
      * just removed from the caller's address range.
      */
     if (pidx != PAGE_IDX_INVAL) {
+        kprintf("TARGET ADDR = %p, pidx = %d\n", target_addr, pidx);
       pagetable_unlock(&target->task_mm->rpd);
       unpin_page_frame(page);
       ret = -EBUSY;
@@ -1436,6 +1437,7 @@ unlock_target:
   rwsem_up_read(&target->task_mm->rwsem);
 
   release_task_struct(target);
+  kprintf("RET = %d\n", ret);
   return ret;
 }
 

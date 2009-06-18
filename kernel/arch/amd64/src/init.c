@@ -55,7 +55,7 @@ static INITCODE void syscall_init(void)
   efer_set_feature(EFER_SCE);
   msr_write(MSR_STAR,
             ((uint64_t)(GDT_SEL(KCODE_DESCR) | SEG_DPL_KERNEL) << 32) |
-            ((uint64_t)(GDT_SEL(KDATA_DESCR | SEG_DPL_USER)) << 48));
+            ((uint64_t)(GDT_SEL(KDATA_DESCR) | SEG_DPL_USER) << 48));
   msr_write(MSR_LSTAR, (uint64_t)syscall_point);
   msr_write(MSR_SF_MASK, 0x200);
 }
@@ -82,8 +82,8 @@ INITCODE void arch_cpu_init(cpu_id_t cpu)
 {
   init_cpu_features();
   arch_seg_init(cpu);
+  arch_idt_init();
   init_fs_and_gs(cpu);
-  arch_idt_init();  
   syscall_init();
   if (cpu != 0) {
     arch_cpu_enable_paging();

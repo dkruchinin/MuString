@@ -495,7 +495,7 @@ static slab_t *__create_slabs_slab(pfalloc_flags_t pfa_flags)
    * When creating a new slab for slab_t structures, the very
    * first object in the slab must be reserverd for slab_t itself.
    * Thus it will be fried only after given slab is destroyed.
-   */
+   */  
   slab = __objrealaddr(pframe_to_virt(pages), 0);
   slab->memcache = &slabs_memcache;
   slab->objects = NULL;
@@ -829,7 +829,7 @@ static void __create_heart_cache(memcache_t *cache, size_t size,
      * so we are allocating it using init-data allocator for each CPU.
      */
     if (cache == &slabs_memcache) {
-      slab = __create_slabs_slab(0);
+      slab = __create_slabs_slab(0);      
       if (!slab)
         goto err;
     }
@@ -901,11 +901,11 @@ void slab_allocator_init(void)
   CT_ASSERT((1 << FIRST_GENSLABS_POW2) == SLAB_OBJECT_MIN_SIZE);
   CT_ASSERT((1 << LAST_GENSLABS_POW2) == SLAB_OBJECT_MAX_SIZE);
 
-  /* create default cache for slab_t structures */
+  /* create default cache for slab_t structures */  
   __create_heart_cache(&slabs_memcache, sizeof(slab_t), "slab_t");
   
   /* create default cache for memcache_t structures */
-  __create_heart_cache(&caches_memcache, sizeof(memcache_t), "memcache_t");
+  __create_heart_cache(&caches_memcache, sizeof(memcache_t), "memcache_t");  
   __create_generic_caches();
 }
 

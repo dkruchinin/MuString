@@ -55,7 +55,7 @@ void invalid_opcode_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 
 out:
   //fault_dump_regs(regs, stack_frame->rip);
-  show_stack_trace(stack_frame->old_rsp);
+  //show_stack_trace(stack_frame->old_rsp);
   for(;;);
 }
 

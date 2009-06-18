@@ -60,7 +60,7 @@ static void __validate_mmpools_dbg(void)
     pool_total = pool_reserved = 0;
     /* check all pages belonging to given memory pool */
     for (i = 0; i < p->total_pages; i++, pool_total++) {
-      pf = pframe_by_number(i + p->first_page_id);
+      pf = pframe_by_id(i + p->first_page_id);
       if (pf->flags & PF_RESERVED)
         pool_reserved++;
       if (pf->pool_type != p->type) {
@@ -99,9 +99,9 @@ static void __validate_mmpools_dbg(void)
     }
     if (p->first_page_id != PAGE_IDX_INVAL) {
       if (p->first_page_id != 0)
-        __check_one_frame(p, pframe_by_number(p->first_page_id - 1));
+        __check_one_frame(p, pframe_by_id(p->first_page_id - 1));
       if ((p->first_page_id + p->total_pages) < num_phys_pages)
-          __check_one_frame(p, pframe_by_number(p->first_page_id
+          __check_one_frame(p, pframe_by_id(p->first_page_id
                                                 + p->total_pages));
     }
 

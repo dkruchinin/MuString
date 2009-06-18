@@ -48,7 +48,7 @@
  */
 typedef ulong_t page_idx_t;
 
-#define PAGE_IDX_INVAL (~0U)
+#define PAGE_IDX_INVAL (~0UL)
 
 /**
  * @typedef uint16_t page_flags_t;
