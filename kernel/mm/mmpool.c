@@ -17,50 +17,37 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * mm/mmpool.c: MM-pools
- *
  */
 
 #include <config.h>
-#include <ds/list.h>
-#include <mstring/string.h>
+#include <arch/atomic.h>
+#include <arch/mmpool_config.h>
 #include <mm/mmpool.h>
 #include <mm/page.h>
-#include <mm/tlsf.h>
 #include <mstring/panic.h>
-#include <arch/atomic.h>
-#include <arch/types.h>
+#include <mstring/assert.h>
+#include <mstring/string.h>
+#include <mstring/types.h>
 
-mm_pool_t mm_pools[MMPOOLS_MAX];
+mmpool_t *mmpools[ARCH_NUM_MMPOOLS];
+static INITDATA SPINLOCK_DEFINE(mmpool_ids_lock);
+static INITDATA mmpool_ids = 0;
 
-void mmpools_initialize(void)
+INITCODE mmpool_type_t mmpool_register(mmpool_t *mmpool)
 {
-  uint8_t i;
+  mmpool_type_t type;
   
-  kprintf("[MM] Initialize memory pools.\n");
-  memset(mm_pools, 0, sizeof(*mm_pools) * MMPOOLS_MAX);
-  for (i = 0; i < MMPOOLS_MAX; i++) {
-    switch (i) {
-        case GENERAL_POOL_TYPE:
-          mm_pools[i].name = "General";
-          break;
-        case DMA_POOL_TYPE:
-          mm_pools[i].name = "DMA";
-          break;
-        case HIGHMEM_POOL_TYPE:
-          mm_pools[i].name = "Highmem";
-          break;
-        case BOOTMEM_POOL_TYPE:
-          mm_pools[i].name = "Bootmem";
-          break;
-        default:
-          panic("Unknown memory pool type: %d\n", i);
-    }
+  ASSERT(mmpool != NULL);
+  ASSERT(mmpool->num_pages > 0);
+  
+  spinlock_lock(&mmpool_ids_lock);
+  type = mmpool_ids++;
+  spinlock_unlock(&mmpool_ids_lock);
 
-    mm_pools[i].type = i;
-    mm_pools[i].is_active = false;
-    mm_pools[i].first_page_id = PAGE_IDX_INVAL;
-  }
+  ASSERT(type < MMPOOLS_MAX);
+  mmpool->type = type;
+  mmpools[type] = mmpool;
+  return type;
 }
 
 void mmpool_add_page(mm_pool_t *pool, page_frame_t *pframe)

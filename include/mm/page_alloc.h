@@ -17,8 +17,6 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * include/mm/pfalloc.h: page frame allocation API
- *
  */
 
 /**
@@ -27,8 +25,8 @@
  * @author Dan Kruchinin
  */
 
-#ifndef __PFALLOC_H__
-#define __PFALLOC_H__ 
+#ifndef __MSTRING_PAGE_ALLOC_H__
+#define __MSTRING_PAGE_ALLOC_H__
 
 #include <mm/page.h>
 #include <mstring/types.h>
@@ -42,30 +40,25 @@
  * @typedef uint8_t pfalloc_flags_t
  * Page frame allocation flags
  */
-typedef uint32_t pfalloc_flags_t;
+typedef uint32_t palloc_flags_t;
 
-/**
- * @struct pfalloc_type_t
- * Contains types of all available allocator.
- * Each allocator has its own unique type.
- */
-typedef enum __pfalloc_type {
-    PFA_IDALLOC = 1, /**< Init-data(bootmem) allocator */
-    PFA_TLSF,        /**< TLSF O(1) allocator */
-} pfalloc_type_t;
+struct mmpool;
 
 /**
  * @struct pf_allocator_t
  * Page frame allocator abstract type
  */
-typedef struct __pf_allocator {
-  page_frame_t *(*alloc_pages)(page_idx_t n, void *data);
+typedef struct page_allocator {
+  char *name;
+  void (*initialize)(struct mmpool *pool);
+  page_frame_t *(*alloc_pages)(page_idx_t num_pages, void *data);
   void (*free_pages)(page_frame_t *pframe, page_idx_t num_pages, void *data);
   void (*dump)(void *data);
-  void *alloc_ctx;         /**< Internal allocator private data */
+  void *alloc_ctx;
+  struct page_allocator *next;
+  page_idx_t min_block_size;
   page_idx_t max_block_size;
-  pfalloc_type_t type;     /**< Allocator type */
-} pf_allocator_t;
+} page_allocator_t;
 
 /**
  * @def alloc_page(flags)
