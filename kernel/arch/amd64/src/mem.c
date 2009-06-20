@@ -49,9 +49,6 @@ uintptr_t __utrampoline_virt;
 static SPINLOCK_DEFINE(vregion_lock);
 static uintptr_t vregion_cur_ptr = KERNEL_OFFSET;
 static vm_mandmap_t ident_mandmap, utramp_mandmap, swks_mandmap;
-#if 0
-static mmpool_type_t highmem_pool, lowmem_pool;
-#endif
 
 /*
  * Points to the very first available page-aligned address.
@@ -191,7 +188,6 @@ struct pt_ops pt_ops = {
 static inline bool is_kernel_page(page_frame_t *page)
 {
   return ((uintptr_t)pframe_to_phys(page) < KERNEL_END_PHYS);
-  //return (/*(pa_start >= 0/*KVIRT_TO_PHYS(&__bootstrap_start)) && */(pa_end <= KERNEL_END_PHYS));
 }
 
 static INITCODE void __map_kmem(page_idx_t pidx, page_idx_t npages,
@@ -315,32 +311,14 @@ static INITCODE void build_page_frames_array(void)
       if (reserved || is_kernel_page(page)) {
         page->flags = PF_RESERVED;
       }
-      if ((uintptr_t)pframe_to_phys(page) < MB2B(4096UL)) {
-        //pool = mmpool_by_type(lowmem_pool);
-        pool = POOL_GENERAL();  
-      }
-      else {
-        pool = POOL_HIGHMEM();
-        //pool = mmpool_by_type(highmem_pool);
-      }
 
-      mmpool_add_page(pool, page);
+      arch_register_page(page);
     }
 
     mmap = E820_MMAP_NEXT(mmap);
   }
 
   ASSERT(num_phys_pages == pidx);
-}
-
-static INITCODE void setup_mmpools(void)
-{
-#if 0
-  lowmem_pool = register_mmpool("Lowmem (< 4G)",
-                                MMPOOL_KERN | MMPOOL_USER | MMPOOL_DMA);
-  highmem_pool = register_mmpool("Highmem (>= 4G)",
-                                 MMPOOL_KERN | MMPOOL_USER);
-#endif
 }
 
 static INITCODE void configure_mmpools(void)
@@ -365,6 +343,7 @@ INITCODE void arch_mem_init(void)
   ulong_t phys_mem_bytes = KB2B(mb_info->mem_upper + 1024);
   uintptr_t srv_addr;
 
+  arch_init_mmpools();
   if (phys_mem_bytes < MIN_MEM_REQUIRED) {
     panic("Mstring kernel launches on systems with at least %dM of RAM. "
           "Your system has only %dM\n", B2MB(MIN_MEM_REQUIRED),
@@ -419,7 +398,7 @@ INITCODE void arch_mem_init(void)
                             sizeof(page_frame_t) * num_phys_pages));
   kprintf(KO_INFO "Page frames array size: %dK\n",
           B2KB(KERNEL_END_VIRT - (uintptr_t)page_frames_array));
-  configure_mmpools();
+  arch_register_mmpools();
   register_mandatory_mappings();
 }
 

@@ -34,6 +34,8 @@
 #include <mstring/panic.h>
 #include <mstring/types.h>
 
+#define NUM_PREFERRED_MMPOOLS 3
+
 #ifdef ARCH_NUM_MMPOOLS
 
 #if (ARCH_NUM_MMPOOLS > MMPOOLS_MAX)
@@ -50,9 +52,17 @@
 typedef uint8_t mmpool_flags_t;
 typedef uint8_t mmpool_type_t;
 
-#define MMPOOL_KERN   0x01
-#define MMPOOL_USER   0x02
-#define MMPOOL_DMA    0x04
+enum {
+  PREF_MMPOOL_KERN = 0,
+  PREF_MMPOOL_USER,
+  PREF_MMPOOL_DMA,
+};
+
+#define LAST_PREF_MMPOOL PREF_MMPOOL_DMA
+
+#define MMPOOL_KERN   (1 << PREF_MMPOOL_KERN)
+#define MMPOOL_USER   (1 << PREF_MMPOOL_USER)
+#define MMPOOL_DMA    (1 << PREF_MMPOOL_DMA)
 
 /**
  * @struct mm_pool_t
@@ -78,8 +88,6 @@ typedef struct mmpool {
   mmpool_type_t type;             /**< Unique integer fitting in 4 bits identifying memory pool type */
 } mmpool_t;
 
-extern mmpool_t *mmpools[ARCH_NUM_MMPOOLS];
-
 /**
  * @def for_each_mm_pool(p)
  * @brief Iterate through all memory pools
@@ -89,6 +97,13 @@ extern mmpool_t *mmpools[ARCH_NUM_MMPOOLS];
  */
 #define for_each_mmpool(p)                                 \
   for ((p) = mmpools; (p); (p)++)
+
+extern mmpool_t *mmpools[ARCH_NUM_MMPOOLS];
+extern mmpool_t *preferred_mmpools[NUM_PREFERRED_MMPOOLS];
+
+INITCODE mmpool_type_t mmpool_register(mmpool_t *mmpool);
+INITCODE void mmpool_set_preferred(int mmpool_id, mmpool_t *pref_mmpool);
+void mmpool_add_page(mmpool_t *mmpool, page_frame_t *pframe);
 
 /**
  * @brief Get pool by its type
@@ -102,6 +117,12 @@ static inline mmpool_t *get_mmpool_by_type(uint8_t type)
   }
   
   return mmpools[type];
+}
+
+static inline mmpool_t *mmpool_get_preferred(int mmpool_id)
+{
+  ASSERT((mmpool_id >= 0) && (mmpool_id <= LAST_PREF_MMPOOL));
+  return preferred_mmpools[mmpoold_id];
 }
 
 static inline page_frame_t *mmpool_alloc_pages(mm_pool_t *pool, page_idx_t num_pages)
