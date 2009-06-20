@@ -17,36 +17,52 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * include/mm/mmpool.h: MM-pools
- *
  */
 
-#ifndef __MMPOOL_H__
-#define __MMPOOL_H__
+#ifndef __MSTRING_MMPOOL_H__
+#define __MSTRING_MMPOOL_H__
 
 #include <config.h>
-#include <mstring/assert.h>
+#include <arch/atomic.h>
+#include <arch/mmpool_cofig.h>
 #include <ds/list.h>
 #include <mm/page.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <sync/spinlock.h>
 #include <mstring/kprintf.h>
-#include <arch/atomic.h>
-#include <arch/types.h>
+#include <mstring/assert.h>
+#include <mstring/panic.h>
+#include <mstring/types.h>
 
-#define MMPOOLS_MAX   4
+#define NUM_PREFERRED_MMPOOLS 3
+
+#ifdef ARCH_NUM_MMPOOLS
+
+#if (ARCH_NUM_MMPOOLS > MMPOOLS_MAX)
+#error "Arch-specific number of memory pools exeeds MMPOOLS_MAX limit!"
+#elif (ARCH_NUM_MMPOOLS <= 0)
+#error "Arch-specific number of memory pools is <= 0!"
+#endif /* RCH_NUM_MMPOOLS > MMPOOLS_MAX */
+
+#else /* ARCH_NUM_MMPOOLS */
+
+#error "ARCH_NUM_MMPOOLS is not defined!"
+#endif /* !defined ARCH_NUM_MMPOOLS */
+
+typedef uint8_t mmpool_flags_t;
+typedef uint8_t mmpool_type_t;
 
 enum {
-  GENERAL_POOL_TYPE = 0,  
-  HIGHMEM_POOL_TYPE,
-  DMA_POOL_TYPE,
-  BOOTMEM_POOL_TYPE,
+  PREF_MMPOOL_KERN = 0,
+  PREF_MMPOOL_USER,
+  PREF_MMPOOL_DMA,
 };
-  
-#define POOL_BOOTMEM() (&mm_pools[BOOTMEM_POOL_TYPE])
-#define POOL_GENERAL() (&mm_pools[GENERAL_POOL_TYPE])
-#define POOL_DMA()     (&mm_pools[DMA_POOL_TYPE])
-#define POOL_HIGHMEM() (&mm_pools[HIGHMEM_POOL_TYPE])
+
+#define LAST_PREF_MMPOOL PREF_MMPOOL_DMA
+
+#define MMPOOL_KERN   (1 << PREF_MMPOOL_KERN)
+#define MMPOOL_USER   (1 << PREF_MMPOOL_USER)
+#define MMPOOL_DMA    (1 << PREF_MMPOOL_DMA)
 
 /**
  * @struct mm_pool_t
@@ -61,18 +77,16 @@ enum {
  * @see pf_allocator_t
  * @see mm_pool_type_t
  */
-typedef struct __mm_pool {
-  char *name;
-  pf_allocator_t allocator;      /**< Pool's pages allocator */
-  page_idx_t first_page_id;      /**< Number of very first page in a pool */
-  page_idx_t total_pages;        /**< Total number of pages in pool */
-  page_idx_t reserved_pages;     /**< Number of reserved pages */
-  atomic_t free_pages;           /**< Number of free pages (atomic) */
-  bool is_active;
-  uint8_t type;
-} mm_pool_t;
-
-extern mm_pool_t mm_pools[MMPOOLS_MAX]; /**< An array of all pools */
+typedef struct mmpool {
+  char *name;                     /**< Memory pool name */
+  page_allocator_t allocator;     /**< Page frames allocator attached to given pool */
+  page_idx_t first_pidx;          /**< Memory pool's very first page frame number */
+  page_idx_t num_pages;           /**< Total number of pages in the pool */
+  page_idx_t num_reserved_pages;  /**< Number of reserved pages fitting given pool */
+  atomic_t num_free_pages;        /**< Number of free in the pool */
+  mmpool_flags_t flags;           /**< Memory pool flags */
+  mmpool_type_t type;             /**< Unique integer fitting in 4 bits identifying memory pool type */
+} mmpool_t;
 
 /**
  * @def for_each_mm_pool(p)
@@ -81,35 +95,34 @@ extern mm_pool_t mm_pools[MMPOOLS_MAX]; /**< An array of all pools */
  *
  * @see mm_pool_t
  */
-#define for_each_mm_pool(p)                                 \
-  for (p = mm_pools; p < (mm_pools + MMPOOLS_MAX); p++)
+#define for_each_mmpool(p)                                 \
+  for ((p) = mmpools; (p); (p)++)
 
-/**
- * @def for_each_active_mm_pool(p)
- * @brief Iterate through each active memory pool
- * @param[out] p - A pointer to mm_pool_t which will be used as iterator element
- *
- * @see mm_pool_t
- */
-#define for_each_active_mm_pool(p)              \
-  for_each_mm_pool(p)                           \
-    if((p)->is_active)
+extern mmpool_t *mmpools[ARCH_NUM_MMPOOLS];
+extern mmpool_t *preferred_mmpools[NUM_PREFERRED_MMPOOLS];
+
+INITCODE mmpool_type_t mmpool_register(mmpool_t *mmpool);
+INITCODE void mmpool_set_preferred(int mmpool_id, mmpool_t *pref_mmpool);
+void mmpool_add_page(mmpool_t *mmpool, page_frame_t *pframe);
 
 /**
  * @brief Get pool by its type
  * @param type - pool type
  * @return A pointer to mm pool of type @a type
- *
- * @see mm_pool_type_t
  */
-static inline mm_pool_t *get_mmpool_by_type(uint8_t type)
+static inline mmpool_t *get_mmpool_by_type(uint8_t type)
 {
   if (unlikely(type >= MMPOOLS_MAX)) {
-    kprintf(KO_WARNING "Attemption to get memory pool by unknown type %d!\n", type);
-    return NULL;
+    panic("Attemption to get memory pool by unknown type %d!\n", type);
   }
   
-  return &mm_pools[type];
+  return mmpools[type];
+}
+
+static inline mmpool_t *mmpool_get_preferred(int mmpool_id)
+{
+  ASSERT((mmpool_id >= 0) && (mmpool_id <= LAST_PREF_MMPOOL));
+  return preferred_mmpools[mmpoold_id];
 }
 
 static inline page_frame_t *mmpool_alloc_pages(mm_pool_t *pool, page_idx_t num_pages)
@@ -139,8 +152,4 @@ static inline void mmpool_allocator_dump(mm_pool_t *pool)
   kprintf(KO_WARNING "Memory pool \"%s\" doesn't support dump function!\n", pool->name);
 }
 
-void mmpools_initialize(void);
-void mmpool_activate(mm_pool_t *pool);
-void mmpool_add_page(mm_pool_t *pool, page_frame_t *pframe);
-
-#endif /* __MMPOOL_H__ */
+#endif /* __MSTRING_MMPOOL_H__ */

@@ -37,10 +37,13 @@
 #include <arch/page.h>
 #include <arch/atomic.h>
 
-#define MMPOOLS_MASK  0x07
-#define MMPOOLS_SHIFT 3
 #define PAGE_ALIGN(addr) (((uintptr_t)(addr) + PAGE_MASK) & ~PAGE_MASK)
 #define PAGE_ALIGN_DOWN(addr) ((uintptr_t)(addr) & ~PAGE_MASK)
+
+#define MMPOOLS_MASK    0xf
+#define MMPOOLS_SHIFT   4
+#define MMPOOLS_MAX     (1 << MMPOOLS_SHIFT)
+#define PF_MMPOOL(type) ((type) & MMPOOLS_MASK)
 
 /**
  * @typedef int page_idx_t
