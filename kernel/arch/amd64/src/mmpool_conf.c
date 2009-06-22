@@ -42,7 +42,7 @@ INITCODE void arch_register_page(page_frame_t *page)
 {
   mmpool_t *pool;
   
-  if (pframe_to_phys(page) < MB2B(4096UL)) {
+  if ((uintptr_t)pframe_to_phys(page) < MB2B(4096UL)) {
     pool = &lowmem_pool;
   }
   else {
@@ -60,7 +60,7 @@ INITCODE void arch_register_mmpools(void)
     panic("Memory pool \"%s\" has not free pages at all!");
   }
 
-  lowmem_id = mmpool_register(&lowmem_pool);
+  mmpool_register(&lowmem_pool);
   mmpool_set_preferred(PREF_MMPOOL_DMA, &lowmem_pool);
   mmpool_register(&highmem_pool);
   if (atomic_get(&highmem_pool.num_free_pages) > 0) {    

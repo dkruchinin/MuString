@@ -23,9 +23,9 @@
 #define __ARCH_MSTRING_MMPOOL_CONF_H__
 
 #include <mm/page.h>
-#include <mstring/page.h>
+#include <mstring/types.h>
 
-#define ARCH_NUM_MMOOLS 2
+#define ARCH_NUM_MMPOOLS 2
 
 INITCODE void arch_init_mmpools(void);
 INITCODE void arch_register_mmpools(void);

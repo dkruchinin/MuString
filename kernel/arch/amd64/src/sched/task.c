@@ -32,7 +32,7 @@
 #include <mstring/errno.h>
 #include <mstring/string.h>
 #include <mstring/smp.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mstring/panic.h>
 #include <mstring/scheduler.h>
 #include <arch/scheduler.h>

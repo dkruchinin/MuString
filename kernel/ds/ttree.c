@@ -595,7 +595,7 @@ void __ttree_init(ttree_t *ttree, ttree_cmp_func_t cmpf, size_t key_offs)
   CT_ASSERT(tnode_size(ttree) <= SLAB_OBJECT_MAX_SIZE);
   if (!__tnodes_memcache) {
      __tnodes_memcache = create_memcache("T*-tree nodes", tnode_size(ttree), 1,
-                                          GENERAL_POOL_TYPE | SMCF_IMMORTAL | SMCF_LAZY);
+                                          MMPOOL_KERN | SMCF_IMMORTAL | SMCF_LAZY);
     if (!__tnodes_memcache)
       panic("__ttree_init: Couldn't create memory cache for T*-tree nodes cache. ENOMEM.");
   }

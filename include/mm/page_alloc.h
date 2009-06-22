@@ -15,14 +15,8 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
- * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
+ * (c) Copyright 2008 Dan Kruchinin <dk@jarios.org>
  *
- */
-
-/**
- * @file include/mm/pfalloc.h
- * page frame allocation API
- * @author Dan Kruchinin
  */
 
 #ifndef __MSTRING_PAGE_ALLOC_H__
@@ -32,9 +26,11 @@
 #include <mstring/types.h>
 
 /* Allocation flags */
-#define AF_ZERO      (1 << MMPOOLS_SHIFT)
-#define AF_USER      (2 << MMPOOLS_SHIFT)
-#define AF_ATOMIC    (4 << MMPOOLS_SHIFT)
+#define AF_ZERO       (1 << MMPOOLS_SHIFT)
+#define AF_STRICT_CNT (2 << MMPOOLS_SHIFT)
+#define AF_ATOMIC     (4 << MMPOOLS_SHIFT)
+
+#define PAFLAGS_MMPOOL_TYPE(flags) ((flags) & MMPOOLS_MASK)
 
 /**
  * @typedef uint8_t pfalloc_flags_t
@@ -82,7 +78,7 @@ typedef struct page_allocator {
  *
  * @see alloc_page
  */
-page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags);
+page_frame_t *alloc_pages(page_idx_t num_pages, palloc_flags_t flags);
 
 /**
  * @brief free continous block of pages starting from @a pages
@@ -95,7 +91,7 @@ void free_pages_chain(page_frame_t *pages);
 uintptr_t sys_alloc_dma_pages(int num_pages);
 void sys_free_dma_pages(uintptr_t paddr, int num_pages);
 
-static inline void *alloc_pages_addr(int n, pfalloc_flags_t flags)
+static inline void *alloc_pages_addr(int n, palloc_flags_t flags)
 {
   page_frame_t *pf = alloc_pages(n, flags);
   if(pf)

@@ -25,6 +25,8 @@
 #include <arch/ptable.h>
 #include <arch/cpu.h>
 #include <arch/msr.h>
+#include <arch/mem.h>
+#include <arch/mmpool_conf.h>
 #include <arch/cpufeatures.h>
 #include <mm/page.h>
 #include <mm/mem.h>
@@ -295,7 +297,6 @@ static INITCODE void build_page_frames_array(void)
   page_frame_t *page;
   int reserved;
   uintptr_t end;
-  mm_pool_t *pool;
 
   mmap = (e820memmap_t *)((uintptr_t)mb_info->mmap_addr);
   while (mmap->base_address < last_usable_addr) {
@@ -319,23 +320,6 @@ static INITCODE void build_page_frames_array(void)
   }
 
   ASSERT(num_phys_pages == pidx);
-}
-
-static INITCODE void configure_mmpools(void)
-{
-#if 0
-  mmpool_t *pref_pool, *pool;
-
-  pref_pool = mmpool_by_type(lowmem_pool);
-  set_preferred_mmpool(MMP_PREF_DMA, pref_pool);  
-  pool = mmpool_by_type(highmem_pool);
-  if (atomic_get(&pool->num_free_pages) > 0) {
-    pref_pool = pool;
-  }
-  
-  set_preferred_mmpool(MMP_PREF_KERNEL, pref_pool);
-  set_preferred_mmpool(MMP_PREF_USER, pref_pool);
-#endif
 }
 
 INITCODE void arch_mem_init(void)
@@ -389,7 +373,7 @@ INITCODE void arch_mem_init(void)
   ealloc_disable_feature(EALLOCF_APAGES);
 
   /* Set up arch-specific memory pools */
-  setup_mmpools();
+  arch_register_mmpools();
   SET_KERNEL_END((uintptr_t)ealloc_data.pages);
   page_frames_array = (page_frame_t *)KERNEL_END_VIRT;
   build_page_frames_array();

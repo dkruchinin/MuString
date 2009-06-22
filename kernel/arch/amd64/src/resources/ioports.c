@@ -22,10 +22,9 @@
  */
 
 #include <mstring/resource.h>
-#include <mm/pfalloc.h>
 #include <mstring/errno.h>
 #include <arch/context.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mstring/stddef.h>
 #include <arch/interrupt.h>
 

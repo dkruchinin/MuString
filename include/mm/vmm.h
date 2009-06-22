@@ -21,14 +21,14 @@
  *
  */
 
-#ifndef __VMM_H__
-#define __VMM_H__
+#ifndef __MSTRING_VMM_H__
+#define __MSTRING_VMM_H__
 
 #include <config.h>
 #include <ds/list.h>
 #include <ds/ttree.h>
 #include <mm/page.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/memobj.h>
 #include <mm/mem.h>
 #include <mstring/types.h>
@@ -201,4 +201,4 @@ void vmranges_print_tree_dbg(vmm_t *vmm);
 #define vmranges_print_tree_dbg(vmm)
 #endif /* CONFIG_DEBUG_MM */
 
-#endif /* __VMM_H__ */
+#endif /* __MSTRING_VMM_H__ */

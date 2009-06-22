@@ -15,142 +15,148 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
- * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
- *
- * mm/pfalloc.c: page frame allocation API
+ * (c) Copyright 2008 Dan Kruchinin <dk@jarios.org>
  *
  */
 
 #include <mm/page.h>
 #include <mm/mmpool.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/vmm.h>
 #include <mstring/errno.h>
 #include <mstring/types.h>
-#include <mm/tlsf.h>
 
 #define DEFAULT_GRANULARITY 64
 
-static page_frame_t *__alloc_pages_ncont(mm_pool_t *pool, page_idx_t n, pfalloc_flags_t flags)
+static page_frame_t *alloc_pages_ncont(mmpool_t *mmpool,
+                                       page_idx_t num_pages, palloc_flags_t flags)
 {
-  page_idx_t granularity;
-  page_frame_t *pages = NULL, *p;
+  mmpool_flags_t mmpool_nature = PFLAGS_MMPOOL_TYPE(flags);
+  page_idx_t granularity, n;
+  page_frame_t *pages = NULL, *pg;
+  mmpool_t *p = mmpool;
 
-  config_granularity:
-  if (pool->allocator.max_block_size >= DEFAULT_GRANULARITY)
+  ASSERT(is_poerof2(mmpool_nature));
+  n = num_pages;
+config_granularity:
+  if (p->allocator.max_block_size >= DEFAULT_GRANULARITY) {
     granularity = DEFAULT_GRANULARITY;
-  else
-    granularity = pool->allocator.max_block_size;
-  
-  while (n) {    
-    if (granularity > n)
+  }
+  else {
+    granularity = p->allocator.max_block_size;
+  }
+
+  while (n) {
+    if (granularity > n) {
       granularity = n;
-
-    p = mmpool_alloc_pages(pool, granularity);
-    if (!p) {
-      if (atomic_get(&pool->free_pages)) {
-        if ((granularity /= 2) != 0)
-          continue;
-      }
-      switch (pool->type) {
-          case HIGHMEM_POOL_TYPE:
-            pool = POOL_GENERAL();
-            goto config_granularity;
-          case GENERAL_POOL_TYPE:
-            if (!POOL_DMA()->is_active)
-              goto failed;
-
-            pool = POOL_DMA();
-            goto config_granularity;
-          default:
-            goto failed;
-      }
     }
-    if ((flags & AF_ZERO) && (pool->type != HIGHMEM_POOL_TYPE))
-      pframes_memnull(p, granularity);
-    if (unlikely(pages == NULL))
-      pages = p;
-    else {
+
+    pg = mmpool_alloc_pages(mmpool, granularity);
+    if (!pg) {
+      if (atomic_get(&mmpool->num_free_pages)) {
+        if ((granularity /= 2) != 0) {
+          continue;
+        }
+      }
+
+      if (p == mmpool) {
+        p = get_mmpool_by_type(MMPOOL_FIRST_TYPE);
+      }
+      else {
+        p = mmpool_next(p);
+      }
+      while (p) {
+        if ((p != mmpool) && (p->flags & mmpool_nature)) {
+          goto config_granularity;
+        }
+
+        p = mmpool_next(p);
+      }
+
+      goto failed;
+    }
+    if (flags & AF_ZERO) {
+      pframes_memnull(pg, granularity);
+    }
+    if (likely(pages != NULL)) {
       list_add_range(&p->chain_node, p->chain_node.prev,
                      pages->chain_node.prev, &pages->chain_node);
     }
+    else {
+      pages = p;
+    }
 
-    atomic_sub(&pool->free_pages, granularity);
+    atomic_sub(&p->num_free_pages, granularity);
     n -= granularity;
   }
 
   return pages;
-
-  failed:
-  if (pages)
-    free_pages_chain(pages);
+failed:
+  if (pages) {
+    free_pages_chain(pages);    
+  }
 
   return NULL;
 }
 
-page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags)
+page_frame_t *alloc_pages(page_idx_t num_pages, palloc_flags_t flags)
 {
-  page_frame_t *pages = NULL;
-  mm_pool_t *pool;
+  mmpool_flags_t mmpool_nature;
+  mmpool_t *mmpool;
+  page_frame_t *pages;
 
-  pool = get_mmpool_by_type(flags & MMPOOLS_MASK);
-  ASSERT(n > 0);
-  if (!pool) {
-    kprintf("No pool %d\n", flags & MMPOOLS_MASK);
-    return NULL;
+  ASSERT(num_pages > 0);
+  ASSERT(flags != 0);
+  mmpool_nature = PAFLAGS_MMPOOL_TYPE(flags);
+  if (unlikely(!is_powerof2(mmpool_nature))) {
+    panic("Allocation from unrecognized memory pool with nature = %#x\n", mmpool_nature);
   }
 
-  if (!pool->is_active) {
-    kprintf(KO_WARNING "alloc_pages: Can't allocate from pool \"%s\" (pool is no active)\n", pool->name);
-    return NULL;
-  }
-  if (!(flags & AF_USER)) {
-    pages = mmpool_alloc_pages(pool, n);
-    if (!pages) {
-      if ((pool->type == GENERAL_POOL_TYPE) && POOL_DMA()->is_active) {
-        /* try to allocate pages from DMA pool if it's possible */
-        pool = POOL_DMA();
-        pages = mmpool_alloc_pages(pool, n);
-        if (!pages)
-          goto out;
+  mmpool = get_preferred_mmpool(BITNUM(mmpool_nature));
+  pages = mmpool_alloc_pages(mmpool, num_pages);
+  if (!pages) {
+    if (flags & AF_STRICT_CNT) {
+      mmpool_t *p;
+
+      for_each_mmpool(p) {
+        if ((p == mmpool) || !(p->flags & mmpool_nature)) {
+          continue;
+        }
+
+        pages = mmpool_alloc_pages(p, num_pages);
+        if (pages) {
+          atomic_sub(&p->num_free_pages, num_pages);
+          break;
+        }
+      }      
+      if (pages && (flags & AF_ZERO)) {
+          pframes_memnull(pages, num_pages);
       }
-      else
-        goto out;
     }
-    if (flags & AF_ZERO)
-      pframes_memnull(pages, n);
-
-    atomic_sub(&pool->free_pages, n);
-  }
-  else {
-    /* Allocate non-contious chain of pages... */
-    if (pool->type == HIGHMEM_POOL_TYPE) {
-      pages = mmpool_alloc_pages(pool, n);
-      if (pages)
-        goto out;
+    else {
+      pages = alloc_pages_ncont(mmpool, num_pages, flags);
     }
-
-    pages = __alloc_pages_ncont(pool, n, flags);
   }
 
-  /* done */
-out:
   return pages;
 }
 
 void free_pages(page_frame_t *pages, page_idx_t num_pages)
 {
-  mm_pool_t *pool = get_mmpool_by_type(pages->pool_type);
+  mmpool_t *mmpool;
+  mmpool_type_t type;
 
-  if (!pool)
-    panic("Page frame #%#x has invalid pool type %d!", pframe_number(pages), pages->pool_type);
-  if (!pool->is_active) {
-    kprintf(KO_ERROR "free_pages: trying to free pages from dead pool %s\n", pool->name);
-    return;
+  ASSERT(pages != NULL);
+  ASSERT(num_pages > 0);
+
+  mmpool = get_mmpool_by_type(PF_MMPOOL_TYPE(pages->flags));
+  if (!mmpool) {
+    panic("Page frame #%#x has invalid pool type %d!",
+          pframe_number(pages), PF_MMPOOL_TYPE(pages->flags));
   }
 
-  mmpool_free_pages(pool, pages, num_pages);
-  atomic_add(&pool->free_pages, num_pages);
+  mmpool_free_pages(mmpool, pages, num_pages);
+  atomic_add(&mmpool->num_free_pages, num_pages);
 }
 
 void free_pages_chain(page_frame_t *pages)

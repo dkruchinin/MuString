@@ -24,7 +24,7 @@
 
 #include <config.h>
 #include <arch/atomic.h>
-#include <arch/mmpool_cofig.h>
+#include <arch/mmpool_conf.h>
 #include <ds/list.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
@@ -58,7 +58,8 @@ enum {
   PREF_MMPOOL_DMA,
 };
 
-#define LAST_PREF_MMPOOL PREF_MMPOOL_DMA
+#define LAST_PREF_MMPOOL  PREF_MMPOOL_DMA
+#define MMPOOL_FIRST_TYPE 0
 
 #define MMPOOL_KERN   (1 << PREF_MMPOOL_KERN)
 #define MMPOOL_USER   (1 << PREF_MMPOOL_USER)
@@ -119,40 +120,43 @@ static inline mmpool_t *get_mmpool_by_type(uint8_t type)
   return mmpools[type];
 }
 
+static inline mmpool_t *mmpool_next(mmpool_t *mmpool)
+{
+  ASSERT(mmpool != NULL);
+  if ((mmpool->type + 1) < MMPOOLS_MAX) {
+    return mmpools[mmpool->type + 1];
+  }
+
+  return NULL;
+}
+
 static inline mmpool_t *mmpool_get_preferred(int mmpool_id)
 {
   ASSERT((mmpool_id >= 0) && (mmpool_id <= LAST_PREF_MMPOOL));
-  return preferred_mmpools[mmpoold_id];
+  return preferred_mmpools[mmpool_id];
 }
 
-static inline page_frame_t *mmpool_alloc_pages(mm_pool_t *pool, page_idx_t num_pages)
+static inline page_frame_t *mmpool_alloc_pages(mmpool_t *pool, page_idx_t num_pages)
 {
-  if (likely(pool->allocator.alloc_pages != NULL))
+  if (likely(pool->allocator.alloc_pages != NULL)) {
     return pool->allocator.alloc_pages(num_pages, pool->allocator.alloc_ctx);
+  }
 
-  kprintf(KO_WARNING "Memory pool \"%s\" doesn't support alloc_pages function!\n", pool->name);
   return NULL;  
 }
 
-static inline void mmpool_free_pages(mm_pool_t *pool, page_frame_t *pages, page_idx_t num_pages)
+static inline void mmpool_free_pages(mmpool_t *pool, page_frame_t *pages, page_idx_t num_pages)
 {
-  if (likely(pool->allocator.free_pages != NULL))
+  if (likely(pool->allocator.free_pages != NULL)) {
     return pool->allocator.free_pages(pages, num_pages, pool->allocator.alloc_ctx);
-
-  kprintf(KO_WARNING "Memory pool \"%s\" doesn't support free_pages function!\n", pool->name);
+  }
 }
 
-static inline void mmpool_allocator_dump(mm_pool_t *pool)
+static inline void mmpool_allocator_dump(mmpool_t *pool)
 {
   if (likely(pool->allocator.dump != NULL)) {
     pool->allocator.dump(pool->allocator.alloc_ctx);
-    return;
   }
-
-  kprintf(KO_WARNING "Memory pool \"%s\" doesn't support dump function!\n", pool->name);
 }
-
-INITCODE mmpool_type_t mmpool_register(mmpool_t *mmpool);
-void mmpool_add_page(mmpool_type_t pool_type, page_frame_t *pframe);
 
 #endif /* __MSTRING_MMPOOL_H__ */

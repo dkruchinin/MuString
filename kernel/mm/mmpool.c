@@ -32,7 +32,7 @@
 mmpool_t *mmpools[ARCH_NUM_MMPOOLS];
 mmpool_t *preferred_mmpools[NUM_PREFERRED_MMPOOLS];
 static INITDATA SPINLOCK_DEFINE(mmpool_ids_lock);
-static INITDATA mmpool_ids = 0;
+static INITDATA mmpool_ids = MMPOOL_FIRST_TYPE;
 
 INITCODE mmpool_type_t mmpool_register(mmpool_t *mmpool)
 {
