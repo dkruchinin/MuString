@@ -115,7 +115,7 @@ failed:
   return NULL;
 }
 
-static page_frame_t *alloc_pages_cont(mmpool_t *failed_pool,
+static page_frame_t *alloc_pages_cont(mmpool_t *mmpool,
                                       page_idx_t num_pages,
                                       palloc_flags_t flags)
 {
@@ -123,8 +123,13 @@ static page_frame_t *alloc_pages_cont(mmpool_t *failed_pool,
   page_frame_t *pages = NULL;
   mmpool_flags_t mmpool_nature = PAFLAGS_MMPOOL_TYPE(flags);
 
+  pages = mmpool_alloc_pages(mmpool, num_pages);
+  if (pages) {
+    p = mmpool;
+    goto out_ok;
+  }
   for_each_mmpool(p) {
-    if ((p == failed_pool) || !(p->flags & mmpool_nature)) {
+    if ((p == mmpool) || !(p->flags & mmpool_nature)) {
       continue;
     }
 

@@ -682,7 +682,6 @@ static void tlsf_memdump(void *_tlsf)
 #include <mm/slab.h>
 #include <mstring/smp.h>
 
-static smp_hook_t __percpu_hook;
 static int tlsf_smp_hook(cpu_id_t cpuid, void *_tlsf)
 {
   tlsf_t *tlsf = _tlsf;
