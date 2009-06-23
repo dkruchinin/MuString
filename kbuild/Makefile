@@ -1,5 +1,5 @@
 include $(BUILD_ROOT)/include/Makefile.inc
-#include ../include/Makefile.inc
+
 # lxdialig related variables
 lxdialog_root := $(BUILD_ROOT)/kbuild/lxdialog
 check-lxdialog := $(lxdialog_root)/check-lxdialog.sh

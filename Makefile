@@ -48,24 +48,20 @@ Q := @
 MAKE := make -s
 endif
 
-
-ifneq ($(NOCOLOR), y)
-NOCOLOR :=
-endif
-
 OPTIMIZATION ?= -g
 CFLAGS = -Wall -nostdlib -nostdinc -fno-builtin -fomit-frame-pointer \
 	$(OPTIMIZATION) $(KERN_CFLAGS)
 
 LDFLAGS += -M
 INCLUDE += -Iinclude
+MENUCONFIG_COLOR ?= mono
 
 export CC LD AR OBJDUMP OBJCOPY GMAP GREP CPP AS ECHO
 export HOSTCC HOSTLD HOSTCFLAGS HOSTLDFLAGS
 export GREP MAKE LN RM GMAP MKDIR CP
 export CFLAGS LDFLAGS INCLUDE
 export BUILD_ROOT ARCH ARCH_DIR ARCH_COM_DIR OBJECTS
-export KERNELVERSION
+export KERNELVERSION MENUCONFIG_COLOR
 
 include include/Makefile.inc
 
