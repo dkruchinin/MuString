@@ -196,7 +196,6 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
   if (r)
     panic("Server [#%d]: Failed to map \"text\" section. (ERR = %d)", num, r);
 
-  //kprintf("TEXT: %p -> %p\n", USPACE_VA_BOTTOM, USPACE_VA_BOTTOM + (text_size << PAGE_WIDTH));
   if (data_size) {
     r = vmrange_map(generic_memobj, vmm, real_data_offset, data_size, VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED, 0);
     if (!PAGE_ALIGN(r))
@@ -215,7 +214,6 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
       panic("Server [#%d]: Failed to create VM range for \"BSS\" section. (ERR = %d)", num, r);
     }
   }
-
   r = vmrange_map(generic_memobj, vmm, USPACE_VADDR_TOP - 0x40000, USER_STACK_SIZE,
                   VMR_READ | VMR_WRITE | VMR_STACK | VMR_PRIVATE | VMR_POPULATE | VMR_FIXED, 0);
   /*r = mmap_core(task_get_rpd(task), USPACE_VA_TOP-0x40000, pframe_number(stack), USER_STACK_SIZE, KMAP_READ | KMAP_WRITE);*/
@@ -243,7 +241,11 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
   
   r=do_task_control(task,SYS_PR_CTL_SET_STACK,ustack_top);
   if (r < 0)
-    panic("Server [#%d]: Failed to set task's stack(%p). (ERR = %d)", num, ustack_top, r);  
+    panic("Server [#%d]: Failed to set task's stack(%p). (ERR = %d)", num, ustack_top, r);
+  if (vmm->owner->pid == 11) {
+    interrupts_disable();
+    for(;;);
+  }
 }
 
 static void __server_task_runner(void *data)
@@ -306,6 +308,7 @@ static void __server_task_runner(void *data)
       }
 #endif
 
+      kprintf("SRV [%d]\n", server->pid);
       r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
       if( r ) {
         panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);

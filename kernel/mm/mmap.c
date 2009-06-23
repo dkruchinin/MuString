@@ -1222,7 +1222,7 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
                     vmrflags, PAGE_ALIGN(margs.offset) >> PAGE_WIDTH);
   rwsem_up_write(&vmm->rwsem);
 
-  out:
+out:
   if (victim_task && victim)
     release_task_struct(victim_task);
   if (memobj)

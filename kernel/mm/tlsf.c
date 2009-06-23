@@ -15,7 +15,7 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
- * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
+ * (c) Copyright 2008 Dan Kruchinin <dk@jarios.org>
  *
  * include/mm/tlsf.h: TLSF O(1) page allocator
  *
@@ -494,6 +494,9 @@ static page_frame_t *__get_page_from_cache(tlsf_t *tlsf)
 
   interrupts_save_and_disable(irqstat);
   page = list_entry(list_node_first(&pcpu->pages), page_frame_t, node);
+  if ((uintptr_t)pframe_to_virt(page) == 0xffffffff836dc000UL) {
+    kprintf("ALLOC PAGE FROM CACHE!\n");
+  }
   list_del(&page->node);
   pcpu->noc_pages--;
   interrupts_restore(irqstat);
@@ -522,14 +525,17 @@ static void tlsf_free_pages(page_frame_t *pages, page_idx_t num_pages, void *dat
     return;
   }
   for (i = 0; i < num_pages; i++) {
+    if ((uintptr_t)pframe_to_virt(&pages[i]) == 0xffffffff836dc000UL) {
+      kprintf("FREE PAGES!\n");
+    }
 #ifdef CONFIG_DEBUG_MM
     tlsf_uint_t flags = pages_block_flags(&pages[i]);
-    if (pages[i].pool_type != tlsf->owner->type) {
-      mm_pool_t *page_pool = get_mmpool_by_type(pages[i].pool_type);
+    if (PF_MMPOOL_TYPE(pages[i].flags) != tlsf->owner->type) {
+      mmpool_t *page_pool = get_mmpool_by_type(PF_MMPOOL_TYPE(pages[i].flags));
 
       if (!page_pool) {
         panic("Page #%#x has invalid pool type: %d!",
-              pframe_number(&pages[i]), pages[i].pool_type);
+              pframe_number(&pages[i]), PF_MMPOOL_TYPE(pages[i].flags));
       }
 
       panic("Attemption to free page #%#x owened by pool %s to the pool %s!",
@@ -540,7 +546,7 @@ static void tlsf_free_pages(page_frame_t *pages, page_idx_t num_pages, void *dat
             pframe_number(&pages[i]), tlsf->owner->name, pages[i]._private);
     }
 #endif /* CONFIG_DEBUG_MM */
-
+    
     bit_clear(&pages[i]._private, TLSF_PB_BUSY);
     clear_page_frame(&pages[i]);
     list_init_node(&pages[i].chain_node);
@@ -588,6 +594,9 @@ init_block:
   /* Now we free to build pages chain and set TLSF_PB_BUSY bit for each allocated page */
   list_init_head(list_node2head(&block_head->chain_node));
   for (i = 0; i < n; i++) {
+    if ((uintptr_t)pframe_to_virt(&block_head[i]) == 0xffffffff836dc000UL) {
+      kprintf("ALLOC PAGES!\n");
+    }
 #ifndef CONFIG_DEBUG_MM
     bit_set(&block_head[i]._private, TLSF_PB_BUSY);
 #else
@@ -800,7 +809,7 @@ void tlsf_validate_dbg(void *_tlsf)
   tlsf_t *tlsf = _tlsf;
   int fldi, sldi, irqstat;
   page_idx_t total_pgs = 0;
-  mm_pool_t *parent_pool = tlsf->owner;
+  mmpool_t *parent_pool = tlsf->owner;
 
   spinlock_lock_irqsave(&tlsf->lock, irqstat);
   for (fldi = 0; fldi < TLSF_FLD_SIZE; fldi++) {
@@ -862,10 +871,10 @@ void tlsf_validate_dbg(void *_tlsf)
   }
 #endif /* CONFIG_SMP */
 
-  if (total_pgs != atomic_get(&parent_pool->free_pages)) {
+  if (total_pgs != atomic_get(&parent_pool->num_free_pages)) {
     panic("TLSF belonging to pool %s has inadequate number of free pages: "
           "%d, but pool itself tells us that there are %d pages available!",
-          parent_pool->name, total_pgs, atomic_get(&parent_pool->free_pages));
+          parent_pool->name, total_pgs, atomic_get(&parent_pool->num_free_pages));
   }
 
   spinlock_unlock_irqrestore(&tlsf->lock, irqstat);

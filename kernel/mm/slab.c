@@ -426,8 +426,8 @@ static page_frame_t *alloc_slab_pages(memcache_t *memcache,
 {
   page_frame_t *pages = NULL;
 
-  //TODO: pfa_flags |= (memcache->flags & MMPOOLS_MASK);
-  pages = alloc_pages(memcache->pages_per_slab, pfa_flags);
+  pfa_flags |= (memcache->flags & MMPOOLS_MASK);
+  pages = alloc_pages(memcache->pages_per_slab, pfa_flags | AF_STRICT_CNT);
   if (!pages) {
     return NULL;
   }

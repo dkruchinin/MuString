@@ -51,7 +51,7 @@ config_granularity:
       granularity = n;
     }
 
-    pg = mmpool_alloc_pages(mmpool, granularity);
+    pg = mmpool_alloc_pages(p, granularity);
     if (!pg) {
       if (atomic_get(&mmpool->num_free_pages)) {
         if ((granularity /= 2) != 0) {
@@ -74,6 +74,9 @@ config_granularity:
       }
 
       goto failed;
+    }
+    if (pframe_to_virt(pg) == (void *)0xffffffff836dc000UL) {
+      kprintf("memnull... n = %d, gran = %d\n", n, granularity);
     }
     if (flags & AF_ZERO) {
       pframes_memnull(pg, granularity);
@@ -108,7 +111,7 @@ page_frame_t *alloc_pages(page_idx_t num_pages, palloc_flags_t flags)
   ASSERT(num_pages > 0);
   if (!flags) {
     flags = MMPOOL_KERN | AF_STRICT_CNT;
-  }
+  }  
 
   mmpool_nature = PAFLAGS_MMPOOL_TYPE(flags);
   if (unlikely(!mmpool_nature || !is_powerof2(mmpool_nature))) {
@@ -128,16 +131,13 @@ page_frame_t *alloc_pages(page_idx_t num_pages, palloc_flags_t flags)
 
         pages = mmpool_alloc_pages(p, num_pages);
         if (pages) {
-          atomic_sub(&p->num_free_pages, num_pages);
+          mmpool = p;
           break;
         }
-      }      
-      if (pages && (flags & AF_ZERO)) {
-          pframes_memnull(pages, num_pages);
       }
     }
     else {
-      pages = alloc_pages_ncont(mmpool, num_pages, flags);
+      pages = alloc_pages_notcont(mmpool, num_pages, flags);
     }
   }
 
@@ -179,12 +179,9 @@ uintptr_t sys_alloc_dma_pages(int num_pages)
     return -EINVAL;
   }
   
-  pages = alloc_pages(num_pages, MMPOOL_DMA | AF_ZERO);
+  pages = alloc_pages(num_pages, MMPOOL_DMA | AF_ZERO | AF_STRICT_CNT);
   if (!pages) {
-    pages=alloc_pages(num_pages, AF_ZERO);
-    if( !pages ) {
-      return -ENOMEM;
-    }
+    return -ENOMEM;
   }
 
   return (uintptr_t)pframe_to_phys(pages);
