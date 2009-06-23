@@ -80,7 +80,8 @@ enum {
  */
 typedef struct mmpool {
   char *name;                     /**< Memory pool name */
-  page_allocator_t allocator;     /**< Page frames allocator attached to given pool */
+  page_allocator_t *allocator;    /**< Page frames allocator attached to given pool */
+  void *alloc_ctx;
   page_idx_t first_pidx;          /**< Memory pool's very first page frame number */
   page_idx_t num_pages;           /**< Total number of pages in the pool */
   page_idx_t num_reserved_pages;  /**< Number of reserved pages fitting given pool */
@@ -97,7 +98,7 @@ typedef struct mmpool {
  * @see mm_pool_t
  */
 #define for_each_mmpool(p)                                 \
-  for ((p) = mmpools; (p); (p)++)
+  for ((p) = mmpools[0]; p; p = mmpool_next(p))
 
 extern mmpool_t *mmpools[ARCH_NUM_MMPOOLS];
 extern mmpool_t *preferred_mmpools[NUM_PREFERRED_MMPOOLS];
@@ -138,8 +139,8 @@ static inline mmpool_t *mmpool_get_preferred(int mmpool_id)
 
 static inline page_frame_t *mmpool_alloc_pages(mmpool_t *pool, page_idx_t num_pages)
 {
-  if (likely(pool->allocator.alloc_pages != NULL)) {
-    return pool->allocator.alloc_pages(num_pages, pool->allocator.alloc_ctx);
+  if (likely(pool->allocator->alloc_pages != NULL)) {
+    return pool->allocator->alloc_pages(num_pages, pool->alloc_ctx);
   }
 
   return NULL;  
@@ -147,16 +148,23 @@ static inline page_frame_t *mmpool_alloc_pages(mmpool_t *pool, page_idx_t num_pa
 
 static inline void mmpool_free_pages(mmpool_t *pool, page_frame_t *pages, page_idx_t num_pages)
 {
-  if (likely(pool->allocator.free_pages != NULL)) {
-    return pool->allocator.free_pages(pages, num_pages, pool->allocator.alloc_ctx);
+  if (likely(pool->allocator->free_pages != NULL)) {
+    return pool->allocator->free_pages(pages, num_pages, pool->alloc_ctx);
   }
 }
 
 static inline void mmpool_allocator_dump(mmpool_t *pool)
 {
-  if (likely(pool->allocator.dump != NULL)) {
-    pool->allocator.dump(pool->allocator.alloc_ctx);
+  if (likely(pool->allocator->dump != NULL)) {
+    pool->allocator->dump(pool->alloc_ctx);
   }
 }
+
+#if 0
+static inline void mmpool_activate(mmpool_t *pool)
+{
+  pool->allocator->initialize(pool);
+}
+#endif
 
 #endif /* __MSTRING_MMPOOL_H__ */

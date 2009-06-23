@@ -20,7 +20,7 @@ void rmap_subsystem_initialize(void)
 
   for (i =0; i < 2; i++) {
     caches[i] = create_memcache(names[i], sizes[i], 1,
-                                GENERAL_POOL_TYPE | SMCF_UNIQUE |
+                                MMPOOL_KERN | SMCF_UNIQUE |
                                 SMCF_IMMORTAL | SMCF_LAZY);
     if (!caches[i]) {
       panic("Failed to create memory cache for \"%s\" (size = %zd). ENOMEM\n",

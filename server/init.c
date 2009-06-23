@@ -26,7 +26,7 @@
 #include <mstring/process.h>
 #include <arch/mem.h>
 #include <mm/page.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/vmm.h>
 #include <mm/rmap.h>
 #include <arch/elf.h>

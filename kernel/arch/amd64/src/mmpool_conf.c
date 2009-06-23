@@ -22,6 +22,7 @@
 #include <config.h>
 #include <arch/mmpool_conf.h>
 #include <mm/page.h>
+#include <mm/page_alloc.h>
 #include <mm/mmpool.h>
 #include <mstring/types.h>
 

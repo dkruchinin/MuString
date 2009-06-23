@@ -114,7 +114,7 @@ void initialize_idle_tasks(void)
   cpu_sched_stat_t *sched_stat;
 
   for( cpu = 0; cpu < CONFIG_NRCPUS; cpu++ ) {
-    ts_page = alloc_page(AF_ZERO);
+    ts_page = alloc_page(MMPOOL_KERN | AF_ZERO);
     if( ts_page == NULL ) {
       panic( "initialize_idle_tasks(): Can't allocate main structure for idle task !" );  
     }
@@ -143,11 +143,11 @@ void initialize_idle_tasks(void)
 
     /* FIXME DK: redisign! */
     {
-        page_frame_t *pf = alloc_pages(KERNEL_STACK_PAGES, 0);
+        page_frame_t *pf = alloc_pages(KERNEL_STACK_PAGES, MMPOOL_KERN | AF_STRICT_CNT);
         
         if (!pf)
             panic("Can't allocate %d pages for kernel stack!", KERNEL_STACK_PAGES);
-        
+
         r = mmap_kern(task->kernel_stack.low_address, pframe_number(pf),
                       KERNEL_STACK_PAGES, KMAP_KERN | KMAP_READ | KMAP_WRITE);
         if( r != 0 ) {

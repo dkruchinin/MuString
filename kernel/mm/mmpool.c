@@ -21,7 +21,7 @@
 
 #include <config.h>
 #include <arch/atomic.h>
-#include <arch/mmpool_config.h>
+#include <arch/mmpool_conf.h>
 #include <mm/mmpool.h>
 #include <mm/page.h>
 #include <mstring/panic.h>
@@ -32,7 +32,7 @@
 mmpool_t *mmpools[ARCH_NUM_MMPOOLS];
 mmpool_t *preferred_mmpools[NUM_PREFERRED_MMPOOLS];
 static INITDATA SPINLOCK_DEFINE(mmpool_ids_lock);
-static INITDATA mmpool_ids = MMPOOL_FIRST_TYPE;
+static INITDATA mmpool_type_t mmpool_ids = MMPOOL_FIRST_TYPE;
 
 INITCODE mmpool_type_t mmpool_register(mmpool_t *mmpool)
 {
@@ -62,10 +62,10 @@ INITCODE void mmpool_set_preferred(int mmpool_id, mmpool_t *pref_mmpool)
 
 void mmpool_add_page(mmpool_t *mmpool, page_frame_t *pframe)
 {
-  if (pframe_number(pframe) < pool->first_pidx)
+  if (pframe_number(pframe) < mmpool->first_pidx)
     mmpool->first_pidx = pframe_number(pframe);
 
-  mmpool->num_total_pages++;
+  mmpool->num_pages++;
   if (pframe->flags & PF_RESERVED) {
     mmpool->num_reserved_pages++;
   }
@@ -74,20 +74,4 @@ void mmpool_add_page(mmpool_t *mmpool, page_frame_t *pframe)
   }
 
   pframe->flags |= mmpool->type;
-}
-
-void mmpool_activate(mm_pool_t *pool)
-{
-  ASSERT(pool->type < MMPOOLS_MAX);
-  ASSERT(!pool->is_active);
-  switch (pool->type) {
-      case GENERAL_POOL_TYPE: case DMA_POOL_TYPE:
-        tlsf_allocator_init(pool);
-        tlsf_validate_dbg(pool->allocator.alloc_ctx);
-        break;
-      default:
-        panic("Unknown memory pool type: %d!", pool->type);
-  }
-
-  pool->is_active = true;
 }

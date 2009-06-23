@@ -32,7 +32,7 @@
 #include <ds/list.h>
 #include <mm/page.h>
 #include <mm/mmpool.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/ealloc.h>
 #include <mm/tlsf.h>
 #include <sync/spinlock.h>
@@ -107,13 +107,13 @@ enum {
 };
 
 #define TLSF_PB_MASK ((1 << TLSF_PB_HEAD) | (1 << TLSF_PB_TAIL))
+#define MAX_BLOCK_SIZE (1 << (TLSF_FLD_SIZE + TLSF_FIRST_OFFSET - 1))
 
 /* First available power of two */
 static const int FLD_FPOW2 = 0;
 
 /* Very last power of two */
 static const int FLD_LPOW2 = TLSF_FLD_SIZE + TLSF_FIRST_OFFSET - 2;
-static const int MAX_BLOCK_SIZE = (1 << (TLSF_FLD_SIZE + TLSF_FIRST_OFFSET - 1));
 
 static inline void get_tlsf_ids(tlsf_uint_t size, struct tlsf_idxs *ids);
 static inline tlsf_uint_t size_from_tlsf_ids(struct tlsf_idxs *ids);
@@ -309,8 +309,10 @@ static inline page_frame_t *__left_neighbour(page_frame_t *block_head)
 
   page = pframe_by_id(pframe_number(block_head) - 1);
   if (!bit_test(&page->_private, TLSF_PB_TAIL) ||
-      (page->pool_type != block_head->pool_type) || (page->flags & PF_RESERVED))
+      (PF_MMPOOL_TYPE(page->flags) != PF_MMPOOL_TYPE(block_head->flags))
+      || (page->flags & PF_RESERVED)) {
     return NULL;
+  }
 
   page -= pages_block_size_get(page) - 1;
   ASSERT(bit_test(&page->_private, TLSF_PB_HEAD));
@@ -328,8 +330,10 @@ static inline page_frame_t *__right_neighbour(page_frame_t *block_head)
 
   page = block_head + pages_block_size_get(block_head);
   if (!bit_test(&page->_private, TLSF_PB_HEAD) ||
-      ((page->pool_type == block_head->pool_type)) || (page->flags & PF_RESERVED))
+      ((PF_MMPOOL_TYPE(page->flags) == PF_MMPOOL_TYPE(block_head->flags))) ||
+      (page->flags & PF_RESERVED)) {
     return NULL;
+  }
 
   return page;
 }
@@ -367,13 +371,13 @@ static page_frame_t *try_merge_blocks(tlsf_t *tlsf, page_frame_t *block_head, in
   size = pages_block_size_get(block_head);
   /* get block's left neighbour */
   if ((side < 0) &&
-      (pframe_number(block_head) > tlsf->owner->first_page_id)) {
+      (pframe_number(block_head) > tlsf->owner->first_pidx)) {
     neighbour = __left_neighbour(block_head);
   }
   /* get block's right neighbour */
   else {
     if ((pframe_number(block_head) + pages_block_size_get(block_head)) <
-        (tlsf->owner->first_page_id + tlsf->owner->total_pages)) {
+        (tlsf->owner->first_pidx + tlsf->owner->num_pages)) {
       neighbour = __right_neighbour(block_head);
     }
   }
@@ -510,8 +514,8 @@ static void tlsf_free_pages(page_frame_t *pages, page_idx_t num_pages, void *dat
   int i, irqstat;
 
   ASSERT(num_pages != 0);
-  if (((num_pages + page_idx - 1) < tlsf->owner->first_page_id) ||
-      ((num_pages + page_idx - 1) >= (tlsf->owner->first_page_id + tlsf->owner->total_pages))) {
+  if (((num_pages + page_idx - 1) < tlsf->owner->first_pidx) ||
+      ((num_pages + page_idx - 1) >= (tlsf->owner->first_pidx + tlsf->owner->num_pages))) {
     kprintf(KO_WARNING "TLSF: Invalid size(%d) of freeing block starting from %d frame\n",
             num_pages, page_idx);
     kprintf(KO_WARNING "TLSF: Can't free %d pages starting from %d frame\n", num_pages, page_idx);
@@ -559,7 +563,7 @@ static page_frame_t *tlsf_alloc_pages(page_idx_t n, void *data)
   tlsf_uint_t size;
   int i, irqstat;
 
-  if ((n >= MAX_BLOCK_SIZE) || (n > atomic_get(&tlsf->owner->free_pages)))
+  if ((n >= MAX_BLOCK_SIZE) || (n > atomic_get(&tlsf->owner->num_free_pages)))
     goto out;
   if ((n == 1) && ((block_head = __get_page_from_cache(tlsf)) != NULL))
     goto init_block;
@@ -603,8 +607,8 @@ out:
 static void build_tlsf_map(tlsf_t *tlsf)
 {
   int i, j;
-  page_idx_t npages = tlsf->owner->total_pages;
-  page_frame_t *pages = pframe_by_id(tlsf->owner->first_page_id);
+  page_idx_t npages = tlsf->owner->num_pages;
+  page_frame_t *pages = pframe_by_id(tlsf->owner->first_pidx);
 
   /* initialize TLSF map */
   for (i = 0; i < TLSF_FLD_SIZE; i++) {
@@ -675,6 +679,7 @@ static void tlsf_memdump(void *_tlsf)
 }
 
 #ifdef CONFIG_SMP
+#include <mm/slab.h>
 #include <mstring/smp.h>
 
 static smp_hook_t __percpu_hook;
@@ -687,7 +692,7 @@ static int tlsf_smp_hook(cpu_id_t cpuid, void *_tlsf)
   list_head_t h;
   list_node_t *iter, *safe;
 
-  cache = ealloc_space(sizeof(*cache));
+  cache = memalloc(sizeof(*cache));
   if (!cache) {
     return ERR(ret);
   }
@@ -698,7 +703,7 @@ static int tlsf_smp_hook(cpu_id_t cpuid, void *_tlsf)
   tlsf->percpu[cpuid] = cache;
   pages = tlsf_alloc_pages(TLSF_CPUCACHE_PAGES, tlsf);
   if (!pages) {
-    return ERR(ret);
+    return 0;
   }
 
   list_set_head(&h, &pages->chain_node);
@@ -728,10 +733,18 @@ static inline void check_tlsf_defs(void)
             (TLSF_SLD_SIZE >= TLSF_SLDS_MIN));
 }
 
-void tlsf_allocator_init(mm_pool_t *pool)
+static page_allocator_t tlsf_allocator = {
+  .name = "TLSF",
+  .alloc_pages = tlsf_alloc_pages,
+  .free_pages = tlsf_free_pages,
+  .dump = tlsf_memdump,
+  .min_block_size = 1,
+  .max_block_size = MAX_BLOCK_SIZE,
+};
+
+void tlsf_allocator_init(mmpool_t *pool)
 {
   tlsf_t *tlsf;
-  long free_pages;
 
   tlsf = ealloc_space(sizeof(*tlsf));
   if (!tlsf) {
@@ -739,41 +752,22 @@ void tlsf_allocator_init(mm_pool_t *pool)
           "idalloc allocator!", sizeof(*tlsf));
   }
 
-  ASSERT(atomic_get(&pool->free_pages) > 0);
   memset(tlsf, 0, sizeof(*tlsf));
   check_tlsf_defs(); /* some paranoic checks */
   CT_ASSERT(sizeof(union tlsf_priv) <= sizeof(page_frames_array->_private));
   tlsf->owner = pool;
   spinlock_initialize(&tlsf->lock);
 
-  /*
-   * build_tlsf_map uses function __free_pages which
-   * increments pool's free_pages counter. We don't
-   * want counter becomes invalid.
-   */
-  free_pages = atomic_get(&pool->free_pages);
-  atomic_set(&pool->free_pages, free_pages);
-  pool->allocator.type = PFA_TLSF;
-  pool->allocator.alloc_ctx = tlsf;
-  pool->allocator.alloc_pages = tlsf_alloc_pages;
-  pool->allocator.free_pages = tlsf_free_pages;
-  pool->allocator.dump = tlsf_memdump;
-  pool->allocator.max_block_size = MAX_BLOCK_SIZE;
+  pool->allocator = &tlsf_allocator;
+  pool->alloc_ctx = tlsf;
   build_tlsf_map(tlsf);
 
-#ifdef CONFIG_SMP
-  /*
-   * FIXME DK: it's not very clear to distinguish general and dma
-   * pools in percpu caches field. This option must be configured
-   * during allocator initialization!
-   */
-  if (pool->type == GENERAL_POOL_TYPE) {
-    memset(&__percpu_hook, 0, sizeof(__percpu_hook));
-    __percpu_hook.hook = tlsf_smp_hook;
-    __percpu_hook.arg = tlsf;
-    __percpu_hook.name = "TLSF percpu";
-    smp_hook_register(&__percpu_hook);
-  }
+#ifdef CONFIG_SMP_xxx
+  memset(&__percpu_hook, 0, sizeof(__percpu_hook));
+  __percpu_hook.hook = tlsf_smp_hook;
+  __percpu_hook.arg = tlsf;
+  __percpu_hook.name = "TLSF percpu";
+  smp_hook_register(&__percpu_hook);
 #endif /* CONFIG_SMP */
 
   kprintf("[MM] Pool \"%s\" initialized TLSF O(1) allocator\n", pool->name);

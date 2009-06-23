@@ -62,7 +62,7 @@ void initialize_gc(void)
   }
 
   gc_actions_cache = create_memcache("GC actions", sizeof(gc_action_t), 1,
-                                     GENERAL_POOL_TYPE | SMCF_IMMORTAL | SMCF_LAZY);
+                                     MMPOOL_KERN | SMCF_IMMORTAL | SMCF_LAZY);
   if( !gc_actions_cache ) {
     panic( "initialize_gc(): Can't create GC actions memcache !" );
   }

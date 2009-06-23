@@ -371,18 +371,15 @@ INITCODE void arch_mem_init(void)
    * ealloc page allocator can be disabled.
    */
   ealloc_disable_feature(EALLOCF_APAGES);
-
-  /* Set up arch-specific memory pools */
-  arch_register_mmpools();
   SET_KERNEL_END((uintptr_t)ealloc_data.pages);
   page_frames_array = (page_frame_t *)KERNEL_END_VIRT;
+  arch_init_mmpools();
   build_page_frames_array();
 
   SET_KERNEL_END(PAGE_ALIGN((uintptr_t)page_frames_array +
                             sizeof(page_frame_t) * num_phys_pages));
   kprintf(KO_INFO "Page frames array size: %dK\n",
           B2KB(KERNEL_END_VIRT - (uintptr_t)page_frames_array));
-  arch_register_mmpools();
   register_mandatory_mappings();
 }
 

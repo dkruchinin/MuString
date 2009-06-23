@@ -35,7 +35,7 @@
 #include <mstring/stddef.h>
 #include <mm/page.h>
 #include <mm/mmpool.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <sync/spinlock.h>
 #include <mstring/smp.h>
 #include <mstring/types.h>
@@ -91,21 +91,11 @@ typedef struct tlsf {
 #endif /* CONFIG_SMP */
 
   spinlock_t lock;
-  mm_pool_t *owner;                   /**< Type of pool that owns given TLSF allocator */
+  mmpool_t *owner;                   /**< Type of pool that owns given TLSF allocator */
   uint8_t slds_bitmap[TLSF_SLD_BITMAP_SIZE];
   uint8_t fld_bitmap;  
 } tlsf_t;
 
-/**
- * Initialize tlsf allocator.
- * @param pool - A pointer to pool allocator bins to.
- */
-void tlsf_allocator_init(mm_pool_t *pool);
-
-#ifdef CONFIG_DEBUG_MM
-void tlsf_validate_dbg(void *_tlsf);
-#else
-#define tlsf_validate_dbg(_tlsf)
-#endif /* CONFIG_MM_DEBUG */
+void tlsf_allocator_init(mmpool_t *pool);
 
 #endif /* __MSTRING_TLSF_H__ */

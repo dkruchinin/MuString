@@ -1,6 +1,6 @@
 #include <arch/types.h>
 #include <ipc/ipc.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/page.h>
 #include <ds/idx_allocator.h>
 #include <mstring/string.h>
@@ -17,7 +17,7 @@ void initialize_ipc(void)
 
   ipc_priv_data_cache= create_memcache("IPC private data",
                                         sizeof(task_ipc_priv_t),1,
-                                       GENERAL_POOL_TYPE | SMCF_IMMORTAL |
+                                       MMPOOL_KERN | SMCF_IMMORTAL |
                                        SMCF_LAZY | SMCF_UNIQUE);
 
   if( !ipc_priv_data_cache ) {
@@ -102,12 +102,12 @@ int setup_task_ipc(task_t *task)
     memset(&ipc_priv->pstats,0,sizeof(ipc_pstats_t));
   }
 
-  p1=alloc_pages_addr(IPC_PERTASK_PAGES, AF_ZERO);
+  p1=alloc_pages_addr(IPC_PERTASK_PAGES, MMPOOL_KERN | AF_ZERO | AF_STRICT_CNT);
   if( !p1 ) {
     goto free_ipc_priv;
   }
 
-  p2=alloc_pages_addr(IPC_PERTASK_PAGES, AF_ZERO);
+  p2=alloc_pages_addr(IPC_PERTASK_PAGES, MMPOOL_KERN | AF_ZERO | AF_STRICT_CNT);
   if( !p2 ) {
     goto free_page1;
   }
@@ -147,7 +147,7 @@ void *allocate_ipc_memory(long size)
       memset(addr,0,size);
     }
   } else {
-    addr=alloc_pages_addr(PAGE_ALIGN(size)>>PAGE_WIDTH,AF_ZERO);
+    addr=alloc_pages_addr(PAGE_ALIGN(size)>>PAGE_WIDTH,MMPOOL_KERN | AF_ZERO | AF_STRICT_CNT);
   }
   return addr;
 }

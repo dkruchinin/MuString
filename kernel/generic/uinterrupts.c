@@ -8,7 +8,7 @@
 #include <mm/slab.h>
 #include <mstring/smp.h>
 #include <mm/page.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/vmm.h>
 #include <mstring/scheduler.h>
 #include <mstring/kconsole.h>

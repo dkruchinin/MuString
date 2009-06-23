@@ -27,7 +27,7 @@
 #include <mm/vmm.h>
 #include <mm/slab.h>
 #include <mm/mem.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/memobj.h>
 #include <mm/rmap.h>
 #include <sync/spinlock.h>
@@ -109,7 +109,7 @@ static int __mmap_cached_page(vmrange_t *vmr, uintptr_t addr,
      * into faulted process address space.
      */
     if (unlikely(vmr->flags & VMR_PRIVATE)) {
-      page_frame_t *new_page = alloc_page(AF_USER);
+      page_frame_t *new_page = alloc_page(MMPOOL_USER);
 
       if (!new_page)
         return -ENOMEM;
@@ -247,7 +247,7 @@ static int handle_not_present_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
 
   if (!page) {
     if (!(memobj->flags & MMO_FLG_BACKENDED)) {
-      page = alloc_page(AF_USER | AF_ZERO);
+      page = alloc_page(MMPOOL_USER | AF_ZERO);
       if (!page) {
         PCACHE_DBG("Failed to allocate page while handling #PF by offset"
                    " %#x and address %p.\n", offset, addr);
@@ -410,7 +410,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr,
          * has PF_COW flag set.
          */
 
-        page_frame_t *new_page = alloc_page(AF_USER);
+        page_frame_t *new_page = alloc_page(MMPOOL_USER);
 
         if (!new_page) {
           pagetable_unlock(&vmm->rpd);
@@ -477,7 +477,7 @@ void pagecache_memobjs_prepare(void)
 {
   ASSERT(pcache_memcache == NULL);
   pcache_memcache = create_memcache("Pagecache", sizeof(struct pcache), 1,
-                                    GENERAL_POOL_TYPE | SMCF_IMMORTAL | SMCF_LAZY);
+                                    MMPOOL_KERN | SMCF_IMMORTAL | SMCF_LAZY);
   if (!pcache_memcache) {
     panic("Can not create memory cache for pagecache objects. ENOMEM\n");
   }

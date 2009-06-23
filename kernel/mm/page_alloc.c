@@ -31,19 +31,19 @@
 static page_frame_t *alloc_pages_ncont(mmpool_t *mmpool,
                                        page_idx_t num_pages, palloc_flags_t flags)
 {
-  mmpool_flags_t mmpool_nature = PFLAGS_MMPOOL_TYPE(flags);
+  mmpool_flags_t mmpool_nature = PAFLAGS_MMPOOL_TYPE(flags);
   page_idx_t granularity, n;
   page_frame_t *pages = NULL, *pg;
   mmpool_t *p = mmpool;
 
-  ASSERT(is_poerof2(mmpool_nature));
+  ASSERT(is_powerof2(mmpool_nature));
   n = num_pages;
 config_granularity:
-  if (p->allocator.max_block_size >= DEFAULT_GRANULARITY) {
+  if (p->allocator->max_block_size >= DEFAULT_GRANULARITY) {
     granularity = DEFAULT_GRANULARITY;
   }
   else {
-    granularity = p->allocator.max_block_size;
+    granularity = p->allocator->max_block_size;
   }
 
   while (n) {
@@ -79,11 +79,11 @@ config_granularity:
       pframes_memnull(pg, granularity);
     }
     if (likely(pages != NULL)) {
-      list_add_range(&p->chain_node, p->chain_node.prev,
+      list_add_range(&pg->chain_node, pg->chain_node.prev,
                      pages->chain_node.prev, &pages->chain_node);
     }
     else {
-      pages = p;
+      pages = pg;
     }
 
     atomic_sub(&p->num_free_pages, granularity);
@@ -106,13 +106,16 @@ page_frame_t *alloc_pages(page_idx_t num_pages, palloc_flags_t flags)
   page_frame_t *pages;
 
   ASSERT(num_pages > 0);
-  ASSERT(flags != 0);
+  if (!flags) {
+    flags = MMPOOL_KERN | AF_STRICT_CNT;
+  }
+
   mmpool_nature = PAFLAGS_MMPOOL_TYPE(flags);
-  if (unlikely(!is_powerof2(mmpool_nature))) {
+  if (unlikely(!mmpool_nature || !is_powerof2(mmpool_nature))) {
     panic("Allocation from unrecognized memory pool with nature = %#x\n", mmpool_nature);
   }
 
-  mmpool = get_preferred_mmpool(BITNUM(mmpool_nature));
+  mmpool = mmpool_get_preferred(BITNUM(mmpool_nature));
   pages = mmpool_alloc_pages(mmpool, num_pages);
   if (!pages) {
     if (flags & AF_STRICT_CNT) {
@@ -144,7 +147,6 @@ page_frame_t *alloc_pages(page_idx_t num_pages, palloc_flags_t flags)
 void free_pages(page_frame_t *pages, page_idx_t num_pages)
 {
   mmpool_t *mmpool;
-  mmpool_type_t type;
 
   ASSERT(pages != NULL);
   ASSERT(num_pages > 0);
@@ -177,12 +179,10 @@ uintptr_t sys_alloc_dma_pages(int num_pages)
     return -EINVAL;
   }
   
-  pages = alloc_pages(num_pages, DMA_POOL_TYPE | AF_ZERO);
+  pages = alloc_pages(num_pages, MMPOOL_DMA | AF_ZERO);
   if (!pages) {
     pages=alloc_pages(num_pages, AF_ZERO);
     if( !pages ) {
-      kprintf_fault("sys_alloc_dma_pages(): [%d:%d] failed to allocate %d pages !\n",
-                    current_task()->pid,current_task()->tid,num_pages);
       return -ENOMEM;
     }
   }

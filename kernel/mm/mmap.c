@@ -25,7 +25,7 @@
 #include <ds/list.h>
 #include <ds/ttree.h>
 #include <mm/page.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/slab.h>
 #include <mm/memobj.h>
 #include <mm/vmm.h>
@@ -319,14 +319,14 @@ void vmm_subsystem_initialize(void)
 {
   kprintf("[MM] Initializing VMM subsystem...\n");
   __vmms_cache = create_memcache("VMM objects cache", sizeof(vmm_t), 1,
-                                 GENERAL_POOL_TYPE | SMCF_IMMORTAL |
+                                 MMPOOL_KERN | SMCF_IMMORTAL |
                                  SMCF_UNIQUE | SMCF_LAZY);
   if (!__vmms_cache)
     panic("vmm_subsystem_initialize: Can not create memory "
           "cache for VMM objects. ENOMEM");
 
   __vmrs_cache = create_memcache("Vmrange objects cache", sizeof(vmrange_t), 1,
-                                 GENERAL_POOL_TYPE | SMCF_IMMORTAL |
+                                 MMPOOL_KERN | SMCF_IMMORTAL |
                                  SMCF_UNIQUE | SMCF_LAZY);
   if (!__vmrs_cache)
     panic("vmm_subsystem_initialize: Can not create memory "
@@ -531,7 +531,7 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
         else if ((flags & VMM_CLONE_POPULATE) &&
             ((((vmr->flags & VMR_SHARED) && !(flags & VMM_CLONE_SHARED)))
              || (vmr->flags & VMR_WRITE))) {
-          page_frame_t *new_page = alloc_page(AF_USER);
+          page_frame_t *new_page = alloc_page(MMPOOL_USER | AF_ZERO);
 
           if (!new_page) {
             VMM_VERBOSE("[%s] Failed to allocate new page for copying content "
@@ -1390,7 +1390,7 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
      * will be mapped as is.
      */
     if (unlikely((page->flags & PF_COW) && (target_vmr->flags & VMR_WRITE))) {
-      page_frame_t *new_page = alloc_page(AF_USER);
+      page_frame_t *new_page = alloc_page(MMPOOL_USER | AF_ZERO);
 
       if (!new_page) {
         ret = -ENOMEM;

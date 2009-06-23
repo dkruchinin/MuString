@@ -25,9 +25,10 @@
 #include <arch/mem.h>
 #include <mm/page.h>
 #include <mm/mmpool.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/vmm.h>
 #include <mm/mem.h>
+#include <mm/tlsf.h>
 #include <mm/memobj.h>
 #include <mm/rmap.h>
 #include <mstring/panic.h>
@@ -123,7 +124,7 @@ static void __validate_mmpools_dbg(void)
 
 static void *allocate_pagedir(void)
 {
-  page_frame_t *page = alloc_page(AF_ZERO);
+  page_frame_t *page = alloc_page(MMPOOL_KERN | AF_ZERO);
   
   if (!page) {
     return NULL;
@@ -140,32 +141,28 @@ static void free_pagedir(void *pdir)
 
 void mm_initialize(void)
 {
-  mm_pool_t *pool;
-  int activated_pools = 0;
+  mmpool_t *pool;
+  int nonempty_pools = 0;
 
-  mmpools_initialize();
   arch_mem_init();
-
+  arch_register_mmpools();
   pt_ops.alloc_pagedir = allocate_pagedir;
   pt_ops.free_pagedir = free_pagedir;
   
-  for_each_mm_pool(pool) {
-    if (!atomic_get(&pool->free_pages) || (pool->type == BOOTMEM_POOL_TYPE)) {
-      continue;
+  for_each_mmpool(pool) {
+    tlsf_allocator_init(pool);
+    if (atomic_get(&pool->num_free_pages) > 0) {
+      nonempty_pools++;
     }
-
-    kprintf("activate pool %d %s\n", pool->type, pool->name);
-    mmpool_activate(pool);
-    activated_pools++;
   }
-  if (!activated_pools)
+  if (!nonempty_pools)
     panic("No one memory pool was activated!");
 
-  for_each_active_mm_pool(pool) {
+  for_each_mmpool(pool) {
     kprintf("[MM] Pages statistics of pool \"%s\":\n", pool->name);
     kprintf(" | %-8s %-8s %-8s |\n", "Total", "Free", "Reserved");
-    kprintf(" | %-8d %-8d %-8d |\n", pool->total_pages,
-            atomic_get(&pool->free_pages), pool->reserved_pages);
+    kprintf(" | %-8d %-8d %-8d |\n", pool->num_pages,
+            atomic_get(&pool->num_free_pages), pool->num_reserved_pages);
   }
 
   kprintf("[MM] All pages were successfully remapped.\n");

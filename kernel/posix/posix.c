@@ -1,6 +1,6 @@
 #include <mstring/posix.h>
 #include <mstring/task.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <ds/idx_allocator.h>
 #include <arch/atomic.h>
 #include <sync/mutex.h>

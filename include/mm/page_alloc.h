@@ -45,12 +45,10 @@ struct mmpool;
  * Page frame allocator abstract type
  */
 typedef struct page_allocator {
-  char *name;
-  void (*initialize)(struct mmpool *pool);
   page_frame_t *(*alloc_pages)(page_idx_t num_pages, void *data);
   void (*free_pages)(page_frame_t *pframe, page_idx_t num_pages, void *data);
   void (*dump)(void *data);
-  void *alloc_ctx;
+  char *name;
   struct page_allocator *next;
   page_idx_t min_block_size;
   page_idx_t max_block_size;

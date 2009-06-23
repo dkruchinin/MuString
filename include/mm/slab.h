@@ -121,10 +121,10 @@ typedef uint16_t memcache_flags_t;
  * The following flags controls memory cache behaviour
  * @see memcache_t
  */
-#define SMCF_UNIQUE     (1 << MMPOOLS_SHIFT)
-#define SMCF_IMMORTAL   (1 << (MMPOOLS_SHIFT + 1))
-#define SMCF_LAZY       (1 << (MMPOOLS_SHIFT + 2))
-#define __SMCF_BIT_LOCK (1 << (MMPOOLS_SHIFT + 3))
+#define SMCF_UNIQUE     (0x01 << MMPOOLS_SHIFT)
+#define SMCF_IMMORTAL   (0x02 << MMPOOLS_SHIFT)
+#define SMCF_LAZY       (0x04 << MMPOOLS_SHIFT)
+#define __SMCF_BIT_LOCK (0x08 << MMPOOLS_SHIFT)
 
 #define SMCF_MASK (MMPOOLS_MASK | SMCF_UNIQUE | SMCF_IMMORTAL | SMCF_LAZY)
 
