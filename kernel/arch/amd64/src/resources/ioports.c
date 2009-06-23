@@ -42,7 +42,7 @@ int arch_allocate_ioports(task_t *task,ulong_t start_port,
    * fit the default number of I/O ports provided.
    */
   if( ctx->tss == NULL ) {
-    ctx->tss=alloc_pages_addr(TSS_IOPORTS_PAGES,MMPOOL_KERN | AF_ZERO | AF_STRICT_CNT);
+    ctx->tss=alloc_pages_addr(TSS_IOPORTS_PAGES,MMPOOL_KERN | AF_ZERO | AF_CONTIG);
     if( !ctx->tss ) {
       r=-ENOMEM;
       goto out_unlock;

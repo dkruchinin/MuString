@@ -456,7 +456,7 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
     goto free_stack;
   }
 
-  if( !(stack_pages = alloc_pages(KERNEL_STACK_PAGES,MMPOOL_KERN | AF_STRICT_CNT)) ) {
+  if( !(stack_pages = alloc_pages(KERNEL_STACK_PAGES,MMPOOL_KERN | AF_CONTIG)) ) {
     r = -ENOMEM;
     goto free_mm;
   }

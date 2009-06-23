@@ -38,14 +38,8 @@ static int populate_pagedir(pde_t *pde, ptable_flags_t flags)
   if (!subdir) {
     return ERR(-ENOMEM);
   }
-  if (subdir ==(void *)0xffffffff836dc000UL) {
-    kprintf("GOT IT TO %p\n", *(uintptr_t *)subdir);
-  }
 
   pde_save(pde, virt_to_pframe_id(subdir), flags);
-  if (subdir ==(void *)0xffffffff836dc000UL) {
-    kprintf("GOT IT TO %p\n", *(uintptr_t *)subdir);
-  }
   return 0;
 }
 
@@ -106,22 +100,11 @@ int ptable_map_page(rpd_t *rpd, uintptr_t addr,
 
       pagedir_ref(pde);
     }
-    else if (pde ==(void *)0xffffffff836dc000UL) {
-      kprintf("WTF? %p\n", *(uintptr_t *)pde);
-    }
 
-    if ((uintptr_t)pde == (uintptr_t)KERNEL_OFFSET) {
-      kprintf("Parent pde = %p, %d, %p\n", parent_pde, pde_fetch_page_idx(parent_pde), ROOT_PDIR_PAGE(rpd));
-    }
     parent_pde = pde;    
     cur_dir = pde_fetch_subdir(pde);
   }
-  {
-    page_frame_t *p = virt_to_pframe((void *)0xffffffff836dc000UL);
-    if (pframe_number(p) == pidx && KERNEL_ROOT_PDIR() != rpd) {
-      kprintf("MMAP to %d: %p, %d\n", rpd->vmm->owner->pid, addr, atomic_get(&p->refcount));
-    }
-  }
+
   pde = pde_fetch(cur_dir, pde_offset2idx(addr, PTABLE_LEVEL_FIRST));
   pde_was_present = pde_is_present(pde);
   pde_save(pde, pidx, flags);
@@ -155,20 +138,11 @@ void ptable_unmap_page(rpd_t *rpd, uintptr_t addr)
     return;
   }
 
-  {
-    page_frame_t *px = pframe_by_id(pde_fetch_page_idx(pde));
-    page_frame_t *p = virt_to_pframe((void *)0xffffffff836dc000UL);
-    if (p == px && KERNEL_ROOT_PDIR() != rpd) {
-      kprintf("UNMAP to %d: %p, %d\n", rpd->vmm->owner->pid, addr, atomic_get(&p->refcount));
-    }
-  }
-
   pde_set_not_present(pde);
   for (level = PTABLE_LEVEL_FIRST; level < PTABLE_LEVEL_LAST; level++) {
     pde = dirspath[level];    
     if (need_depopulate) {
       cur_dir = pde_fetch_subdir(pde);
-      kprintf("DEPOPULATE: %p\n", cur_dir);
       depopulate_pagedir(cur_dir);
       need_depopulate = false;
     }

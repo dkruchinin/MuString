@@ -94,7 +94,7 @@ int sched_verbose=0;
 
 static mstring_sched_cpudata_t *__allocate_cpu_sched_data(cpu_id_t cpu) {
   /* TODO: [mt] Allocate memory via slabs !!!  */
-  page_frame_t *page = alloc_pages(16, MMPOOL_KERN | AF_STRICT_CNT);
+  page_frame_t *page = alloc_pages(16, MMPOOL_KERN | AF_CONTIG);
   mstring_sched_cpudata_t *cpudata = (mstring_sched_cpudata_t *)pframe_to_virt(page);
 
   if( cpudata != NULL ) {

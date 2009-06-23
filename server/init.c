@@ -308,7 +308,6 @@ static void __server_task_runner(void *data)
       }
 #endif
 
-      kprintf("SRV [%d]\n", server->pid);
       r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
       if( r ) {
         panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);

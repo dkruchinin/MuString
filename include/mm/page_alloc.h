@@ -27,7 +27,7 @@
 
 /* Allocation flags */
 #define AF_ZERO       (1 << MMPOOLS_SHIFT)
-#define AF_STRICT_CNT (2 << MMPOOLS_SHIFT)
+#define AF_CONTIG     (2 << MMPOOLS_SHIFT)
 #define AF_ATOMIC     (4 << MMPOOLS_SHIFT)
 
 #define PAFLAGS_MMPOOL_TYPE(flags) ((flags) & MMPOOLS_MASK)
@@ -104,5 +104,5 @@ static inline void free_pages_addr(void *addr, page_idx_t npages)
   free_pages(pf, npages);
 }
 
-#endif /* __PFALLOC_H__ */
+#endif /* __MSTRING_PAGE_ALLOC_H__ */
 

@@ -190,9 +190,6 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
         goto out_unlock;
       }
 
-      if ((uintptr_t)pframe_to_virt(new_page) == 0xffffffff836dc000UL) {
-        kprintf("What the fucking fuck?! %p == %p\n", new_page, page);
-      }
       atomic_set(&new_page->refcount, 1);
       new_page->offset = page->offset;
       copy_page_frame(new_page, page);

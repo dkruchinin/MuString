@@ -494,9 +494,6 @@ static page_frame_t *__get_page_from_cache(tlsf_t *tlsf)
 
   interrupts_save_and_disable(irqstat);
   page = list_entry(list_node_first(&pcpu->pages), page_frame_t, node);
-  if ((uintptr_t)pframe_to_virt(page) == 0xffffffff836dc000UL) {
-    kprintf("ALLOC PAGE FROM CACHE!\n");
-  }
   list_del(&page->node);
   pcpu->noc_pages--;
   interrupts_restore(irqstat);
@@ -525,9 +522,6 @@ static void tlsf_free_pages(page_frame_t *pages, page_idx_t num_pages, void *dat
     return;
   }
   for (i = 0; i < num_pages; i++) {
-    if ((uintptr_t)pframe_to_virt(&pages[i]) == 0xffffffff836dc000UL) {
-      kprintf("FREE PAGES!\n");
-    }
 #ifdef CONFIG_DEBUG_MM
     tlsf_uint_t flags = pages_block_flags(&pages[i]);
     if (PF_MMPOOL_TYPE(pages[i].flags) != tlsf->owner->type) {
@@ -594,9 +588,6 @@ init_block:
   /* Now we free to build pages chain and set TLSF_PB_BUSY bit for each allocated page */
   list_init_head(list_node2head(&block_head->chain_node));
   for (i = 0; i < n; i++) {
-    if ((uintptr_t)pframe_to_virt(&block_head[i]) == 0xffffffff836dc000UL) {
-      kprintf("ALLOC PAGES!\n");
-    }
 #ifndef CONFIG_DEBUG_MM
     bit_set(&block_head[i]._private, TLSF_PB_BUSY);
 #else

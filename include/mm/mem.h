@@ -116,9 +116,6 @@ static inline bool page_is_mapped(rpd_t *rpd, uintptr_t va)
 
 static inline void unpin_page_frame(page_frame_t *pf)
 {
-  if((uintptr_t)pframe_to_virt(pf) == 0xffffffff836dc000UL) {
-    kprintf("REFCOUNT = %d\n", atomic_get(&pf->refcount));
-  }
   if (atomic_dec_and_test(&pf->refcount)) {
     free_page(pf);
   }

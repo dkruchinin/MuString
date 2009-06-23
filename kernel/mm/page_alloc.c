@@ -28,8 +28,9 @@
 
 #define DEFAULT_GRANULARITY 64
 
-static page_frame_t *alloc_pages_ncont(mmpool_t *mmpool,
-                                       page_idx_t num_pages, palloc_flags_t flags)
+static page_frame_t *alloc_pages_notcont(mmpool_t *mmpool,
+                                         page_idx_t num_pages,
+                                         palloc_flags_t flags)
 {
   mmpool_flags_t mmpool_nature = PAFLAGS_MMPOOL_TYPE(flags);
   page_idx_t granularity, n;
@@ -46,6 +47,11 @@ config_granularity:
     granularity = p->allocator->max_block_size;
   }
 
+  /*
+   * While there are pages in pools that support given nature,
+   * we'll be emptying them until we collect needful amount of
+   * memory(not necessaeily that it will be continuous).
+   */
   while (n) {
     if (granularity > n) {
       granularity = n;
@@ -53,12 +59,22 @@ config_granularity:
 
     pg = mmpool_alloc_pages(p, granularity);
     if (!pg) {
+      /*
+       * Unfurtunatelly, page allocation from given pool failed,
+       * but it's not a catastrophe. We can decrease granularity
+       * on half.
+       */
       if (atomic_get(&mmpool->num_free_pages)) {
         if ((granularity /= 2) != 0) {
           continue;
         }
       }
 
+      /*
+       * It seems that target memory pool hasn't any free pages
+       * at all. But we can try to find out another pool conforming
+       * the nature given by user.
+       */
       if (p == mmpool) {
         p = get_mmpool_by_type(MMPOOL_FIRST_TYPE);
       }
@@ -74,9 +90,6 @@ config_granularity:
       }
 
       goto failed;
-    }
-    if (pframe_to_virt(pg) == (void *)0xffffffff836dc000UL) {
-      kprintf("memnull... n = %d, gran = %d\n", n, granularity);
     }
     if (flags & AF_ZERO) {
       pframes_memnull(pg, granularity);
@@ -102,43 +115,72 @@ failed:
   return NULL;
 }
 
+static page_frame_t *alloc_pages_cont(mmpool_t *failed_pool,
+                                      page_idx_t num_pages,
+                                      palloc_flags_t flags)
+{
+  mmpool_t *p;
+  page_frame_t *pages = NULL;
+  mmpool_flags_t mmpool_nature = PAFLAGS_MMPOOL_TYPE(flags);
+
+  for_each_mmpool(p) {
+    if ((p == failed_pool) || !(p->flags & mmpool_nature)) {
+      continue;
+    }
+
+    pages = mmpool_alloc_pages(p, num_pages);
+    if (pages) {
+      goto out_ok;
+    }
+  }
+
+  return NULL;
+out_ok:
+  atomic_sub(&p->num_free_pages, num_pages);
+  if (flags & AF_ZERO) {
+    pframes_memnull(pages, num_pages);
+  }
+
+  return pages;
+}
+
 page_frame_t *alloc_pages(page_idx_t num_pages, palloc_flags_t flags)
 {
   mmpool_flags_t mmpool_nature;
-  mmpool_t *mmpool;
   page_frame_t *pages;
+  mmpool_t *mmpool;
 
   ASSERT(num_pages > 0);
   if (!flags) {
-    flags = MMPOOL_KERN | AF_STRICT_CNT;
-  }  
+    flags = MMPOOL_KERN | AF_CONTIG;
+  }
 
   mmpool_nature = PAFLAGS_MMPOOL_TYPE(flags);
   if (unlikely(!mmpool_nature || !is_powerof2(mmpool_nature))) {
-    panic("Allocation from unrecognized memory pool with nature = %#x\n", mmpool_nature);
+    panic("Allocation from unrecognized memory pool"
+          " with nature = %#x\n", mmpool_nature);
   }
 
+  /*
+   * Overall page allocation algorithm is quite simple.
+   * First of all it tries to find out preferred memory
+   * pool for page allocation. (there are three kinds of preferred pools:
+   * one for allocation for kernel itself, one for user-space and one for DMA
+   * pages.). After pool is found, it tries to allocate requested number of
+   * pages from it. For the moment it doesn't care about AF_CONTIG flag.
+   * If allocation failed, there are two possible ways to get out needful
+   * amount of memory:
+   *  1) If AF_CONTIG flag is set, then we'll try to allocate pages from
+   *     another pools registered in the system(if any) that support
+   *     pages allocation of the same nature that preferred pool has.
+   *  2) If AF_CONTIG flag is not set, we'll try to allocate needful
+   *     number of pages by non-continuous chunks from pools supporting
+   *     the nature of preferred one.
+   */
   mmpool = mmpool_get_preferred(BITNUM(mmpool_nature));
-  pages = mmpool_alloc_pages(mmpool, num_pages);
-  if (!pages) {
-    if (flags & AF_STRICT_CNT) {
-      mmpool_t *p;
-
-      for_each_mmpool(p) {
-        if ((p == mmpool) || !(p->flags & mmpool_nature)) {
-          continue;
-        }
-
-        pages = mmpool_alloc_pages(p, num_pages);
-        if (pages) {
-          mmpool = p;
-          break;
-        }
-      }
-    }
-    else {
-      pages = alloc_pages_notcont(mmpool, num_pages, flags);
-    }
+  pages = alloc_pages_cont(mmpool, num_pages, flags);
+  if (!pages && !(flags & AF_CONTIG)) {
+    pages = alloc_pages_notcont(mmpool, num_pages, flags);
   }
 
   return pages;
@@ -165,8 +207,9 @@ void free_pages_chain(page_frame_t *pages)
 {
   list_node_t *n, *safe;
 
-  list_for_each_safe(list_node2head(&pages->chain_node), n, safe)
+  list_for_each_safe(list_node2head(&pages->chain_node), n, safe) {
     free_page(list_entry(n, page_frame_t, chain_node));
+  }
 
   free_page(pages);
 }
@@ -179,7 +222,7 @@ uintptr_t sys_alloc_dma_pages(int num_pages)
     return -EINVAL;
   }
   
-  pages = alloc_pages(num_pages, MMPOOL_DMA | AF_ZERO | AF_STRICT_CNT);
+  pages = alloc_pages(num_pages, MMPOOL_DMA | AF_ZERO | AF_CONTIG);
   if (!pages) {
     return -ENOMEM;
   }

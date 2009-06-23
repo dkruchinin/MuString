@@ -143,7 +143,7 @@ void initialize_idle_tasks(void)
 
     /* FIXME DK: redisign! */
     {
-        page_frame_t *pf = alloc_pages(KERNEL_STACK_PAGES, MMPOOL_KERN | AF_STRICT_CNT);
+        page_frame_t *pf = alloc_pages(KERNEL_STACK_PAGES, MMPOOL_KERN | AF_CONTIG);
         
         if (!pf)
             panic("Can't allocate %d pages for kernel stack!", KERNEL_STACK_PAGES);
