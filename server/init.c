@@ -242,10 +242,6 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
   r=do_task_control(task,SYS_PR_CTL_SET_STACK,ustack_top);
   if (r < 0)
     panic("Server [#%d]: Failed to set task's stack(%p). (ERR = %d)", num, ustack_top, r);
-  if (vmm->owner->pid == 11) {
-    interrupts_disable();
-    for(;;);
-  }
 }
 
 static void __server_task_runner(void *data)

@@ -374,10 +374,10 @@ INITCODE void arch_mem_init(void)
   SET_KERNEL_END((uintptr_t)ealloc_data.pages);
   page_frames_array = (page_frame_t *)KERNEL_END_VIRT;
   arch_init_mmpools();
-  build_page_frames_array();
-
   SET_KERNEL_END(PAGE_ALIGN((uintptr_t)page_frames_array +
                             sizeof(page_frame_t) * num_phys_pages));
+  build_page_frames_array();
+
   kprintf(KO_INFO "Page frames array size: %dK\n",
           B2KB(KERNEL_END_VIRT - (uintptr_t)page_frames_array));
   register_mandatory_mappings();

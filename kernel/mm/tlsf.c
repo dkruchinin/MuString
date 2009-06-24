@@ -563,10 +563,12 @@ static page_frame_t *tlsf_alloc_pages(page_idx_t n, void *data)
   tlsf_uint_t size;
   int i, irqstat;
 
-  if ((n >= MAX_BLOCK_SIZE) || (n > atomic_get(&tlsf->owner->num_free_pages)))
+  if ((n >= MAX_BLOCK_SIZE) || (n > atomic_get(&tlsf->owner->num_free_pages))) {
     goto out;
-  if ((n == 1) && ((block_head = __get_page_from_cache(tlsf)) != NULL))
+  }
+  if ((n == 1) && ((block_head = __get_page_from_cache(tlsf)) != NULL)) {
     goto init_block;
+  }
 
   spinlock_lock_irqsave(&tlsf->lock, irqstat);
   block_head = find_suitable_block(tlsf, n);
@@ -595,8 +597,9 @@ init_block:
       panic("Just allocated page frame #%#x is *already* busy! WTF?", pframe_number(block_head + i));
 #endif /* CONFIG_DEBUG_MM */
 
-    if (likely(i > 0))
+    if (likely(i > 0)) {
       list_add_before(&block_head->chain_node, &block_head[i].chain_node);
+    }
   }
 
 out:
