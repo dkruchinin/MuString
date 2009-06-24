@@ -17,78 +17,61 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * mm/mmpool.c: MM-pools
- *
  */
 
 #include <config.h>
-#include <ds/list.h>
-#include <mstring/string.h>
+#include <arch/atomic.h>
+#include <arch/mmpool_conf.h>
 #include <mm/mmpool.h>
 #include <mm/page.h>
-#include <mm/tlsf.h>
 #include <mstring/panic.h>
-#include <arch/atomic.h>
-#include <arch/types.h>
+#include <mstring/assert.h>
+#include <mstring/string.h>
+#include <mstring/types.h>
 
-mm_pool_t mm_pools[MMPOOLS_MAX];
+mmpool_t *mmpools[ARCH_NUM_MMPOOLS];
+mmpool_t *preferred_mmpools[NUM_PREFERRED_MMPOOLS];
+static INITDATA SPINLOCK_DEFINE(mmpool_ids_lock);
+static INITDATA mmpool_type_t mmpool_ids = MMPOOL_FIRST_TYPE;
 
-void mmpools_initialize(void)
+INITCODE mmpool_type_t mmpool_register(mmpool_t *mmpool)
 {
-  uint8_t i;
+  mmpool_type_t type;
   
-  kprintf("[MM] Initialize memory pools.\n");
-  memset(mm_pools, 0, sizeof(*mm_pools) * MMPOOLS_MAX);
-  for (i = 0; i < MMPOOLS_MAX; i++) {
-    switch (i) {
-        case GENERAL_POOL_TYPE:
-          mm_pools[i].name = "General";
-          break;
-        case DMA_POOL_TYPE:
-          mm_pools[i].name = "DMA";
-          break;
-        case HIGHMEM_POOL_TYPE:
-          mm_pools[i].name = "Highmem";
-          break;
-        case BOOTMEM_POOL_TYPE:
-          mm_pools[i].name = "Bootmem";
-          break;
-        default:
-          panic("Unknown memory pool type: %d\n", i);
-    }
+  ASSERT(mmpool != NULL);
+  
+  spinlock_lock(&mmpool_ids_lock);
+  type = mmpool_ids++;
+  spinlock_unlock(&mmpool_ids_lock);
 
-    mm_pools[i].type = i;
-    mm_pools[i].is_active = false;
-    mm_pools[i].first_page_id = PAGE_IDX_INVAL;
-  }
+  ASSERT(type < MMPOOLS_MAX);
+  mmpool->type = type;
+  mmpools[type] = mmpool;
+  return type;
 }
 
-void mmpool_add_page(mm_pool_t *pool, page_frame_t *pframe)
+INITCODE void mmpool_set_preferred(int mmpool_id, mmpool_t *pref_mmpool)
 {
-  if (pframe_number(pframe) < pool->first_page_id)
-    pool->first_page_id = pframe_number(pframe);
+  ASSERT(pref_mmpool != NULL);
+  ASSERT((mmpool_id >= 0) && (mmpool_id <= LAST_PREF_MMPOOL));
+  ASSERT(preferred_mmpools[mmpool_id] == NULL);
+  ASSERT(pref_mmpool->flags & (1 << mmpool_id));
 
-  pool->total_pages++;
-  if (pframe->flags & PF_RESERVED)
-    pool->reserved_pages++;
-  else
-    atomic_inc(&pool->free_pages);
-
-  pframe->pool_type = pool->type;
+  preferred_mmpools[mmpool_id] = pref_mmpool;
 }
 
-void mmpool_activate(mm_pool_t *pool)
+void mmpool_add_page(mmpool_t *mmpool, page_frame_t *pframe)
 {
-  ASSERT(pool->type < MMPOOLS_MAX);
-  ASSERT(!pool->is_active);
-  switch (pool->type) {
-      case GENERAL_POOL_TYPE: case DMA_POOL_TYPE:
-        tlsf_allocator_init(pool);
-        tlsf_validate_dbg(pool->allocator.alloc_ctx);
-        break;
-      default:
-        panic("Unknown memory pool type: %d!", pool->type);
+  if (pframe_number(pframe) < mmpool->first_pidx)
+    mmpool->first_pidx = pframe_number(pframe);
+
+  mmpool->num_pages++;
+  if (pframe->flags & PF_RESERVED) {
+    mmpool->num_reserved_pages++;
+  }
+  else {
+    atomic_inc(&mmpool->num_free_pages);
   }
 
-  pool->is_active = true;
+  pframe->flags |= mmpool->type;
 }

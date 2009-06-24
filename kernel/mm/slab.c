@@ -25,7 +25,7 @@
 #include <mstring/stddef.h>
 #include <mstring/string.h>
 #include <mm/page.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/slab.h>
 #include <sync/spinlock.h>
 #include <sync/rwsem.h>
@@ -422,12 +422,12 @@ static void __init_slab_objects(slab_t *slab, int skip_objs)
  * by himself. (if cache locking is necessary)
  */
 static page_frame_t *alloc_slab_pages(memcache_t *memcache,
-                                      pfalloc_flags_t pfa_flags)
+                                      palloc_flags_t pfa_flags)
 {
   page_frame_t *pages = NULL;
 
-  //TODO: pfa_flags |= (memcache->flags & MMPOOLS_MASK);
-  pages = alloc_pages(memcache->pages_per_slab, pfa_flags);
+  pfa_flags |= (memcache->flags & MMPOOLS_MASK);
+  pages = alloc_pages(memcache->pages_per_slab, pfa_flags | AF_CONTIG);
   if (!pages) {
     return NULL;
   }
@@ -457,7 +457,7 @@ static inline void prepare_slab_pages(slab_t *slab)
 }
 
 static int prepare_slab(memcache_t *memcache, slab_t *slab,
-                        pfalloc_flags_t pfa_flags)
+                        palloc_flags_t pfa_flags)
 {
   memset(slab, 0, sizeof(*slab));
   slab->memcache = memcache;
@@ -482,7 +482,7 @@ static int prepare_slab(memcache_t *memcache, slab_t *slab,
  * Slab for memory cache managing slab_t structures is
  * allocated and fried in a little diffrent way.
  */
-static slab_t *__create_slabs_slab(pfalloc_flags_t pfa_flags)
+static slab_t *__create_slabs_slab(palloc_flags_t pfa_flags)
 {
   page_frame_t *pages = alloc_slab_pages(&slabs_memcache, pfa_flags);
   slab_t *slab = NULL;
@@ -516,7 +516,7 @@ out:
 static slab_t *create_new_slab(memcache_t *memcache, int alloc_flags)
 {
   slab_t *new_slab = NULL;
-  pfalloc_flags_t pfa_flags = 0;
+  palloc_flags_t pfa_flags = 0;
 
   pfa_flags |= (!!(alloc_flags & SAF_ATOMIC) << BITNUM(AF_ATOMIC));
   if (likely(memcache != &slabs_memcache)) {
@@ -808,7 +808,7 @@ static void __create_heart_cache(memcache_t *cache, size_t size,
    * them dynamically.
    */
   prepare_memcache(cache, size, GENERIC_SLAB_PAGES);
-  cache->flags = GENERAL_POOL_TYPE | SMCF_IMMORTAL | SMCF_UNIQUE;
+  cache->flags = MMPOOL_KERN | SMCF_IMMORTAL | SMCF_UNIQUE;
   bit_clear(&cache->flags, BITNUM(__SMCF_BIT_LOCK));
   
   /*
@@ -882,7 +882,7 @@ static void __create_generic_caches(void)
     *(cache_name + 9) = '\0';
 
     generic_memcaches[i] = create_memcache(cache_name, size, 1,
-                                           GENERAL_POOL_TYPE | SMCF_IMMORTAL);
+                                           MMPOOL_KERN | SMCF_IMMORTAL);
     if (!generic_memcaches[i])
       panic("Can't greate generic cache for size %zd: (ENOMEM)", size);
 
@@ -1188,7 +1188,7 @@ void *__memalloc(size_t size, int alloc_flags)
 
 void *memalloc(size_t size)
 {
-  return __memalloc(size, 0);
+  return __memalloc(size, MMPOOL_KERN);
 }
 
 void memfree(void *mem)

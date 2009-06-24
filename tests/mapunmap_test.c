@@ -25,7 +25,7 @@
 #include <ds/iterator.h>
 #include <mm/page.h>
 #include <mm/mmpool.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/vmm.h>
 #include <mm/pfi.h>
 #include <mstring/task.h>

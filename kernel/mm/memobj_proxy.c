@@ -9,7 +9,7 @@
 #include <mm/memobj.h>
 #include <mm/backend.h>
 #include <mm/rmap.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <ipc/channel.h>
 #include <ipc/ipc.h>
 #include <mstring/types.h>
@@ -197,7 +197,7 @@ static int proxy_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npage
   if (vmr->parent_vmm != memobj->backend.server->task_mm)
     return -EINVAL;
   
-  pages = alloc_pages(npages, AF_USER | AF_ZERO);
+  pages = alloc_pages(npages, MMPOOL_USER | AF_ZERO);
   if (!pages) {
     ret = -EFAULT;
     goto out;

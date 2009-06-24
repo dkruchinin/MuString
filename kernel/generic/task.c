@@ -217,7 +217,7 @@ static tg_leader_private_t *__allocate_tg_data(task_privelege_t priv)
 
 static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
 {
-  task_t *task=alloc_pages_addr(1, AF_ZERO);
+  task_t *task=alloc_pages_addr(1, MMPOOL_KERN | AF_ZERO);
 
   if( task ) {
     if( !(flags & CLONE_MM) || priv == TPL_KERNEL ) {
@@ -456,7 +456,7 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
     goto free_stack;
   }
 
-  if( !(stack_pages = alloc_pages(KERNEL_STACK_PAGES,0)) ) {
+  if( !(stack_pages = alloc_pages(KERNEL_STACK_PAGES,MMPOOL_KERN | AF_CONTIG)) ) {
     r = -ENOMEM;
     goto free_mm;
   }

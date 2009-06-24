@@ -27,7 +27,7 @@
 #include <mm/mem.h>
 #include <mm/vmm.h>
 #include <mm/memobj.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/rmap.h>
 #include <mstring/task.h>
 #include <mstring/types.h>
@@ -126,7 +126,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
       mmap_flags &= ~VMR_WRITE;
     }
 
-    pf = alloc_page(AF_USER | AF_ZERO);
+    pf = alloc_page(MMPOOL_USER | AF_ZERO);
     if (!pf)
       return -ENOMEM;
 
@@ -184,7 +184,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
     else { /* Handle copy-on-write */
       page_frame_t *new_page;
 
-      new_page = alloc_page(AF_USER);
+      new_page = alloc_page(MMPOOL_USER);
       if (!new_page) {
         ret = -ENOMEM;
         goto out_unlock;
@@ -200,6 +200,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
                 pframe_number(page), addr, ret);
 
         free_page(new_page);
+        unpin_page_frame(page);
         goto out_unlock;
       }
 
@@ -230,7 +231,7 @@ static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr,
     list_head_t chain_head;
 
     list_init_head(&chain_head);
-    pages = alloc_pages(npages, AF_ZERO | AF_USER);
+    pages = alloc_pages(npages, AF_ZERO | MMPOOL_USER);
     if (!pages)
       return -ENOMEM;
 

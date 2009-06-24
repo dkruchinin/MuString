@@ -23,7 +23,8 @@
 
 #include <ds/idx_allocator.h>
 #include <mm/page.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
+#include <mm/mmpool.h>
 #include <mm/slab.h>
 #include <mstring/string.h>
 #include <mstring/stddef.h>
@@ -179,7 +180,7 @@ int idx_allocator_init(idx_allocator_t *ida, ulong_t idx_max)
   ida->size = bmap_sz / sizeof(ulong_t);
   if (likely(ida->size >= MIN_IDA_SIZE)) {
     if ((bmap_sz >= PAGE_SIZE) || (bmap_sz > SLAB_OBJECT_MAX_SIZE)) {
-      page_frame_t *pf = alloc_pages(bmap_sz >> PAGE_WIDTH, AF_ZERO);
+      page_frame_t *pf = alloc_pages(bmap_sz >> PAGE_WIDTH, MMPOOL_KERN | AF_ZERO);
 
       if (!pf) {
         kprintf(KO_ERROR, "Can not allocate %d pages for bitmap. ENOMEM.\n", bmap_sz >> PAGE_WIDTH);

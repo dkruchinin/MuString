@@ -92,7 +92,7 @@ void kernel_main(void)
   
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.
-   */  
+   */
   arch_activate_idle_task(0);
   /* Now we can continue initialization with properly initialized kernel
    * stack frame.

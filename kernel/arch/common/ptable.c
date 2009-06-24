@@ -101,21 +101,19 @@ int ptable_map_page(rpd_t *rpd, uintptr_t addr,
       pagedir_ref(pde);
     }
 
-    parent_pde = pde;
+    parent_pde = pde;    
     cur_dir = pde_fetch_subdir(pde);
   }
 
   pde = pde_fetch(cur_dir, pde_offset2idx(addr, PTABLE_LEVEL_FIRST));
   pde_was_present = pde_is_present(pde);
   pde_save(pde, pidx, flags);
-  
+
   if (!pde_was_present) {
     pagedir_ref(parent_pde);
   }
-  else {
-    tlb_flush_entry(rpd, (uintptr_t)pde);
-  }
-  
+
+  tlb_flush_entry(rpd, addr);
   return 0;
 }
 
@@ -141,7 +139,6 @@ void ptable_unmap_page(rpd_t *rpd, uintptr_t addr)
   }
 
   pde_set_not_present(pde);
-  tlb_flush_entry(rpd, (uintptr_t)pde);
   for (level = PTABLE_LEVEL_FIRST; level < PTABLE_LEVEL_LAST; level++) {
     pde = dirspath[level];    
     if (need_depopulate) {
@@ -158,4 +155,6 @@ void ptable_unmap_page(rpd_t *rpd, uintptr_t addr)
       break;
     }
   }
+
+  tlb_flush_entry(rpd, addr);
 }

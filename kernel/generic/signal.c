@@ -27,7 +27,7 @@
 #include <arch/context.h>
 #include <mstring/signal.h>
 #include <mm/slab.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mstring/security.h>
 #include <mstring/usercopy.h>
 #include <mstring/posix.h>
@@ -52,7 +52,7 @@ static bool __deferred_sig_check(void *d)
 void initialize_signals(void)
 {
   sigq_cache = create_memcache("Sigqueue items", sizeof(sigq_item_t),
-                              1, GENERAL_POOL_TYPE | SMCF_IMMORTAL | SMCF_LAZY);
+                              1, MMPOOL_KERN | SMCF_IMMORTAL | SMCF_LAZY);
   if( !sigq_cache ) {
     panic( "initialize_signals(): Can't create the sigqueue item memcache !" );
   }
@@ -478,7 +478,7 @@ int sys_sigaction(int signum,sigaction_t *act,
 
 sighandlers_t *allocate_signal_handlers(void)
 {
-  sighandlers_t *sh=alloc_pages_addr(1, 0);
+  sighandlers_t *sh=alloc_pages_addr(1, MMPOOL_KERN);
 
   if( sh ) {
     int i;

@@ -20,7 +20,7 @@
  * mstring/generic_api/kstack.c: functions for dealing with kernel stack management.
  */
 
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <arch/bits.h>
 #include <mstring/errno.h>
 #include <mstring/kprintf.h>
@@ -63,7 +63,7 @@ static void initialize_stack_chunk(kernel_stack_chunk_t *chunk, uint32_t id)
 
 static void initialize_stack_allocator_context(kernel_stack_allocator_context_t *ctx)
 {
-  page_frame_t *page = alloc_page(0);
+  page_frame_t *page = alloc_page(MMPOOL_KERN);
   kernel_stack_chunk_t *ch1 = (kernel_stack_chunk_t *)pframe_to_virt(page);
 
   if( ch1 == NULL ) {

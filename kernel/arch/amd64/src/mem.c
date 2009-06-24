@@ -25,6 +25,8 @@
 #include <arch/ptable.h>
 #include <arch/cpu.h>
 #include <arch/msr.h>
+#include <arch/mem.h>
+#include <arch/mmpool_conf.h>
 #include <arch/cpufeatures.h>
 #include <mm/page.h>
 #include <mm/mem.h>
@@ -49,9 +51,6 @@ uintptr_t __utrampoline_virt;
 static SPINLOCK_DEFINE(vregion_lock);
 static uintptr_t vregion_cur_ptr = KERNEL_OFFSET;
 static vm_mandmap_t ident_mandmap, utramp_mandmap, swks_mandmap;
-#if 0
-static mmpool_type_t highmem_pool, lowmem_pool;
-#endif
 
 /*
  * Points to the very first available page-aligned address.
@@ -116,12 +115,12 @@ static INITCODE void enable_nx(void)
 
 static INITCODE void register_mandatory_mappings(void)
 {
-  memset(&ident_mandmap, 0, sizeof(ident_mandmap));
+    /*memset(&ident_mandmap, 0, sizeof(ident_mandmap));
   ident_mandmap.virt_addr = 0x1000;
   ident_mandmap.phys_addr = 0x1000;
   ident_mandmap.num_pages = IDENT_MAP_PAGES - 1;
   ident_mandmap.flags = KMAP_READ | KMAP_KERN;
-  vm_mandmap_register(&ident_mandmap, "Identity mapping");
+  vm_mandmap_register(&ident_mandmap, "Identity mapping");*/
 
   memset(&utramp_mandmap, 0, sizeof(utramp_mandmap));
   __utrampoline_virt = USPACE_VADDR_TOP + PAGE_SIZE;//__reserve_uspace_vregion(1);
@@ -191,7 +190,6 @@ struct pt_ops pt_ops = {
 static inline bool is_kernel_page(page_frame_t *page)
 {
   return ((uintptr_t)pframe_to_phys(page) < KERNEL_END_PHYS);
-  //return (/*(pa_start >= 0/*KVIRT_TO_PHYS(&__bootstrap_start)) && */(pa_end <= KERNEL_END_PHYS));
 }
 
 static INITCODE void __map_kmem(page_idx_t pidx, page_idx_t npages,
@@ -299,7 +297,6 @@ static INITCODE void build_page_frames_array(void)
   page_frame_t *page;
   int reserved;
   uintptr_t end;
-  mm_pool_t *pool;
 
   mmap = (e820memmap_t *)((uintptr_t)mb_info->mmap_addr);
   while (mmap->base_address < last_usable_addr) {
@@ -315,16 +312,8 @@ static INITCODE void build_page_frames_array(void)
       if (reserved || is_kernel_page(page)) {
         page->flags = PF_RESERVED;
       }
-      if ((uintptr_t)pframe_to_phys(page) < MB2B(4096UL)) {
-        //pool = mmpool_by_type(lowmem_pool);
-        pool = POOL_GENERAL();  
-      }
-      else {
-        pool = POOL_HIGHMEM();
-        //pool = mmpool_by_type(highmem_pool);
-      }
 
-      mmpool_add_page(pool, page);
+      arch_register_page(page);
     }
 
     mmap = E820_MMAP_NEXT(mmap);
@@ -333,38 +322,12 @@ static INITCODE void build_page_frames_array(void)
   ASSERT(num_phys_pages == pidx);
 }
 
-static INITCODE void setup_mmpools(void)
-{
-#if 0
-  lowmem_pool = register_mmpool("Lowmem (< 4G)",
-                                MMPOOL_KERN | MMPOOL_USER | MMPOOL_DMA);
-  highmem_pool = register_mmpool("Highmem (>= 4G)",
-                                 MMPOOL_KERN | MMPOOL_USER);
-#endif
-}
-
-static INITCODE void configure_mmpools(void)
-{
-#if 0
-  mmpool_t *pref_pool, *pool;
-
-  pref_pool = mmpool_by_type(lowmem_pool);
-  set_preferred_mmpool(MMP_PREF_DMA, pref_pool);  
-  pool = mmpool_by_type(highmem_pool);
-  if (atomic_get(&pool->num_free_pages) > 0) {
-    pref_pool = pool;
-  }
-  
-  set_preferred_mmpool(MMP_PREF_KERNEL, pref_pool);
-  set_preferred_mmpool(MMP_PREF_USER, pref_pool);
-#endif
-}
-
 INITCODE void arch_mem_init(void)
 {
   ulong_t phys_mem_bytes = KB2B(mb_info->mem_upper + 1024);
   uintptr_t srv_addr;
 
+  arch_init_mmpools();
   if (phys_mem_bytes < MIN_MEM_REQUIRED) {
     panic("Mstring kernel launches on systems with at least %dM of RAM. "
           "Your system has only %dM\n", B2MB(MIN_MEM_REQUIRED),
@@ -408,18 +371,15 @@ INITCODE void arch_mem_init(void)
    * ealloc page allocator can be disabled.
    */
   ealloc_disable_feature(EALLOCF_APAGES);
-
-  /* Set up arch-specific memory pools */
-  setup_mmpools();
   SET_KERNEL_END((uintptr_t)ealloc_data.pages);
   page_frames_array = (page_frame_t *)KERNEL_END_VIRT;
+  arch_init_mmpools();
   build_page_frames_array();
 
   SET_KERNEL_END(PAGE_ALIGN((uintptr_t)page_frames_array +
                             sizeof(page_frame_t) * num_phys_pages));
   kprintf(KO_INFO "Page frames array size: %dK\n",
           B2KB(KERNEL_END_VIRT - (uintptr_t)page_frames_array));
-  configure_mmpools();
   register_mandatory_mappings();
 }
 

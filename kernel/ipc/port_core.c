@@ -26,7 +26,7 @@
 #include <mstring/task.h>
 #include <mstring/errno.h>
 #include <sync/mutex.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/page.h>
 #include <ds/idx_allocator.h>
 #include <ipc/ipc.h>

@@ -27,7 +27,7 @@
 #include <mm/vmm.h>
 #include <mm/memobj.h>
 #include <mm/slab.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/rmap.h>
 #include <sync/spinlock.h>
 #include <mstring/stddef.h>

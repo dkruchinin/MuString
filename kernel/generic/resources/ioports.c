@@ -29,7 +29,7 @@
 #include <mstring/swks.h>
 #include <mstring/resource.h>
 #include <ds/rbtree.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mstring/string.h>
 #include <kernel/syscalls.h>
 
@@ -47,7 +47,7 @@ typedef struct __ioport_range {
 
 static ioport_range_t *__allocate_ioports_range(void)
 {
-  ioport_range_t *r=alloc_pages_addr(1,AF_ZERO);
+  ioport_range_t *r=alloc_pages_addr(1,MMPOOL_KERN | AF_ZERO);
   return r;
   /* TODO: [mt] Allocate ioport ranges via slabs. */
 }

@@ -53,7 +53,9 @@ ifneq ($(NOCOLOR), y)
 NOCOLOR :=
 endif
 
-CFLAGS = -Wall -nostdlib -nostdinc -fno-builtin -fomit-frame-pointer -g $(USER_CFLAGS)
+OPTIMIZATION ?= -g
+CFLAGS = -Wall -nostdlib -nostdinc -fno-builtin -fomit-frame-pointer \
+	$(OPTIMIZATION) $(KERN_CFLAGS)
 
 LDFLAGS += -M
 INCLUDE += -Iinclude

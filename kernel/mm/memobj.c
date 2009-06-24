@@ -27,7 +27,7 @@
 #include <ds/list.h>
 #include <ds/idx_allocator.h>
 #include <mm/page.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/slab.h>
 #include <mm/memobj.h>
 #include <mm/memobjctl.h>
@@ -132,7 +132,7 @@ void memobj_subsystem_initialize(void)
     idx_reserve(&memobjs_ida, i);
 
   memobjs_memcache = create_memcache("Mmemory objects cache", sizeof(memobj_t), 1,
-                                     GENERAL_POOL_TYPE | SMCF_IMMORTAL | SMCF_LAZY);
+                                     MMPOOL_KERN | SMCF_IMMORTAL | SMCF_LAZY);
   if (!memobjs_memcache)
     panic("memobj_subsystem_initialize: Can't create memory cache for memory objects. ENOMEM.");
 

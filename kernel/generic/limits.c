@@ -1,6 +1,6 @@
 #include <arch/types.h>
 #include <mstring/limits.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/page.h>
 #include <ipc/ipc.h>
 #include <sync/spinlock.h>
@@ -8,7 +8,7 @@
 
 task_limits_t *allocate_task_limits(void)
 {
-  page_frame_t *p = alloc_page(AF_ZERO);
+  page_frame_t *p = alloc_page(MMPOOL_KERN | AF_ZERO);
   if( p!= NULL ) {
     task_limits_t *tl = (task_limits_t*)pframe_to_virt(p);
 

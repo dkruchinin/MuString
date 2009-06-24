@@ -3,7 +3,7 @@
 #include <mm/page.h>
 #include <mm/vmm.h>
 #include <mm/memobj.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <kernel/syscalls.h>
 #include <mstring/types.h>
 

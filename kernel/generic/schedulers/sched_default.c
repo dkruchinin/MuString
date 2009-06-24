@@ -24,7 +24,7 @@
 #include <arch/types.h>
 #include <mstring/resource.h>
 #include <mm/vmm.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mstring/kstack.h>
 #include <sync/spinlock.h>
 #include <arch/current.h>
@@ -86,7 +86,7 @@ static void __initialize_cpu_sched_data(mstring_sched_cpudata_t *queue, cpu_id_t
 static mstring_sched_taskdata_t *__allocate_task_sched_data(void)
 {
   /* TODO: [mt] Allocate memory via slabs !!!  */
-  page_frame_t *page = alloc_page(0);
+  page_frame_t *page = alloc_page(MMPOOL_KERN);
   return (mstring_sched_taskdata_t *)pframe_to_virt(page);
 }
 
@@ -94,7 +94,7 @@ int sched_verbose=0;
 
 static mstring_sched_cpudata_t *__allocate_cpu_sched_data(cpu_id_t cpu) {
   /* TODO: [mt] Allocate memory via slabs !!!  */
-  page_frame_t *page = alloc_pages(16, 0);
+  page_frame_t *page = alloc_pages(16, MMPOOL_KERN | AF_CONTIG);
   mstring_sched_cpudata_t *cpudata = (mstring_sched_cpudata_t *)pframe_to_virt(page);
 
   if( cpudata != NULL ) {

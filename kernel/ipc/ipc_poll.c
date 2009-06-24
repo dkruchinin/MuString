@@ -30,7 +30,7 @@
 #include <mstring/time.h>
 #include <mm/slab.h>
 #include <mstring/errno.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mstring/waitqueue.h>
 #include <arch/page.h>
 #include <mstring/scheduler.h>
@@ -75,7 +75,7 @@ long sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
     pkitems=memalloc(size);
     memset(pkitems,0,size);
   } else {
-    pkitems=alloc_pages_addr((size>>PAGE_WIDTH)+1,AF_ZERO);
+    pkitems=alloc_pages_addr((size>>PAGE_WIDTH)+1,MMPOOL_KERN | AF_ZERO | AF_CONTIG);
   }
 
   if( !pkitems ) {

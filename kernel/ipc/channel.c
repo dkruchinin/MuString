@@ -10,7 +10,7 @@
 #include <ipc/ipc.h>
 #include <ds/idx_allocator.h>
 #include <mstring/errno.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mstring/security.h>
 #include <ipc/ipc.h>
 

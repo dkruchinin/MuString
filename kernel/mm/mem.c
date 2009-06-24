@@ -25,9 +25,10 @@
 #include <arch/mem.h>
 #include <mm/page.h>
 #include <mm/mmpool.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/vmm.h>
 #include <mm/mem.h>
+#include <mm/tlsf.h>
 #include <mm/memobj.h>
 #include <mm/rmap.h>
 #include <mstring/panic.h>
@@ -39,9 +40,9 @@ page_frame_t *page_frames_array;
 page_idx_t num_phys_pages;
 
 #ifdef CONFIG_DEBUG_MM
-static inline void __check_one_frame(mm_pool_t *p, page_frame_t *pf)
+static inline void __check_one_frame(mmpool_t *p, page_frame_t *pf)
 {
-  if (pf->pool_type == p->type) {
+  if (PF_MMPOOL_TYPE(pf->flags) == p->type) {
     kprintf("[FAILED]\n");
     panic("Page frame #%#x doesn't included into memory pool "
           "\"%s\", but indeed that frame belongs to it!",
@@ -51,58 +52,56 @@ static inline void __check_one_frame(mm_pool_t *p, page_frame_t *pf)
 
 static void __validate_mmpools_dbg(void)
 {
-  mm_pool_t *p;
+  mmpool_t *p;
   page_idx_t total_pages = 0, pool_total, pool_reserved, i;
   page_frame_t *pf;
 
   kprintf("[DBG] Validating memory pools... ");
-  for_each_mm_pool(p) {
+  for_each_mmpool(p) {
     pool_total = pool_reserved = 0;
     /* check all pages belonging to given memory pool */
-    for (i = 0; i < p->total_pages; i++, pool_total++) {
-      pf = pframe_by_id(i + p->first_page_id);
+    for (i = 0; i < p->num_pages; i++, pool_total++) {
+      pf = pframe_by_id(i + p->first_pidx);
       if (pf->flags & PF_RESERVED)
         pool_reserved++;
-      if (pf->pool_type != p->type) {
-        mm_pool_t *page_pool = get_mmpool_by_type(pf->pool_type);
+      if (PF_MMPOOL_TYPE(pf->flags) != p->type) {
+        mmpool_t *page_pool = get_mmpool_by_type(PF_MMPOOL_TYPE(pf->flags));
 
         kprintf("[FAILED]\n");
         if (!page_pool) {
             panic("Page frame #%#x belongs to memory pool \"%s\", "
                   "but in a \"pool_type\" field it has unexistent pool "
-                  "type: %d!", i + p->first_page_id, p->name, pf->pool_type);
+                  "type: %d!", i + p->first_pidx, p->name, PF_MMPOOL_TYPE(pf->flags));
         }
 
         panic("Memory pool \"%s\" says that page frame #%#x "
               "belongs to it, but its owner is memory pool \"%s\" "
-              "indeed!", p->name, i + p->first_page_id, page_pool->name);
+              "indeed!", p->name, i + p->first_pidx, page_pool->name);
       }
     }
-    if (pool_total != p->total_pages) {
+    if (pool_total != p->num_pages) {
       kprintf("[FAILED]\n");
       panic("Memory pool \"%s\" has inadequate total "
             "number of pages it owns(%d): %d was expected!",
-            p->name, p->total_pages, pool_total);
+            p->name, p->num_pages, pool_total);
     }
-    if (pool_reserved != p->reserved_pages) {
+    if (pool_reserved != p->num_reserved_pages) {
       kprintf("[FAILED]\n");
       panic("Memory pool \"%s\" has inadequate number "
             "of reserved pages (%d): %d was expected!",
-            p->name, p->reserved_pages, pool_reserved);
+            p->name, p->num_reserved_pages, pool_reserved);
     }
-    if ((atomic_get(&p->free_pages) != (pool_total - pool_reserved)) &&
-        (p->type != BOOTMEM_POOL_TYPE)) {
+    if (atomic_get(&p->num_free_pages) != (pool_total - pool_reserved)) {
       kprintf("[FAILED]\n");
       panic("Memory pool \"%s\" has inadequate number of "
             "free pages (%d): %d was expected!",
-            p->name, atomic_get(&p->free_pages), pool_total - pool_reserved);
+            p->name, atomic_get(&p->num_free_pages), pool_total - pool_reserved);
     }
-    if (p->first_page_id != PAGE_IDX_INVAL) {
-      if (p->first_page_id != 0)
-        __check_one_frame(p, pframe_by_id(p->first_page_id - 1));
-      if ((p->first_page_id + p->total_pages) < num_phys_pages)
-          __check_one_frame(p, pframe_by_id(p->first_page_id
-                                                + p->total_pages));
+    if (p->first_pidx != PAGE_IDX_INVAL) {
+      if (p->first_pidx != 0)
+        __check_one_frame(p, pframe_by_id(p->first_pidx - 1));
+      if ((p->first_pidx + p->num_pages) < num_phys_pages)
+          __check_one_frame(p, pframe_by_id(p->first_pidx + p->num_pages));
     }
 
     total_pages += pool_total;
@@ -123,7 +122,7 @@ static void __validate_mmpools_dbg(void)
 
 static void *allocate_pagedir(void)
 {
-  page_frame_t *page = alloc_page(AF_ZERO);
+  page_frame_t *page = alloc_page(MMPOOL_KERN | AF_ZERO);
   
   if (!page) {
     return NULL;
@@ -140,32 +139,28 @@ static void free_pagedir(void *pdir)
 
 void mm_initialize(void)
 {
-  mm_pool_t *pool;
-  int activated_pools = 0;
+  mmpool_t *pool;
+  int nonempty_pools = 0;
 
-  mmpools_initialize();
   arch_mem_init();
-
+  arch_register_mmpools();
   pt_ops.alloc_pagedir = allocate_pagedir;
   pt_ops.free_pagedir = free_pagedir;
   
-  for_each_mm_pool(pool) {
-    if (!atomic_get(&pool->free_pages) || (pool->type == BOOTMEM_POOL_TYPE)) {
-      continue;
+  for_each_mmpool(pool) {
+    tlsf_allocator_init(pool);
+    if (atomic_get(&pool->num_free_pages) > 0) {
+      nonempty_pools++;
     }
-
-    kprintf("activate pool %d %s\n", pool->type, pool->name);
-    mmpool_activate(pool);
-    activated_pools++;
   }
-  if (!activated_pools)
+  if (!nonempty_pools)
     panic("No one memory pool was activated!");
 
-  for_each_active_mm_pool(pool) {
+  for_each_mmpool(pool) {
     kprintf("[MM] Pages statistics of pool \"%s\":\n", pool->name);
     kprintf(" | %-8s %-8s %-8s |\n", "Total", "Free", "Reserved");
-    kprintf(" | %-8d %-8d %-8d |\n", pool->total_pages,
-            atomic_get(&pool->free_pages), pool->reserved_pages);
+    kprintf(" | %-8d %-8d %-8d |\n", pool->num_pages,
+            atomic_get(&pool->num_free_pages), pool->num_reserved_pages);
   }
 
   kprintf("[MM] All pages were successfully remapped.\n");

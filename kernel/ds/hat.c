@@ -80,7 +80,7 @@ void hat_initialize(hat_t *hat)
   CT_ASSERT(sizeof(hat_bucket_t) <= SLAB_OBJECT_MAX_SIZE);
   if (!buckets_cache) {
     buckets_cache = create_memcache("HAT", sizeof(hat_bucket_t), 1,
-                                    GENERAL_POOL_TYPE | SMCF_IMMORTAL | SMCF_LAZY);
+                                    MMPOOL_KERN | SMCF_IMMORTAL | SMCF_LAZY);
     if (!buckets_cache) {
       panic("Can not create buckets memory cache for HAT! (failed to allocate %zd bytes)",
             sizeof(hat_bucket_t));

@@ -28,8 +28,7 @@
 #include <mstring/interrupt.h>
 #include <mstring/timer.h>
 #include <mm/page.h>
-#include <mm/pfalloc.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <arch/page.h>
 #include <arch/smp.h>
 #include <mstring/kprintf.h>

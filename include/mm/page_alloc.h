@@ -15,57 +15,44 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
- * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
- *
- * include/mm/pfalloc.h: page frame allocation API
+ * (c) Copyright 2008 Dan Kruchinin <dk@jarios.org>
  *
  */
 
-/**
- * @file include/mm/pfalloc.h
- * page frame allocation API
- * @author Dan Kruchinin
- */
-
-#ifndef __PFALLOC_H__
-#define __PFALLOC_H__ 
+#ifndef __MSTRING_PAGE_ALLOC_H__
+#define __MSTRING_PAGE_ALLOC_H__
 
 #include <mm/page.h>
 #include <mstring/types.h>
 
 /* Allocation flags */
-#define AF_ZERO      (1 << MMPOOLS_SHIFT)
-#define AF_USER      (2 << MMPOOLS_SHIFT)
-#define AF_ATOMIC    (4 << MMPOOLS_SHIFT)
+#define AF_ZERO       (1 << MMPOOLS_SHIFT)
+#define AF_CONTIG     (2 << MMPOOLS_SHIFT)
+#define AF_ATOMIC     (4 << MMPOOLS_SHIFT)
+
+#define PAFLAGS_MMPOOL_TYPE(flags) ((flags) & MMPOOLS_MASK)
 
 /**
  * @typedef uint8_t pfalloc_flags_t
  * Page frame allocation flags
  */
-typedef uint32_t pfalloc_flags_t;
+typedef uint32_t palloc_flags_t;
 
-/**
- * @struct pfalloc_type_t
- * Contains types of all available allocator.
- * Each allocator has its own unique type.
- */
-typedef enum __pfalloc_type {
-    PFA_IDALLOC = 1, /**< Init-data(bootmem) allocator */
-    PFA_TLSF,        /**< TLSF O(1) allocator */
-} pfalloc_type_t;
+struct mmpool;
 
 /**
  * @struct pf_allocator_t
  * Page frame allocator abstract type
  */
-typedef struct __pf_allocator {
-  page_frame_t *(*alloc_pages)(page_idx_t n, void *data);
+typedef struct page_allocator {
+  page_frame_t *(*alloc_pages)(page_idx_t num_pages, void *data);
   void (*free_pages)(page_frame_t *pframe, page_idx_t num_pages, void *data);
   void (*dump)(void *data);
-  void *alloc_ctx;         /**< Internal allocator private data */
+  char *name;
+  struct page_allocator *next;
+  page_idx_t min_block_size;
   page_idx_t max_block_size;
-  pfalloc_type_t type;     /**< Allocator type */
-} pf_allocator_t;
+} page_allocator_t;
 
 /**
  * @def alloc_page(flags)
@@ -89,7 +76,7 @@ typedef struct __pf_allocator {
  *
  * @see alloc_page
  */
-page_frame_t *alloc_pages(page_idx_t n, pfalloc_flags_t flags);
+page_frame_t *alloc_pages(page_idx_t num_pages, palloc_flags_t flags);
 
 /**
  * @brief free continous block of pages starting from @a pages
@@ -102,7 +89,7 @@ void free_pages_chain(page_frame_t *pages);
 uintptr_t sys_alloc_dma_pages(int num_pages);
 void sys_free_dma_pages(uintptr_t paddr, int num_pages);
 
-static inline void *alloc_pages_addr(int n, pfalloc_flags_t flags)
+static inline void *alloc_pages_addr(int n, palloc_flags_t flags)
 {
   page_frame_t *pf = alloc_pages(n, flags);
   if(pf)
@@ -117,5 +104,5 @@ static inline void free_pages_addr(void *addr, page_idx_t npages)
   free_pages(pf, npages);
 }
 
-#endif /* __PFALLOC_H__ */
+#endif /* __MSTRING_PAGE_ALLOC_H__ */
 

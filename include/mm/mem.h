@@ -26,7 +26,7 @@
 #include <arch/mem.h>
 #include <arch/ptable.h>
 #include <mm/page.h>
-#include <mm/pfalloc.h>
+#include <mm/page_alloc.h>
 #include <mm/mmpool.h>
 #include <sync/spinlock.h>
 #include <mstring/types.h>

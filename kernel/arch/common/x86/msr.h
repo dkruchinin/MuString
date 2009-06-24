@@ -69,10 +69,9 @@ static inline void msr_write(uint32_t msr, uint64_t val)
                     :: "c" (msr), "a" (val & 0xffffffff),
                        "d" (val >> 32));
 }
-
 static inline void efer_set_feature(int ftr_bit)
 {
-  uint64_t efer = msr_read(MSR_EFER);
+  volatile uint64_t efer = (volatile uint64_t)msr_read(MSR_EFER);
 
   bit_set(&efer, ftr_bit);
   msr_write(MSR_EFER, efer);
