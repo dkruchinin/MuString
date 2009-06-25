@@ -244,9 +244,6 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
     panic("Server [#%d]: Failed to set task's stack(%p). (ERR = %d)", num, ustack_top, r);
 }
 
-#define TN 3
-#define test(x, stage)                          \
-    if (a == (x)) { kprintf("STAGE %d\n", stage); }
 static void __server_task_runner(void *data)
 {
   int i,a;
@@ -267,7 +264,6 @@ static void __server_task_runner(void *data)
   for(sn=0,a=0;a<i;a++) {
     char *modvbase;
 
-    test(TN, 0);
     server_ops->get_server_by_num(a, &srv);
     if (srv.name != NULL) {
       kprintf("[LAUNCHER] Starting server: %s\n", srv.name);
@@ -276,7 +272,6 @@ static void __server_task_runner(void *data)
       kprintf("[LAUNCHER] Starting server: %d.\n", a + 1);
     }
 
-    test(TN, 1)
     modvbase=pframe_id_to_virt(srv.addr>>PAGE_WIDTH);
     if( *(uint32_t *)modvbase == ELF_MAGIC ) { /* ELF module ? */
       ulong_t t;
@@ -287,13 +282,11 @@ static void __server_task_runner(void *data)
         t=0;
       }
 
-      test(TN, 2)
       r=create_task(current_task(),t,TPL_USER,&server,NULL);
       if( r ) {
         panic("server_run_tasks(): Can't create task N %d !\n",a+1);
       }
 
-      test(TN, 3)
       if( !sn ) {
         if( server->pid != 1 ) {
           panic( "server_run_tasks(): NameServer has improper PID: %d !\n",
@@ -302,7 +295,6 @@ static void __server_task_runner(void *data)
       }
 
       __create_task_mm(server, a, &srv);
-      test(TN, 4)
 
 #ifdef CONFIG_CORESERVERS_PERCPU_LAUNCH
       t=sn % CONFIG_NRCPUS;
@@ -312,16 +304,13 @@ static void __server_task_runner(void *data)
       }
 #endif
 
-      test(TN, 5);
       r=sched_change_task_state(server,TASK_STATE_RUNNABLE);
       if( r ) {
         panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);
       }
 
-      test(TN, 6);
       sn++;
       sleep(delay);
-      test(TN, 7);
     } else if( !strncmp(&modvbase[257],"ustar",5 ) ) { /* TAR-based ramdisk ? */
       if( initrd_start_page ) {
         panic("Only one instance of initial RAM disk is allowed !");
