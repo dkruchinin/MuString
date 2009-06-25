@@ -33,26 +33,36 @@
 
 void divide_by_zero_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
-  kprintf( "  [!!] #DE exception raised !\n" );
+    kprintf( "  [!!] #DE exception raised !, RIP = %p\n", stack_frame->rip );
+    interrupts_disable();
+    for(;;);
 }
 
 void overflow_fault_handler_impl(void)
 {
-  kprintf( "  [!!] #Overflow exception raised !\n" );
+    kprintf( "  [!!] #Overflow exception raised !");
+    interrupts_disable();
+    for(;;);
 }
 
 void coprocessor_segment_overrun_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
-    kprintf( "  [!!] #FPU segment overrun exception raised !\n" );
+    kprintf( "  [!!] #FPU segment overrun exception raised ! RIP = %p\n", stack_frame->rip );
+    interrupts_disable();
+    for(;;);
 }
 
 void fpu_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
-    kprintf( "  [!!] #FPU exception raised !\n" );
+    kprintf( "  [!!] #FPU exception raised ! RIP = %p\n", stack_frame->rip );
+    interrupts_disable();
+    for(;;);
 }
 
 void simd_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
 {
-    kprintf( "  [!!] #SIMD exception raised !\n" );
+    kprintf( "  [!!] #SIMD exception raised. RIP = %p!\n", stack_frame->rip );
+    interrupts_disable();
+    for(;;);
 }
 
