@@ -115,12 +115,12 @@ static INITCODE void enable_nx(void)
 
 static INITCODE void register_mandatory_mappings(void)
 {
-    /*memset(&ident_mandmap, 0, sizeof(ident_mandmap));
+  memset(&ident_mandmap, 0, sizeof(ident_mandmap));
   ident_mandmap.virt_addr = 0x1000;
   ident_mandmap.phys_addr = 0x1000;
   ident_mandmap.num_pages = IDENT_MAP_PAGES - 1;
   ident_mandmap.flags = KMAP_READ | KMAP_KERN;
-  vm_mandmap_register(&ident_mandmap, "Identity mapping");*/
+  vm_mandmap_register(&ident_mandmap, "Identity mapping");
 
   memset(&utramp_mandmap, 0, sizeof(utramp_mandmap));
   __utrampoline_virt = USPACE_VADDR_TOP + PAGE_SIZE;//__reserve_uspace_vregion(1);
@@ -373,7 +373,6 @@ INITCODE void arch_mem_init(void)
   ealloc_disable_feature(EALLOCF_APAGES);
   SET_KERNEL_END((uintptr_t)ealloc_data.pages);
   page_frames_array = (page_frame_t *)KERNEL_END_VIRT;
-  arch_init_mmpools();
   SET_KERNEL_END(PAGE_ALIGN((uintptr_t)page_frames_array +
                             sizeof(page_frame_t) * num_phys_pages));
   build_page_frames_array();

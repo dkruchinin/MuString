@@ -33,10 +33,12 @@ INITCODE void arch_init_mmpools(void)
   memset(&lowmem_pool, 0, sizeof(lowmem_pool));
   lowmem_pool.name = "Lowmem (< 4G)";
   lowmem_pool.flags = MMPOOL_KERN | MMPOOL_USER | MMPOOL_DMA;
+  mmpool_register(&lowmem_pool);
   
   memset(&highmem_pool, 0, sizeof(highmem_pool));
   highmem_pool.name = "Highmem (>= 4G)";
   highmem_pool.flags = MMPOOL_KERN | MMPOOL_USER;
+  mmpool_register(&highmem_pool);
 }
 
 INITCODE void arch_register_page(page_frame_t *page)
@@ -61,9 +63,7 @@ INITCODE void arch_register_mmpools(void)
     panic("Memory pool \"%s\" has not free pages at all!");
   }
 
-  mmpool_register(&lowmem_pool);
   mmpool_set_preferred(PREF_MMPOOL_DMA, &lowmem_pool);
-  mmpool_register(&highmem_pool);
   if (atomic_get(&highmem_pool.num_free_pages) > 0) {    
     p = &highmem_pool;
   }

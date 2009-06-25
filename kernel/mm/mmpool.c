@@ -46,7 +46,7 @@ INITCODE mmpool_type_t mmpool_register(mmpool_t *mmpool)
 
   ASSERT(type < MMPOOLS_MAX);
   mmpool->type = type;
-  mmpools[type] = mmpool;
+  mmpools[type - 1] = mmpool;
   return type;
 }
 
@@ -62,8 +62,9 @@ INITCODE void mmpool_set_preferred(int mmpool_id, mmpool_t *pref_mmpool)
 
 void mmpool_add_page(mmpool_t *mmpool, page_frame_t *pframe)
 {
-  if (pframe_number(pframe) < mmpool->first_pidx)
+  if (pframe_number(pframe) < mmpool->first_pidx) {
     mmpool->first_pidx = pframe_number(pframe);
+  }
 
   mmpool->num_pages++;
   if (pframe->flags & PF_RESERVED) {

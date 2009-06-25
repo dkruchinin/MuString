@@ -59,7 +59,7 @@ enum {
 };
 
 #define LAST_PREF_MMPOOL  PREF_MMPOOL_DMA
-#define MMPOOL_FIRST_TYPE 0
+#define MMPOOL_FIRST_TYPE 1
 
 #define MMPOOL_KERN   (1 << PREF_MMPOOL_KERN)
 #define MMPOOL_USER   (1 << PREF_MMPOOL_USER)
@@ -114,18 +114,18 @@ void mmpool_add_page(mmpool_t *mmpool, page_frame_t *pframe);
  */
 static inline mmpool_t *get_mmpool_by_type(uint8_t type)
 {
-  if (unlikely(type >= MMPOOLS_MAX)) {
+  if (unlikely((type < MMPOOL_FIRST_TYPE) || (type >= MMPOOLS_MAX))) {
     panic("Attemption to get memory pool by unknown type %d!\n", type);
   }
   
-  return mmpools[type];
+  return mmpools[type - 1];
 }
 
 static inline mmpool_t *mmpool_next(mmpool_t *mmpool)
 {
   ASSERT(mmpool != NULL);
-  if ((mmpool->type + 1) < MMPOOLS_MAX) {
-    return mmpools[mmpool->type + 1];
+  if ((mmpool->type) < MMPOOLS_MAX) {
+    return mmpools[mmpool->type];
   }
 
   return NULL;
@@ -133,7 +133,8 @@ static inline mmpool_t *mmpool_next(mmpool_t *mmpool)
 
 static inline mmpool_t *mmpool_get_preferred(int mmpool_id)
 {
-  ASSERT((mmpool_id >= 0) && (mmpool_id <= LAST_PREF_MMPOOL));
+  ASSERT((mmpool_id >= 0) &&
+         (mmpool_id <= LAST_PREF_MMPOOL));
   return preferred_mmpools[mmpool_id];
 }
 

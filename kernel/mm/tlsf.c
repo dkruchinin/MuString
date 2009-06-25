@@ -536,7 +536,7 @@ static void tlsf_free_pages(page_frame_t *pages, page_idx_t num_pages, void *dat
             pframe_number(&pages[i]), page_pool->name, tlsf->owner->name);
     }
     if ((flags & TLSF_PB_MASK) || !(flags & (1 << TLSF_PB_BUSY))) {
-      panic("Attemption to free *already* free page #%#x to the pool %s! (%#x)",
+      panic("Attemption to free *already* free page №%#x to the pool %s! (%#x)",
             pframe_number(&pages[i]), tlsf->owner->name, pages[i]._private);
     }
 #endif /* CONFIG_DEBUG_MM */
@@ -593,10 +593,10 @@ init_block:
 #ifndef CONFIG_DEBUG_MM
     bit_set(&block_head[i]._private, TLSF_PB_BUSY);
 #else
-    if (bit_test_and_set(&block_head[i]._private, TLSF_PB_BUSY))
+    if (bit_test_and_set(&block_head[i]._private, TLSF_PB_BUSY)) {
       panic("Just allocated page frame #%#x is *already* busy! WTF?", pframe_number(block_head + i));
+    }
 #endif /* CONFIG_DEBUG_MM */
-
     if (likely(i > 0)) {
       list_add_before(&block_head->chain_node, &block_head[i].chain_node);
     }
