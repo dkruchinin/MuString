@@ -1,0 +1,55 @@
+How to bound
+============
+
+1) Before configuring and building the kernel make sure that
+you have the following packages installed on your system:
+ * flex
+ * bison
+ * gperf
+
+2) Configure the kernel:
+  % make config - Configure the kernel using simple text-based config
+   or
+  % make menuconfig - Configure the kernel with GUI configuration tool.
+                      NOTE: menuconfig requires libncurses.
+
+3) And finally build the kernel itself:
+  % make
+
+After step [3] you'll see vmuielf and muielf files in your build directory.
+ vmuielf is a MuString kernel raw binaries.
+ muielf is a MuString kernel in ELF binary format.
+
+4) Step four is optional. If you want to run microkernel on emulator, type:
+  % make image
+
+After this command you'll see boot.img in your build directory.
+It can be launched via bochs, kvm or quemu.
+
+Building the kernel with toolchain
+==================================
+
+Steps 1 and 2 are the same as above. Step three is a bit different.
+You have to specify the path to your toolchain binaries via TOOLCHAIN
+variable. For example let suppose that you have any architecture distinguishing
+from amd64 and you really want to build amd64 kernel.
+For this purpose you must have a working x86_64 toolchain(if you don't have one
+try crosstool to build it[http://www.kegel.com/crosstool/]).
+
+So let suppose that your toolchain sits in /opt/crosstool. Make:
+ % make TOOLCHAIN=/opt/crosstool/gcc-3.4.4-glibc-2.3.4/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-
+
+Still have building problems?
+=============================
+
+Try to set VERBOSE variable to 'y'. It should show you useful more output from GNU make.
+For example:
+ % make VERBOSE=y
+
+If it didn't help you, report a bug with detailed description of how to reproduce it.
+
+FYI
+===
+
+1) type "make help" to see all available building options.
+2) If you found out a BUG or have a question, mail us: jarios-dev@lists.jarios.org
