@@ -96,6 +96,4 @@ typedef struct tlsf {
   uint8_t fld_bitmap;  
 } tlsf_t;
 
-void tlsf_allocator_init(mmpool_t *pool);
-
 #endif /* __MSTRING_TLSF_H__ */

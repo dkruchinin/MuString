@@ -481,7 +481,7 @@ long add_timer(ktimer_t *t)
     }
 
     if( succ ) {
-      list_insert_before(&mt->list,succ);
+      list_add_before(succ, &mt->list);
     } else {
       list_add2tail(&timers_list,&mt->list);
     }
@@ -521,7 +521,7 @@ long add_timer(ktimer_t *t)
         skiplist_add(&t->da,&tt->actions,deffered_irq_action_t,node,head,priority);
         goto out_insert;
       } else if( tt->time_x > t->time_x ) {
-        list_insert_before(&t->minor_tick.node,ln);
+        list_add_before(ln, &t->minor_tick.node);
         list_add2tail(&t->minor_tick.actions,&t->da.node);
         goto out_insert;
       }

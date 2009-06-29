@@ -8,6 +8,8 @@
 #include <mstring/stddef.h>
 #include <mstring/types.h>
 
+#define ARCH_NUM_MMPOOLS 2
+
 #define MIN_MEM_REQUIRED    MB2B(4)
 #define MAX_PAGES_MAP_FIRST (MB2B(512) >> PAGE_WIDTH)
 #define IDENT_MAP_PAGES     (MB2B(2) >> PAGE_WIDTH)
@@ -22,6 +24,9 @@ struct __vmm; /* FIXME DK: remove after cleanup */
 
 INITCODE void arch_mem_init(void);
 INITCODE void arch_cpu_enable_paging(void);
+INITCODE void arch_register_mmpools(void);
+INITCODE void arch_configure_mmpools(void);
+
 void *arch_root_pdir_allocate_ctx(void);
 void arch_root_pdir_free_ctx(void *ctx);
 void map_kernel_area(struct __vmm *vmm);

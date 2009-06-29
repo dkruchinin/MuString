@@ -75,8 +75,8 @@ all: host vmuielf
 -include kernel/arch/$(ARCH)/Makefile.inc
 
 host:
-	$(call echo-header,"kbuild")
-	$(Q)$(MAKE) all -C kbuild BUILD_ROOT=$(BUILD_ROOT)
+	$(call echo-header,"kconfig")
+	$(Q)$(MAKE) all -C kconfig BUILD_ROOT=$(BUILD_ROOT)
 
 vmuielf: muielf
 	$(call echo-label,"OBJCOPY",$< -> $@)
@@ -119,7 +119,7 @@ clean:
 
 clean_host:
 	$(call echo-header,"Cleaning host")
-	$(Q)$(MAKE) -C kbuild clean
+	$(Q)$(MAKE) -C kconfig clean
 
 cleanconf:
 	$(call echo-header,"Cleaning configs")
@@ -175,14 +175,14 @@ $(VERFILE):
 
 config: host
 	$(Q)$(MKDIR) -p $(BUILD_ROOT)/include/config
-	$(Q)$(MAKE) -C kbuild conf BUILD_ROOT=$(BUILD_ROOT)
-	$(Q)$(BUILD_ROOT)/kbuild/conf $(BUILD_ROOT)/kernel/arch/Kconfig
+	$(Q)$(MAKE) -C kconfig conf BUILD_ROOT=$(BUILD_ROOT)
+	$(Q)$(BUILD_ROOT)/kconfig/conf $(BUILD_ROOT)/kernel/arch/Kconfig
 
 menuconfig: host
 	$(Q)$(MKDIR) -p $(BUILD_ROOT)/include/config
-	$(Q)$(MAKE) mconf -C kbuild BUILD_ROOT=$(BUILD_ROOT)
-	$(Q)$(BUILD_ROOT)/kbuild/mconf $(BUILD_ROOT)/kernel/arch/Kconfig
-	$(Q)$(BUILD_ROOT)/kbuild/conf -s $(BUILD_ROOT)/kernel/arch/Kconfig
+	$(Q)$(MAKE) mconf -C kconfig BUILD_ROOT=$(BUILD_ROOT)
+	$(Q)$(BUILD_ROOT)/kconfig/mconf $(BUILD_ROOT)/kernel/arch/Kconfig
+	$(Q)$(BUILD_ROOT)/kconfig/conf -s $(BUILD_ROOT)/kernel/arch/Kconfig
 
 help:
 	$(Q)$(ECHO) "USAGE: make [action] [OPTIONS] [VARIABLES]"

@@ -79,14 +79,14 @@ config_granularity:
         p = get_mmpool_by_type(MMPOOL_FIRST_TYPE);
       }
       else {
-        p = mmpool_next(p);
+        p = mmpool_next_active(p);
       }
       while (p) {
         if ((p != mmpool) && (p->flags & mmpool_nature)) {
           goto config_granularity;
         }
 
-        p = mmpool_next(p);
+        p = mmpool_next_active(p);
       }
 
       goto failed;

@@ -735,19 +735,11 @@ static inline void check_tlsf_defs(void)
             (TLSF_SLD_SIZE >= TLSF_SLDS_MIN));
 }
 
-static page_allocator_t tlsf_allocator = {
-  .name = "TLSF",
-  .alloc_pages = tlsf_alloc_pages,
-  .free_pages = tlsf_free_pages,
-  .dump = tlsf_memdump,
-  .min_block_size = 1,
-  .max_block_size = MAX_BLOCK_SIZE,
-};
-
-void tlsf_allocator_init(mmpool_t *pool)
+static void tlsf_initialize(mmpool_t *pool)
 {
   tlsf_t *tlsf;
 
+  ASSERT(pool->allocator != NULL);
   tlsf = ealloc_space(sizeof(*tlsf));
   if (!tlsf) {
     panic("Can not allocate %zd bytes for TLSF usign "
@@ -760,7 +752,6 @@ void tlsf_allocator_init(mmpool_t *pool)
   tlsf->owner = pool;
   spinlock_initialize(&tlsf->lock);
 
-  pool->allocator = &tlsf_allocator;
   pool->alloc_ctx = tlsf;
   build_tlsf_map(tlsf);
 
@@ -774,6 +765,18 @@ void tlsf_allocator_init(mmpool_t *pool)
 
   kprintf("[MM] Pool \"%s\" initialized TLSF O(1) allocator\n", pool->name);
 }
+
+static page_allocator_t tlsf_allocator = {
+  .name = "TLSF",
+  .initialize = tlsf_initialize,
+  .alloc_pages = tlsf_alloc_pages,
+  .free_pages = tlsf_free_pages,
+  .dump = tlsf_memdump,
+  .min_block_size = 1,
+  .max_block_size = MAX_BLOCK_SIZE,
+};
+
+page_allocator_t *default_allocator = &tlsf_allocator;
 
 #ifdef CONFIG_DEBUG_MM
 static void __validate_empty_sldi_dbg(tlsf_t *tlsf, int fldi, int sldi)

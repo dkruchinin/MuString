@@ -98,7 +98,7 @@ static void __add_one_message(list_head_t *list,
       ulong_t p1=m->sender->static_priority;
 
       if( p1 > p2 ) {
-        list_insert_before(&msg->l,&m->l);
+        list_add_before(&m->l, &msg->l);
         return;
       } else if( p1 == p2 ) {
         list_add2tail(&m->h,&msg->l);

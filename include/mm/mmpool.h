@@ -24,7 +24,7 @@
 
 #include <config.h>
 #include <arch/atomic.h>
-#include <arch/mmpool_conf.h>
+#include <arch/mem.h>
 #include <ds/list.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
@@ -61,9 +61,12 @@ enum {
 #define LAST_PREF_MMPOOL  PREF_MMPOOL_DMA
 #define MMPOOL_FIRST_TYPE 1
 
-#define MMPOOL_KERN   (1 << PREF_MMPOOL_KERN)
-#define MMPOOL_USER   (1 << PREF_MMPOOL_USER)
-#define MMPOOL_DMA    (1 << PREF_MMPOOL_DMA)
+#define MMPOOL_KERN   (0x01 << PREF_MMPOOL_KERN)
+#define MMPOOL_USER   (0x01 << PREF_MMPOOL_USER)
+#define MMPOOL_DMA    (0x01 << PREF_MMPOOL_DMA)
+#define MMPOOL_ACTIVE (0x02 << PREF_MMPOOL_DMA)
+
+#define MMPOOL_BOUND_INF ~(0UL)
 
 /**
  * @struct mm_pool_t
@@ -81,11 +84,13 @@ enum {
 typedef struct mmpool {
   char *name;                     /**< Memory pool name */
   page_allocator_t *allocator;    /**< Page frames allocator attached to given pool */
-  void *alloc_ctx;
+  void *alloc_ctx;                /**< Page allocator specific data */
+  list_node_t pool_node;          /**< List node for mmpools_list */
+  uintptr_t bound_addr;           /**< Memory pool's higher bound phys. address (exclusive) */
+  atomic_t num_free_pages;        /**< Number of free in the pool */
   page_idx_t first_pidx;          /**< Memory pool's very first page frame number */
   page_idx_t num_pages;           /**< Total number of pages in the pool */
   page_idx_t num_reserved_pages;  /**< Number of reserved pages fitting given pool */
-  atomic_t num_free_pages;        /**< Number of free in the pool */
   mmpool_flags_t flags;           /**< Memory pool flags */
   mmpool_type_t type;             /**< Unique integer fitting in 4 bits identifying memory pool type */
 } mmpool_t;
@@ -97,15 +102,18 @@ typedef struct mmpool {
  *
  * @see mm_pool_t
  */
-#define for_each_mmpool(p)                                 \
-  for ((p) = mmpools[0]; p; p = mmpool_next(p))
+#define for_each_mmpool(p)                                      \
+  for (p = mmpools[0]; p; p = mmpools[p->type])
+#define for_each_active_mmpool(p)               \
+  list_for_each_entry(&mmpools_list, p, pool_node)
 
 extern mmpool_t *mmpools[ARCH_NUM_MMPOOLS];
 extern mmpool_t *preferred_mmpools[NUM_PREFERRED_MMPOOLS];
+extern list_head_t mmpools_list;
 
-INITCODE mmpool_type_t mmpool_register(mmpool_t *mmpool);
+INITCODE void mmpool_register(mmpool_t *mmpool);
 INITCODE void mmpool_set_preferred(int mmpool_id, mmpool_t *pref_mmpool);
-void mmpool_add_page(mmpool_t *mmpool, page_frame_t *pframe);
+void mmpools_register_page(page_frame_t *pframe);
 
 /**
  * @brief Get pool by its type
@@ -117,18 +125,27 @@ static inline mmpool_t *get_mmpool_by_type(uint8_t type)
   if (unlikely((type < MMPOOL_FIRST_TYPE) || (type >= MMPOOLS_MAX))) {
     panic("Attemption to get memory pool by unknown type %d!\n", type);
   }
-  
+
   return mmpools[type - 1];
 }
 
 static inline mmpool_t *mmpool_next(mmpool_t *mmpool)
 {
+  if (mmpool->type >= ARCH_NUM_MMPOOLS)
+    return NULL;
+
+  return mmpools[mmpool->type];
+}
+
+static inline mmpool_t *mmpool_next_active(mmpool_t *mmpool)
+{
   ASSERT(mmpool != NULL);
-  if ((mmpool->type) < MMPOOLS_MAX) {
-    return mmpools[mmpool->type];
+  if (mmpool->pool_node.next != list_head(&mmpools_list)) {
+    return NULL;
   }
 
-  return NULL;
+  return list_entry(mmpool->pool_node.next, mmpool_t,
+                    pool_node);
 }
 
 static inline mmpool_t *mmpool_get_preferred(int mmpool_id)
@@ -140,6 +157,7 @@ static inline mmpool_t *mmpool_get_preferred(int mmpool_id)
 
 static inline page_frame_t *mmpool_alloc_pages(mmpool_t *pool, page_idx_t num_pages)
 {
+  ASSERT(pool->allocator != NULL);
   if (likely(pool->allocator->alloc_pages != NULL)) {
     return pool->allocator->alloc_pages(num_pages, pool->alloc_ctx);
   }
@@ -149,6 +167,7 @@ static inline page_frame_t *mmpool_alloc_pages(mmpool_t *pool, page_idx_t num_pa
 
 static inline void mmpool_free_pages(mmpool_t *pool, page_frame_t *pages, page_idx_t num_pages)
 {
+  ASSERT(pool->allocator != NULL);
   if (likely(pool->allocator->free_pages != NULL)) {
     return pool->allocator->free_pages(pages, num_pages, pool->alloc_ctx);
   }
@@ -156,16 +175,21 @@ static inline void mmpool_free_pages(mmpool_t *pool, page_frame_t *pages, page_i
 
 static inline void mmpool_allocator_dump(mmpool_t *pool)
 {
+  ASSERT(pool->allocator != NULL);
   if (likely(pool->allocator->dump != NULL)) {
     pool->allocator->dump(pool->alloc_ctx);
   }
 }
 
-#if 0
-static inline void mmpool_activate(mmpool_t *pool)
+static inline bool mmpool_activate(mmpool_t *pool)
 {
-  pool->allocator->initialize(pool);
+  ASSERT(pool->allocator != NULL);
+  if (atomic_get(&pool->num_free_pages) > 0) {
+    pool->allocator->initialize(pool);
+    return true;
+  }
+
+  return false;
 }
-#endif
 
 #endif /* __MSTRING_MMPOOL_H__ */

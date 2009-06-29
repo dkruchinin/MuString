@@ -17,7 +17,7 @@
       list_for_each(_lh,_ln) {                           \
         da=container_of(_ln,type,ln);                    \
         if( da->cv > a->cv ) {                      \
-          list_insert_before(&a->ln,_ln);           \
+            list_add_before(_ln, &a->ln);           \
           inserted=true;                            \
           break;                                    \
         } else if( da->cv == a->cv ) {              \

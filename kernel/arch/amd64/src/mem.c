@@ -26,7 +26,6 @@
 #include <arch/cpu.h>
 #include <arch/msr.h>
 #include <arch/mem.h>
-#include <arch/mmpool_conf.h>
 #include <arch/cpufeatures.h>
 #include <mm/page.h>
 #include <mm/mem.h>
@@ -313,7 +312,7 @@ static INITCODE void build_page_frames_array(void)
         page->flags = PF_RESERVED;
       }
 
-      arch_register_page(page);
+      mmpools_register_page(page);
     }
 
     mmap = E820_MMAP_NEXT(mmap);
@@ -327,7 +326,7 @@ INITCODE void arch_mem_init(void)
   ulong_t phys_mem_bytes = KB2B(mb_info->mem_upper + 1024);
   uintptr_t srv_addr;
 
-  arch_init_mmpools();
+  arch_register_mmpools();
   if (phys_mem_bytes < MIN_MEM_REQUIRED) {
     panic("Mstring kernel launches on systems with at least %dM of RAM. "
           "Your system has only %dM\n", B2MB(MIN_MEM_REQUIRED),
@@ -380,6 +379,7 @@ INITCODE void arch_mem_init(void)
   kprintf(KO_INFO "Page frames array size: %dK\n",
           B2KB(KERNEL_END_VIRT - (uintptr_t)page_frames_array));
   register_mandatory_mappings();
+  arch_configure_mmpools();
 }
 
 INITCODE void arch_cpu_enable_paging(void)
