@@ -2,8 +2,6 @@
 
 menu "Memory manager"
 
-source "kernel/mm/page_allocators/Kconfig.pallocators"
-
 config KCORE_STACK_PAGES
        int "Kernel core stack pages"
        range 2 8
