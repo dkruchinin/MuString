@@ -104,5 +104,6 @@ static inline long get_userspace_ip(task_t *task)
     (stack_frame->cs == GDT_SEL(KCODE_DESCR))
 
 uint64_t fixup_fault_address(uint64_t fault_address);
+void print_fixup_table(void);
 #endif
 
