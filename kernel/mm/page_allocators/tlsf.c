@@ -536,7 +536,7 @@ static void tlsf_free_pages(page_frame_t *pages, page_idx_t num_pages, void *dat
             pframe_number(&pages[i]), page_pool->name, tlsf->owner->name);
     }
     if ((flags & TLSF_PB_MASK) || !(flags & (1 << TLSF_PB_BUSY))) {
-      panic("Attemption to free *already* free page #%#x to the pool %s! (%#x)",
+      panic("Attemption to free *already* free page №%#x to the pool %s! (%#x)",
             pframe_number(&pages[i]), tlsf->owner->name, pages[i]._private);
     }
 #endif /* CONFIG_DEBUG_MM */
@@ -563,10 +563,12 @@ static page_frame_t *tlsf_alloc_pages(page_idx_t n, void *data)
   tlsf_uint_t size;
   int i, irqstat;
 
-  if ((n >= MAX_BLOCK_SIZE) || (n > atomic_get(&tlsf->owner->num_free_pages)))
+  if ((n >= MAX_BLOCK_SIZE) || (n > atomic_get(&tlsf->owner->num_free_pages))) {
     goto out;
-  if ((n == 1) && ((block_head = __get_page_from_cache(tlsf)) != NULL))
+  }
+  if ((n == 1) && ((block_head = __get_page_from_cache(tlsf)) != NULL)) {
     goto init_block;
+  }
 
   spinlock_lock_irqsave(&tlsf->lock, irqstat);
   block_head = find_suitable_block(tlsf, n);
@@ -591,12 +593,13 @@ init_block:
 #ifndef CONFIG_DEBUG_MM
     bit_set(&block_head[i]._private, TLSF_PB_BUSY);
 #else
-    if (bit_test_and_set(&block_head[i]._private, TLSF_PB_BUSY))
+    if (bit_test_and_set(&block_head[i]._private, TLSF_PB_BUSY)) {
       panic("Just allocated page frame #%#x is *already* busy! WTF?", pframe_number(block_head + i));
+    }
 #endif /* CONFIG_DEBUG_MM */
-
-    if (likely(i > 0))
+    if (likely(i > 0)) {
       list_add_before(&block_head->chain_node, &block_head[i].chain_node);
+    }
   }
 
 out:
@@ -732,19 +735,11 @@ static inline void check_tlsf_defs(void)
             (TLSF_SLD_SIZE >= TLSF_SLDS_MIN));
 }
 
-static page_allocator_t tlsf_allocator = {
-  .name = "TLSF",
-  .alloc_pages = tlsf_alloc_pages,
-  .free_pages = tlsf_free_pages,
-  .dump = tlsf_memdump,
-  .min_block_size = 1,
-  .max_block_size = MAX_BLOCK_SIZE,
-};
-
-void tlsf_allocator_init(mmpool_t *pool)
+static void tlsf_initialize(mmpool_t *pool)
 {
   tlsf_t *tlsf;
 
+  ASSERT(pool->allocator != NULL);
   tlsf = ealloc_space(sizeof(*tlsf));
   if (!tlsf) {
     panic("Can not allocate %zd bytes for TLSF usign "
@@ -757,7 +752,6 @@ void tlsf_allocator_init(mmpool_t *pool)
   tlsf->owner = pool;
   spinlock_initialize(&tlsf->lock);
 
-  pool->allocator = &tlsf_allocator;
   pool->alloc_ctx = tlsf;
   build_tlsf_map(tlsf);
 
@@ -771,6 +765,18 @@ void tlsf_allocator_init(mmpool_t *pool)
 
   kprintf("[MM] Pool \"%s\" initialized TLSF O(1) allocator\n", pool->name);
 }
+
+static page_allocator_t tlsf_allocator = {
+  .name = "TLSF",
+  .initialize = tlsf_initialize,
+  .alloc_pages = tlsf_alloc_pages,
+  .free_pages = tlsf_free_pages,
+  .dump = tlsf_memdump,
+  .min_block_size = 1,
+  .max_block_size = MAX_BLOCK_SIZE,
+};
+
+page_allocator_t *default_allocator = &tlsf_allocator;
 
 #ifdef CONFIG_DEBUG_MM
 static void __validate_empty_sldi_dbg(tlsf_t *tlsf, int fldi, int sldi)

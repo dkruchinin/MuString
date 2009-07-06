@@ -232,8 +232,9 @@ static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr,
 
     list_init_head(&chain_head);
     pages = alloc_pages(npages, AF_ZERO | MMPOOL_USER);
-    if (!pages)
+    if (!pages) {
       return -ENOMEM;
+    }
 
     list_set_head(&chain_head, &pages->chain_node);
     pagetable_lock(&vmm->rpd);

@@ -28,7 +28,6 @@
 #include <mm/page_alloc.h>
 #include <mm/vmm.h>
 #include <mm/mem.h>
-#include <mm/tlsf.h>
 #include <mm/memobj.h>
 #include <mm/rmap.h>
 #include <mstring/panic.h>
@@ -143,15 +142,12 @@ void mm_initialize(void)
   int nonempty_pools = 0;
 
   arch_mem_init();
-  arch_register_mmpools();
   pt_ops.alloc_pagedir = allocate_pagedir;
   pt_ops.free_pagedir = free_pagedir;
   
   for_each_mmpool(pool) {
-    tlsf_allocator_init(pool);
-    if (atomic_get(&pool->num_free_pages) > 0) {
+    if (mmpool_activate(pool))
       nonempty_pools++;
-    }
   }
   if (!nonempty_pools)
     panic("No one memory pool was activated!");

@@ -1,7 +1,7 @@
 include $(BUILD_ROOT)/include/Makefile.inc
-#include ../include/Makefile.inc
+
 # lxdialig related variables
-lxdialog_root := $(BUILD_ROOT)/kbuild/lxdialog
+lxdialog_root := $(BUILD_ROOT)/kconfig/lxdialog
 check-lxdialog := $(lxdialog_root)/check-lxdialog.sh
 HOSTCFLAGS = $(shell bash $(check-lxdialog) -ccflags)
 HOSTLDFLAGS += "$(shell bash $(check-lxdialog) -ldflags $(HOSTCC))"

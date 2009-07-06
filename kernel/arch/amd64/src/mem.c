@@ -26,7 +26,6 @@
 #include <arch/cpu.h>
 #include <arch/msr.h>
 #include <arch/mem.h>
-#include <arch/mmpool_conf.h>
 #include <arch/cpufeatures.h>
 #include <mm/page.h>
 #include <mm/mem.h>
@@ -115,12 +114,12 @@ static INITCODE void enable_nx(void)
 
 static INITCODE void register_mandatory_mappings(void)
 {
-    /*memset(&ident_mandmap, 0, sizeof(ident_mandmap));
+  memset(&ident_mandmap, 0, sizeof(ident_mandmap));
   ident_mandmap.virt_addr = 0x1000;
   ident_mandmap.phys_addr = 0x1000;
   ident_mandmap.num_pages = IDENT_MAP_PAGES - 1;
   ident_mandmap.flags = KMAP_READ | KMAP_KERN;
-  vm_mandmap_register(&ident_mandmap, "Identity mapping");*/
+  vm_mandmap_register(&ident_mandmap, "Identity mapping");
 
   memset(&utramp_mandmap, 0, sizeof(utramp_mandmap));
   __utrampoline_virt = USPACE_VADDR_TOP + PAGE_SIZE;//__reserve_uspace_vregion(1);
@@ -313,7 +312,7 @@ static INITCODE void build_page_frames_array(void)
         page->flags = PF_RESERVED;
       }
 
-      arch_register_page(page);
+      mmpools_register_page(page);
     }
 
     mmap = E820_MMAP_NEXT(mmap);
@@ -327,7 +326,7 @@ INITCODE void arch_mem_init(void)
   ulong_t phys_mem_bytes = KB2B(mb_info->mem_upper + 1024);
   uintptr_t srv_addr;
 
-  arch_init_mmpools();
+  arch_register_mmpools();
   if (phys_mem_bytes < MIN_MEM_REQUIRED) {
     panic("Mstring kernel launches on systems with at least %dM of RAM. "
           "Your system has only %dM\n", B2MB(MIN_MEM_REQUIRED),
@@ -373,14 +372,14 @@ INITCODE void arch_mem_init(void)
   ealloc_disable_feature(EALLOCF_APAGES);
   SET_KERNEL_END((uintptr_t)ealloc_data.pages);
   page_frames_array = (page_frame_t *)KERNEL_END_VIRT;
-  arch_init_mmpools();
-  build_page_frames_array();
-
   SET_KERNEL_END(PAGE_ALIGN((uintptr_t)page_frames_array +
                             sizeof(page_frame_t) * num_phys_pages));
+  build_page_frames_array();
+
   kprintf(KO_INFO "Page frames array size: %dK\n",
           B2KB(KERNEL_END_VIRT - (uintptr_t)page_frames_array));
   register_mandatory_mappings();
+  arch_configure_mmpools();
 }
 
 INITCODE void arch_cpu_enable_paging(void)

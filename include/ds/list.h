@@ -389,20 +389,6 @@ static inline void list_move(list_node_t *prev, list_node_t *next, list_head_t *
 }
 
 /**
- * @fn static inline void list_insert_before(list_node_t *t,list_node_t *b)
- * @brief Insert node @a t before @a b
- * @param t - a node that will be inserted
- * @param b - a node before which target now will be inserted
- */
-static inline void list_insert_before(list_node_t *t,list_node_t *b)
-{
-  t->next=b;
-  t->prev=b->prev;
-  b->prev->next=t;
-  b->prev=t;
-}
-
-/**
  * @fn static inline void list_replace(list_node_t *old,list_node_t *new)
  * @brief Replace node @a old with @a new (@a old is removed from the list)
  * @param old - a node to be replaced

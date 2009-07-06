@@ -10,22 +10,14 @@ config KCORE_STACK_PAGES
          You may specify number of kernel core stack pages.
          Strictly speaking it's a kernel stack size.
 
-choice
-        prompt "Select page allocator"
-        ---help---
-        Here you may select physical page frames allocator
+choice 
+       prompt "Choice default page allocator"
+       default TLSF
 
-          
-config PFA_TLSF
-       bool "TLSF"
+config TLSF
+       bool "TLSF O(1) allocator"
+
 endchoice
-
-config PFA_MAX_PAGES
-       int "Max quantity of page frames system may allocate dynamically"
-       range 32 2048
-       default "256"
-       help
-         Max number of pages given page allocator may allocate.
 
 config DEBUG_MM
        bool "Enable memory manager main debugging"

@@ -42,8 +42,8 @@
 
 #define MMPOOLS_MASK        0xf
 #define MMPOOLS_SHIFT       4
-#define MMPOOLS_MAX         (1 << MMPOOLS_SHIFT)
-#define PF_MMPOOL_TYPE(type) ((type) & MMPOOLS_MASK)
+#define MMPOOLS_MAX         ((1 << MMPOOLS_SHIFT) - 1)
+#define PF_MMPOOL_TYPE(flags) ((flags) & MMPOOLS_MASK)
 
 /**
  * @typedef int page_idx_t

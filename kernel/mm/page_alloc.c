@@ -60,7 +60,7 @@ config_granularity:
     pg = mmpool_alloc_pages(p, granularity);
     if (!pg) {
       /*
-       * Unfurtunatelly, page allocation from given pool failed,
+       * Unfortunatelly, page allocation from given pool failed,
        * but it's not a catastrophe. We can decrease granularity
        * on half.
        */
@@ -79,14 +79,14 @@ config_granularity:
         p = get_mmpool_by_type(MMPOOL_FIRST_TYPE);
       }
       else {
-        p = mmpool_next(p);
+        p = mmpool_next_active(p);
       }
       while (p) {
         if ((p != mmpool) && (p->flags & mmpool_nature)) {
           goto config_granularity;
         }
 
-        p = mmpool_next(p);
+        p = mmpool_next_active(p);
       }
 
       goto failed;
@@ -142,6 +142,7 @@ static page_frame_t *alloc_pages_cont(mmpool_t *mmpool,
   return NULL;
 out_ok:
   atomic_sub(&p->num_free_pages, num_pages);
+
   if (flags & AF_ZERO) {
     pframes_memnull(pages, num_pages);
   }

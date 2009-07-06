@@ -242,10 +242,6 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
   r=do_task_control(task,SYS_PR_CTL_SET_STACK,ustack_top);
   if (r < 0)
     panic("Server [#%d]: Failed to set task's stack(%p). (ERR = %d)", num, ustack_top, r);
-  if (vmm->owner->pid == 11) {
-    interrupts_disable();
-    for(;;);
-  }
 }
 
 static void __server_task_runner(void *data)
@@ -262,20 +258,20 @@ static void __server_task_runner(void *data)
     kprintf("[LAUNCHER] Starting %d servers with delay %d. First user (non-NS) PID is %d\n",
             i,delay,2*CONFIG_NRCPUS+3);
     if (kconsole == &vga_console)
-      kconsole->disable();
+        kconsole->disable();
   }
 
   for(sn=0,a=0;a<i;a++) {
     char *modvbase;
-    
+
     server_ops->get_server_by_num(a, &srv);
     if (srv.name != NULL) {
       kprintf("[LAUNCHER] Starting server: %s\n", srv.name);
     }
     else {
-      kprintf("[LAUNCHER] Starting server: %d.\n", a);
+      kprintf("[LAUNCHER] Starting server: %d.\n", a + 1);
     }
-    
+
     modvbase=pframe_id_to_virt(srv.addr>>PAGE_WIDTH);
     if( *(uint32_t *)modvbase == ELF_MAGIC ) { /* ELF module ? */
       ulong_t t;
@@ -312,6 +308,7 @@ static void __server_task_runner(void *data)
       if( r ) {
         panic( "server_run_tasks(): Can't launch core task N%d !\n",a+1);
       }
+
       sn++;
       sleep(delay);
     } else if( !strncmp(&modvbase[257],"ustar",5 ) ) { /* TAR-based ramdisk ? */

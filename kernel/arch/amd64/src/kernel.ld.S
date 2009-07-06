@@ -49,7 +49,7 @@ SECTIONS {
          initcode : AT(ADDR(initcode) - KERNEL_OFFSET - KPHYS_START)
          {
                 *(initcode);
-         }         
+         }
 
          . = ALIGN(0x1000);
          __init_end = .;

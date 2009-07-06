@@ -88,7 +88,7 @@ void schedule_deffered_actions(list_head_t *actions)
         deffered_irq_action_t *da=container_of(ln,deffered_irq_action_t,node);
 
         if( da->priority > a->priority ) {
-          list_insert_before(&a->node,ln);
+            list_add_before(ln, &a->node);
           goto repeat;
         } else if( da->priority == a->priority ) {
           list_add2tail(&da->head,&a->node);
@@ -128,7 +128,7 @@ void schedule_deffered_action(deffered_irq_action_t *a) {
       da=container_of(ln,deffered_irq_action_t,node);
 
       if( da->priority > a->priority ) {
-        list_insert_before(&a->node,ln);
+        list_add_before(ln, &a->node);
         goto out;
       } else if( da->priority == a->priority ) {
         list_add2tail(&da->head,&a->node);

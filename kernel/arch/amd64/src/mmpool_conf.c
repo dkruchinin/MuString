@@ -20,55 +20,44 @@
  */
 
 #include <config.h>
-#include <arch/mmpool_conf.h>
+#include <arch/mem.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <mm/mmpool.h>
+#include <mstring/panic.h>
 #include <mstring/types.h>
 
 static mmpool_t lowmem_pool, highmem_pool;
 
-INITCODE void arch_init_mmpools(void)
-{
-  memset(&lowmem_pool, 0, sizeof(lowmem_pool));
-  lowmem_pool.name = "Lowmem (< 4G)";
-  lowmem_pool.flags = MMPOOL_KERN | MMPOOL_USER | MMPOOL_DMA;
-  
-  memset(&highmem_pool, 0, sizeof(highmem_pool));
-  highmem_pool.name = "Highmem (>= 4G)";
-  highmem_pool.flags = MMPOOL_KERN | MMPOOL_USER;
-}
-
-INITCODE void arch_register_page(page_frame_t *page)
-{
-  mmpool_t *pool;
-  
-  if ((uintptr_t)pframe_to_phys(page) < MB2B(4096UL)) {
-    pool = &lowmem_pool;
-  }
-  else {
-    pool = &highmem_pool;
-  }
-
-  mmpool_add_page(pool, page);
-}
-
 INITCODE void arch_register_mmpools(void)
 {
-  mmpool_t *p;
-  
-  if (!atomic_get(&lowmem_pool.num_free_pages)) {
-    panic("Memory pool \"%s\" has not free pages at all!");
-  }
-
+  /* Low memory pool configuration */
+  lowmem_pool.name = "Lowmem";
+  lowmem_pool.flags = MMPOOL_KERN | MMPOOL_USER | MMPOOL_DMA;
+  lowmem_pool.bound_addr = MB2B(4096UL);
   mmpool_register(&lowmem_pool);
-  mmpool_set_preferred(PREF_MMPOOL_DMA, &lowmem_pool);
+
+  /* High memory pool configuration */
+  highmem_pool.name = "Highmem";
+  highmem_pool.flags = MMPOOL_KERN | MMPOOL_USER;
+  highmem_pool.bound_addr = MMPOOL_BOUND_INF;
   mmpool_register(&highmem_pool);
+}
+
+INITCODE void arch_configure_mmpools(void)
+{
+  mmpool_t *p;
+
+  ASSERT(atomic_get(&lowmem_pool.num_free_pages) > 0);
+  highmem_pool.allocator = default_allocator;
+  lowmem_pool.allocator = default_allocator;
+  
+  mmpool_set_preferred(PREF_MMPOOL_DMA, &lowmem_pool);
   if (atomic_get(&highmem_pool.num_free_pages) > 0) {    
     p = &highmem_pool;
   }
   else {
-    p = &lowmem_pool;
+    p = &lowmem_pool;    
   }
 
   mmpool_set_preferred(PREF_MMPOOL_KERN, p);
