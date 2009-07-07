@@ -31,6 +31,14 @@ SECTIONS {
                 *(.rodata);
          }
 
+         . = ALIGN(8);
+         __ex_table_start = .;
+         .ex_table : AT(ADDR(.ex_table) - KERNEL_OFFSET - KPHYS_START)
+         {
+                *(.ex_table);
+         }
+         __ex_table_end = .;
+
          __bss_start = .;
          .bss : AT(ADDR(.bss) - KERNEL_OFFSET - KPHYS_START)
          {

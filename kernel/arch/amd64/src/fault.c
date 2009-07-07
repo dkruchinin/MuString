@@ -33,10 +33,10 @@
 #include <mstring/smp.h>
 
 /* Markers of exception table. */
-ulong_t __ex_table_start,__ex_table_end;
+extern ulong_t __ex_table_start,__ex_table_end;
 
 struct __fixup_record_t {
-  uint64_t fault_address,fixup_address;
+  uint64_t fault_address, fixup_address;
 }; 
 
 struct __fault_descr_t {
@@ -81,6 +81,17 @@ uint64_t fixup_fault_address(uint64_t fault_address)
     fr++;
   }
   return 0;
+}
+
+void print_fixup_table(void)
+{
+  int i;
+  struct __fixup_record_t *fr=(struct __fixup_record_t *)&__ex_table_start;
+  struct __fixup_record_t *end=(struct __fixup_record_t *)&__ex_table_end;
+
+  for (i = 1; fr < end; fr++, i++) {
+    kprintf("[%d] %p, %p\n", i, fr->fault_address, fr->fixup_address);
+  }
 }
 
 void install_fault_handlers(void)
