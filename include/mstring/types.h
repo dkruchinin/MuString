@@ -43,6 +43,7 @@ typedef int cpu_id_t;
 #define always_inline __attribute__((always_inline)) inline
 #define likely(x)   __builtin_expect((x), 1)
 #define unlikely(x) __builtin_expect((x), 0)
+#define MEMBARIER() __asm__ volatile()
 #define INITDATA __attribute__ ((section("initdata")))
 #define INITCODE __attribute__ ((section("initcode")))
 
