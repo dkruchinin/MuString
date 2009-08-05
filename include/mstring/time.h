@@ -72,6 +72,22 @@ typedef enum __posix_timer_command {
     (_t)->tv_nsec=((_ticks) % HZ)*(NANOSLEEP_MAX_NSECS/HZ);     \
   } while(0)
 
+/* there are POSIX structure that used in epoch calculus */
+struct tm 
+{
+   int tm_sec;
+   int tm_min;
+   int tm_hour;
+   int tm_mday;
+   int tm_mon;
+   int tm_year;
+   int tm_wday;
+   int tm_yday;
+   int tm_isdst;
+};
+
+extern struct tm s_epoch;
+
 void setup_time(void);
 void arch_setup_time(void);
 

@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2009 MadTirra <madtirra@jarios.org> (POSIX Epoch implementation)
  *
  * mstring/generic_api/time.c: contains implementation of the generic
  *                         functions that deal with time processing.
@@ -43,6 +44,8 @@
 #include <mstring/serial.h>
 #endif
 
+struct tm s_epoch;
+
 void initialize_timer(void)
 {
   init_timers();
@@ -58,6 +61,8 @@ void timer_tick(void)
 
 void setup_time(void)
 {
+  /* clear data */
+  memset(&s_epoch,0,sizeof(struct tm));
   arch_setup_time();
 }
 
