@@ -109,7 +109,7 @@ config_granularity:
   return pages;
 failed:
   if (pages) {
-    free_pages_chain(pages);    
+    free_pages_chain(pages);
   }
 
   return NULL;
@@ -128,7 +128,7 @@ static page_frame_t *alloc_pages_cont(mmpool_t *mmpool,
     p = mmpool;
     goto out_ok;
   }
-  for_each_mmpool(p) {
+  for_each_active_mmpool(p) {
     if ((p == mmpool) || !(p->flags & mmpool_nature)) {
       continue;
     }
@@ -227,7 +227,7 @@ uintptr_t sys_alloc_dma_pages(int num_pages)
   if (unlikely(!num_pages)) {
     return -EINVAL;
   }
-  
+
   pages = alloc_pages(num_pages, MMPOOL_DMA | AF_ZERO | AF_CONTIG);
   if (!pages) {
     return -ENOMEM;
@@ -247,5 +247,5 @@ void sys_free_dma_pages(uintptr_t paddr, int num_pages)
       return;
 
     free_page(pframe_by_id(pidx + i));
-  }  
+  }
 }
