@@ -158,6 +158,10 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
     if (!ret) {
       return;
     }
+
+    kprintf_fault("[DEBUG] Failed to handle page fault of "
+                  "task %d [ERR = %d]\n", faulter->pid, ret);
+
     if (fixup != 0) {
       goto kernel_fault;
     }

@@ -176,6 +176,8 @@ static inline void clear_page_frame(page_frame_t *page)
   page->flags &= ~PF_CLEAR_MASK;
   ASSERT(!(page->flags & PF_LOCK));
   atomic_set(&page->refcount, 0);
+  page->slab_lazy_freelist = NULL;
+  page->offset = 0;
 }
 
 #define pframe_memnull(page) pframes_memnull(page, 1)

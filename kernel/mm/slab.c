@@ -266,7 +266,7 @@ inval:
 /* FIXME: DK */
 #define SLAB_VERBOSE(__memcache, fmt, args...)          \
   do {                                                  \
-    if (true) {                                         \
+    if (false) {                                        \
       kprintf("[SLAB VERBOSE] |%s|: ", __FUNCTION__);   \
       kprintf(fmt, ##args);                             \
     }                                                   \
@@ -368,7 +368,7 @@ static inline void slab_add_free_obj(slab_t *slab, void *obj)
   uintptr_t *p = __objoffs(slab, obj, 1);
 
   *p = (uintptr_t)slab->objects;
-  slab->objects = p;    
+  slab->objects = p;
   slab->nobjects++;
   slab_dbg_set_objguards(slab, obj);
 }
@@ -1069,7 +1069,6 @@ void *alloc_from_memcache(memcache_t *memcache, int alloc_flags)
     SLAB_VERBOSE(memcache, ">> taking %d objects from lazy freelist for "
                  "percpu slab %p (CPU №%d)\n", slab->pages->slab_num_lazy_objs,
                  slab, cpu_id());
-
     slab_swap_freelist(slab);
     SLAB_DBG_ASSERT(slab->nobjects > 0);
     slab_unlock(slab);
