@@ -220,6 +220,21 @@ void free_pages_chain(page_frame_t *pages)
   free_page(pages);
 }
 
+/*
+ * FIXME DK: There is one big problem with both DMA pages and physical
+ * mappings. When user allocates DMA pages, all pages in DMA chunk has
+ * refcount equal to zero. After user maps them to any comfortable
+ * virtual address, refcount of pages becomes 1. Therefore after he unmaps
+ * them refcount becomes zero and pages are automatically fried.
+ * So, after user calls sys_free_dma_pages, double-freeing occured.
+ * It's not good. Moreover, user may free any "physicall" address he want.
+ * It's a big fucking hole.
+ *
+ * While we haven't clearly determined security policy, we can not prevent
+ * any chunk of physical memroy(event kernel memroy) from attack.
+ * Thus potentially all kernel and user-space private data can be overwrittren
+ * and readed. Basta.
+ */
 uintptr_t sys_alloc_dma_pages(int num_pages)
 {
   page_frame_t *pages;
