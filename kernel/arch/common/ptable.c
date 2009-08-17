@@ -108,9 +108,6 @@ int ptable_map_page(rpd_t *rpd, uintptr_t addr,
   pde = pde_fetch(cur_dir, pde_offset2idx(addr, PTABLE_LEVEL_FIRST));
   pde_was_present = pde_is_present(pde);
   pde_save(pde, pidx, flags);
-  if (rpd != KERNEL_ROOT_PDIR() && pidx == 0xeac) {
-      kprintf_fault("MMAP page 0xeac to pid %d\n", current_task()->pid);
-  }
 
   if (!pde_was_present) {
     pagedir_ref(parent_pde);
@@ -140,13 +137,7 @@ void ptable_unmap_page(rpd_t *rpd, uintptr_t addr)
   if (!pde_is_present(pde)) {
     return;
   }
-  {
-      page_idx_t pidx = pde_fetch_page_idx(pde);
-      if (rpd != KERNEL_ROOT_PDIR() && pidx == 0xeac) {
-          kprintf_fault("MUNMAP page 0xeac from pid %d\n", current_task()->pid);
-  }
 
-  }
   pde_set_not_present(pde);
   for (level = PTABLE_LEVEL_FIRST; level < PTABLE_LEVEL_LAST; level++) {
     pde = dirspath[level];    

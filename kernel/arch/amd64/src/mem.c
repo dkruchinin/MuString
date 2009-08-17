@@ -233,7 +233,7 @@ static INITCODE void paging_init(void)
 {
   __ptbl_allowed_flags_mask = PDE_RW | PDE_US |
     PDE_PWT | PDE_PS | PDE_GLOBAL | PDE_PAT;
-  
+
   remap_kernel_mem();
   arch_cpu_enable_paging();
   if (num_phys_pages > MAX_PAGES_MAP_FIRST) {
@@ -260,7 +260,7 @@ static INITCODE void scan_phys_mem(void)
           "mmap_addr = %p, mmap_length = %#x\n",
           mb_info->mmap_addr, mb_info->mmap_length);
   }
-  
+
   kprintf("E820 memory map:\n");
   mmap = (e820memmap_t *)((ulong_t)mb_info->mmap_addr);
   e820_end = (e820memmap_t *)
@@ -304,7 +304,7 @@ static INITCODE void build_page_frames_array(void)
     if (mmap->type != E820_USABLE) {
       reserved++;
     }
-    
+
     while ((uintptr_t)pframe_id_to_phys(pidx) < end) {
       page = &page_frames_array[pidx++];
       memset(page, 0, sizeof(*page));
@@ -340,28 +340,28 @@ INITCODE void arch_mem_init(void)
    */
   SET_KERNEL_END(PAGE_ALIGN((uintptr_t)&_kernel_end));
   scan_phys_mem();
-  
+
   kprintf(KO_INFO "Kernel size: %ldK\n",
           B2KB(KERNEL_END_PHYS) - 1024);
-  
+
   srv_addr = server_ops->get_end_addr();
   if (srv_addr) {
     kprintf(KO_INFO "Services size: %ldK\n",
             B2KB(srv_addr - KERNEL_END_PHYS));
     SET_KERNEL_END(PAGE_ALIGN(PHYS_TO_KVIRT(srv_addr)));
   }
-  
-  /* Find out an address where pages can be allocated from */  
+
+  /* Find out an address where pages can be allocated from */
   space_rest = phys_mem_bytes - PAGE_ALIGN(KERNEL_END_PHYS) - 1024;
   ptable_mem_start =  (char *)KERNEL_END_VIRT;
-  
+
   /*
    * Initialize early memory allocator for page allocation
    * during system boot process.
    */
   ealloc_init(KERNEL_END_VIRT, space_rest);
-  
-  /* Initialize kernel root page directory(PML4) */  
+
+  /* Initialize kernel root page directory(PML4) */
   initialize_rpd(&kernel_root_pdir, NULL);
   paging_init();
 
@@ -430,7 +430,7 @@ uintptr_t __allocate_vregion(page_idx_t num_pages)
   else {
     vregion_cur_ptr = retaddr;
   }
-  
+
   spinlock_unlock(&vregion_lock);
 
   return retaddr;

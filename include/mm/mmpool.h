@@ -102,10 +102,11 @@ typedef struct mmpool {
  *
  * @see mm_pool_t
  */
-#define for_each_mmpool(p)                                      \
+#define for_each_mmpool(p)                      \
   for (p = mmpools[0]; p; p = mmpools[p->type])
 #define for_each_active_mmpool(p)               \
-  list_for_each_entry(&mmpools_list, p, pool_node)
+  for_each_mmpool(p)                            \
+    if (((p)->flags & MMPOOL_ACTIVE))
 
 extern mmpool_t *mmpools[ARCH_NUM_MMPOOLS];
 extern mmpool_t *preferred_mmpools[NUM_PREFERRED_MMPOOLS];
@@ -139,13 +140,21 @@ static inline mmpool_t *mmpool_next(mmpool_t *mmpool)
 
 static inline mmpool_t *mmpool_next_active(mmpool_t *mmpool)
 {
+  list_node_t *ln;
+  mmpool_t *p;
+
   ASSERT(mmpool != NULL);
-  if (mmpool->pool_node.next != list_head(&mmpools_list)) {
+  for (ln = mmpool->pool_node.next; ln != list_head(&mmpools_list); ln = ln->next) {
+    p = list_entry(ln, mmpool_t, pool_node);
+    if (p->flags & MMPOOL_ACTIVE) {
+      break;
+    }
+  }
+  if (ln == list_head(&mmpools_list)) {
     return NULL;
   }
 
-  return list_entry(mmpool->pool_node.next, mmpool_t,
-                    pool_node);
+  return p;
 }
 
 static inline mmpool_t *mmpool_get_preferred(int mmpool_id)
@@ -185,6 +194,7 @@ static inline bool mmpool_activate(mmpool_t *pool)
 {
   ASSERT(pool->allocator != NULL);
   if (atomic_get(&pool->num_free_pages) > 0) {
+    pool->flags |= MMPOOL_ACTIVE;
     pool->allocator->initialize(pool);
     return true;
   }
