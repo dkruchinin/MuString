@@ -145,7 +145,8 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
           /* Ignore non page-aligned sections that smell like .data, i.e.
            * .got, .plt and others
            */
-          if( !(esh.sh_addr & (PAGE_SIZE-1)) ) {
+          if( (!(esh.sh_addr & (PAGE_SIZE-1)) && !real_data_offset) ||
+	      ((esh.sh_addr & (PAGE_SIZE-1)) && real_data_offset) ) {
             real_data_size+=esh.sh_size;
             if(real_data_offset==0)
               real_data_offset=esh.sh_addr;
