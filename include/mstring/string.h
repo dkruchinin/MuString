@@ -23,72 +23,24 @@
  *
  */
 
-#ifndef __STRING_H__
-#define __STRING_H__ 
+#ifndef __MSTRING_STRING_H__
+#define __MSTRING_STRING_H__ 
 
 #include <mstring/types.h>
 #include <arch/string.h>
 
-#ifndef ARCH_MEMSET
-static inline void *memset(void *s, int c, size_t n)
-{
-  if (1/*(uintptr_t)s & 0x1*/) {
-    register char *to = (char *)s;
-        
-    while (n-- > 0)
-      *to++ = c;
-  }
-  else { 
-    register uint16_t *to = (uint16_t *)s;
-    register uint16_t tmp = ((c & 0xff) | ((c & 0xff) << 8));
-    size_t len = n >> 1;
-      
-    while (len-- > 0)
-      *to++ = tmp;
-    if (n & 0x1)            
-      *(char *)to = c;
-  }
+/*
+ * NOTE: memset, memcpy, memmove and memcmp *must not* be implemented
+ * as inlines or macros. Gcc may use them for its internal purposes.
+ * Quote from gcc manual:
+ * "The compiler may generate calls to memcmp, memset, memcpy and memmove.
+ * These entries are usually resolved by entries in libc."
+ */
 
-  return s;
-}
-#else
-#define memset(s, c, n) arch_memset(s, c, n)
-#endif /* ARCH_MEMSET */
-
-
-#ifndef ARCH_MEMCPY
-static inline void *memcpy(void *dst, const void *src, size_t n)
-{
-    register char *to = (char *)dst;
-    register const char *from = src;
-
-    while(n-- > 0)
-        *to++ = *from++;
-
-    return dst;
-}
-#else
-#define memcpy(dst, src, n) arch_memcpy(dst, src, n)
-#endif /* ARCH_MEMCPY */
-
-
-#ifndef ARCH_MEMCMP
-static inline int memcmp(const void *s1, const void *s2, size_t n)
-{
-    register const char *p1, *p2;
-
-    p1 = (const char *)s1;
-    p2 = (const char *)s2;
-    for (; n > 0; p1++, p2++, n--) {
-        if (*p1 != *p2)
-            return (*p1 - *p2);
-    }
-    
-    return 0;
-}
-#else
-#define memcmp(s1, s2, n) arch_memcmp(s1, s2, n)
-#endif /* ARCH_MEMCMP */
+extern void *memset(void *s, int c, size_t n);
+extern int memcmp(const void *s1, const void *s2, size_t n);
+extern void *memcpy(void *dst, const void *src, size_t n);
+extern void *memmove(void *dst, const void *src, size_t n);
 
 #ifndef ARCH_STRLEN
 static inline size_t strlen(const char *s)

@@ -22,9 +22,9 @@
  *
  */
 	
-.global arch_memset
+.global memset
 
-arch_memset:
+memset:
 	movq    %rdi, %r9 /* Save return value */
 	movq    %rsi, %rax
 	movq    %rdx, %rcx

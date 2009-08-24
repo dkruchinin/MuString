@@ -49,7 +49,7 @@ MAKE := make -s
 endif
 
 OPTIMIZATION ?= -g
-CFLAGS = -Wall -nostdlib -nostdinc -fno-builtin -fomit-frame-pointer \
+CFLAGS = -Wall -nostdlib -nostdinc -fno-builtin -fomit-frame-pointer -nodefaultlibs \
 	$(OPTIMIZATION) $(KERN_CFLAGS)
 
 LDFLAGS += -M
@@ -205,8 +205,7 @@ help:
 
 help_config:
 	$(Q)$(ECHO) "Before building kernel you should configure it"
-	$(Q)$(ECHO) "Run make [config or menuconfig] arch=<your_arch>"
-	$(Q)$(ECHO) "Supported architectures:"
+	$(Q)$(ECHO) "Run make config or  make menuconfig."
 	$(Q)$(ECHO)
 	$(Q)exit 2
 

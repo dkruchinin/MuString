@@ -23,9 +23,9 @@
  */
 	
 	
-.global arch_memcpy
+.global memcpy
 
-arch_memcpy:
+memcpy:
 	  movq    %rdi, %rax                /* Store destination in return value */
 	  cmpq    $16, %rdx
 	  jb      byte_copy
