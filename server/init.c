@@ -259,7 +259,7 @@ static void __server_task_runner(void *data)
     kprintf("[LAUNCHER] Starting %d servers with delay %d. First user (non-NS) PID is %d\n",
             i,delay,2*CONFIG_NRCPUS+3);
     if (kconsole == &vga_console)
-        kconsole->disable();
+      kconsole->disable();
   }
 
   for(sn=0,a=0;a<i;a++) {

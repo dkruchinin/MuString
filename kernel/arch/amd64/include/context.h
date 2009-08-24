@@ -112,33 +112,6 @@
 /* Offsets to parts of CPU exception stack frames. */
 #define INT_STACK_FRAME_CS_OFFT 8
 
-/* assembler macros for save and restore context */
-#ifdef __ASM__
-
-.macro CONTEXT_SAVE_ARCH_CORE  xc:req pc:req
-  movq \pc, OFFSET_PC(\xc)
-  movq %rsp, OFFSET_SP(\xc)
-  movq %rbx, OFFSET_RBX(\xc)
-  movq %rbp, OFFSET_RBP(\xc)
-  movq %r12, OFFSET_R12(\xc)
-  movq %r13, OFFSET_R13(\xc)
-  movq %r14, OFFSET_R14(\xc)
-  movq %r15, OFFSET_R15(\xc)
-.endm
-
-.macro CONTEXT_RESTORE_ARCH_CORE  xc:req pc:req
-  movq OFFSET_R15(\xc), %r15
-  movq OFFSET_R14(\xc), %r14
-  movq OFFSET_R13(\xc), %r13
-  movq OFFSET_R12(\xc), %r12
-  movq OFFSET_RBP(\xc), %rbp
-  movq OFFSET_RBX(\xc), %rbx
-  movq OFFSET_SP(\xc), %rsp
-  movq OFFSET_PC(\xc), \pc
-.endm
-
-#endif /* __ASM__ */
-
 /* amd64 specific note: ABI describes that stack
  * must be aligned to 16 byte , this can affect va_arg and so on ...
  */
