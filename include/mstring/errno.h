@@ -2,8 +2,8 @@
  * Standard POSIX error codes.
  */
 
-#ifndef __ERRNO_H__
-#define __ERRNO_H__ 
+#ifndef __MSTRING_ERRNO_H__
+#define __MSTRING_ERRNO_H__
 
 #define EPERM         1   /**< Operation not permitted */
 #define ENOENT        2   /**< No such file or directory */
@@ -48,6 +48,7 @@
 #define ENOTSUP       41  /**< Not supported */
 #define ECANCELED     42  /**< Operation canceled. */
 #define EOVERFLOW     43  /**< Value too large to be stored in data type. */
+#define ETIMEDOUT     44  /**< Connection timed out */
 
-#endif
+#endif /* __MSTRING_ERRNO_H__ */
 

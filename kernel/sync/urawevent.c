@@ -25,6 +25,8 @@
 #include <mstring/sync.h>
 #include <mstring/task.h>
 #include <mstring/usercopy.h>
+#include <mstring/time.h>
+#include <mstring/timer.h>
 #include <mm/slab.h>
 #include <arch/atomic.h>
 #include <sync/mutex.h>
@@ -41,34 +43,87 @@ static int __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
   wqueue_task_t wt;
 
   switch( cmd ) {
-    case __SYNC_CMD_EVENT_WAIT:
-      __LOCK_EVENT(e);
-      while( !e->__ecount) {
-        /* Event will be checked one more time later. */
-        __UNLOCK_EVENT(e);
+      case __SYNC_CMD_EVENT_WAIT:
+      case __SYNC_CMD_EVENT_TIMEDWAIT:
+      {
+        timeval_t tspec;
+        ktimer_t ktimer;
+        ulong_t tm;
 
-        waitqueue_prepare_task(&wt,current_task());
-        wt.private=e;
-        waitqueue_push_intr(&e->__wq,&wt);
+        if (cmd == __SYNC_CMD_EVENT_TIMEDWAIT) {
+          if (copy_from_user(&tspec, (void *)arg, sizeof(tspec))) {
+            return -EFAULT;
+          }
+          if (!timeval_is_valid(&tspec)) {
+            return -EINVAL;
+          }
 
-        if( task_was_interrupted(current_task()) ) {
-          waitqueue_delete(&wt,WQ_DELETE_SIMPLE);
-          return -EINTR;
+          __LOCK_EVENT(e);
+          tm = time_to_ticks(&tspec) + system_ticks;
+          ktimer.da.d.target = current_task();
+          init_timer(&ktimer, tm, DEF_ACTION_UNBLOCK);
+          add_timer(&ktimer);
         }
-        __LOCK_EVENT(e);
+        else {
+          __LOCK_EVENT(e);
+        }
+
+        while( !e->__ecount) {
+          /* Event will be checked one more time later. */
+
+          waitqueue_prepare_task(&wt,current_task());
+          wt.private=e;
+          waitqueue_insert_core(&e->__wq,&wt, WQ_INSERT_SLEEP_INR);
+          __UNLOCK_EVENT(e);
+
+          if( task_was_interrupted(current_task()) ) {
+            waitqueue_delete(&wt,WQ_DELETE_SIMPLE);
+            if (cmd == __SYNC_CMD_EVENT_TIMEDWAIT) {
+              delete_timer(&ktimer);
+            }
+
+            return -EINTR;
+          }
+          __LOCK_EVENT(e);
+          if ((cmd == __SYNC_CMD_EVENT_TIMEDWAIT) &&
+              (tm <= system_ticks)) {
+            e->__ecount--;
+            __UNLOCK_EVENT(e);
+            delete_timer(&ktimer);
+            return -ETIMEDOUT;
+          }
+        }
+
+        e->__ecount--;
+        __UNLOCK_EVENT(e);
+        if (cmd == __SYNC_CMD_EVENT_TIMEDWAIT) {
+          delete_timer(&ktimer);
+        }
+
+        break;
       }
-      e->__ecount=0;
-      __UNLOCK_EVENT(e);
-      break;
-    case  __SYNC_CMD_EVENT_SIGNAL:
-      __LOCK_EVENT(e);
-      e->__ecount++;
-      __UNLOCK_EVENT(e);
-      waitqueue_pop(&e->__wq,NULL);
-      break;
-    default:
-      return -EINVAL;
+      case  __SYNC_CMD_EVENT_SIGNAL:
+        __LOCK_EVENT(e);
+        e->__ecount++;
+        __UNLOCK_EVENT(e);
+        waitqueue_pop(&e->__wq,NULL);
+        break;
+      case __SYNC_CMD_EVENT_BROADCAST:
+        __LOCK_EVENT(e);
+        while (!waitqueue_is_empty(&e->__wq)) {
+          wqueue_task_t *waiter = waitqueue_first_task(&e->__wq);
+
+          e->__ecount++;
+          waitqueue_delete_core(waiter, WQ_DELETE_WAKEUP);
+        }
+
+        __UNLOCK_EVENT(e);
+        break;
+
+      default:
+        return -EINVAL;
   }
+
   return 0;
 }
 

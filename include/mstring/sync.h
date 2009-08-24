@@ -196,8 +196,10 @@ int sync_create_uevent(kern_sync_object_t **obj,void *uobj,
                        uint8_t *attrs,ulong_t flags);
 
 enum {
-  __SYNC_CMD_EVENT_WAIT=0x200,    /**< Wait for target event to arrive. **/
-  __SYNC_CMD_EVENT_SIGNAL=0x201,  /**< Signal target event. **/
+  __SYNC_CMD_EVENT_WAIT=0x200,       /**< Wait for target event to arrive. **/
+  __SYNC_CMD_EVENT_SIGNAL=0x201,     /**< Signal target event. **/
+  __SYNC_CMD_EVENT_BROADCAST=0x202,  /**< Signal broadcust event */
+  __SYNC_CMD_EVENT_TIMEDWAIT =0x203, /**< Wait for target event given period of tieme */
 };
 
 #define __UEVENT_OBJ(ksync_obj) (container_of((ksync_obj),      \

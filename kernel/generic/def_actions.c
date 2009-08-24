@@ -170,7 +170,7 @@ void execute_deffered_action(deffered_irq_action_t *a)
                              &ksiginfo->user_siginfo,a->kern_priv);
       }
       break;
-    case  DEF_ACTION_UNBLOCK:
+   case  DEF_ACTION_UNBLOCK:
       activate_task(a->d.target);
       break;
   }
