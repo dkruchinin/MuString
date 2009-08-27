@@ -1044,11 +1044,15 @@ int ttree_cursor_prev(ttree_cursor_t *cursor)
       if (likely(cursor->tnode->parent != NULL)) {
         for (n = cursor->tnode->parent; n->parent &&
                (tnode_get_side(n) == TNODE_LEFT); n = n->parent);
-        n = n->parent;
+        if (n->parent) {
+          n = n->parent;
+        }
       }
-      else
-        goto no_prev;
+      else {
+          goto no_prev;
+      }
     }
+
     if (likely(n != NULL)) {
       cursor->tnode = n;
       cursor->idx = cursor->tnode->max_idx;
@@ -1057,7 +1061,7 @@ int ttree_cursor_prev(ttree_cursor_t *cursor)
       return 0;
     }
 
-    no_prev:
+no_prev:
     cursor->state = TT_CSR_PENDING;
     if (!cursor->idx) {
       cursor->side = TNODE_LEFT;
@@ -1067,7 +1071,7 @@ int ttree_cursor_prev(ttree_cursor_t *cursor)
       cursor->side = TNODE_BOUND;
       cursor->idx--;
     }
-    
+
     return -1;
   }
 

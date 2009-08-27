@@ -223,7 +223,6 @@ static vmrange_t *split_vmrange(vmrange_t *vmrange,
 
   return new_vmr;
 }
-
 /* Fix VM range holes size after new VM range is inserted */
 static void fix_vmrange_holes_after_insertion(vmm_t *vmm, vmrange_t *vmrange,
                                               ttree_cursor_t *cursor)
@@ -771,7 +770,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr,
     goto err;
   }
 
-  create_vmrange:
+create_vmrange:
   /*
    * Generic memory object was disigned to collect and handle all anonymous and
    * physical mappings. Unlike other memory objects it actually doesn't
