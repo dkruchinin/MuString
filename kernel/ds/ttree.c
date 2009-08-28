@@ -1044,7 +1044,7 @@ int ttree_cursor_prev(ttree_cursor_t *cursor)
       if (likely(cursor->tnode->parent != NULL)) {
         for (n = cursor->tnode->parent; n->parent &&
                (tnode_get_side(n) == TNODE_LEFT); n = n->parent);
-        if (n->parent) {
+        if (n->parent && tnode_get_side(n) != TNODE_RIGHT) {
           n = n->parent;
         }
       }

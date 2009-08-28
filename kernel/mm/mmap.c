@@ -223,6 +223,7 @@ static vmrange_t *split_vmrange(vmrange_t *vmrange,
 
   return new_vmr;
 }
+
 /* Fix VM range holes size after new VM range is inserted */
 static void fix_vmrange_holes_after_insertion(vmm_t *vmm, vmrange_t *vmrange,
                                               ttree_cursor_t *cursor)
@@ -233,7 +234,6 @@ static void fix_vmrange_holes_after_insertion(vmm_t *vmm, vmrange_t *vmrange,
   ttree_cursor_copy(&csr, cursor);
   if (!ttree_cursor_prev(&csr)) {
     vmr = ttree_item_from_cursor(&csr);
-
     VMM_VERBOSE("%s(P) [%p, %p): old hole size: %ld, new hole size: %ld\n",
                 vmm_get_name_dbg(vmm), vmr->bounds.space_start,
                 vmr->bounds.space_end, vmr->hole_size,
