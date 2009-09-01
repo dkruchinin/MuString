@@ -33,6 +33,7 @@
 #include <mm/slab.h>
 #include <mstring/waitqueue.h>
 #include <sync/spinlock.h>
+#include <sync/rwsem.h>
 
 #define SYNC_OBJS_PER_PROCESS   16384
 #define SYNC_ID_NOT_INITIALIZED 0
@@ -49,10 +50,11 @@ typedef enum __sync_object_type {
   __SO_CONDVAR=2, /**< Userspace conditional variable **/
 
   __SO_RAWEVENT=3, /**< Raw userspace event **/
+  __SO_RWSEMAPHORE=4, /**< R/W semaphore **/
   /* XXX: Update __SO_MAX_TYPE in case a new sync type appears. */
 } sync_object_type_t;
 
-#define __SO_MAX_TYPE  __SO_RAWEVENT
+#define __SO_MAX_TYPE  __SO_RWSEMAPHORE
 
 struct __kern_sync_object;
 
@@ -62,8 +64,7 @@ typedef struct __sync_obj_ops {
   struct __kern_sync_object *(*clone)(struct __kern_sync_object *obj);
 } sync_obj_ops_t;
 
-typedef struct __uspace_mutex {
-  mutex_t mutex;
+typedef struct __uspace_mutex {  mutex_t mutex;
   ulong_t flags;
 } uspace_mutex_t;
 
@@ -204,5 +205,31 @@ enum {
 
 #define __UEVENT_OBJ(ksync_obj) (container_of((ksync_obj),      \
                                               sync_uevent_t,k_syncobj))
+
+/* Userspace RW semaphores - related stuff. */
+typedef struct __sync_urw_semaphore {
+  kern_sync_object_t k_syncobj;
+  rwsem_t krw_sem;
+} sync_urw_semaphore_t;
+
+int sync_create_urw_semaphore(kern_sync_object_t **obj,void *uobj,
+                              void *attrs,ulong_t flags);
+
+enum {
+  __SYNC_CMD_RWSEM_RLOCK=0x300,       /**< Grab semaphore as a reader. **/
+  __SYNC_CMD_RWSEM_RUNLOCK=0x301,     /**< Release semaphore as a reader. **/
+  __SYNC_CMD_RWSEM_WLOCK=0x302,       /**< Grab semaphore as a writer. **/
+  __SYNC_CMD_RWSEM_WUNLOCK=0x303,     /**< Release semaphore as a writer. **/
+  __SYNC_CMD_RWSEM_TRY_RLOCK=0x304,   /**< Try to grab a semaphore as a reader. */
+  __SYNC_CMD_RWSEM_TRY_WLOCK=0x305,   /**< Try to grab a semaphore as a writer. */
+};
+
+typedef struct {
+  sync_id_t __id;
+  int state;
+} pthread_rwlock_t;
+
+#define __URWSEMAPHORE_OBJ(ksync_obj) (container_of((ksync_obj),        \
+                                                    sync_urw_semaphore_t,k_syncobj))
 
 #endif

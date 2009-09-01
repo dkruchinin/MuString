@@ -115,11 +115,11 @@ bool __rwsem_try_down_read(rwsem_t *rwsem, wqueue_insop_t iop)
 {
   bool rt = false;
   
-  if (rwsem_is_locked4read(rwsem))
+  if (rwsem_is_locked4write(rwsem))
     return rt;
 
   spinlock_lock(&rwsem->sem_lock);
-  if (likely(!rwsem_is_locked4read(rwsem))) {
+  if (likely(!rwsem_is_locked4write(rwsem))) {
     __rwsem_down_read_core(rwsem, iop);
     rt = true;
   }

@@ -52,7 +52,7 @@ typedef struct __rwsem {
 #define rwsem_down_write(rs)                    \
   __rwsem_down_write(rs, WQ_INSERT_SLEEP_UNR)
 #define rwsem_down_read_intr(rs)                \
-  __rwsem_down_read(rs, WQ_INSERT_SLEEN_INR)
+  __rwsem_down_read(rs, WQ_INSERT_SLEEP_INR)
 #define rwsem_down_write_intr(rs)               \
   __rwsem_down_write(rs, WQ_INSERT_SLEEP_INR)
 #define rwsem_try_down_read(rs)                 \
@@ -60,7 +60,7 @@ typedef struct __rwsem {
 #define rwsem_try_down_write(rs)                \
   __rwsem_try_down_write(rs, WQ_INSERT_SLEEP_UNR)
 #define rwsem_try_down_read_intr(rs)            \
-  __rwsem_try_down_read(rs, WQ_INSERaT_SLEEP_INR)
+  __rwsem_try_down_read(rs, WQ_INSERT_SLEEP_INR)
 #define rwsem_try_down_write_intr(rs)           \
   __rwsem_try_down_write(rs, WQ_INSERT_SLEEP_INR)
 

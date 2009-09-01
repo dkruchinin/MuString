@@ -118,6 +118,9 @@ int sys_sync_create_object(sync_object_type_t obj_type,
     case __SO_RAWEVENT:
       r=sync_create_uevent(&kobj,uobj,attrs,flags);
       break;
+    case __SO_RWSEMAPHORE:
+      r=sync_create_urw_semaphore(&kobj,uobj,attrs,flags);
+      break;
     case __SO_CONDVAR:
     case __SO_SEMAPHORE:
     default:
