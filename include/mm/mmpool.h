@@ -45,7 +45,6 @@
 #endif /* RCH_NUM_MMPOOLS > MMPOOLS_MAX */
 
 #else /* ARCH_NUM_MMPOOLS */
-
 #error "ARCH_NUM_MMPOOLS is not defined!"
 #endif /* !defined ARCH_NUM_MMPOOLS */
 
@@ -102,8 +101,9 @@ typedef struct mmpool {
  *
  * @see mm_pool_t
  */
-#define for_each_mmpool(p)                      \
-  for (p = mmpools[0]; p; p = mmpools[p->type])
+#define for_each_mmpool(p)                              \
+  for (p = mmpools[0]; (p)->type < ARCH_NUM_MMPOOLS;    \
+       p = mmpools[(p)->type])
 #define for_each_active_mmpool(p)               \
   for_each_mmpool(p)                            \
     if (((p)->flags & MMPOOL_ACTIVE))

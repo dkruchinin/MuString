@@ -63,7 +63,7 @@ INITCODE void mmpool_register(mmpool_t *mmpool)
       panic("Memory pools \"%s\" and \"%s\" has the same "
             "bound address = %p!\n", mmpool->bound_addr);
     }
-    if (mmpool->bound_addr < p->bound_addr) {
+    if (mmpool->bound_addr > p->bound_addr) {
       ins = &p->pool_node;
       break;
     }
@@ -73,7 +73,7 @@ INITCODE void mmpool_register(mmpool_t *mmpool)
   ASSERT(type < MMPOOLS_MAX);
   mmpool->type = type;
   mmpools[type - 1] = mmpool;
-  list_add_before(ins, &mmpool->pool_node);
+  list_add_after(ins, &mmpool->pool_node);
 }
 
 INITCODE void mmpool_set_preferred(int mmpool_id, mmpool_t *pref_mmpool)
