@@ -608,9 +608,9 @@ out:
     
     if (msg->blocked_mode) {
       POST_MESSAGE_DATA_ACCESS_STEP(port,msg,r,true);
+    } else {
+      put_ipc_port_message(msg);
     }
-    
-    put_ipc_port_message(msg);
   }
   return r;
 }
@@ -703,7 +703,8 @@ long ipc_port_send_iov_core(ipc_gen_port_t *port,
 
   if( !msg_ops->insert_message ||
       (sync_send && !msg_ops->dequeue_message) ) {
-    return -EINVAL;
+    r=-EINVAL;
+    goto out;
   }
 
   event_set_task(&msg->event,sender);
@@ -734,7 +735,7 @@ long ipc_port_send_iov_core(ipc_gen_port_t *port,
   IPC_UNLOCK_PORT_W(port);
 
   if( r ) {
-    return r;
+    goto out;
   }
 
   /* Sender should wait for the reply, so put it into sleep here. */
@@ -807,7 +808,13 @@ long ipc_port_send_iov_core(ipc_gen_port_t *port,
   } else {
     r=msg_size;
   }
-  return r;
+
+out:
+  if( r < 0 || msg->blocked_mode ) {
+    put_ipc_port_message(msg);
+  }
+
+  return ERR(r);
 }
 
 long ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
