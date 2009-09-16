@@ -103,7 +103,6 @@ struct tlsf_idxs {
 enum {
   TLSF_PB_HEAD = 0,  /* Determines that a page is a block head */
   TLSF_PB_TAIL,      /* Determines that a page is a block tail */
-  TLSF_PB_BUSY,
 };
 
 #define TLSF_PB_MASK ((1 << TLSF_PB_HEAD) | (1 << TLSF_PB_TAIL))
@@ -249,34 +248,6 @@ void tlsf_validate_dbg(void *_tlsf)
   }
 
   spinlock_unlock_irqrestore(&tlsf->lock, irqstat);
-}
-
-static inline page_frame_t *pages_block_find(tlsf_t *tlsf, page_frame_t *page)
-{
-  page_frame_t *block = NULL, *p;
-  int fldi, sldi, irqstat;
-  tlsf_node_t *node;
-
-  spinlock_lock_irqsave(&tlsf->lock, irqstat);
-  for (fldi = 0; fldi < TLSF_FLD_SIZE; fldi++) {
-    for (sldi = 0; sldi < TLSF_SLD_SIZE; sldi++) {
-      node = &tlsf->map[fldi].nodes[sldi];
-      list_for_each_entry(&node->blocks, p, node) {
-        kprintf("%#x <=> %#x .. %#x\n", pframe_number(p),
-                pframe_number(p + pages_block_size_get(p) - 1),
-                pframe_number(page));
-        if ((pframe_number(p) >= pframe_number(page)) &&
-            (pframe_number(p + pages_block_size_get(p) - 1) <= pframe_number(page))) {
-          block = p;
-          goto out;
-        }
-      }
-    }
-  }
-
-out:
-  spinlock_unlock_irqrestore(&tlsf->lock, irqstat);
-  return block;
 }
 #endif /* CONFIG_DEBUG_MM */
 
@@ -605,10 +576,8 @@ static int __put_page_to_cache(tlsf_t *tlsf, page_frame_t *page)
   if (!pcpu || (pcpu->noc_pages >= TLSF_CPUCACHE_PAGES))
     return -1;
 
-#ifdef CONFIG_DEBUG_MM
-  bit_clear(&page->_private, TLSF_PB_BUSY);
-#endif /* CONFIG_DEBUG_MM */
   preempt_disable();
+  PF_MARK_FREE(page);
   list_add2head(&pcpu->pages, &page->node);
   pcpu->noc_pages++;  
   preempt_enable();
@@ -625,19 +594,12 @@ static page_frame_t *__get_page_from_cache(tlsf_t *tlsf)
   if (!pcpu || !pcpu->noc_pages)
     return NULL;
 
-#ifdef CONFIG_DEBUG_MM
-  bit_set(&page->_private, TLSF_PB_BUSY);
-#endif /* CONFIG_DEBUG_MM */
   interrupts_save_and_disable(irqstat);
   page = list_entry(list_node_first(&pcpu->pages), page_frame_t, node);
   list_del(&page->node);
   pcpu->noc_pages--;
+  PF_MARK_BUSY(page);
   interrupts_restore(irqstat);
-  if (page && pframe_number(page) == 0x860) {
-    kprintf("=====================> !?!\n");
-    interrupts_disable();
-    for (;;);
-  }
 
   return page;
 }
@@ -664,33 +626,26 @@ static void tlsf_free_pages(page_frame_t *pages, page_idx_t num_pages, void *dat
   }
   for (i = 0; i < num_pages; i++) {
 #ifdef CONFIG_DEBUG_MM
-    tlsf_uint_t flags = pages_block_flags(&pages[i]);
     mmpool_t *page_pool;
 
     if (PFRAME_MMPOOL_TYPE(&pages[i]) != tlsf->owner->type) {
       page_pool = get_mmpool_by_type(PFRAME_MMPOOL_TYPE(&pages[i]));
+
       if (!page_pool) {
         panic("Page #%#x has invalid pool type: %d!",
               pframe_number(&pages[i]), PFRAME_MMPOOL_TYPE(&pages[i]));
+      }
+      if (!PF_IS_BUSY(&pages[i])) {
+        panic("Attemption to free already free page frame №%#x to memory pool %s",
+              pframe_number(&pages[i]), tlsf->owner->name);
       }
 
       panic("Attemption to free page #%#x owened by pool %s to the pool %s!",
             pframe_number(&pages[i]), page_pool->name, tlsf->owner->name);
     }
-    if ((flags & TLSF_PB_MASK) || !(flags & (1 << TLSF_PB_BUSY))) {
-      page_frame_t *block = pages_block_find(tlsf, &pages[i]);
-
-      /*panic*/kprintf("Attemption to free *already* free page №%#x to the pool %s! (%#x) %p, #%x\n",
-                       pframe_number(&pages[i]), tlsf->owner->name, pages[i]._private, pframe_to_virt(&pages[i]),
-                       tlsf->owner->first_pidx);
-      interrupts_disable();
-      for (;;);
-      *(int *)0x666 = 1;
-    }
-
-    bit_clear(&pages[i]._private, TLSF_PB_BUSY);
 #endif /* CONFIG_DEBUG_MM */
-    
+
+    PF_MARK_FREE(&pages[i]);
     clear_page_frame(&pages[i]);
     list_init_node(&pages[i].chain_node);
   }
@@ -736,17 +691,17 @@ static page_frame_t *tlsf_alloc_pages(page_idx_t n, void *data)
   spinlock_unlock_irqrestore(&tlsf->lock, irqstat);
 
 init_block:
-  /* Now we free to build pages chain and set TLSF_PB_BUSY bit for each allocated page */
   list_init_head(list_node2head(&block_head->chain_node));
   for (i = 0; i < n; i++) {
 #ifdef CONFIG_DEBUG_MM
-    if (bit_test_and_set(&block_head[i]._private, TLSF_PB_BUSY)) {
-      panic("Just allocated page frame #%#x is *already* busy! WTF?", pframe_number(block_head + i));
-    }
-    if (pframe_number(&block_head[i]) == 0x860) {
-        kprintf("==============================+> 0x860 allocated!\n");
+    if (PF_IS_BUSY(&block_head[i])) {
+      panic("Attemption to allocate already allocated page frame "
+            "№%#x from pool %s\n",
+            pframe_number(&block_head[i]), tlsf->owner->name);
     }
 #endif /* CONFIG_DEBUG_MM */
+
+    PF_MARK_BUSY(&block_head[i]);
     if (likely(i > 0)) {
       list_add_before(&block_head->chain_node, &block_head[i].chain_node);
     }
@@ -787,7 +742,7 @@ static void build_tlsf_map(tlsf_t *tlsf)
     if (pages[i].flags & PF_RESERVED) /* skip reserved pages */
       continue;
 
-    bit_set(&pages[i]._private, TLSF_PB_BUSY);
+    PF_MARK_BUSY(&pages[i]);
     list_init_head(list_node2head(&pages[i].chain_node));
     tlsf_free_pages(pages + i, 1, tlsf);
   }
@@ -862,13 +817,8 @@ static int tlsf_smp_hook(cpu_id_t cpuid, void *_tlsf)
   list_set_head(&h, &pages->chain_node);
   list_for_each_safe(&h, iter, safe) {
     p = list_entry(iter, page_frame_t, chain_node);
-    if (pframe_number(p) == 0x860) {
-      kprintf("!!!!!!!\n");
-      interrupts_disable();
-      for (;;);
-    }
     list_del(&p->chain_node);
-    bit_clear(&p->_private, TLSF_PB_BUSY);
+    PF_MARK_FREE(p);
     list_add2tail(&cache->pages, &p->node);
   }
 

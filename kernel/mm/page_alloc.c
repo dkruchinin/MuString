@@ -147,6 +147,7 @@ out_ok:
     pframes_memnull(pages, num_pages);
   }
 
+
   return pages;
 }
 
@@ -244,17 +245,6 @@ uintptr_t sys_alloc_dma_pages(int num_pages)
   }
 
   pages = alloc_pages(num_pages, MMPOOL_DMA | AF_ZERO | AF_CONTIG);
-  {
-      page_idx_t pidx = pframe_number(pages);
-      int i;
-
-      for (i = 0; i < num_pages; i++) {
-          if (pidx + i == 0x860) {
-              kprintf("===> DMA 0x860 allocated!\n");
-              break;
-          }
-      }
-  }
   if (!pages) {
     return -ENOMEM;
   }
@@ -271,9 +261,6 @@ void sys_free_dma_pages(uintptr_t paddr, int num_pages)
   for (i = 0; i < num_pages; i++) {
     if (!page_idx_is_present(pidx + i))
       return;
-    if (pidx +i == 0x860) {
-        kprintf("=====> FREE DMA PAGES!!!\n");
-    }
 
     free_page(pframe_by_id(pidx + i));
   }

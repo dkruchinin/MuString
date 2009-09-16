@@ -310,6 +310,7 @@ static INITCODE void build_page_frames_array(void)
       memset(page, 0, sizeof(*page));
       if (reserved || is_kernel_page(page)) {
         page->flags = PF_RESERVED;
+        PF_MARK_BUSY(page);
       }
 
       mmpools_register_page(page);

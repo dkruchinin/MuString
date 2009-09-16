@@ -491,11 +491,6 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
           pagetable_unlock(&src->rpd);
           continue;
         }
-        if (pidx == 0x860) {
-            kprintf("PIDX = 0x860, pid=%d, addr=%p, is_phys=%d\n",
-                    src->owner->pid, addr, !!(vmr->flags & VMR_PHYS));
-        }
-
         if (((flags & VMM_CLONE_COW) && !(new_vmr->flags & VMR_PHYS))) {
           /*
            * If copy-on-write clone policy was specified all pages in
@@ -520,10 +515,6 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
             }
 
             page->flags |= PF_COW;
-            if (pframe_number(page) == 0x860) {
-                kprintf("===> COW %d, %#x\n",
-                        vmr->parent_vmm->owner->pid, page->_private);
-            }
             ret = memobj_method_call(vmr->memobj, insert_page, vmr, page,
                                      addr, mmap_flags);
             if (ret) {
@@ -1426,10 +1417,6 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
     }
 
     /* finally page may be inserted in target VM range */
-    if (pframe_number(page) == 0x860) {
-        kprintf("!!!!!!!!!!!!!!!!!!!!!!!! %d -> %d\n",
-                vmr->parent_vmm->owner->pid, target_vmr->parent_vmm->owner->pid);
-    }
     ret = memobj_method_call(target_vmr->memobj, insert_page, target_vmr,
                              page, target_addr, target_vmr->flags);
     if (ret) {

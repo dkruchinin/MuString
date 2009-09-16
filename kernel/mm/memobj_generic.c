@@ -240,10 +240,6 @@ static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr,
     pagetable_lock(&vmm->rpd);
     list_for_each_entry(&chain_head, p, chain_node) {
       ret = __mmap_one_anon_page(vmm, p, addr, vmr->flags);
-      if (pframe_number(p) == 0x860) {
-          kprintf("%d mapped 0x860!!!!!!!!!!!!!!!!!!!!\n",
-                  vmm->owner->pid);
-      }
       if (unlikely(ret)) {
         GMO_DBG("(pid %ld): Failed to mmap anonymous page %#x to address %p. "
                 "[RET = %d]\n", vmm->owner->pid, pframe_number(p), addr, ret);
@@ -265,11 +261,6 @@ static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr,
     pagetable_lock(&vmm->rpd);
     for (i = 0; i < npages; i++, addr += PAGE_SIZE) {
       ret = __mmap_one_phys_page(vmm, idx + i, addr, vmr->flags);
-      if (idx + i == 0x860) {
-          kprintf("%d mapped PHYS 0x860!!!!!!!!!!!!!!!!!!!!\n",
-                  vmm->owner->pid);
-      }
-
       if (ret) {
         GMO_DBG("(pid %ld): Failed to mmap physical page %#x to address %p. "
                 "[RET = %d]\n", i, addr, ret);
@@ -299,12 +290,7 @@ static int generic_insert_page(vmrange_t *vmr, page_frame_t *page,
   if (pg_memobj && (pg_memobj != vmr->memobj)) {
     return -EINVAL;
   }
-  if (pframe_number(page) == 0x860) {
-      kprintf("generic_insert_page %d ... %#x!!!\n",
-              vmm->owner->pid, page->_private);
-      interrupts_disable();
-      for (;;);
-  }
+
   ret = mmap_page(&vmm->rpd, addr, pframe_number(page),
                       mmap_flags & KMAP_FLAGS_MASK);
   if (ret) {
@@ -344,9 +330,7 @@ static int generic_depopulate_pages(vmrange_t *vmr, uintptr_t va_from,
     if (pidx == PAGE_IDX_INVAL) {
       goto eof_cycle;
     }
-    if (pidx == 0x860) {
-        kprintf("====> %d, %s\n", current_task()->pid, current_task()->short_name);
-    }
+
     munmap_page(&vmm->rpd, va_from);
     if (likely(page_idx_is_present(pidx))) {
       page = pframe_by_id(pidx);

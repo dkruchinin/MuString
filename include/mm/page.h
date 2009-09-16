@@ -66,6 +66,7 @@ typedef uint16_t page_flags_t;
 #define PF_SLAB       (0x10 << MMPOOLS_SHIFT)
 #define PF_PENDING    (0x20 << MMPOOLS_SHIFT)
 #define PF_LOCK       (0x40 << MMPOOLS_SHIFT)
+#define PF_BUSY       (0x80 << MMPOOLS_SHIFT)
 
 #define PF_CLEAR_MASK (PF_COW | PF_DIRTY | PF_SHARED | PF_SLAB | PF_PENDING)
 
@@ -207,4 +208,15 @@ static inline void copy_page_frame(page_frame_t *dst, page_frame_t *src)
 #else
 #define copy_page_frame(dst, src) arch_copy_page_frame(dst, src)
 #endif /* ARCH_COPY_PAGE */
+
+#ifdef CONFIG_DEBUG_MM
+#define PF_MARK_BUSY(page) ((page)->flags |= PF_BUSY)
+#define PF_MARK_FREE(page) ((page)->flags &= ~PF_BUSY)
+#define PF_IS_BUSY(page)   (!!((page)->flags & PF_BUSY))
+#else /* CONFIG_DEBUG_MM */
+#define PF_MARK_BUSY(page)
+#define PF_MARK_FREE(page)
+#define PF_IS_BUSY(page) false
+#endif /* !CONFIG_DEBUG_MM */
+
 #endif /* __PAGE_H__ */
