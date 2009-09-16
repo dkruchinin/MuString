@@ -438,6 +438,7 @@ static page_frame_t *alloc_slab_pages(memcache_t *memcache,
 
 static inline void free_slab_pages(memcache_t *memcache, page_frame_t *pages)
 {
+  kprintf("FREE PAGES %d pages\n", memcache->pages_per_slab);
   free_pages(pages, memcache->pages_per_slab);
 }
 
@@ -554,6 +555,7 @@ static void destroy_slab(slab_t *slab)
   SLAB_VERBOSE(memcache, ">> destroy slab %p(state = %s)\n",
                slab,  __slab_state_to_string(slab->state));
 
+  kprintf("destroy slab\n");
   if (likely(slab->memcache != &slabs_memcache)) {
     slab_t *slabs_slab;
 
@@ -564,6 +566,7 @@ static void destroy_slab(slab_t *slab)
     free_slab_object(slabs_slab, slab);
   }
 
+  kprintf("?????????\n");
   free_slab_pages(memcache, slab_pages);
 }
 
@@ -1137,6 +1140,7 @@ take_new_slab:
       memcache->stat.nempty_slabs++;
     }
     else {
+      kprintf("DESTROY SLAB\n");
       destroy_slab(slab);
     }
 

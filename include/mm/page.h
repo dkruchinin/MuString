@@ -81,6 +81,8 @@ typedef uint16_t page_flags_t;
 struct __rmap_group_head;
 struct __rmap_group_entry;
 
+#define PFRAME_PRIV_SIZE sizeof(unsigned long)
+
 /**
  * @struct page_frame_t
  * @brief Describes one physical page.
@@ -108,7 +110,6 @@ typedef struct __page_frame {
     int slab_num_lazy_objs;
   };
 
-  page_idx_t idx;
   ulong_t _private;
   page_flags_t flags;
 } page_frame_t;

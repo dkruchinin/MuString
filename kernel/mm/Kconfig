@@ -19,14 +19,6 @@ config TLSF
 
 endchoice
 
-config DEBUG_MM
-       bool "Enable memory manager main debugging"
-       default n
-       help
-         Enable general memory manager debugging. If the option is enabled
-         various runtime checks and special debug functions will execute.
-         Also some debug API will be compiled.
-
 config DEBUG_PTABLE
        bool "Debug low-level page table interface"
        default n

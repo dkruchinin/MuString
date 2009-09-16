@@ -117,6 +117,7 @@ static const int FLD_LPOW2 = TLSF_FLD_SIZE + TLSF_FIRST_OFFSET - 2;
 
 static inline void get_tlsf_ids(tlsf_uint_t size, struct tlsf_idxs *ids);
 static inline tlsf_uint_t size_from_tlsf_ids(struct tlsf_idxs *ids);
+static inline tlsf_uint_t pages_block_size_get(page_frame_t *block);
 
 /* Get number of SLDs in given FLD index */
 #define __fld_offset(fldi)                                  \
@@ -152,6 +153,133 @@ static inline tlsf_uint_t size_from_tlsf_ids(struct tlsf_idxs *ids);
 #define __sld_is_avail(tlsf, fldi, sldi)                            \
   (bit_test(&(tlsf)->slds_bitmap[(fldi) * TLSF_SLD_SIZE], sldi))
 
+#ifdef CONFIG_DEBUG_MM
+static void __validate_empty_sldi_dbg(tlsf_t *tlsf, int fldi, int sldi)
+{
+  /* Check if given SLD *really* hasn't any pages */
+  tlsf_node_t *node = tlsf->map[fldi].nodes + sldi;
+  list_node_t *n;
+
+  list_for_each(&node->blocks, n) {
+    panic("TLSF: (FLDi: %d, SLDi: %d) is marked as free, but it has at least "
+          "one page frame[idx = %d] available!", fldi, sldi,
+          pframe_number(list_entry(n, page_frame_t, node)));
+  }
+  if (node->num_blocks) {
+    panic("TLSF: (FLDi: %d, SLDi: %d) is marked as free, but num_blocks field of "
+          "corresponding TLSF node is not 0! (num_blocks = %d)", fldi, sldi, node->num_blocks);
+  }
+  if (node->max_avail_size) {
+    panic("TLSF: (FLDi: %d, SLDi: %d) is marked as free, but max_avail_size field "
+          "of corresponding TLSF node is %d instead of 0!", fldi, sldi, node->max_avail_size);
+  }
+}
+
+void tlsf_validate_dbg(void *_tlsf)
+{
+  tlsf_t *tlsf = _tlsf;
+  int fldi, sldi, irqstat;
+  page_idx_t total_pgs = 0;
+  mmpool_t *parent_pool = tlsf->owner;
+
+  spinlock_lock_irqsave(&tlsf->lock, irqstat);
+  for (fldi = 0; fldi < TLSF_FLD_SIZE; fldi++) {
+    if (!__fld_is_avail(tlsf, fldi)) {
+      /* Ok, given FLD is marked as free. Check if it's true */
+      for (sldi = 0; sldi < TLSF_SLD_SIZE; sldi++) {
+        if (!__sld_is_avail(tlsf, fldi, sldi))
+          __validate_empty_sldi_dbg(tlsf, fldi, sldi);
+      }
+
+      /* It seems TLSF is not a lier (: */
+    }
+    for (sldi = 0; sldi < TLSF_SLD_SIZE; sldi++) {
+      page_frame_t *pf;
+      tlsf_node_t *node;
+      list_node_t *n;
+      int blocks = 0;
+
+      if (!__sld_is_avail(tlsf, fldi, sldi)) {
+        __validate_empty_sldi_dbg(tlsf, fldi, sldi);
+        continue;
+      }
+
+      /*
+       * Check if max_avail_size field and actual size of max block
+       * in a directory are relevant.
+       */
+      node = tlsf->map[fldi].nodes + sldi;
+      pf = list_entry(list_node_last(&node->blocks), page_frame_t, node);
+      if (pages_block_size_get(pf) != node->max_avail_size) {
+        panic("TLSF (FLDi: %d, SLDi: %d) TLSF node has invalid value in a max_avail_size field. "
+              "max_avail_size = %d, actual block size = %d", fldi, sldi,
+              node->max_avail_size, pages_block_size_get(pf));
+      }
+
+      /* Then check if actual number of blocks corresponds to num_blocks field */
+      list_for_each(&node->blocks, n) {
+        total_pgs += pages_block_size_get(list_entry(n, page_frame_t, node));
+        blocks++;
+      }
+      if (blocks != node->num_blocks) {
+        panic("TLSF (FLDi: %d, SLDi: %d) num_blocks field of TLSF node contains invalid value: %d "
+              "but %d is expected!", fldi, sldi, node->num_blocks, blocks);
+      }
+    }
+  }
+
+#ifdef CONFIG_SMP
+  {
+    cpu_id_t c;
+
+    for_each_cpu(c) {
+      if (!tlsf->percpu[c])
+        continue;
+
+      ASSERT(tlsf->percpu[c]->noc_pages >= 0);
+      total_pgs += tlsf->percpu[c]->noc_pages;
+    }
+  }
+#endif /* CONFIG_SMP */
+
+  if (total_pgs != atomic_get(&parent_pool->num_free_pages)) {
+    panic("TLSF belonging to pool %s has inadequate number of free pages: "
+          "%d, but pool itself tells us that there are %d pages available!",
+          parent_pool->name, total_pgs, atomic_get(&parent_pool->num_free_pages));
+  }
+
+  spinlock_unlock_irqrestore(&tlsf->lock, irqstat);
+}
+
+static inline page_frame_t *pages_block_find(tlsf_t *tlsf, page_frame_t *page)
+{
+  page_frame_t *block = NULL, *p;
+  int fldi, sldi, irqstat;
+  tlsf_node_t *node;
+
+  spinlock_lock_irqsave(&tlsf->lock, irqstat);
+  for (fldi = 0; fldi < TLSF_FLD_SIZE; fldi++) {
+    for (sldi = 0; sldi < TLSF_SLD_SIZE; sldi++) {
+      node = &tlsf->map[fldi].nodes[sldi];
+      list_for_each_entry(&node->blocks, p, node) {
+        kprintf("%#x <=> %#x .. %#x\n", pframe_number(p),
+                pframe_number(p + pages_block_size_get(p) - 1),
+                pframe_number(page));
+        if ((pframe_number(p) >= pframe_number(page)) &&
+            (pframe_number(p + pages_block_size_get(p) - 1) <= pframe_number(page))) {
+          block = p;
+          goto out;
+        }
+      }
+    }
+  }
+
+out:
+  spinlock_unlock_irqrestore(&tlsf->lock, irqstat);
+  return block;
+}
+#endif /* CONFIG_DEBUG_MM */
+
 /* get block size. */
 static inline tlsf_uint_t pages_block_size_get(page_frame_t *block)
 {
@@ -167,7 +295,9 @@ static inline void pages_block_size_set(page_frame_t *block, tlsf_uint_t size)
 
 static inline tlsf_uint_t pages_block_flags(page_frame_t *block)
 {
-  union tlsf_priv priv = { block->_private };
+  union tlsf_priv priv;
+
+  priv.pad = block->_private;
   return priv.flags;
 }
 
@@ -475,9 +605,12 @@ static int __put_page_to_cache(tlsf_t *tlsf, page_frame_t *page)
   if (!pcpu || (pcpu->noc_pages >= TLSF_CPUCACHE_PAGES))
     return -1;
 
+#ifdef CONFIG_DEBUG_MM
+  bit_clear(&page->_private, TLSF_PB_BUSY);
+#endif /* CONFIG_DEBUG_MM */
   preempt_disable();
   list_add2head(&pcpu->pages, &page->node);
-  pcpu->noc_pages++;
+  pcpu->noc_pages++;  
   preempt_enable();
 
   return 0;
@@ -492,11 +625,19 @@ static page_frame_t *__get_page_from_cache(tlsf_t *tlsf)
   if (!pcpu || !pcpu->noc_pages)
     return NULL;
 
+#ifdef CONFIG_DEBUG_MM
+  bit_set(&page->_private, TLSF_PB_BUSY);
+#endif /* CONFIG_DEBUG_MM */
   interrupts_save_and_disable(irqstat);
   page = list_entry(list_node_first(&pcpu->pages), page_frame_t, node);
   list_del(&page->node);
   pcpu->noc_pages--;
   interrupts_restore(irqstat);
+  if (page && pframe_number(page) == 0x860) {
+    kprintf("=====================> !?!\n");
+    interrupts_disable();
+    for (;;);
+  }
 
   return page;
 }
@@ -524,24 +665,32 @@ static void tlsf_free_pages(page_frame_t *pages, page_idx_t num_pages, void *dat
   for (i = 0; i < num_pages; i++) {
 #ifdef CONFIG_DEBUG_MM
     tlsf_uint_t flags = pages_block_flags(&pages[i]);
-    if (PF_MMPOOL_TYPE(pages[i].flags) != tlsf->owner->type) {
-      mmpool_t *page_pool = get_mmpool_by_type(PF_MMPOOL_TYPE(pages[i].flags));
+    mmpool_t *page_pool;
 
+    if (PFRAME_MMPOOL_TYPE(&pages[i]) != tlsf->owner->type) {
+      page_pool = get_mmpool_by_type(PFRAME_MMPOOL_TYPE(&pages[i]));
       if (!page_pool) {
         panic("Page #%#x has invalid pool type: %d!",
-              pframe_number(&pages[i]), PF_MMPOOL_TYPE(pages[i].flags));
+              pframe_number(&pages[i]), PFRAME_MMPOOL_TYPE(&pages[i]));
       }
 
       panic("Attemption to free page #%#x owened by pool %s to the pool %s!",
             pframe_number(&pages[i]), page_pool->name, tlsf->owner->name);
     }
     if ((flags & TLSF_PB_MASK) || !(flags & (1 << TLSF_PB_BUSY))) {
-      panic("Attemption to free *already* free page №%#x to the pool %s! (%#x)",
-            pframe_number(&pages[i]), tlsf->owner->name, pages[i]._private);
+      page_frame_t *block = pages_block_find(tlsf, &pages[i]);
+
+      /*panic*/kprintf("Attemption to free *already* free page №%#x to the pool %s! (%#x) %p, #%x\n",
+                       pframe_number(&pages[i]), tlsf->owner->name, pages[i]._private, pframe_to_virt(&pages[i]),
+                       tlsf->owner->first_pidx);
+      interrupts_disable();
+      for (;;);
+      *(int *)0x666 = 1;
     }
+
+    bit_clear(&pages[i]._private, TLSF_PB_BUSY);
 #endif /* CONFIG_DEBUG_MM */
     
-    bit_clear(&pages[i]._private, TLSF_PB_BUSY);
     clear_page_frame(&pages[i]);
     list_init_node(&pages[i].chain_node);
   }
@@ -590,11 +739,12 @@ init_block:
   /* Now we free to build pages chain and set TLSF_PB_BUSY bit for each allocated page */
   list_init_head(list_node2head(&block_head->chain_node));
   for (i = 0; i < n; i++) {
-#ifndef CONFIG_DEBUG_MM
-    bit_set(&block_head[i]._private, TLSF_PB_BUSY);
-#else
+#ifdef CONFIG_DEBUG_MM
     if (bit_test_and_set(&block_head[i]._private, TLSF_PB_BUSY)) {
       panic("Just allocated page frame #%#x is *already* busy! WTF?", pframe_number(block_head + i));
+    }
+    if (pframe_number(&block_head[i]) == 0x860) {
+        kprintf("==============================+> 0x860 allocated!\n");
     }
 #endif /* CONFIG_DEBUG_MM */
     if (likely(i > 0)) {
@@ -684,6 +834,7 @@ static void tlsf_memdump(void *_tlsf)
 #ifdef CONFIG_SMP
 #include <mm/slab.h>
 #include <mstring/smp.h>
+#include <mstring/interrupt.h>
 
 static int tlsf_smp_hook(cpu_id_t cpuid, void *_tlsf)
 {
@@ -711,6 +862,11 @@ static int tlsf_smp_hook(cpu_id_t cpuid, void *_tlsf)
   list_set_head(&h, &pages->chain_node);
   list_for_each_safe(&h, iter, safe) {
     p = list_entry(iter, page_frame_t, chain_node);
+    if (pframe_number(p) == 0x860) {
+      kprintf("!!!!!!!\n");
+      interrupts_disable();
+      for (;;);
+    }
     list_del(&p->chain_node);
     bit_clear(&p->_private, TLSF_PB_BUSY);
     list_add2tail(&cache->pages, &p->node);
@@ -778,101 +934,3 @@ static page_allocator_t tlsf_allocator = {
 
 page_allocator_t *default_allocator = &tlsf_allocator;
 
-#ifdef CONFIG_DEBUG_MM
-static void __validate_empty_sldi_dbg(tlsf_t *tlsf, int fldi, int sldi)
-{
-  /* Check if given SLD *really* hasn't any pages */
-  tlsf_node_t *node = tlsf->map[fldi].nodes + sldi;
-  list_node_t *n;
-
-  list_for_each(&node->blocks, n) {
-    panic("TLSF: (FLDi: %d, SLDi: %d) is marked as free, but it has at least "
-          "one page frame[idx = %d] available!", fldi, sldi,
-          pframe_number(list_entry(n, page_frame_t, node)));
-  }
-  if (node->num_blocks) {
-    panic("TLSF: (FLDi: %d, SLDi: %d) is marked as free, but num_blocks field of "
-          "corresponding TLSF node is not 0! (num_blocks = %d)", fldi, sldi, node->num_blocks);
-  }
-  if (node->max_avail_size) {
-    panic("TLSF: (FLDi: %d, SLDi: %d) is marked as free, but max_avail_size field "
-          "of corresponding TLSF node is %d instead of 0!", fldi, sldi, node->max_avail_size);
-  }
-}
-
-void tlsf_validate_dbg(void *_tlsf)
-{
-  tlsf_t *tlsf = _tlsf;
-  int fldi, sldi, irqstat;
-  page_idx_t total_pgs = 0;
-  mmpool_t *parent_pool = tlsf->owner;
-
-  spinlock_lock_irqsave(&tlsf->lock, irqstat);
-  for (fldi = 0; fldi < TLSF_FLD_SIZE; fldi++) {
-    if (!__fld_is_avail(tlsf, fldi)) {
-      /* Ok, given FLD is marked as free. Check if it's true */
-      for (sldi = 0; sldi < TLSF_SLD_SIZE; sldi++) {
-        if (!__sld_is_avail(tlsf, fldi, sldi))
-          __validate_empty_sldi_dbg(tlsf, fldi, sldi);
-      }
-
-      /* It seems TLSF is not a lier (: */
-    }
-    for (sldi = 0; sldi < TLSF_SLD_SIZE; sldi++) {
-      page_frame_t *pf;
-      tlsf_node_t *node;
-      list_node_t *n;
-      int blocks = 0;
-
-      if (!__sld_is_avail(tlsf, fldi, sldi)) {
-        __validate_empty_sldi_dbg(tlsf, fldi, sldi);
-        continue;
-      }
-
-      /*
-       * Check if max_avail_size field and actual size of max block
-       * in a directory are relevant.
-       */
-      node = tlsf->map[fldi].nodes + sldi;
-      pf = list_entry(list_node_last(&node->blocks), page_frame_t, node);
-      if (pages_block_size_get(pf) != node->max_avail_size) {
-        panic("TLSF (FLDi: %d, SLDi: %d) TLSF node has invalid value in a max_avail_size field. "
-              "max_avail_size = %d, actual block size = %d", fldi, sldi,
-              node->max_avail_size, pages_block_size_get(pf));
-      }
-
-      /* Then check if actual number of blocks corresponds to num_blocks field */
-      list_for_each(&node->blocks, n) {
-        total_pgs += pages_block_size_get(list_entry(n, page_frame_t, node));
-        blocks++;
-      }
-      if (blocks != node->num_blocks) {
-        panic("TLSF (FLDi: %d, SLDi: %d) num_blocks field of TLSF node contains invalid value: %d "
-              "but %d is expected!", fldi, sldi, node->num_blocks, blocks);
-      }
-    }
-  }
-
-#ifdef CONFIG_SMP
-  {
-    cpu_id_t c;
-
-    for_each_cpu(c) {
-      if (!tlsf->percpu[c])
-        continue;
-
-      ASSERT(tlsf->percpu[c]->noc_pages >= 0);
-      total_pgs += tlsf->percpu[c]->noc_pages;
-    }
-  }
-#endif /* CONFIG_SMP */
-
-  if (total_pgs != atomic_get(&parent_pool->num_free_pages)) {
-    panic("TLSF belonging to pool %s has inadequate number of free pages: "
-          "%d, but pool itself tells us that there are %d pages available!",
-          parent_pool->name, total_pgs, atomic_get(&parent_pool->num_free_pages));
-  }
-
-  spinlock_unlock_irqrestore(&tlsf->lock, irqstat);
-}
-#endif /* CONFIG_DEBUG_MM */

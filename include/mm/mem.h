@@ -114,9 +114,15 @@ static inline bool page_is_mapped(rpd_t *rpd, uintptr_t va)
   return (vaddr_to_pidx(rpd, va) != PAGE_IDX_INVAL);
 }
 
+#include <arch/current.h>
 static inline void unpin_page_frame(page_frame_t *pf)
 {
   if (atomic_dec_and_test(&pf->refcount)) {
+      if (pframe_number(pf) == 0x860) {
+          kprintf("Yes, it is!\n");
+          interrupts_disable();
+          for (;;);
+      }
     free_page(pf);
   }
 }

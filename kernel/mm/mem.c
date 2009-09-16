@@ -51,7 +51,7 @@ static inline void __check_one_frame(mmpool_t *p, page_frame_t *pf)
 
 static void __validate_mmpools_dbg(void)
 {
-  mmpool_t *p;
+  mmpool_t *p, *page_pool;
   page_idx_t total_pages = 0, pool_total, pool_reserved, i;
   page_frame_t *pf;
 
@@ -61,16 +61,17 @@ static void __validate_mmpools_dbg(void)
     /* check all pages belonging to given memory pool */
     for (i = 0; i < p->num_pages; i++, pool_total++) {
       pf = pframe_by_id(i + p->first_pidx);
-      if (pf->flags & PF_RESERVED)
+      if (pf->flags & PF_RESERVED) {
         pool_reserved++;
-      if (PF_MMPOOL_TYPE(pf->flags) != p->type) {
-        mmpool_t *page_pool = get_mmpool_by_type(PF_MMPOOL_TYPE(pf->flags));
+      }
+      if (PFRAME_MMPOOL_TYPE(pf) != p->type) {
+        page_pool = get_mmpool_by_type(PFRAME_MMPOOL_TYPE(pf));
 
         kprintf("[FAILED]\n");
         if (!page_pool) {
             panic("Page frame #%#x belongs to memory pool \"%s\", "
                   "but in a \"pool_type\" field it has unexistent pool "
-                  "type: %d!", i + p->first_pidx, p->name, PF_MMPOOL_TYPE(pf->flags));
+                  "type: %d!", i + p->first_pidx, p->name, PFRAME_MMPOOL_TYPE(pf));
         }
 
         panic("Memory pool \"%s\" says that page frame #%#x "
@@ -97,16 +98,17 @@ static void __validate_mmpools_dbg(void)
             p->name, atomic_get(&p->num_free_pages), pool_total - pool_reserved);
     }
     if (p->first_pidx != PAGE_IDX_INVAL) {
-      if (p->first_pidx != 0)
+      if (p->first_pidx != 0) {
         __check_one_frame(p, pframe_by_id(p->first_pidx - 1));
-      if ((p->first_pidx + p->num_pages) < num_phys_pages)
+      }
+      if ((p->first_pidx + p->num_pages) < num_phys_pages) {
           __check_one_frame(p, pframe_by_id(p->first_pidx + p->num_pages));
+      }
     }
 
     total_pages += pool_total;
   }
   if (total_pages != num_phys_pages) {
-    kprintf("aga! 5\n");
     kprintf("[FAILED]\n");
     panic("Unexpected total number of pages owned "
           "by different memory pools: %d, but %d was expected!",

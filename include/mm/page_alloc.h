@@ -31,6 +31,7 @@
 #define AF_ATOMIC     (4 << MMPOOLS_SHIFT)
 
 #define PAFLAGS_MMPOOL_TYPE(flags) ((flags) & MMPOOLS_MASK)
+#define PFRAME_MMPOOL_TYPE(page) PAFLAGS_MMPOOL_TYPE((page)->flags)
 
 /**
  * @typedef uint8_t pfalloc_flags_t
