@@ -30,7 +30,7 @@
 #include <mstring/process.h>
 #include <mstring/kconsole.h>
 
-long sys_timer_create(clockid_t clockid,struct sigevent *evp,
+long sys_timer_create1(clockid_t clockid,struct sigevent *evp,
                       posixid_t *timerid)
 {
   task_t *caller=current_task(), *target=NULL;
@@ -137,6 +137,26 @@ out:
   if( ptimer ) {
     memfree(ptimer);
   }
+  return r;
+}
+
+static int __timers=0;
+
+long sys_timer_create(clockid_t clockid,struct sigevent *evp,
+                      posixid_t *timerid)
+{
+  long r;
+
+  r=sys_timer_create1(clockid,evp,timerid);
+
+  if( current_task()->pid == 15 ) {
+    __timers++;
+    kprintf_fault(">[%d:%d] %d (%d)\n",
+                  current_task()->pid,
+                  current_task()->tid,
+                  r,__timers);
+  }
+
   return r;
 }
 
