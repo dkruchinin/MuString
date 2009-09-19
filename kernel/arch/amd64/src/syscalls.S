@@ -123,5 +123,20 @@ good_syscall_number:
 	 */
 	movq %r10,%rcx
 
+	pushq %rax
+	pushq %rax
+	SAVE_GPR
+	movq %rax,%rdi
+	call log_syscall_enter
+	RESTORE_GPR
+	popq %rax
+
 	call *syscall_table(,%rax,8)
+
+	movq %rax,%rbx
+	popq %rdi
+	pushq %rbx
+	call log_syscall_return
+	popq %rax
+
 	jmp return_from_syscall

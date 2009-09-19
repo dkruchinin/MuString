@@ -216,8 +216,12 @@ void enable_all_irqs(void)
   RELEASE_IRQ_LOCK();
 }
 
+int irq_depth=0;
+
 void do_irq(irq_t irq)
 {
+  irq_depth++;
+
   if( irq < NUM_IRQS ) {
     int handlers = 0;
     irq_action_t *action;
@@ -243,13 +247,15 @@ void do_irq(irq_t irq)
 #ifdef CONFIG_DEBUG_IRQ_ACTIVITY
       serial_write_char('>');
 #endif
-      return;
+      goto out;
     }
   }
   interrupts_enable();
-  //kprintf( "** Spurious interrupt detected: %d\n", irq );
+  kprintf( "** Spurious interrupt detected: %d\n", irq );
 #ifdef CONFIG_DEBUG_IRQ_ACTIVITY
   serial_write_char('Z');
 #endif
+out:
+  irq_depth--;
 }
 

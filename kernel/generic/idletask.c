@@ -24,6 +24,8 @@
 #include <mstring/task.h>
 #include <mstring/swks.h>
 #include <mstring/smp.h>
+#include <mstring/serial.h>
+#include <arch/fault.h>
 
 #ifdef CONFIG_SMP
 /* FIXME: I don't know a better place for this global vaiable,
@@ -40,11 +42,100 @@ task_t *idle_tasks[CONFIG_NRCPUS];
 #define STEP 600
 #define TICKS_TO_WAIT 300
 
+extern int irq_depth;
+extern task_t *cpu0_current;
+
+static char dbuf[512];
+extern int irq_depth;
+int timer0_depth;
+
+long cur_syscall=0,log_step=0,left_syscall=0;
+int tpid,ttid;
+
+static void __cosher_serial_write(char *s)
+{
+  int i;
+
+  for( i=0; s[i]; i++ ) {
+    serial_write_char(s[i]);
+  }
+}
+
+static void __show_cpu0_stats(void)
+{
+  int pid,tid;
+  long urip;
+
+  if( cpu0_current ) {
+    pid=cpu0_current->pid;
+    tid=cpu0_current->tid;
+    urip=get_userspace_ip(cpu0_current);
+  } else {
+    pid=tid=-1;
+    urip=0;
+  }
+
+  sprintf(dbuf,"[%d:%d] %p, d1:%d,d2:%d\n",
+          pid,tid,urip,irq_depth,timer0_depth);
+  __cosher_serial_write(dbuf);
+}
+
+void log_syscall_enter(long num)
+{
+  if( current_task()->pid == 15 ) {
+    tpid=15;
+    ttid=current_task()->tid;
+    cur_syscall=num;
+    log_step++;
+  }
+}
+
+void log_syscall_return(long num)
+{
+  if( current_task()->pid == 15 ) {
+    left_syscall=num;
+    log_step++;
+  }
+}
+
+static void second_idle(void)
+{
+  long prev_step=0;
+
+  kprintf_fault("SECOND IDLE TASK is STARTING !\n");
+
+  for(;;);
+
+  while(1) {
+
+    if( prev_step != log_step ) {
+      prev_step=log_step;
+      sprintf(dbuf,">[%d:%d] %d:%d\n",tpid,ttid,cur_syscall,left_syscall);
+      __cosher_serial_write(dbuf);
+    }
+    //for( i=0; i < 500000000; i++ ) {
+    //}
+
+    //if( step & 0x1 ) {
+    //  serial_write_char('.');
+    //}
+    //serial_write_char('0'+irq_depth);
+    //serial_write_char('\n');
+
+    //__show_cpu0_stats();
+    //step++;
+  }
+}
+
 ulong_t syscall_counter = 0;
 
 void idle_loop(void)
 {
   long idle_cycles=0;
+
+  if( cpu_id() ) {
+    second_idle();
+  }
 
 #ifdef CONFIG_TEST
   if( !cpu_id() ) {

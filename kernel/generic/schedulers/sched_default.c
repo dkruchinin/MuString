@@ -315,6 +315,8 @@ static pid_t __current_cpu_task_pid[CONFIG_NRCPUS];
 static tid_t __current_cpu_task_tid[CONFIG_NRCPUS];
 #endif
 
+task_t *cpu0_current;
+
 static void def_schedule(void)
 {
   mstring_sched_cpudata_t *sched_data = CPU_SCHED_DATA();
@@ -362,6 +364,10 @@ get_next_task:
     need_switch = true;
   } else {
     need_switch = false;
+  }
+
+  if( !cpu_id() ) {
+    cpu0_current=next;
   }
 
   if( next->state == TASK_STATE_RUNNABLE ) {

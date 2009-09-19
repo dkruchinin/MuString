@@ -151,7 +151,7 @@ long sys_timer_create(clockid_t clockid,struct sigevent *evp,
 
   if( current_task()->pid == 15 ) {
     __timers++;
-    kprintf_fault(">[%d:%d] %d (%d)\n",
+    kprintf_fault("sys_timer_create(): [%d:%d] %d (%d)\n",
                   current_task()->pid,
                   current_task()->tid,
                   r,__timers);

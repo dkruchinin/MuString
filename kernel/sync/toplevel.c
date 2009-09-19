@@ -26,6 +26,7 @@
 #include <mstring/task.h>
 #include <mstring/usercopy.h>
 #include <mm/slab.h>
+#include <arch/fault.h>
 
 static int __sync_allocate_id(struct __task_struct *task,
                                    bool shared_id,sync_id_t *p_id)
@@ -157,6 +158,9 @@ put_sync_data:
 extern int __big_verbose;
 
 static int __failed_allocs=0;
+static int __allocs=0;
+
+#define TARGET_FAIL 219
 
 int sys_sync_create_object(sync_object_type_t obj_type,
                                 void *uobj,uint8_t *attrs,
@@ -166,10 +170,22 @@ int sys_sync_create_object(sync_object_type_t obj_type,
 
   r = sys_sync_create_object1(obj_type,uobj,attrs,flags);
 
-  if( r < 0 && current_task()->pid == 15 ) {
-    __failed_allocs++;
-    kprintf_fault("[%d:%d] F: %d, (%d)\n",current_task()->pid,
-                  current_task()->tid,obj_type,__failed_allocs);
+  if( current_task()->pid == 15 ) {
+    if( r < 0 ) {
+      __failed_allocs++;
+    }
+    __allocs++;
+    kprintf_fault("[%d:%d] sys_sync_create_object: TYPE: %d, (F:%d), r=%d, TF: %d, MAX=%d, A: %d\n",
+                  current_task()->pid,
+                  current_task()->tid,obj_type,__failed_allocs,
+                  r,TARGET_FAIL,
+                  MAX_PROCESS_SYNC_OBJS,
+                  __allocs);
+    if( __failed_allocs == TARGET_FAIL ) {
+      kprintf_fault("##################################################################\n");
+      __dump_stack(get_userspace_stack(current_task()));
+      kprintf_fault("##################################################################\n");
+    }
   }
   return r;
 }
@@ -228,9 +244,9 @@ int dup_task_sync_data(task_sync_data_t *sync_data)
 
 task_sync_data_t *allocate_task_sync_data(void)
 {
-  task_sync_data_t *s=memalloc(sizeof(*s));
+  task_sync_data_t *s=alloc_pages_addr(SYNC_OBJS_PAGES,0);
   if( s ) {
-    memset(s,0,sizeof(*s));
+    memset(s,0,SYNC_OBJS_PAGES*PAGE_SIZE);
     atomic_set(&s->use_count,1);
     mutex_initialize(&s->mutex);
   }

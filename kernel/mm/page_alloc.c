@@ -25,6 +25,7 @@
 #include <mm/vmm.h>
 #include <mstring/errno.h>
 #include <mstring/types.h>
+#include <mstring/task.h>
 
 #define DEFAULT_GRANULARITY 64
 
@@ -236,6 +237,8 @@ void free_pages_chain(page_frame_t *pages)
  * Thus potentially all kernel and user-space private data can be overwrittren
  * and readed. Basta.
  */
+extern int *shared_debug_state;
+
 uintptr_t sys_alloc_dma_pages(int num_pages)
 {
   page_frame_t *pages;
