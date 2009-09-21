@@ -99,8 +99,6 @@ int sys_nanosleep(timeval_t *in,timeval_t *out)
   }
 }
 
-extern int timer0_depth;
-
 #ifdef CONFIG_SMP
 /* SMP-specific stuff. */
 void smp_local_timer_interrupt_tick(void)
@@ -112,16 +110,8 @@ void smp_local_timer_interrupt_tick(void)
 #endif
 
   if(cpu_id() == 0) {
-    timer0_depth++;
-  }
-
-  if(cpu_id() == 0) {
     timer_tick();
   }
   sched_timer_tick();
-
-  if(cpu_id() == 0) {
-    timer0_depth--;
-  }
 }
 #endif
