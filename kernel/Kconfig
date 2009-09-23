@@ -199,9 +199,14 @@ config DUMP_USPACE_STACK
        bool "Dump user-space stack after any exception occurs"
        default n
 
+config DUMP_USER_CALL_PATH
+       bool "Dump stack items only if they fit in the code segment."
+       default n
+       depends on DUMP_USPACE_STACK
+
 config NUM_STACKWORDS
        int "Number of stack words that will be printed during the stack dump."
-       range 5 50
+       range 5 100
        default "5"
 
 endmenu
