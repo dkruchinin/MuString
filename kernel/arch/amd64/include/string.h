@@ -25,7 +25,7 @@
 #ifndef __ARCH_STRING_H__
 #define __ARCH_STRING_H__
 
-#define ARCH_MEMSET
-#define ARCH_MEMCPY
+//#define ARCH_MEMSET
+//#define ARCH_MEMCPY
 
 #endif /* __ARCH_STRING_H__ */

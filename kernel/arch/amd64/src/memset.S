@@ -22,9 +22,9 @@
  *
  */
 	
-.global memset
+.global amd64_memset
 
-memset:
+amd64_memset:
 	movq    %rdi, %r9 /* Save return value */
 	movq    %rsi, %rax
 	movq    %rdx, %rcx
