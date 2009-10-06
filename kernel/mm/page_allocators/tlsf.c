@@ -635,13 +635,13 @@ static void tlsf_free_pages(page_frame_t *pages, page_idx_t num_pages, void *dat
         panic("Page #%#x has invalid pool type: %d!",
               pframe_number(&pages[i]), PFRAME_MMPOOL_TYPE(&pages[i]));
       }
-      if (!PF_IS_BUSY(&pages[i])) {
-        panic("Attemption to free already free page frame №%#x to memory pool %s",
-              pframe_number(&pages[i]), tlsf->owner->name);
-      }
 
       panic("Attemption to free page #%#x owened by pool %s to the pool %s!",
             pframe_number(&pages[i]), page_pool->name, tlsf->owner->name);
+    }
+    if (!PF_IS_BUSY(&pages[i])) {
+      panic("Attemption to free already free page frame №%#x to memory pool %s",
+            pframe_number(&pages[i]), tlsf->owner->name);
     }
 #endif /* CONFIG_DEBUG_MM */
 
