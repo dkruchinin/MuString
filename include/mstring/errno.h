@@ -48,7 +48,7 @@
 #define ENOTSUP       41  /**< Not supported */
 #define ECANCELED     42  /**< Operation canceled. */
 #define EOVERFLOW     43  /**< Value too large to be stored in data type. */
-#define ETIMEDOUT     44  /**< Connection timed out */
+#define ETIMEDOUT     110  /**< Connection timed out */
 
 #endif /* __MSTRING_ERRNO_H__ */
 
