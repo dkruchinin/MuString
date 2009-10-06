@@ -62,16 +62,33 @@ static bool __read_user_safe(uintptr_t addr,uintptr_t *val)
   return true;
 }
 
-void __dump_stack(uintptr_t ustack)
+void __dump_stack(uintptr_t ustack,vmm_t *vmm)
 {
-  int i;
+  int i,show;
   uintptr_t d;
+  vmrange_t *vmr=NULL;
 
   kprintf_fault("\nTop %d words of userspace stack (RSP=%p).\n\n",
           CONFIG_NUM_STACKWORDS,ustack);
+
+#ifdef CONFIG_DUMP_USER_CALL_PATH
+  if( vmm ) {
+    vmr=vmrange_find(vmm,USPACE_VADDR_BOTTOM,USPACE_VADDR_BOTTOM+PAGE_SIZE,NULL);
+    kprintf_fault("VMR: %p\n",vmr);
+  }
+#endif
+
   for(i=0;i<CONFIG_NUM_STACKWORDS;i++) {
     if( __read_user_safe(ustack,&d) ) {
-      kprintf_fault("  <%p>\n",d);
+      if( vmr ) {
+        show=(d >= vmr->bounds.space_start && d < vmr->bounds.space_end);
+      } else {
+        show=1;
+      }
+
+      if( show ) {
+        kprintf_fault("  <%p>\n",d);
+      }
     } else {
       kprintf_fault("  <Invalid stack pointer>\n");
     }
@@ -129,6 +146,7 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
   regs_t *regs=(regs_t *)(((uintptr_t)stack_frame)-sizeof(struct __gpr_regs)-8);
   usiginfo_t siginfo;
   task_t *faulter=current_task();
+  vmm_t *vmm = NULL;
 
   get_fault_address(invalid_address);
   fixup = fixup_fault_address(stack_frame->rip);
@@ -141,7 +159,7 @@ void page_fault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
      * Try to find out correspondig VM range and handle the faut using range's memory object.
      */
 
-    vmm_t *vmm = current_task()->task_mm;
+    vmm = current_task()->task_mm;
     uint32_t errmask = 0;
     int ret = -EFAULT;
 
@@ -194,7 +212,7 @@ stop_cpu:
   }
 #ifdef CONFIG_DUMP_USPACE_STACK
   else {
-    __dump_stack(stack_frame->old_rsp);
+    __dump_stack(stack_frame->old_rsp,vmm);
   }
 #endif /* CONFIG_DUMP_USTACK */
 

@@ -243,7 +243,7 @@ void do_irq(irq_t irq)
 #ifdef CONFIG_DEBUG_IRQ_ACTIVITY
       serial_write_char('>');
 #endif
-      return;
+      goto out;
     }
   }
   interrupts_enable();
@@ -251,5 +251,7 @@ void do_irq(irq_t irq)
 #ifdef CONFIG_DEBUG_IRQ_ACTIVITY
   serial_write_char('Z');
 #endif
+out:
+  return;
 }
 

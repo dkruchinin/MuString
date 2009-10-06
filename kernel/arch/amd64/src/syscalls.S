@@ -124,4 +124,5 @@ good_syscall_number:
 	movq %r10,%rcx
 
 	call *syscall_table(,%rax,8)
+
 	jmp return_from_syscall

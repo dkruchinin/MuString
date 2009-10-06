@@ -108,9 +108,10 @@ void smp_local_timer_interrupt_tick(void)
     serial_write_char('a'+cpu_id());
   }
 #endif
-    if(cpu_id() == 0) {
-      timer_tick();
-    }
-    sched_timer_tick();
+
+  if(cpu_id() == 0) {
+    timer_tick();
+  }
+  sched_timer_tick();
 }
 #endif

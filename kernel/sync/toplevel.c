@@ -73,8 +73,8 @@ static kern_sync_object_t *__lookup_sync(task_t *owner,sync_id_t id)
 }
 
 int sys_sync_create_object(sync_object_type_t obj_type,
-                                void *uobj,uint8_t *attrs,
-                                ulong_t flags)
+                           void *uobj,uint8_t *attrs,
+                           ulong_t flags)
 {
   kern_sync_object_t *kobj=NULL;
   int r;
@@ -210,9 +210,9 @@ int dup_task_sync_data(task_sync_data_t *sync_data)
 
 task_sync_data_t *allocate_task_sync_data(void)
 {
-  task_sync_data_t *s=memalloc(sizeof(*s));
+  task_sync_data_t *s=alloc_pages_addr(SYNC_OBJS_PAGES,0);
   if( s ) {
-    memset(s,0,sizeof(*s));
+    memset(s,0,SYNC_OBJS_PAGES*PAGE_SIZE);
     atomic_set(&s->use_count,1);
     mutex_initialize(&s->mutex);
   }

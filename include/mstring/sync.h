@@ -81,13 +81,14 @@ enum {
 };
 
 /* Per-process sync info structure. */
-#define MAX_PROCESS_SYNC_OBJS  72
+#define SYNC_OBJS_PAGES 1
+#define MAX_PROCESS_SYNC_OBJS  ((PAGE_SIZE * SYNC_OBJS_PAGES - (sizeof(atomic_t)+2*sizeof(ulong_t)+sizeof(mutex_t))) / sizeof(long))
 
 typedef struct __task_sync_data {
   atomic_t use_count;
-  kern_sync_object_t *sync_objects[MAX_PROCESS_SYNC_OBJS];
   ulong_t numobjs;
   mutex_t mutex;
+  kern_sync_object_t *sync_objects[MAX_PROCESS_SYNC_OBJS];
 } task_sync_data_t;
 
 struct __task_struct;
@@ -119,7 +120,7 @@ static inline task_sync_data_t *get_task_sync_data(task_t *t)
 
 static inline void __free_task_sync_data(task_sync_data_t *sync_data)
 {
-  memfree(sync_data);
+  free_pages_addr(sync_data,SYNC_OBJS_PAGES);
 }
 
 static inline void release_task_sync_data(task_sync_data_t *sync_data)
