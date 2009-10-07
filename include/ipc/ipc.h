@@ -17,6 +17,8 @@
 
 /**< Maximum numbers of vectors for I/O operations. */
 #define MAX_IOVECS  8
+/**< Absolute maximum numbers of vectors for I/O operations. */
+#define IPC_ABS_IOVEC_LIM 1024
 
 #define UNTRUSTED_MANDATORY_FLAGS  (IPC_BLOCKED_ACCESS)
 
@@ -82,6 +84,7 @@ void release_task_ipc_priv(task_ipc_priv_t *priv);
 void release_task_ipc(task_ipc_t *ipc);
 void *allocate_ipc_memory(long size);
 void free_ipc_memory(void *addr,int size);
+bool valid_iovecs(struct __iovec *iovecs, uint32_t num_vecs,long *size);
 
 typedef struct __iovec {
   void *iov_base;

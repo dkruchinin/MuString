@@ -34,6 +34,7 @@
 #include <arch/spinlock.h>
 #include <mstring/types.h>
 #include <mstring/raw_sync.h>
+#include <mstring/assert.h>
 
 #ifdef CONFIG_SMP
 #define SPINLOCK_INITIALIZE(state)              \
@@ -209,6 +210,19 @@
   __unlock_irqrestore(unlock_write, v, s)
 #define spinlock_unlock_bit_irqrestore(bitmap, bit, v)  \
   __unlock_irqrestore(unlock_bit, v, bitmap, bit)
+
+static inline void spinlocks_lock2( spinlock_t *lock1, spinlock_t *lock2)
+{
+  ASSERT(lock1 != lock2);
+
+  if( lock1 < lock2 ) {
+    spinlock_lock(lock1);
+    spinlock_lock(lock2);
+  } else {
+    spinlock_lock(lock2);
+    spinlock_lock(lock1);
+  }
+}
 
 #endif /* __EZA_SPINLOCK_H__ */
 

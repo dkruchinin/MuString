@@ -61,6 +61,9 @@ typedef enum __ipc_msg_state {
   MSG_STATE_DATA_UNDER_ACCESS,
 } ipc_msg_state_t;
 
+#define IPC_MSG_EXTRA_SIZE  PAGE_SIZE
+#define IPC_MSG_EXTRA_PAGES 1
+
 typedef struct __ipc_port_message_t {
   ulong_t data_size,reply_size,id;
   long replied_size;
@@ -72,7 +75,10 @@ typedef struct __ipc_port_message_t {
   ulong_t num_send_bufs,num_recv_buffers;
   task_t *sender;
   ipc_msg_state_t state;
-  bool blocked_mode;  
+  bool blocked_mode;
+
+  void *extra_data;
+  long extra_data_tail;
 } ipc_port_message_t;
 
 typedef struct __port_msg_info {
@@ -133,8 +139,12 @@ extern ipc_port_ops_t prio_port_ops;
 #define IPC_LOCK_PORT(p) spinlock_lock(&p->lock)
 #define IPC_UNLOCK_PORT(p) spinlock_unlock(&p->lock)
 
-#define IPC_LOCK_PORT_W(p) spinlock_lock(&p->lock)
-#define IPC_UNLOCK_PORT_W(p) spinlock_unlock(&p->lock)
+#define IPC_LOCK_PORT_W(p) IPC_LOCK_PORT((p))
+#define IPC_UNLOCK_PORT_W(p) IPC_UNLOCK_PORT((p))
+
+static inline void ipc_lock_ports(ipc_gen_port_t *p1,ipc_gen_port_t *p2) {
+  spinlocks_lock2(&p1->lock,&p2->lock);
+}
 
 struct __iovec;
 
@@ -157,6 +167,10 @@ long ipc_port_send_iov_core(ipc_gen_port_t *port,
                             ulong_t reply_len);
 long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
                        struct __iovec *rcv_iov,ulong_t numvecs,ulong_t offset);
+long ipc_port_msg_write(struct __ipc_gen_port *port,ulong_t msg_id,
+                        struct __iovec *iovecs,ulong_t numvecs,off_t *offset,
+                        long len);
+
 ipc_gen_port_t *ipc_clone_port(ipc_gen_port_t *p);
 void put_ipc_port_message(ipc_port_message_t *msg);
 
@@ -173,5 +187,35 @@ void put_ipc_port_message(ipc_port_message_t *msg);
   } while(0)
 
 #define ipc_message_data(m) ((m)->data_size <= IPC_NB_MESSAGE_MAXLEN ? (void *)(m)->send_buffer : NULL )
+
+long ipc_port_control(ipc_gen_port_t *p, ulong_t cmd, ulong_t arg);
+
+#define message_writable(msg)  ((msg)->state != MSG_STATE_REPLY_BEGIN && (msg)->state != MSG_STATE_DATA_UNDER_ACCESS )
+#define mark_message_waccess(msg) do { (msg)->state = MSG_STATE_DATA_UNDER_ACCESS; } while(0)
+#define unmark_message_waccess(msg) do { (msg)->state = MSG_STATE_DATA_TRANSFERRED; } while(0)
+
+/* NOTE: port must be locked ! */
+static inline ipc_port_message_t *__ipc_port_lookup_message(ipc_gen_port_t *p,
+                                                            ulong_t msg_id,
+                                                            long *err)
+{
+  ipc_port_message_t *msg = p->msg_ops->lookup_message(p,msg_id);
+  long e;
+
+  if( msg == __MSG_WAS_DEQUEUED ) { /* Client got lost somehow. */
+    e=-ENXIO;
+  } else if( !msg ) {
+    e=-EINVAL;
+  } else {
+    e=0;
+  }
+
+  *err = e;
+  if( e ) {
+    return NULL;
+  } else {
+    return msg;
+  }
+}
 
 #endif
