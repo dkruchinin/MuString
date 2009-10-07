@@ -51,9 +51,17 @@ typedef int cpu_id_t;
 #define UNUSED(var) UNUSED_ ## var __attribute__ ((unused))
 #endif /* UNUSED */
 
-/* TODO DK: make ERR macro depend on CONFIG_TRACE_ERROS option
- * (and invent this option).
- */
-#define ERR(err) err
+#ifdef CONFIG_TRACE_ERRORS
+
+#define ERR(err)                                                      \
+  ({  if( (err) < 0 ) {                                               \
+      kprintf_fault("ERR(%d) in module %s, function %s, line %d\n",   \
+        (err),__FILE__,__FUNCTION__,__LINE__);                        \
+     }                                                                \
+    (err); })
+
+#else
+  #define ERR(err) err
+#endif
 
 #endif /* __MSTRING_TYPES_H__ */

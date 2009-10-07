@@ -209,4 +209,8 @@ config NUM_STACKWORDS
        range 5 100
        default "5"
 
+config TRACE_ERRORS
+       bool "Trace all functions returning errors via macro ERR(x)"
+       default n
+
 endmenu

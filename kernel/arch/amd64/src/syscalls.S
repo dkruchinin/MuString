@@ -82,6 +82,8 @@ syscall_table:
 	.quad   sys_waitpid
         .quad   sys_alloc_dma_pages             /* 45  */
         .quad   sys_free_dma_pages
+	.quad   sys_port_control
+	.quad   sys_port_msg_write
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

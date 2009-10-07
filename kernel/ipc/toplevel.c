@@ -311,7 +311,7 @@ long sys_port_msg_write(ulong_t port, ulong_t msg_id, iovec_t *iovecs,
         break;
       }
 
-      //r=ipc_port_msg_write(p,msg_id,kiovecs,nc,&offset,size);
+      r=ipc_port_msg_write(p,msg_id,kiovecs,nc,&offset,size);
       if( r < 0 ) {
         break;
       }
