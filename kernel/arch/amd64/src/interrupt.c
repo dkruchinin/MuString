@@ -50,6 +50,7 @@ static void install_smp_irq_handlers(void)
   long r;
 
   idt = get_idt();
+#if 0
   r = idt->install_handler(smp_local_timer_interrupt_handler,
                            LOCAL_TIMER_CPU_IRQ_VEC);
   r |= idt->install_handler(smp_scheduler_interrupt_handler,
@@ -57,6 +58,7 @@ static void install_smp_irq_handlers(void)
   if(r != 0) {
     panic( "arch_initialize_irqs(): Can't install SMP irqs !" );
   }
+#endif
 }
 #endif /* CONFIG_SMP */
 
@@ -78,6 +80,7 @@ void arch_initialize_irqs(void)
   /* Initialize all possible IRQ handlers to stubs. */
   base=idt->first_available_vector();
 
+#if 0
   for(idx=0;idx<idt->vectors_available();idx++) {
     vector_irq_table[idx] = idx;
 		r=idt->install_handler((idt_handler_t)irq_entrypoints_array[idx],idx+base);
@@ -85,6 +88,7 @@ void arch_initialize_irqs(void)
       panic( "Can't install IDT slot for IRQ #%d\n", idx );
     }
   }
+#endif
 
   /* Setup all known interrupt handlers. */
 #ifndef CONFIG_APIC

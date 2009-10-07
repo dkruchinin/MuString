@@ -33,7 +33,7 @@ void atom_usleep(usec_t usecs)
   if( enabled ) {
     interrupts_disable();
   }
-  arch_delay_loop(delay_loop*usecs);
+  //arch_delay_loop(delay_loop*usecs);
   if( enabled ) {
     interrupts_enable();
   }
@@ -41,6 +41,6 @@ void atom_usleep(usec_t usecs)
 
 void usleep(usec_t usecs)
 {
-  arch_delay_loop(delay_loop*usecs);
+    //arch_delay_loop(delay_loop*usecs);
 }
 

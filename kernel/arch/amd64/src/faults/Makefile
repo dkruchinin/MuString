@@ -1,1 +1,1 @@
-obj-y += common_faults.o fpu_faults.o mem_faults.o
+obj-y += common_faults.o fpu_faults.o page_fault.o

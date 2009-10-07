@@ -59,7 +59,7 @@ uint64_t i8254_calibrate_delay_loop(void)
     tt1|=inb(I8254_BASE) << 8;
   } while(cnt);
   
-  arch_delay_loop(DCLOCK);
+  //arch_delay_loop(DCLOCK);
 
   outb(I8254_BASE+3,0xd2);
   tt2=inb(I8254_BASE);
@@ -69,7 +69,7 @@ uint64_t i8254_calibrate_delay_loop(void)
   oo1=inb(I8254_BASE);
   oo1|=inb(I8254_BASE) << 8;
 
-  arch_fake_loop(DCLOCK);
+  //arch_fake_loop(DCLOCK);
 
   outb(I8254_BASE+3,0xd2);
   oo2=inb(I8254_BASE);
@@ -107,7 +107,7 @@ uint64_t i8254_calibrate_delay_loop0(void)
   oo1=inb(I8254_BASE);
   oo1|=inb(I8254_BASE) << 8;
 
-  arch_fake_loop(DCLOCK);
+  //arch_fake_loop(DCLOCK);
 
   outb(I8254_BASE+3,0xd2);
   oo2=inb(I8254_BASE);

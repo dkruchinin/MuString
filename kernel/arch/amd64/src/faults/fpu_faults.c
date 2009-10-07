@@ -22,47 +22,31 @@
  *
  */
 
-#include <arch/types.h>
-#include <arch/page.h>
+#include <arch/context.h>
 #include <arch/fault.h>
-#include <arch/interrupt.h>
-#include <mstring/panic.h>
-#include <mstring/kprintf.h>
-#include <arch/mem.h>
-#include <mstring/smp.h>
+#include <mstring/types.h>
 
-void divide_by_zero_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+void FH_devide_by_zero(struct fault_ctx *fctx)
 {
-    kprintf( "  [!!] #DE exception raised !, RIP = %p\n", stack_frame->rip );
-    interrupts_disable();
-    for(;;);
+  kprintf_fault("Devide by zero fault!\n");
+  for (;;);
 }
 
-void overflow_fault_handler_impl(void)
+void FH_overflow(struct fault_ctx *fctx)
 {
-    kprintf( "  [!!] #Overflow exception raised !");
-    interrupts_disable();
-    for(;;);
+  kprintf_fault("Overflow fault\n");
+  for (;;);
 }
 
-void coprocessor_segment_overrun_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+void FH_segment_not_present(struct fault_ctx *fctx)
 {
-    kprintf( "  [!!] #FPU segment overrun exception raised ! RIP = %p\n", stack_frame->rip );
-    interrupts_disable();
-    for(;;);
+  kprintf_fault("Segment not present\n");
+  for (;;);
 }
 
-void fpu_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+void FH_simd_floating_point(struct fault_ctx *fctx)
 {
-    kprintf( "  [!!] #FPU exception raised ! RIP = %p\n", stack_frame->rip );
-    interrupts_disable();
-    for(;;);
-}
-
-void simd_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-    kprintf( "  [!!] #SIMD exception raised. RIP = %p!\n", stack_frame->rip );
-    interrupts_disable();
-    for(;;);
+  kprintf_fault("SIMD fault!\n");
+  for (;;);
 }
 

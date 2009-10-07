@@ -76,8 +76,10 @@ void arch_specific_init(void)
           kprintf(", found CPUs: %d, being launched CPUs: %d\n", n - 1, r - 1);
       else
           kprintf(", total number of CPUs: %d\n", r);
-      
+
+#if 0
       arch_smp_init(r);
+#endif
   }
 #endif
 }

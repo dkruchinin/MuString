@@ -115,7 +115,7 @@ syscall_point:
 	jb good_syscall_number
 
 	movq $-ENOSYS,%rax
-	jmp return_from_syscall
+	//jmp return_from_syscall
 
 good_syscall_number:
 	/* Since %rcx contains the return address, we should reload
@@ -125,4 +125,4 @@ good_syscall_number:
 
 	call *syscall_table(,%rax,8)
 
-	jmp return_from_syscall
+	//jmp return_from_syscall

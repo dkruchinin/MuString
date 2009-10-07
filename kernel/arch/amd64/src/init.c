@@ -1,17 +1,11 @@
-#include <config.h>
-#include <server.h>
-#include <arch/boot.h>
 #include <arch/seg.h>
-#include <arch/msr.h>
 #include <arch/fault.h>
-#include <arch/smp.h>
-#include <arch/mem.h>
-#include <arch/current.h>
+#include <arch/msr.h>
+#include <server.h>
 #include <arch/cpufeatures.h>
-#include <mstring/smp.h>
-#include <mstring/string.h>
-#include <mstring/kconsole.h>
+#include <arch/boot.h>
 #include <mstring/kprintf.h>
+#include <mstring/smp.h>
 #include <mstring/types.h>
 
 uint32_t multiboot_info_ptr __attribute__ ((section(".data")));
@@ -102,6 +96,6 @@ INITCODE void arch_init(void)
 
   multiboot_init();
   arch_cpu_init(0);
-  install_fault_handlers();
+  arch_faults_init();
   arch_servers_init();
 }

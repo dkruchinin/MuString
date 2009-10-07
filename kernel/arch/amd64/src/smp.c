@@ -58,7 +58,9 @@ void arch_smp_init(int ncpus)
   apcfg->gdt[APGDT_KCOFF_DESCR] |= (uint64_t)apcfg->page_addr << 16;
 
   /* Change bootstrap entry point (from kernel_main to main_smpap_routine) */
+#if 0
   *(uint64_t *)&kernel_jump_addr = (uint64_t)main_smpap_routine;
+#endif
   /* And finally copy AP initialization code to the proper place */
   memcpy(ap_code, &ap_boot_start, size);
 

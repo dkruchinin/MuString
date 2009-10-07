@@ -44,37 +44,37 @@
 #define OFFSET_TLS  OFFSET_IPL
 
 /* Save all general purpose registers  */
-#define SAVE_GPR \
-    pushq %r8; \
-    pushq %r9; \
-    pushq %r10; \
-    pushq %r11; \
-    pushq %r12; \
-    pushq %r13; \
-    pushq %r14; \
-    pushq %r15; \
-    pushq %rbx; \
-    pushq %rcx; \
-    pushq %rdx; \
-    pushq %rdi; \
-    pushq %rsi; \
-    pushq %rbp; \
+#define SAVE_GPRS                               \
+    pushq %r8;                                  \
+    pushq %r9;                                  \
+    pushq %r10;                                 \
+    pushq %r11;                                 \
+    pushq %r12;                                 \
+    pushq %r13;                                 \
+    pushq %r14;                                 \
+    pushq %r15;                                 \
+    pushq %rbx;                                 \
+    pushq %rcx;                                 \
+    pushq %rdx;                                 \
+    pushq %rdi;                                 \
+    pushq %rsi;                                 \
+    pushq %rbp;                                 \
 
-#define RESTORE_GPR \
-    popq %rbp; \
-    popq %rsi; \
-    popq %rdi; \
-    popq %rdx; \
-    popq %rcx; \
-    popq %rbx; \
-    popq %r15; \
-    popq %r14; \
-    popq %r13; \
-    popq %r12; \
-    popq %r11; \
-    popq %r10; \
-    popq %r9; \
-    popq %r8; \
+#define RESTORE_GPRS                            \
+    popq %rbp;                                  \
+    popq %rsi;                                  \
+    popq %rdi;                                  \
+    popq %rdx;                                  \
+    popq %rcx;                                  \
+    popq %rbx;                                  \
+    popq %r15;                                  \
+    popq %r14;                                  \
+    popq %r13;                                  \
+    popq %r12;                                  \
+    popq %r11;                                  \
+    popq %r10;                                  \
+    popq %r9;                                   \
+    popq %r8;                                   \
 
 #define NUM_GPR_SAVED 14
 #define SAVED_GPR_SIZE (NUM_GPR_SAVED * 8)
@@ -98,13 +98,13 @@
 
 /* NOTE: SAVE_MM initializes %rsi so that it points to iterrupt/exception stack frame. */
 #define SAVE_ALL \
-  SAVE_GPR \
+  SAVE_GPRS \
   SAVE_MM \
 
 
 #define RESTORE_ALL \
   RESTORE_MM \
-  RESTORE_GPR
+  RESTORE_GPRS
 
 #define SAVED_REGISTERS_SIZE \
    ((NUM_GPR_SAVED)*8)
@@ -190,9 +190,9 @@
 #endif
 
 #ifndef __ASM__
-
-#include <mstring/types.h>
 #include <arch/seg.h>
+#include <arch/interrupt.h>
+#include <mstring/types.h>
 
 #define KERNEL_RFLAGS (DEFAULT_RFLAGS_VALUE | (3 << RFLAGS_IOPL_BIT))
      /* The most sensetive bits in RFLAGS.  */
@@ -208,6 +208,31 @@
 /* Initial RFLAGS value for new kernel tasks: IOPL=3. */
 #define KERNEL_RFLAGS (DEFAULT_RFLAGS_VALUE | (3 << RFLAGS_IOPL_BIT))
 
+struct gpregs {
+  uint64_t rbp;
+  uint64_t rsi;
+  uint64_t rdi;
+  uint64_t rdx;
+  uint64_t rcx;
+  uint64_t rbx;
+  uint64_t r15;
+  uint64_t r14;
+  uint64_t r13;
+  uint64_t r12;
+  uint64_t r11;
+  uint64_t r10;
+  uint64_t r9;
+  uint64_t r8;
+  uint64_t rax;
+};
+
+struct intr_stack_frame {
+  uint64_t rip;
+  uint64_t cs;
+  uint64_t rflags;
+  uint64_t rsp;
+  uint64_t ss;
+};
      
 typedef struct __context_t { /* others don't interesting... */
   uintptr_t sp;

@@ -41,6 +41,7 @@
 #include <mstring/gc.h>
 #include <mstring/signal.h>
 
+#if 0
 extern void initialize_common_hardware(void);
 extern void initialize_timer(void);
 
@@ -77,12 +78,16 @@ static void main_routine_stage1(void)
            current_task(), cpu_id() );
   idle_loop();
 }
+#endif
 
 void kernel_main(void)
 {
   arch_init();
   initialize_irqs();
-  
+  kprintf("everything is done\n");
+  ASSERT(1 == 0);
+  for (;;);
+#if 0
   mm_initialize();
   slab_allocator_init();  
   vmm_initialize();
@@ -99,9 +104,11 @@ void kernel_main(void)
    */
   
   main_routine_stage1();
+#endif
 }
 
 #ifdef CONFIG_SMP
+#if 0
 static void main_smpap_routine_stage1(cpu_id_t cpu)
 {
   arch_ap_specific_init();
@@ -139,5 +146,6 @@ void main_smpap_routine(void)
   /* Continue CPU initialization in new context. */
   main_smpap_routine_stage1(cpu - 1);
 }
+#endif
 #endif
 

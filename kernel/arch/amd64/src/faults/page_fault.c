@@ -18,25 +18,17 @@
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  * (c) Copyright 2009 Dan Kruchinin <dan.kruchinin@gmail.com>
  *
- * mstring/amd64/faults/mem_faults.c: contains routines for dealing with
- *   memory-related x86_64 CPU fauls.
- *
  */
 
-#include <arch/types.h>
-#include <arch/page.h>
+#include <config.h>
+#include <arch/seg.h>
 #include <arch/fault.h>
-#include <arch/interrupt.h>
-#include <mm/vmm.h>
-#include <mm/page.h>
-#include <mstring/panic.h>
-#include <mstring/kprintf.h>
-#include <arch/mem.h>
-#include <mstring/smp.h>
-#include <mstring/kconsole.h>
 #include <arch/context.h>
-#include <mstring/signal.h>
+#include <arch/cpu.h>
+#include <mstring/kprintf.h>
+#include <mstring/types.h>
 
+#if 0
 #define PFAULT_NP(errcode) (((errcode) & 0x1) == 0)
 #define PFAULT_PROTECT(errcode) ((errcode) & 0x01)
 #define PFAULT_READ(errcode) (((errcode) & 0x02) == 0)
@@ -235,5 +227,49 @@ send_sigsegv:
   kprintf_fault("[!!] Sending SIGSEGV to %d:%d ('%s')\n",
                 faulter->pid,faulter->tid,faulter->short_name);
   send_task_siginfo(faulter,&siginfo,true,NULL);
+}
+#endif
+
+static int do_handle_kernel_fault(struct fault_ctx *fctx, uintptr_t fault_addr)
+{
+  uintptr_t fixup;
+
+  fixup = 0;//fixup_fault_address(fault_addr);
+  if (fixup) {
+    fctx->istack_frame->rip = fixup;
+    return 0;
+  }
+
+  return -1;
+}
+
+static int do_handle_user_fault(struct fault_ctx *fctx, uintptr_t fault_addr)
+{
+  return -1;
+}
+
+void FH_page_fault(struct fault_ctx *fctx)
+{
+  uintptr_t fault_addr;
+  int ret;
+
+  fault_addr = read_cr2();
+  if (IS_KERNEL_FAULT(fctx)) {
+    ret = do_handle_kernel_fault(fctx, fault_addr);
+    if (ret < 0) {
+      goto dump_kernel_stack;
+    }
+  }
+  else {
+    ret = do_handle_user_fault(fctx, fault_addr);
+    if (ret < 0) {
+      goto dump_user_stack;
+    }
+  }
+
+dump_user_stack:
+dump_kernel_stack:
+  kprintf_fault("Page fault in kernel, address = %p\n", fault_addr);
+  for (;;);
 }
 
