@@ -287,12 +287,13 @@ long sys_port_control(ulong_t port, ulong_t cmd, ulong_t arg)
 }
 
 long sys_port_msg_write(ulong_t port, ulong_t msg_id, iovec_t *iovecs,
-                        uint32_t numvecs,off_t offset,int flags)
+                        ulong_t numvecs,off_t offset)
 {
   ipc_gen_port_t *p;
   long r;
   iovec_t kiovecs[MAX_IOVECS];
-  long size;
+  long size,processed;
+  off_t koffset;
 
   if( !numvecs || numvecs > IPC_ABS_IOVEC_LIM ) {
     return ERR(-EINVAL);
@@ -302,6 +303,9 @@ long sys_port_msg_write(ulong_t port, ulong_t msg_id, iovec_t *iovecs,
   if( !p ) {
     r=-EINVAL;
   } else {
+    processed = 0;
+    koffset = offset;
+
     while( numvecs ) {
       ulong_t nc = MIN(numvecs,MAX_IOVECS);
 
@@ -311,17 +315,18 @@ long sys_port_msg_write(ulong_t port, ulong_t msg_id, iovec_t *iovecs,
         break;
       }
 
-      r=ipc_port_msg_write(p,msg_id,kiovecs,nc,&offset,size);
+      r=ipc_port_msg_write(p,msg_id,kiovecs,nc,&koffset,size);
       if( r < 0 ) {
+        processed = r;
         break;
       }
 
-      offset += r;
+      processed += r;
       numvecs -= nc;
       iovecs += nc;
     }
   }
 
   ipc_put_port(p);
-  return ERR(r);
+  return ERR(processed);
 }

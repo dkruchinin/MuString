@@ -166,7 +166,7 @@ outerror:
 }
 
 /* TODO DK: unpin pages after transferring is end */
-int ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs, iovec_t *iovecs,
+long ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs, iovec_t *iovecs,
                                  uint32_t numvecs, ulong_t offset, bool to_buffer)
 {
   char *page_end;
@@ -174,9 +174,10 @@ int ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs, iovec_t *
   ulong_t to_copy, iov_size, bufsize, data_size;
   char *dest_kaddr;
   char *user_addr;
-  long r, buf_offset = offset;
+  long r, processed, buf_offset = offset;
   ipc_buffer_t *start_buf = NULL;
 
+  processed=0;
   for (bufsize = 0, to_copy = 0; to_copy < numbufs; to_copy++) {
     bufsize += bufs[to_copy].length;
     if (offset) {
@@ -256,6 +257,7 @@ int ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs, iovec_t *
         return -EFAULT;
       }
 
+      processed += to_copy;
       data_size -= to_copy;
       iov_size -= to_copy;
       bufsize -= to_copy;
@@ -293,5 +295,5 @@ int ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs, iovec_t *
     }
   }
 
-  return 0;
+  return processed;
 }

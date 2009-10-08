@@ -38,8 +38,8 @@ typedef struct __ipc_buffer {
 struct __iovec;
 int ipc_setup_buffer_pages(struct __iovec *iovecs, uint32_t numvecs,
                            page_idx_t *idx_array, ipc_buffer_t *bufs, bool is_sender_buffer);
-int ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs,
-                                 struct __iovec *iovecs, uint32_t numvecs,
-                                 ulong_t offset, bool to_buffer);
+long ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs,
+                                  struct __iovec *iovecs, uint32_t numvecs,
+                                  ulong_t offset, bool to_buffer);
 void ipc_release_buffer_pages(ipc_buffer_t *bufs, uint32_t numbufs);
 #endif

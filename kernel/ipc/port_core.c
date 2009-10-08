@@ -579,12 +579,11 @@ long ipc_port_msg_write(struct __ipc_gen_port *port,ulong_t msg_id,
 {
   ipc_port_message_t *msg;
   long r = -EINVAL;
-  off_t offset=*poffset;
 
   IPC_LOCK_PORT_W(port);
   if( !(port->flags & IPC_PORT_SHUTDOWN) &&
       (msg = __ipc_port_lookup_message(port,msg_id,&r)) ) {
-    if( message_writable(msg) && offset < msg->reply_size ) {
+    if( message_writable(msg) && *poffset < msg->reply_size ) {
       mark_message_waccess(msg);
       r=0;
     }
@@ -592,7 +591,7 @@ long ipc_port_msg_write(struct __ipc_gen_port *port,ulong_t msg_id,
   IPC_UNLOCK_PORT_W(port);
 
   if( !r ) {
-    r=__transfer_reply_data_iov(msg,iovecs,numvecs,true,len,offset);
+    r=__transfer_reply_data_iov(msg,iovecs,numvecs,true,len,*poffset);
 
     IPC_LOCK_PORT_W(port);
     unmark_message_waccess(msg);
