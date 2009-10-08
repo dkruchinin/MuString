@@ -40,7 +40,7 @@ typedef struct __hw_timer_type {
   void (*calibrate)(uint32_t hz);
   void (*resume)(void);
   void (*suspend)(void);
-  void (*register_callback)(irq_t irq,irq_handler_t handler);
+  void (*register_callback)(irq_t irq, irq_handler_fn handler);
 } hw_timer_t;
 
 void hw_timer_register(hw_timer_t *ctrl);

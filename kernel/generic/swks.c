@@ -43,6 +43,6 @@ void initialize_swks(void)
   swks.system_clock_ticks = INITIAL_TICKS_VALUE;
   swks.nr_cpus = CONFIG_NRCPUS;
   swks.hz = HZ;
-  swks.num_irqs=NUM_IRQS;
+  swks.num_irqs=IRQ_VECTORS;
   arch_initialize_swks();
 }

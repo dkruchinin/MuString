@@ -16,7 +16,7 @@
 #include <mstring/def_actions.h>
 
 static SPINLOCK_DEFINE(descrs_lock);
-static uintr_descr_t descriptors[NUM_IRQS];
+static uintr_descr_t descriptors[IRQ_VECTORS];
 
 #define LOCK_DESCRIPTORS spinlock_lock(&descrs_lock)
 #define UNLOCK_DESCRIPTORS spinlock_unlock(&descrs_lock)
@@ -43,7 +43,7 @@ static void __clean_interrupt_descriptor(irq_t irq)
 
 static void __unregister_interrupt_listener(irq_t irq,void *private_data)
 {
-  unregister_irq(irq,private_data);
+  irq_line_unregister(irq);
   __clean_interrupt_descriptor(irq);
 }
 
@@ -53,7 +53,7 @@ static long register_interrupt_listener(irq_t irq,irq_listener_t listener,
   long r;
   uintr_descr_t *descr;
 
-  if( irq >= NUM_IRQS || !listener ) {
+  if( irq >= IRQ_VECTORS || !listener ) {
     return -EINVAL;
   }
 
@@ -71,7 +71,7 @@ static long register_interrupt_listener(irq_t irq,irq_listener_t listener,
   descr->private_data=private_data;
   descr->irq_num=irq;
 
-  r=register_irq(irq,__raw_uinterrupt_handler,descr,0);
+  //r=register_irq(irq,__raw_uinterrupt_handler,descr,0);
   if( r ) {
     __clean_interrupt_descriptor(irq);
   } else {
@@ -222,10 +222,12 @@ long sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
 
   /* Sanity check: make sure user didn't pass any invalid IRQ numbers. */
   for(i=0;i<irqs;i++) {
+#if 0
     if( !valid_irq_number(ids[i]) ) {
       id=-EINVAL;
       goto out;
     }
+#endif
   }
 
   id=-ENOMEM;

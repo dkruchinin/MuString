@@ -82,10 +82,9 @@ static void main_routine_stage1(void)
 
 void kernel_main(void)
 {
-  arch_init();
-  initialize_irqs();
+  arch_prepare_system();
+  irqs_init();
   kprintf("everything is done\n");
-  ASSERT(1 == 0);
   for (;;);
 #if 0
   mm_initialize();

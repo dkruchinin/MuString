@@ -233,20 +233,6 @@ struct intr_stack_frame {
   uint64_t rsp;
   uint64_t ss;
 };
-     
-typedef struct __context_t { /* others don't interesting... */
-  uintptr_t sp;
-  uintptr_t pc;
-
-  uint64_t rbx;
-  uint64_t rbp;
-  uint64_t r12;
-  uint64_t r13;
-  uint64_t r14;
-  uint64_t r15;
-
-  ipl_t ipl;
-} __attribute__ ((packed)) context_t;
 
 typedef struct __arch_context_t {
   uintptr_t cr3, rsp, fs, gs, es, ds, user_rsp;

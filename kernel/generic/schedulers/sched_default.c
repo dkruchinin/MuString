@@ -442,10 +442,12 @@ static void def_reset(void)
 
 static inline void __reschedule_task(task_t *t)
 {
+#if 0
   set_task_need_resched(t);
   if( t->cpu != cpu_id() ) {
     apic_broadcast_ipi_vector(SCHEDULER_IPI_IRQ_VEC);
   }
+#endif
 }
 
 int __big_verbose=0;

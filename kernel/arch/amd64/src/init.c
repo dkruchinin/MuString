@@ -86,7 +86,7 @@ INITCODE void arch_cpu_init(cpu_id_t cpu)
   syscall_init();
 }
 
-INITCODE void arch_init(void)
+INITCODE void arch_prepare_system(void)
 {
   kconsole_t *kcons = default_console();
 

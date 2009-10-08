@@ -16,238 +16,291 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2009 Dan Kruchinin <dk@jarios.org>
  *
- * mstring/generic_api/interrupt.c: contains routines for dealing with hardware
- *                              interrupts. 
- *
- */
-/* Changes:
- * added (disable|enable)_hw_irq() functions
- *  - Tirra
  */
 
+#include <config.h>
+#include <arch/interrupt.h>
 #include <ds/list.h>
+#include <sync/spinlock.h>
 #include <mstring/interrupt.h>
 #include <mstring/errno.h>
-#include <sync/spinlock.h>
-#include <mstring/smp.h>
-#include <arch/interrupt.h> /* Arch-specific constants. */
 #include <mstring/string.h>
-#include <mstring/kprintf.h>
-#include <mstring/swks.h>
-#include <arch/preempt.h>
-#include <mstring/idt.h>
-#include <config.h>
+#include <mstring/types.h>
 
 #ifdef CONFIG_DEBUG_IRQ_ACTIVITY
 #include <mstring/serial.h>
 #endif
 
-static spinlock_t irq_lock;
+static LIST_DEFINE(irqctls_list);
+static SPINLOCK_DEFINE(irqctls_lock);
+static struct irq_line irq_lines[NUM_IRQ_LINES];
 
-static LIST_DEFINE(known_hw_int_controllers);
-static irq_line_t irqs[NUM_IRQS];
+#define IRQLINE_IS_ACTIVE(irqline)              \
+  !!((irqline)->flags & IRQLINE_ACTIVE)
 
-#define GRAB_IRQ_LOCK() spinlock_lock(&irq_lock)
-#define RELEASE_IRQ_LOCK() spinlock_unlock(&irq_lock)
+#define IRQ_CONTROLLERS_LOCK()   spinlock_lock(&irqctls_lock)
+#define IRQ_CONTROLLERS_UNLOCK() spinlock_unlock(&irqctls_lock)
 
-list_head_t thead;
-
-static irq_action_t *allocate_irq_action( void )
+static void __unregister_irq_action(struct irq_line *iline,
+                                    struct irq_action *iaction)
 {
-  static irq_action_t descs[512];
-  static int idx = 5;
-  static irq_action_t *desc;
-
-  desc = &descs[idx];
-  list_init_node( &desc->l );
-  idx++;
-  return desc;
+  list_del(&iaction->node);
+  iaction->irq = IRQ_INVAL;
+  iline->num_actions--;
 }
 
-static void install_irq_action( uint32_t irq, irq_action_t *desc ) 
+int irq_mask(irq_t irq)
 {
-  list_add2tail( &irqs[irq].actions, &desc->l);
+  struct irq_line *iline;
+  uint_t irqstat;
+
+  if (irq >= NUM_IRQ_LINES) {
+    return ERR(-EINVAL);
+  }
+
+  iline = &irq_lines[irq];
+  spinlock_lock_irqsave(&iline->irq_line_lock, irqstat);
+  if (unlikely(!IRQLINE_IS_ACTIVE(iline))) {
+    spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
+    return ERR(-EBADF);
+  }
+
+  iline->irqctl->mask_irq(irq);
+  spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
+
+  return 0;
 }
 
-static void remove_irq_action( irq_action_t *desc ) {
-  list_del( &desc->l );
+void irq_mask_all(void)
+{
+  struct irq_controller *irqctl;
+
+  IRQ_CONTROLLERS_LOCK();
+  list_for_each_entry(&irqctls_list, irqctl, ctl_node) {
+    irqctl->mask_all();
+  }
+
+  IRQ_CONTROLLERS_UNLOCK();
 }
 
-void register_hw_interrupt_controller(hw_interrupt_controller_t *ctrl)
+int irq_unmask(irq_t irq)
 {
-  int idx;
+  struct irq_line *iline;
+  uint_t irqstat;
 
-  GRAB_IRQ_LOCK();
-  list_add2tail(&known_hw_int_controllers, &ctrl->l);
+  if (irq >= NUM_IRQ_LINES) {
+    return ERR(-EINVAL);
+  }
 
-  for( idx = 0; idx < NUM_IRQS; idx++ ) {
-    if( irqs[idx].controller == NULL ) {
-      if( ctrl->handles_irq(idx) ) {
-        irqs[idx].controller = ctrl;
-      }
+  iline = &irq_lines[irq];
+  spinlock_lock_irqsave(&iline->irq_line_lock, irqstat);
+  if (unlikely(!IRQLINE_IS_ACTIVE(iline))) {
+    spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
+    return ERR(-EBADF);
+  }
+
+  iline->irqctl->unmask_irq(irq);
+  spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
+
+  return 0;
+}
+
+void irq_unmask_all(void)
+{
+  struct irq_controller *ictl;
+
+  IRQ_CONTROLLERS_LOCK();
+  list_for_each_entry(&irqctls_list, ictl, ctl_node) {
+    ictl->unmask_all();
+  }
+
+  IRQ_CONTROLLERS_UNLOCK();
+}
+
+int irq_register_action(irq_t irq, struct irq_action *action)
+{
+  struct irq_line *iline;
+  uint_t irqstat;
+
+  ASSERT(action != NULL);
+  if (irq >= NUM_IRQ_LINES) {
+    return ERR(-EINVAL);
+  }
+
+  iline = &irq_lines[irq];
+  spinlock_lock_irqsave(&iline->irq_line_lock, irqstat);
+  if (unlikely(!IRQLINE_IS_ACTIVE(iline))) {
+    spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
+    return ERR(-EBADF);
+  }
+
+  action->irq = irq;
+  list_add2tail(&iline->actions, &action->node);
+  iline->num_actions++;
+  spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
+
+  return 0;
+}
+
+int irq_unregister_action(struct irq_action *action)
+{
+  struct irq_action *irq_action;
+  struct irq_line *iline;
+  int ret = -ENOENT;
+  uint_t irqstat;
+  
+  ASSERT(action != NULL);
+  if (action->irq >= NUM_IRQ_LINES) {
+    return ERR(-EINVAL);
+  }
+
+  iline = &irq_lines[action->irq];
+  spinlock_lock_irqsave(&iline->irq_line_lock, irqstat);
+  list_for_each_entry(&iline->actions, irq_action, node) {
+    if (irq_action == action) {
+      ret = 0;
+      break;
     }
   }
-  RELEASE_IRQ_LOCK();
-}
-
-int disable_hw_irq(irq_t irq)
-{
-  uint32_t r=0;
-
-  if(irq>=NUM_IRQS)
-    return -EINVAL;
-
-  GRAB_IRQ_LOCK();
-  if(irqs[irq].controller)
-    irqs[irq].controller->disable_irq(irq);
-  else r=-EINVAL;
-
-  RELEASE_IRQ_LOCK();
-
-  return r;
-}
-
-int enable_hw_irq(irq_t irq)
-{
-  uint32_t r=0;
-
-  if(irq>=NUM_IRQS)
-    return -EINVAL;
-
-  GRAB_IRQ_LOCK();
-  if(irqs[irq].controller)
-    irqs[irq].controller->enable_irq(irq);
-  else r=-EINVAL;
-
-  RELEASE_IRQ_LOCK();
-
-  return r;
-}
-
-int register_irq(irq_t irq, irq_handler_t handler, void *data, uint32_t flags)
-{
-  int retval = -EINVAL;
-
-  if( irq < NUM_IRQS && handler != NULL ) {
-    irq_action_t *desc = allocate_irq_action();
-
-    GRAB_IRQ_LOCK();
-  
-    desc->handler = handler;
-    desc->flags = flags;
-    desc->private_data = data;
-
-    install_irq_action(irq,desc);
-
-    /* Enable IRQ line for this interrupt since its handler is now
-     * installed.
-     */
-    irqs[irq].controller->enable_irq(irq);
-
-    RELEASE_IRQ_LOCK();
-    retval = 0;
-  }
-  
-  return retval;
-}
-
-int unregister_irq(irq_t irq, void *data)
-{
-  int retval = -EINVAL;
-  irq_action_t *desc;
-
-  if( irq < NUM_IRQS ) {
-    GRAB_IRQ_LOCK();
-    list_for_each_entry(&irqs[irq].actions, desc, l) {
-      if( desc->private_data == data ) {
-        remove_irq_action(desc);
-      }
-    }
-    RELEASE_IRQ_LOCK();
-  }
-  return retval;
-}
-
-void initialize_irqs( void )
-{
-  int i;
-
-  /* First, initialize the IDT. */
-  if( get_idt() == NULL ) {
-    panic( "initialize_irqs(): Can't locate the IDT !" );
+  if (!ret) {
+    __unregister_irq_action(iline, action);
   }
 
-  get_idt()->initialize();
+  spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
+  return ERR(ret);
+}
 
-  for( i = 0; i < NUM_IRQS; i++ ) {
-    list_init_head(&irqs[i].actions);
+INITCODE void irq_register_controller(struct irq_controller *irqctl)
+{
+  ASSERT(irqctl != NULL);
+  ASSERT(irqctl->can_handle_irq != NULL);
+  ASSERT(irqctl->mask_all != NULL);
+  ASSERT(irqctl->unmask_all != NULL);
+  ASSERT(irqctl->mask_irq != NULL);
+  ASSERT(irqctl->unmask_irq != NULL);
+  ASSERT(irqctl->ack_irq != NULL);
 
-    irqs[i].controller = NULL;
-    irqs[i].flags = 0;
+
+  IRQ_CONTROLLERS_LOCK();
+  list_add2tail(&irqctls_list, &irqctl->ctl_node);
+  IRQ_CONTROLLERS_UNLOCK();
+}
+
+int irq_line_register(irq_t irq, struct irq_controller *controller)
+{
+  struct irq_line *iline;
+  uint_t irqstat;
+
+  ASSERT(controller != NULL);
+  if (irq >= NUM_IRQ_LINES) {
+    return ERR(-EINVAL);
   }
 
-  spinlock_initialize( &irq_lock );
+  iline = &irq_lines[irq];
+  spinlock_lock_irqsave(&iline->irq_line_lock, irqstat);
+  if (unlikely(IRQLINE_IS_ACTIVE(iline))) {
+    spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
+    return ERR(-EBUSY);
+  }
+
+  iline->irqctl = controller;
+  iline->flags |= IRQLINE_ACTIVE;
+  spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
+
+  return 0;
+}
+
+int irq_line_unregister(irq_t irq)
+{
+  struct irq_line *iline;
+  struct irq_action *iaction;
+  list_node_t *node, *safe_node;
+  uint_t irqstat;
+
+  if (irq >= NUM_IRQ_LINES) {
+    return ERR(-EINVAL);
+  }
+
+  iline = &irq_lines[irq];
+  spinlock_lock_irqsave(&iline->irq_line_lock, irqstat);
+  if (unlikely(!IRQLINE_IS_ACTIVE(iline))) {
+    spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
+    return ERR(-EALREADY);
+  }
+  list_for_each_safe(&iline->actions, node, safe_node) {
+    iaction = list_entry(node, struct irq_action, node);
+    __unregister_irq_action(iline, iaction);
+  }
+
+  iline->flags &= ~IRQLINE_ACTIVE;
+  spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
+
+  return 0;
+}
+
+#include <mstring/kprintf.h>
+INITCODE void irqs_init(void)
+{
+  irq_t irq_num;
+  struct irq_line *iline;
+
+  for (irq_num = 0; irq_num < IRQ_VECTORS; irq_num++) {
+    iline = &irq_lines[irq_num];
+    memset(iline, 0, sizeof(*iline));
+    list_init_head(&iline->actions);
+    spinlock_initialize(&iline->irq_line_lock);    
+  }
+
+  arch_irqs_init();
+  kprintf("ARCH IRQS INITIALIZED\n");
+}
+
+void __do_handle_irq(irq_t irq)
+{
+  int handlers = 0;
+  struct irq_line *iline;
+  struct irq_action *action;
+  uint_t irqstat;
+
+  if (irq >= NUM_IRQ_LINES) {
+    goto out;
+  }
 
 #ifdef CONFIG_DEBUG_IRQ_ACTIVITY
-  serial_init();
-#endif
-}
-
-void disable_all_irqs(void)
-{
-  hw_interrupt_controller_t *p;
-
-  GRAB_IRQ_LOCK();
-  list_for_each_entry(&known_hw_int_controllers, p, l) {
-    p->disable_all();
-  }
-  RELEASE_IRQ_LOCK();
-}
-
-void enable_all_irqs(void)
-{
-  hw_interrupt_controller_t *p;
-
-  GRAB_IRQ_LOCK();
-  list_for_each_entry(&known_hw_int_controllers, p, l) {
-    p->enable_all();
-  }
-  RELEASE_IRQ_LOCK();
-}
-
-void do_irq(irq_t irq)
-{
-  if( irq < NUM_IRQS ) {
-    int handlers = 0;
-    irq_action_t *action;
-
-#ifdef CONFIG_DEBUG_IRQ_ACTIVITY
-    serial_write_char('<');
-    serial_write_char('0'+irq);
+  serial_write_char('<');
+  serial_write_char('0'+irq);
 #endif
 
-    /* Call all handlers. */
-    list_for_each_entry(&irqs[irq].actions, action, l) {
+  iline = &irq_lines[irq];
+  spinlock_lock_irqsave(&iline->irq_line_lock, irqstat);
+
+  /* Call all handlers. */
+  list_for_each_entry(&iline->actions, action, node) {
 #ifdef CONFIG_DEBUG_IRQ_ACTIVITY
     serial_write_char('.');
 #endif
-      action->handler( action->private_data );
-      handlers++;
-    }
-
-    /* Ack this interrupt. */
-    irqs[irq].controller->ack_irq(irq);
-
-    if( handlers > 0) {
-#ifdef CONFIG_DEBUG_IRQ_ACTIVITY
-      serial_write_char('>');
-#endif
-      goto out;
-    }
+    action->handler(action->priv_data);
+    handlers++;
   }
+
+  /* Ack this interrupt. */
+  iline->irqctl->ack_irq(irq);
+  iline->stat.num_irqs++;
+  if (!handlers) {
+    iline->stat.num_sp_irqs++;
+  }
+
+  if( handlers > 0) {
+#ifdef CONFIG_DEBUG_IRQ_ACTIVITY
+    serial_write_char('>');
+#endif
+    goto out;
+  }
+
+  spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
   interrupts_enable();
-  //kprintf( "** Spurious interrupt detected: %d\n", irq );
 #ifdef CONFIG_DEBUG_IRQ_ACTIVITY
   serial_write_char('Z');
 #endif
