@@ -884,7 +884,7 @@ long ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
   ipc_port_message_t *msg = NULL;
   long r;
   size_t reply_len;
-  
+
   if( !port->msg_ops->remove_message ||
       !(port->flags & IPC_BLOCKED_ACCESS)) {
     return -EINVAL;
@@ -894,7 +894,7 @@ long ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
   if (r) {
     return r;
   }
-  
+
   IPC_LOCK_PORT_W(port);
   if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
     msg=port->msg_ops->lookup_message(port,msg_id);

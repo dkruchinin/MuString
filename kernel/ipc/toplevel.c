@@ -94,14 +94,15 @@ static inline long __reply_iov(ulong_t port, ulong_t msg_id,
   ipc_gen_port_t *p;
   long r;
 
+  if (!valid_iovecs(reply_iov, numvecs,NULL)) {
+    return -EFAULT;
+  }
+
   p = ipc_get_port(current_task(), port);
   if (!p) {
     return -EINVAL;
   }
-  if (!valid_iovecs(reply_iov, numvecs,NULL)) {
-    return -EFAULT;
-  }
-  
+
   r = ipc_port_reply_iov(p, msg_id, reply_iov, numvecs);
   ipc_put_port(p);
   return r;

@@ -103,12 +103,12 @@ static long __port_ctl_append_to_message(ipc_gen_port_t *p,
     return ERR(-EFAULT);
   }
 
-  if( !valid_iovecs(&kgap.data,1,NULL) ||
+  if( !valid_iovecs(&kgap.d.data,1,NULL) ||
       !(kgap.flags & IPC_PORT_CTL_DIR_HEAD)) {
     return ERR(-EINVAL);
   }
 
-  if( !kgap.data.iov_len ) {
+  if( !kgap.d.data.iov_len ) {
     return 0;
   }
 
@@ -135,17 +135,17 @@ static long __port_ctl_append_to_message(ipc_gen_port_t *p,
 
   if( !r ) {
     /* Make sure we fit into extra buffer. */
-    if( kgap.data.iov_len > (IPC_MSG_EXTRA_SIZE-(IPC_MSG_EXTRA_SIZE - msg->extra_data_tail)) ) {
+    if( kgap.d.data.iov_len > (IPC_MSG_EXTRA_SIZE-(IPC_MSG_EXTRA_SIZE - msg->extra_data_tail)) ) {
       r=-EINVAL;
     } else {
       char *eptr;
       int to_copy;
 
-      msg->extra_data_tail -= kgap.data.iov_len;
+      msg->extra_data_tail -= kgap.d.data.iov_len;
       eptr = (char *)msg->extra_data + msg->extra_data_tail;
       to_copy = IPC_MSG_EXTRA_SIZE - msg->extra_data_tail;
 
-      if( copy_from_user(eptr, kgap.data.iov_base,kgap.data.iov_len ) ) {
+      if( copy_from_user(eptr, kgap.d.data.iov_base,kgap.d.data.iov_len ) ) {
         r=-EFAULT;
       }
     }
@@ -154,7 +154,7 @@ static long __port_ctl_append_to_message(ipc_gen_port_t *p,
   IPC_LOCK_PORT_W(p);
   if( r < 0 ) {
     /* Adjust extra data pointer in case of errors. */
-    msg->extra_data_tail += kgap.data.iov_len;
+    msg->extra_data_tail += kgap.d.data.iov_len;
   } else {
     msg->data_size += r;
   }
@@ -176,12 +176,12 @@ static long __port_ctl_cut_from_message(ipc_gen_port_t *p,
     return ERR(-EFAULT);
   }
 
-  if( !(to_cut = kgap.data.iov_len) ) {
+  if( !(to_cut = kgap.d.data.iov_len) ) {
     return 0;
   }
 
-  if( kgap.data.iov_base ) {
-    if( !valid_iovecs(&kgap.data,1,NULL) ||
+  if( kgap.d.data.iov_base ) {
+    if( !valid_iovecs(&kgap.d.data,1,NULL) ||
         !(kgap.flags & IPC_PORT_CTL_DIR_HEAD)) {
       return ERR(-EINVAL);
     }
@@ -203,10 +203,10 @@ static long __port_ctl_cut_from_message(ipc_gen_port_t *p,
   /* Make sure we fit into extra buffer. */
   to_cut = MIN(to_cut,IPC_MSG_EXTRA_SIZE - msg->extra_data_tail);
 
-  if( to_cut && kgap.data.iov_base ) { /* cut-and-store */
+  if( to_cut && kgap.d.data.iov_base ) { /* cut-and-store */
     char *eptr = (char *)msg->extra_data + msg->extra_data_tail;
 
-    if( copy_to_user(kgap.data.iov_base,eptr,to_cut) ) {
+    if( copy_to_user(kgap.d.data.iov_base,eptr,to_cut) ) {
       r=-EFAULT;
     }
   }
@@ -223,6 +223,43 @@ static long __port_ctl_cut_from_message(ipc_gen_port_t *p,
   return ERR(r);
 }
 
+static long __port_ctl_reply_retcode(ipc_gen_port_t *p,
+                                     port_ctl_msg_extra_data_t *ugap)
+{
+  ipc_port_message_t *msg;
+  long r=-EINVAL;
+  port_ctl_msg_extra_data_t kgap;
+  long to_reply;
+
+  if( copy_from_user(&kgap, ugap, sizeof(kgap)) ) {
+    return ERR(-EFAULT);
+  }
+
+  IPC_LOCK_PORT_W(p);
+  if( !(p->flags & IPC_PORT_SHUTDOWN) &&
+      (msg = __ipc_port_lookup_message(p,kgap.msg_id,&r)) &&
+      message_writable(msg) && msg->extra_data ) {
+    msg->state=MSG_STATE_REPLY_BEGIN;
+    to_reply=MIN((long)msg->reply_size,kgap.d.code);
+    r=0;
+  }
+  IPC_UNLOCK_PORT_W(p);
+
+  if( r ) {
+    return ERR(r);
+  }
+
+  if( (p->flags & IPC_AUTOREF) && msg->sender ) {
+    release_task_struct(msg->sender);
+  }
+
+  /* Update message state and wakeup client. */
+  msg->replied_size=to_reply;
+  msg->state=MSG_STATE_REPLIED;
+  event_raise(&msg->event);
+  return 0;
+}
+
 long ipc_port_control(ipc_gen_port_t *p, ulong_t cmd, ulong_t arg)
 {
   switch( cmd ) {
@@ -232,6 +269,8 @@ long ipc_port_control(ipc_gen_port_t *p, ulong_t cmd, ulong_t arg)
       return __port_ctl_append_to_message(p,(port_ctl_msg_extra_data_t *)arg);
     case IPC_PORT_CTL_MSG_CUT:
       return __port_ctl_cut_from_message(p,(port_ctl_msg_extra_data_t *)arg);
+    case IPC_PORT_CTL_MSG_REPLY_RETCODE:
+      return __port_ctl_reply_retcode(p,(port_ctl_msg_extra_data_t *)arg);
     default:
       break;
   }

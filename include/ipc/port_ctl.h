@@ -34,13 +34,17 @@ typedef struct __port_ctl_msg_ch_descr {
 
 typedef struct __port_ctl_msg_extra_data {
   ulong_t msg_id,flags;
-  iovec_t data;
+  union {
+    iovec_t data;
+    long code;
+  } d;
 } port_ctl_msg_extra_data_t;
 
 enum ipc_port_ctrl_command {
   IPC_PORT_CTL_MSG_FWD =    0, /** Forward message over target channel. */
   IPC_PORT_CTL_MSG_APPEND = 1, /** Append extra data to original message */
   IPC_PORT_CTL_MSG_CUT = 2,    /** Cut extra data from message */
+  IPC_PORT_CTL_MSG_REPLY_RETCODE = 3, /*Just wake up sender and transfer the retcode. */
 };
 
 #endif
