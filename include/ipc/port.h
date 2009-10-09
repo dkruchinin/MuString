@@ -157,8 +157,6 @@ ipc_port_message_t *ipc_create_port_message_iov_v(struct __ipc_channel *channel,
                                                   uint32_t snd_numvecs, size_t data_len,
                                                   struct __iovec *rcv_kiovecs, uint32_t rcv_numvecs,
                                                   ipc_buffer_t *snd_bufs, ipc_buffer_t *rcv_bufs, size_t rcv_size);
-long ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
-                        struct __iovec *reply_iov, uint32_t numvecs);
 long ipc_port_send_iov(struct __ipc_channel *channel, struct __iovec *snd_kiovecs, ulong_t snd_numvecs,
                        struct __iovec *rcv_kiovecs, ulong_t rcv_numvecs);
 long ipc_port_send_iov_core(ipc_gen_port_t *port,
@@ -169,7 +167,7 @@ long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
                        struct __iovec *rcv_iov,ulong_t numvecs,ulong_t offset);
 long ipc_port_msg_write(struct __ipc_gen_port *port,ulong_t msg_id,
                         struct __iovec *iovecs,ulong_t numvecs,off_t *offset,
-                        long len);
+                        long len, bool wakeup,long msg_size);
 
 ipc_gen_port_t *ipc_clone_port(ipc_gen_port_t *p);
 void put_ipc_port_message(ipc_port_message_t *msg);
@@ -199,9 +197,15 @@ static inline ipc_port_message_t *__ipc_port_lookup_message(ipc_gen_port_t *p,
                                                             ulong_t msg_id,
                                                             long *err)
 {
-  ipc_port_message_t *msg = p->msg_ops->lookup_message(p,msg_id);
+  ipc_port_message_t *msg;
   long e;
 
+  if( p->flags & IPC_PORT_SHUTDOWN ) {
+    e=-EPIPE;
+    goto out;
+  }
+
+  msg = p->msg_ops->lookup_message(p,msg_id);
   if( msg == __MSG_WAS_DEQUEUED ) { /* Client got lost somehow. */
     e=-ENXIO;
   } else if( !msg ) {
@@ -210,6 +214,7 @@ static inline ipc_port_message_t *__ipc_port_lookup_message(ipc_gen_port_t *p,
     e=0;
   }
 
+out:
   *err = e;
   if( e ) {
     return NULL;

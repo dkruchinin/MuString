@@ -365,6 +365,9 @@ void sys_sched_yield(void);
 
 long sys_waitpid(pid_t pid,int *status,int options);
 
+long sys_port_msg_write(ulong_t port, ulong_t msg_id, iovec_t *iovecs,
+                        ulong_t numvecs,off_t offset);
+
 #endif
 
 #endif

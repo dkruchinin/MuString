@@ -575,30 +575,54 @@ long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
 
 long ipc_port_msg_write(struct __ipc_gen_port *port,ulong_t msg_id,
                         struct __iovec *iovecs,ulong_t numvecs,off_t *poffset,
-                        long len)
+                        long len, bool wakeup,long msg_size)
 {
   ipc_port_message_t *msg;
   long r = -EINVAL;
 
   IPC_LOCK_PORT_W(port);
-  if( !(port->flags & IPC_PORT_SHUTDOWN) &&
-      (msg = __ipc_port_lookup_message(port,msg_id,&r)) ) {
-    if( message_writable(msg) && *poffset < msg->reply_size ) {
+  if( (msg = __ipc_port_lookup_message(port,msg_id,&r)) ) {
+    if( message_writable(msg) ) {
+      if( !poffset || (*poffset < msg->reply_size) ) {
+        r=0;
+      }
+    }
+  }
+
+  if( !r ) {
+    if( wakeup ) {
+      r=port->msg_ops->remove_message(port,msg);
+      msg->state=MSG_STATE_REPLY_BEGIN;
+    } else {
       mark_message_waccess(msg);
-      r=0;
     }
   }
   IPC_UNLOCK_PORT_W(port);
 
   if( !r ) {
-    r=__transfer_reply_data_iov(msg,iovecs,numvecs,true,len,*poffset);
+    if( iovecs ) {
+      r=__transfer_reply_data_iov(msg,iovecs,numvecs,true,len,*poffset);
+    }
 
     IPC_LOCK_PORT_W(port);
     unmark_message_waccess(msg);
     IPC_UNLOCK_PORT_W(port);
 
-    if( r > 0 ) {
+    if( r > 0 && poffset ) {
       *poffset +=r;
+    }
+
+    if( wakeup ) {
+      if( (port->flags & IPC_AUTOREF) && msg->sender ) {
+        release_task_struct(msg->sender);
+      }
+
+      /* Message was removed from the port queue, so we don't need
+       * any locks when accessing it in case when reply was requested.
+       */
+      msg->replied_size=(r >= 0) ? msg_size + r : r;
+      msg->state=MSG_STATE_REPLIED;
+      event_raise(&msg->event);
     }
   }
   return ERR(r);
@@ -611,7 +635,7 @@ long ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
   long r=-EINVAL;
   ipc_port_message_t *msg;
   task_t *owner=current_task();
-  
+
   if (!msg_info) {
     return -EINVAL;
   }
@@ -875,60 +899,6 @@ long ipc_port_send_iov_core(ipc_gen_port_t *port,
   } else {
     r=msg_size;
   }
-  return r;
-}
-
-long ipc_port_reply_iov(ipc_gen_port_t *port, ulong_t msg_id,
-                        iovec_t *reply_iov, uint32_t numvecs)
-{
-  ipc_port_message_t *msg = NULL;
-  long r;
-  size_t reply_len;
-
-  if( !port->msg_ops->remove_message ||
-      !(port->flags & IPC_BLOCKED_ACCESS)) {
-    return -EINVAL;
-  }
-
-  r = __calc_msg_length(reply_iov, numvecs, &reply_len);
-  if (r) {
-    return r;
-  }
-
-  IPC_LOCK_PORT_W(port);
-  if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
-    msg=port->msg_ops->lookup_message(port,msg_id);
-    if( msg == __MSG_WAS_DEQUEUED ) { /* Client got lost. */
-      r=-ENXIO;
-    } else if( msg ) {
-      r=port->msg_ops->remove_message(port,msg);
-      if( !r ) {
-        msg->state=MSG_STATE_REPLY_BEGIN;
-      }
-    } else {
-      r=-EINVAL;
-    }
-  } else {
-    r=-EPIPE;
-  }
-  IPC_UNLOCK_PORT_W(port);
-
-  if( !r ) {
-    r=__transfer_reply_data_iov(msg,reply_iov,numvecs,true,reply_len,0);
-
-    if( (port->flags & IPC_AUTOREF) && msg->sender ) {
-      release_task_struct(msg->sender);
-    }
-
-    /* Update message state and wakeup client. */
-    msg->state=MSG_STATE_REPLIED;
-    event_raise(&msg->event);
-
-    if( r > 0 ) {
-      r=0;
-    }
- }
-
   return r;
 }
 

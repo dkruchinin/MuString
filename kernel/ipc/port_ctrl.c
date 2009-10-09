@@ -226,38 +226,17 @@ static long __port_ctl_cut_from_message(ipc_gen_port_t *p,
 static long __port_ctl_reply_retcode(ipc_gen_port_t *p,
                                      port_ctl_msg_extra_data_t *ugap)
 {
-  ipc_port_message_t *msg;
-  long r=-EINVAL;
+  long r;
   port_ctl_msg_extra_data_t kgap;
-  long to_reply;
 
   if( copy_from_user(&kgap, ugap, sizeof(kgap)) ) {
     return ERR(-EFAULT);
   }
 
-  IPC_LOCK_PORT_W(p);
-  if( !(p->flags & IPC_PORT_SHUTDOWN) &&
-      (msg = __ipc_port_lookup_message(p,kgap.msg_id,&r)) &&
-      message_writable(msg) && msg->extra_data ) {
-    msg->state=MSG_STATE_REPLY_BEGIN;
-    to_reply=MIN((long)msg->reply_size,kgap.d.code);
-    r=0;
-  }
-  IPC_UNLOCK_PORT_W(p);
+  r=ipc_port_msg_write(p,kgap.msg_id,NULL,0,NULL,
+                       0,true,kgap.d.code);
 
-  if( r ) {
-    return ERR(r);
-  }
-
-  if( (p->flags & IPC_AUTOREF) && msg->sender ) {
-    release_task_struct(msg->sender);
-  }
-
-  /* Update message state and wakeup client. */
-  msg->replied_size=to_reply;
-  msg->state=MSG_STATE_REPLIED;
-  event_raise(&msg->event);
-  return 0;
+  return r >= 0 ? 0 : r;
 }
 
 long ipc_port_control(ipc_gen_port_t *p, ulong_t cmd, ulong_t arg)

@@ -33,6 +33,53 @@
 #include <ipc/port.h>
 #include <ipc/channel.h>
 
+static long __ipc_port_msg_write(ulong_t port, ulong_t msg_id, iovec_t *iovecs,
+                                 ulong_t numvecs,off_t offset, bool wakeup)
+{
+  ipc_gen_port_t *p;
+  long r;
+  iovec_t kiovecs[MAX_IOVECS];
+  long size,processed;
+  off_t koffset;
+
+  if( !numvecs || numvecs > IPC_ABS_IOVEC_LIM ) {
+    return ERR(-EINVAL);
+  }
+
+  p = ipc_get_port(current_task(), port);
+  if( !p ) {
+    r=-EINVAL;
+  } else {
+    processed = 0;
+    koffset = offset;
+
+    while( numvecs ) {
+      ulong_t nc = MIN(numvecs,MAX_IOVECS);
+
+      if( copy_from_user(kiovecs,iovecs,nc*sizeof(iovec_t)) ||
+          !valid_iovecs(kiovecs,nc,&size) ) {
+        r=-EFAULT;
+        break;
+      }
+
+      /* Wake up sender only when processing the last set of I/O vecs. */
+      r=ipc_port_msg_write(p,msg_id,kiovecs,nc,&koffset,size,
+                           (numvecs <= MAX_IOVECS && wakeup), processed);
+      if( r < 0 ) {
+        processed = r;
+        break;
+      }
+
+      processed += r;
+      numvecs -= nc;
+      iovecs += nc;
+    }
+  }
+
+  ipc_put_port(p);
+  return ERR(processed);
+}
+
 bool valid_iovecs(iovec_t *iovecs, uint32_t num_vecs,long *size)
 {
   int i;
@@ -88,50 +135,24 @@ int sys_close_port(ulong_t port)
   return ipc_close_port(current_task()->ipc,port);
 }
 
-static inline long __reply_iov(ulong_t port, ulong_t msg_id,
-                               iovec_t reply_iov[], uint32_t numvecs)
-{
-  ipc_gen_port_t *p;
-  long r;
-
-  if (!valid_iovecs(reply_iov, numvecs,NULL)) {
-    return -EFAULT;
-  }
-
-  p = ipc_get_port(current_task(), port);
-  if (!p) {
-    return -EINVAL;
-  }
-
-  r = ipc_port_reply_iov(p, msg_id, reply_iov, numvecs);
-  ipc_put_port(p);
-  return r;
-}
-
 long sys_port_reply_iov(ulong_t port, ulong_t msg_id,
                         iovec_t reply_iov[], uint32_t numvecs)
 {
-  iovec_t iovecs[MAX_IOVECS];
-
-  if (!reply_iov || !numvecs || numvecs > MAX_IOVECS) {
-    return -EINVAL;
-  }
-  if (copy_from_user(iovecs, reply_iov, numvecs * sizeof(iovec_t))) {
-    return -EFAULT;
-  }
-
-  return __reply_iov(port, msg_id, iovecs, numvecs);
+  long r = __ipc_port_msg_write(port,msg_id,reply_iov,numvecs,0,true);
+  return r > 0 ? 0 : ERR(r);
 }
 
 size_t sys_port_reply(ulong_t port,ulong_t msg_id, ulong_t reply_buf,
                       size_t reply_len)
 {
   iovec_t iv;
+  long r;
 
   iv.iov_base=(void *)reply_buf;
   iv.iov_len=reply_len;
 
-  return __reply_iov(port,msg_id,&iv,1);
+  r=__ipc_port_msg_write(port,msg_id,&iv,1,0,true);
+  return r > 0 ? 0 : ERR(r);
 }
 
 long sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
@@ -288,46 +309,7 @@ long sys_port_control(ulong_t port, ulong_t cmd, ulong_t arg)
 }
 
 long sys_port_msg_write(ulong_t port, ulong_t msg_id, iovec_t *iovecs,
-                        ulong_t numvecs,off_t offset)
+                                 ulong_t numvecs,off_t offset)
 {
-  ipc_gen_port_t *p;
-  long r;
-  iovec_t kiovecs[MAX_IOVECS];
-  long size,processed;
-  off_t koffset;
-
-  if( !numvecs || numvecs > IPC_ABS_IOVEC_LIM ) {
-    return ERR(-EINVAL);
-  }
-
-  p = ipc_get_port(current_task(), port);
-  if( !p ) {
-    r=-EINVAL;
-  } else {
-    processed = 0;
-    koffset = offset;
-
-    while( numvecs ) {
-      ulong_t nc = MIN(numvecs,MAX_IOVECS);
-
-      if( copy_from_user(kiovecs,iovecs,nc*sizeof(iovec_t)) ||
-          !valid_iovecs(kiovecs,nc,&size) ) {
-        r=-EFAULT;
-        break;
-      }
-
-      r=ipc_port_msg_write(p,msg_id,kiovecs,nc,&koffset,size);
-      if( r < 0 ) {
-        processed = r;
-        break;
-      }
-
-      processed += r;
-      numvecs -= nc;
-      iovecs += nc;
-    }
-  }
-
-  ipc_put_port(p);
-  return ERR(processed);
+  return __ipc_port_msg_write(port,msg_id,iovecs,numvecs,offset,0);
 }
