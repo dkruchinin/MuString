@@ -84,7 +84,9 @@ void kernel_main(void)
 {
   arch_prepare_system();
   irqs_init();
+  timers_init();
   kprintf("everything is done\n");
+  interrupts_enable();
   for (;;);
 #if 0
   mm_initialize();

@@ -33,6 +33,7 @@
 #include <mstring/serial.h>
 #endif
 
+struct irq_controller *default_irqctrl = NULL;
 static LIST_DEFINE(irqctls_list);
 static SPINLOCK_DEFINE(irqctls_lock);
 static struct irq_line irq_lines[NUM_IRQ_LINES];
@@ -207,6 +208,7 @@ int irq_line_register(irq_t irq, struct irq_controller *controller)
 
   iline->irqctl = controller;
   iline->flags |= IRQLINE_ACTIVE;
+  list_init_head(&iline->actions);
   spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
 
   return 0;
@@ -254,6 +256,7 @@ INITCODE void irqs_init(void)
   }
 
   arch_irqs_init();
+  ASSERT(default_irqctrl != NULL);
   kprintf("ARCH IRQS INITIALIZED\n");
 }
 
@@ -286,7 +289,9 @@ void __do_handle_irq(irq_t irq)
   }
 
   /* Ack this interrupt. */
-  iline->irqctl->ack_irq(irq);
+  if (iline->irqctl) {
+    iline->irqctl->ack_irq(irq);
+  }
   iline->stat.num_irqs++;
   if (!handlers) {
     iline->stat.num_sp_irqs++;
@@ -296,11 +301,10 @@ void __do_handle_irq(irq_t irq)
 #ifdef CONFIG_DEBUG_IRQ_ACTIVITY
     serial_write_char('>');
 #endif
-    goto out;
   }
 
   spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
-  interrupts_enable();
+  //interrupts_enable();
 #ifdef CONFIG_DEBUG_IRQ_ACTIVITY
   serial_write_char('Z');
 #endif

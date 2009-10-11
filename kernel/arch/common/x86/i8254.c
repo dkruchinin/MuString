@@ -133,6 +133,18 @@ static void i8254_resume(void)
   outb(I8254_BASE+3,0x36);
 }
 
+static void pit_interrupt_handler(void *unused)
+{
+  static int ticks = 0;
+  kprintf("timer IRQ: %d\n", ++ticks);
+}
+
+struct irq_action pit_interrupt = {
+  .name = "PIT interrupt",
+  .handler = pit_interrupt_handler,
+  .priv_data = NULL,
+};
+
 void i8254_init(void) 
 {
   __arch_i8254_init();
@@ -142,4 +154,7 @@ void i8254_init(void)
   i8254.suspend=i8254_suspend;
   //i8254.register_callback=i8254_register_callback;
   hw_timer_register(&i8254);
+  ASSERT(irq_line_register(0, default_irqctrl) == 0);
+  ASSERT(irq_register_action(0, &pit_interrupt) == 0);
+  irq_unmask(0);
 }

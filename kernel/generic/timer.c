@@ -123,8 +123,10 @@ static void __init_sw_timers(void)
   }
 }
 
-void init_timers(void)
+INITCODE void timers_init(void)
 {
+  arch_timer_init();
+  return 0;
   init_hw_timers();
   __init_sw_timers();
   initialize_deffered_actions();

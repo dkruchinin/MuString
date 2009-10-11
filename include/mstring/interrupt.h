@@ -75,6 +75,8 @@ typedef struct irq_action {
   void *priv_data;  
 } irq_action_t;
 
+extern struct irq_controller *default_irqctrl;
+
 INITCODE void irqs_init(void);
 INITCODE void irq_register_controller(struct irq_controller *irqctl);
 int irq_line_register(irq_t irq, struct irq_controller *controller);

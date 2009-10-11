@@ -1,6 +1,7 @@
 #include <arch/seg.h>
 #include <arch/fault.h>
 #include <arch/msr.h>
+#include <arch/acpi.h>
 #include <server.h>
 #include <arch/cpufeatures.h>
 #include <arch/boot.h>
@@ -98,4 +99,5 @@ INITCODE void arch_prepare_system(void)
   arch_cpu_init(0);
   arch_faults_init();
   arch_servers_init();
+  acpi_init();
 }
