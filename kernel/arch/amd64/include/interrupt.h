@@ -32,15 +32,15 @@
 
 #define HZ  1000 /* Timer frequency. */
 #define IRQ_VECTORS (IDT_ITEMS - IDT_NUM_FAULTS)
-#define IRQ_BASE 32 /* First vector in IDT for IRQ #0. */
+#define IRQ_BASE    32 /* First vector in IDT for IRQ #0. */
 #define RESERVED_IRQS 8 /* Reserved IRQ for SMP use. */
 
 //#ifdef CONFIG_SMP
 
-#define CPU_SMP_BASE_IRQ (256 - RESERVED_IRQS)
-#define APIC_SPURIOUS_VECTOR (CPU_SMP_BASE_IRQ + 1)
+#define CPU_SMP_BASE_IRQ        (IRQ_VECTORS - RESERVED_IRQS)
+#define APIC_SPURIOUS_VECTOR    (CPU_SMP_BASE_IRQ + 1)
 #define LOCAL_TIMER_CPU_IRQ_VEC (CPU_SMP_BASE_IRQ + 0)
-#define APIC_ERROR_VECTOR    (CPU_SMP_BASE_IRQ + 2)
+#define APIC_ERROR_VECTOR       (CPU_SMP_BASE_IRQ + 2)
 
 //#endif
 

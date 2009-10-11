@@ -39,7 +39,7 @@
 extern volatile uint32_t local_apic_base;
 extern volatile uint8_t local_apic_ids[CONFIG_NRCPUS];
 
-#ifdef CONFIG_APIC
+#ifdef CONFIG_APIC_xxx
 void arch_specific_init(void)
 {
   int r, i;
@@ -96,7 +96,7 @@ void arch_specific_init(void)
 
 void arch_ap_specific_init(void)
 {
-	local_ap_apic_init();
+	//local_ap_apic_init();
 }
 
 #endif

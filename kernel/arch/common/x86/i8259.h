@@ -15,24 +15,23 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
  *
- * include/mstring/amd64/i8254.h: implements i8254 timer driver.
+ * include/eza/amd64/8259.h: Contains base constants for the I8259A PIC.
  *
  */
 
-#ifndef __MSTINRG_ARCH_I8254_H__
-#define __MSTRING_ARCH_I8254_H__
+#ifndef __MSTRING_ARCH_I8259_H__
+#define __MSTRING_ARCH_I8259_H__
 
 #include <mstring/types.h>
 
-#define I8254_BASE  0x40
+#define I8259_PIC_MASTER  0x20
+#define I8259_PIC_SLAVE   0xA0
+#define PIC_EOI           0x20
 
-#define DCLOCK       150000
-#define PIT_OSC_FREQ 1193182
-#define MAGIC_CLOCKN 1193
+INITCODE void pic_init(void);
 
-void i8254_init(void);
-
-#endif /* !__MSTRING_ARCH_I8254_H__ */
+#endif /* !__MSTRING_ARCH_I8259_H__ */
 

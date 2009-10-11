@@ -191,10 +191,9 @@ INITCODE void acpi_init(void)
 {
   acpi_rsdp = acpi_rsdp_find();
   if (!acpi_rsdp) {
-    kprintf("Can not find ACPI RSDP.\n");
-    return;
+    panic("Can not find ACPI RSDP\n");
   }
 
   acpi_rsdt = acpi_get_rsdt();
-  acpi_xsdt = acpi_get_xsdt();
+  acpi_xsdt = acpi_get_xsdt();  
 }

@@ -24,6 +24,7 @@
 
 #include <config.h>
 #include <arch/i8254.h>
+#include <arch/apic.h>
 #include <arch/cpufeatures.h>
 #include <mstring/timer.h>
 #include <mstring/time.h>
@@ -39,7 +40,8 @@ void arch_timer_init(void)
   if (!cpu_has_feature(X86_FTR_APIC)) {
     kprintf(KO_WARNING "Your CPU doesn't support APIC\n");
   }
-  else {    
+  else {
+    local_apic_init(0);
   }
   
 #if 0
