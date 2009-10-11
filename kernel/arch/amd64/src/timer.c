@@ -22,12 +22,13 @@
  *
  */
 
-#include <arch/types.h>
+#include <config.h>
 #include <arch/i8254.h>
+#include <arch/cpufeatures.h>
 #include <mstring/timer.h>
 #include <mstring/time.h>
 #include <mstring/kprintf.h>
-#include <config.h>
+#include <mstring/types.h>
 
 extern void i8254_resume(void);
 extern void i8254_suspend(void);
@@ -35,7 +36,12 @@ extern void i8254_suspend(void);
 void arch_timer_init(void)
 {
   i8254_init();
-
+  if (!cpu_has_feature(X86_FTR_APIC)) {
+    kprintf(KO_WARNING "Your CPU doesn't support APIC\n");
+  }
+  else {    
+  }
+  
 #if 0
   kprintf("[LW] Calibrating delay loop ... ");
   delay_loop=i8254_calibrate_delay_loop();

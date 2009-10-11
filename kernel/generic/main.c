@@ -80,12 +80,15 @@ static void main_routine_stage1(void)
 }
 #endif
 
+#include <arch/acpi.h>
 void kernel_main(void)
 {
   arch_prepare_system();
-  irqs_init();
-  timers_init();
+  irqs_init();  
   kprintf("everything is done\n");
+  mm_initialize();
+  acpi_init();
+  timers_init();
   interrupts_enable();
   for (;;);
 #if 0
