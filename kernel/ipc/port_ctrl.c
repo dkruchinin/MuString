@@ -73,7 +73,7 @@ static long __port_ctl_forward_message(ipc_gen_port_t *port,
     if( msg ) {
       if( msg->state == MSG_STATE_REPLY_BEGIN ||
           msg->state == MSG_STATE_DATA_UNDER_ACCESS ) {
-        r=-EINVAL;
+        r=-EBUSY;
       } else {
         port->msg_ops->remove_message(port,msg);
         dest_port->msg_ops->insert_message(dest_port,msg);

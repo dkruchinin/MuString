@@ -278,8 +278,10 @@ repeat:
   IPC_LOCK_PORT_W(port);
   msg=port->msg_ops->remove_head_message(port);
   if( msg ) {
-    msg->replied_size=-EPIPE;
-    event_raise(&msg->event);
+    if( message_writable(msg) ) {
+      msg->replied_size=-EPIPE;
+      event_raise(&msg->event);
+    }
     IPC_UNLOCK_PORT_W(port);
     goto repeat;
   }
