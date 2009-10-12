@@ -45,6 +45,7 @@ struct ap_config {
 extern int ap_boot_start, ap_boot_end, ap_config;
 
 INITCODE void arch_smp_init(void);
+INITCODE void arch_processor_init(cpu_id_t cpuid);
 extern void ap_boot(void);
 extern void smp_start32(void);
 extern void main_smpap_routine(void);

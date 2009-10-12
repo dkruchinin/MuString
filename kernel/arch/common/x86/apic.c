@@ -297,16 +297,14 @@ INITCODE void local_apic_init(cpu_id_t cpuid)
   val |= (IRQ_NUM_TO_VECTOR(APIC_SPURIOUS_IRQ) | APIC_SVR_ENABLED);
   apic_write(APIC_SIVR, val);
 
-#if 0
   if (!cpuid) {
     apic_write(APIC_LI0_VTE, APIC_LVTDM_EXTINT);
     apic_write(APIC_LI1_VTE, APIC_LVTDM_NMI);
   }
   else {
-#endif
     apic_write(APIC_LI0_VTE, APIC_LVTDM_EXTINT | APIC_LVT_MASKED);
     apic_write(APIC_LI1_VTE, APIC_LVTDM_NMI | APIC_LVT_MASKED);
-    //}
+  }
 
   lapic_eoi();
   maxlvt = apic_get_maxlvt();
@@ -341,14 +339,14 @@ static void apic_icr_wait(void)
   }
 }
 
-INITCODE void local_apic_timer_init(void)
+INITCODE void local_apic_timer_init(cpu_id_t cpuid)
 {
   tick_t apictick0, apictick1, delta;
   uint_t irqstat;
   uint32_t val;
 
   ASSERT(default_hwclock != NULL);
-  if (irq_line_is_registered(PIT_IRQ)) {
+  if (!cpuid && irq_line_is_registered(PIT_IRQ)) {
     irq_mask(PIT_IRQ);
   }
 
@@ -358,21 +356,21 @@ INITCODE void local_apic_timer_init(void)
   apic_write(APIC_TIMER_DCR, val);
   apic_write(APIC_TIMER_ICR, 0xffffffffU);
 
-  interrupts_save_and_disable(irqstat);
+  //interrupts_save_and_disable(irqstat);
   apictick0 = apic_read(APIC_TIMER_CCR);
   default_hwclock->delay(APIC_CAL_LOOPS * 1000);
   apictick1 = apic_read(APIC_TIMER_CCR);
-  interrupts_restore(irqstat);
+  //interrupts_restore(irqstat);
 
   delta = (apictick0 - apictick1) * APIC_DIVISOR / APIC_CAL_LOOPS;  
   val = APIC_LVT_TIMER_MODE; /* periodic timer mode */
   val |= APIC_LVT_MASKED;
   apic_write(APIC_TIMER_LVTE, val);
 
-  apic_write(APIC_TIMER_ICR, delta / APIC_DIVISOR);
-  lapic_timer.freq = delta;
-  hwclock_register(&lapic_timer);
-  if (!cpu_id()) {
+  apic_write(APIC_TIMER_ICR, delta / APIC_DIVISOR);  
+  if (!cpuid) {
+      lapic_timer.freq = delta;
+      hwclock_register(&lapic_timer);
       ASSERT(irq_line_register(APIC_TIMER_IRQ, &lapic_controller) == 0);
       ASSERT(irq_register_action(APIC_TIMER_IRQ, &lapic_timer_irq) == 0);
   }

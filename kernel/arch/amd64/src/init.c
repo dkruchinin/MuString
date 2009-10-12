@@ -150,8 +150,8 @@ INITCODE void arch_prepare_system(void)
 
   multiboot_init();
   arch_cpu_init(0);
-  arch_faults_init();
-  arch_servers_init();
+  arch_faults_init();  
+  arch_servers_init();  
 }
 
 INITCODE void arch_init(void)

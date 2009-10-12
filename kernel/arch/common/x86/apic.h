@@ -114,6 +114,7 @@ extern uint32_t PER_CPU_VAR(lapic_ids);
 
 INITCODE void local_apic_init(cpu_id_t cpuid);
 INITCODE int apic_init_ipi(uint32_t apic_id);
+INITCODE void local_apic_timer_init(cpu_id_t cpuid);
 extern void apic_spurious_interrupt(void);
 
 #endif /* !__MSTRING_ARCH_APIC_H__ */

@@ -23,18 +23,18 @@
  */
 
 #include <config.h>
-#include <mstring/interrupt.h>
-#include <arch/i8259.h>
-#include <arch/i8254.h>
-#include <arch/types.h>
+#include <arch/init.h>
 #include <arch/asm.h>
 #include <arch/apic.h>
 #include <arch/seg.h>
+#include <arch/smp.h>
+#include <arch/cpufeatures.h>
 #include <mstring/kprintf.h>
+#include <mstring/interrupt.h>
 #include <mstring/string.h>
 #include <mstring/timer.h>
 #include <mstring/smp.h>
-#include <arch/smp.h>
+#include <mstring/types.h>
 
 #ifdef CONFIG_SMP
 int ap_boot_start, ap_boot_end,
@@ -88,6 +88,15 @@ INITCODE void arch_smp_init(void)
       for (;;);
       panic("CPU %d is not online\n", c);
     }
+  }
+}
+
+INITCODE void arch_processor_init(cpu_id_t cpuid)
+{
+  arch_cpu_init(cpuid);
+  if (cpu_has_feature(X86_FTR_APIC)) {
+    local_apic_init(cpuid);
+    local_apic_timer_init(cpuid);
   }
 }
 
