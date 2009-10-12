@@ -14,8 +14,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
- * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2006,2007,2008,2009 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2008,2009 Michael Tsymbalyuk <mtzaurus@gmail.com>
  *
  * ipc/toplevel.c: Top-level entrypoints for IPC-related functions.
  */
@@ -99,35 +99,37 @@ bool valid_iovecs(iovec_t *iovecs, uint32_t num_vecs,long *size)
   return true;
 }
 
-/* TODO: [mt] Implement security checks for port-related syscalls ! */
 long sys_open_channel(pid_t pid,ulong_t port,ulong_t flags)
 {
   task_t *task = pid_to_task(pid);
   long r;
 
   if (task == NULL) {
-    return -ESRCH;
+    return ERR(-ESRCH);
   }
 
   r=ipc_open_channel(current_task(),task,port,flags);
   release_task_struct(task);
-  return r;
+  return ERR(r);
 }
 
 int sys_close_channel(ulong_t channel)
 {
-  return ipc_close_channel(current_task()->ipc,channel);
+  long r=ipc_close_channel(current_task()->ipc,channel);
+  return ERR(r);
 }
 
 long sys_create_port( ulong_t flags, ulong_t queue_size )
 {
   task_t *caller=current_task();
+  long r;
 
   if(!trusted_task(caller)) {
     flags |= IPC_BLOCKED_ACCESS;
   }
 
-  return ipc_create_port(caller, flags, queue_size);
+  r=ipc_create_port(caller, flags, queue_size);
+  return ERR(r);
 }
 
 int sys_close_port(ulong_t port)
@@ -142,19 +144,6 @@ long sys_port_reply_iov(ulong_t port, ulong_t msg_id,
   return r > 0 ? 0 : ERR(r);
 }
 
-size_t sys_port_reply(ulong_t port,ulong_t msg_id, ulong_t reply_buf,
-                      size_t reply_len)
-{
-  iovec_t iv;
-  long r;
-
-  iv.iov_base=(void *)reply_buf;
-  iv.iov_len=reply_len;
-
-  r=__ipc_port_msg_write(port,msg_id,&iv,1,0,true);
-  return r > 0 ? 0 : ERR(r);
-}
-
 long sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
                       size_t recv_len, port_msg_info_t *msg_info)
 {
@@ -166,7 +155,7 @@ long sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
     iovec.iov_base = (void *)recv_buf;
     iovec.iov_len = recv_len;
     if (!valid_iovecs(&iovec, 1,NULL)) {
-      return -EFAULT;
+      return ERR(-EFAULT);
     }
     piovec = &iovec;
   }
@@ -176,37 +165,12 @@ long sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
 
   p = ipc_get_port(current_task(), port);
   if (!p) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   r = ipc_port_receive(p, flags, piovec, 1, msg_info);
   ipc_put_port(p);
-  return r;
-}
-
-static inline long __send_iov_v(ulong_t channel,
-                                iovec_t snd_kiovecs[], uint32_t snd_numvecs,
-                                iovec_t rcv_kiovecs[], uint32_t rcv_numvecs)
-{
-  ipc_channel_t *c;
-  long ret;
-
-  if (!valid_iovecs(snd_kiovecs, snd_numvecs,NULL)) {
-    return -EFAULT;
-  }
-
-  if (rcv_kiovecs && !valid_iovecs(rcv_kiovecs, rcv_numvecs,NULL)) {
-    return -EFAULT;
-  }
-
-  c = ipc_get_channel(current_task(), channel);
-  if (!c) {
-    return -EINVAL;
-  }
-
-  ret = ipc_port_send_iov(c, snd_kiovecs, snd_numvecs, rcv_kiovecs, rcv_numvecs);
-  ipc_put_channel(c);
-  return ret;
+  return ERR(r);
 }
 
 long sys_port_send_iov_v(ulong_t channel,
@@ -215,59 +179,41 @@ long sys_port_send_iov_v(ulong_t channel,
 {
   iovec_t snd_kiovecs[MAX_IOVECS];
   iovec_t rcv_kiovecs[MAX_IOVECS];
+  ipc_channel_t *c;
+  long ret;
 
   if (!snd_iov || !snd_numvecs || snd_numvecs > MAX_IOVECS ||
       !rcv_iov || !rcv_numvecs || rcv_numvecs > MAX_IOVECS) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   if (copy_from_user(&snd_kiovecs, snd_iov, snd_numvecs * sizeof(iovec_t))) {
-    return -EFAULT;
+    return ERR(-EFAULT);
   }
+
   if (copy_from_user(&rcv_kiovecs, rcv_iov, rcv_numvecs * sizeof(iovec_t))) {
-    return -EFAULT;
-  }
-  
-  return __send_iov_v(channel, snd_iov, snd_numvecs, rcv_iov, rcv_numvecs);
-}
-
-long sys_port_send(ulong_t channel,
-                   uintptr_t snd_buf, size_t snd_size,
-                   uintptr_t rcv_buf, size_t rcv_size)
-{
-  iovec_t snd_kiovec, rcv_kiovec;
-
-  snd_kiovec.iov_base = (void *)snd_buf;
-  snd_kiovec.iov_len = snd_size;
-
-  rcv_kiovec.iov_base = (void *)rcv_buf;
-  rcv_kiovec.iov_len = rcv_size;
-
-  return __send_iov_v(channel, &snd_kiovec, 1, &rcv_kiovec, 1);
-}
-
-long sys_port_send_iov(ulong_t channel, iovec_t iov[], uint32_t numvecs,
-                       uintptr_t rcv_buf, size_t rcv_size)
-{
-  iovec_t kiovecs[MAX_IOVECS], rcv_kiovec;
-
-  if (!iov || !numvecs || numvecs > MAX_IOVECS) {
-    return -EINVAL;
+    return ERR(-EFAULT);
   }
 
-  if (copy_from_user(kiovecs, iov, numvecs * sizeof(iovec_t))) {
-    return -EFAULT;
+  if (!valid_iovecs(snd_kiovecs, snd_numvecs,NULL) ||
+      !valid_iovecs(rcv_kiovecs, rcv_numvecs,NULL) ) {
+    return ERR(-EFAULT);
   }
 
-  rcv_kiovec.iov_base = (void *)rcv_buf;
-  rcv_kiovec.iov_len = rcv_size;
+  c = ipc_get_channel(current_task(), channel);
+  if (!c) {
+    return ERR(-EINVAL);
+  }
 
-  return __send_iov_v(channel, kiovecs, numvecs, &rcv_kiovec, 1);
+  ret = ipc_port_send_iov(c, snd_kiovecs, snd_numvecs, rcv_kiovecs, rcv_numvecs);
+  ipc_put_channel(c);
+  return ERR(ret);
 }
 
 long sys_control_channel(ulong_t channel, ulong_t cmd, ulong_t arg)
 {
-  return ipc_channel_control(current_task(),channel,cmd,arg);
+  long r=ipc_channel_control(current_task(),channel,cmd,arg);
+  return ERR(r);
 }
 
 long sys_port_msg_read(ulong_t port, ulong_t msg_id, uintptr_t recv_buf,
@@ -279,18 +225,18 @@ long sys_port_msg_read(ulong_t port, ulong_t msg_id, uintptr_t recv_buf,
 
   p = ipc_get_port(current_task(), port);
   if (!p) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   iovec.iov_base = (void *)recv_buf;
   iovec.iov_len = recv_len;
   if (!valid_iovecs(&iovec, 1, NULL)) {
-    return -EFAULT;
+    return ERR(-EFAULT);
   }
 
   r = ipc_port_msg_read(p, msg_id, &iovec, 1, offset);
   ipc_put_port(p);
-  return r;
+  return ERR(r);
 }
 
 long sys_port_control(ulong_t port, ulong_t cmd, ulong_t arg)
@@ -300,16 +246,17 @@ long sys_port_control(ulong_t port, ulong_t cmd, ulong_t arg)
 
   p = ipc_get_port(current_task(), port);
   if (!p) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   r = ipc_port_control(p, cmd, arg);
   ipc_put_port(p);
-  return r;
+  return ERR(r);
 }
 
 long sys_port_msg_write(ulong_t port, ulong_t msg_id, iovec_t *iovecs,
                                  ulong_t numvecs,off_t offset)
 {
-  return __ipc_port_msg_write(port,msg_id,iovecs,numvecs,offset,0);
+  long r=__ipc_port_msg_write(port,msg_id,iovecs,numvecs,offset,0);
+  return ERR(r);
 }
