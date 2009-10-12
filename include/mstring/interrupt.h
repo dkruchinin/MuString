@@ -87,6 +87,7 @@ int irq_mask(irq_t irq);
 void irq_mask_all(void);
 int irq_unmask(irq_t irq);
 void irq_unmask_all(void);
+bool irq_line_is_registered(irq_t irq);
 extern void __do_handle_irq(irq_t irq);
 
 #endif /* !__MSTRING_INTERRUPT_H__ */

@@ -269,7 +269,8 @@ void FH_page_fault(struct fault_ctx *fctx)
 
 dump_user_stack:
 dump_kernel_stack:
-  kprintf_fault("Page fault in kernel, address = %p\n", fault_addr);
+  kprintf_fault("Page fault in kernel, address = %p, rip = %p\n", fault_addr,
+                fctx->istack_frame->rip);
   for (;;);
 }
 

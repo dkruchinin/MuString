@@ -101,6 +101,16 @@ static struct irq_controller i8259A_pic = {
   .ack_irq = i8259a_ack_irq,
 };
 
+static void i8259_spurious_handler(void *unused)
+{
+  return;
+}
+
+static struct irq_action i8259_spurious = {
+  .name = "PIC spurious interrupt",
+  .handler = i8259_spurious_handler,
+};
+
 INITCODE void i8259a_init(void)
 {
   /*
@@ -139,5 +149,7 @@ INITCODE void i8259a_init(void)
   outb(I8259_PIC_SLAVE + 1, 0x01);
   i8259a_mask_all();
   irq_register_controller(&i8259A_pic);
+  ASSERT(irq_line_register(PIC_SPURIOUS_IRQ, &i8259A_pic) == 0);
+  ASSERT(irq_register_action(PIC_SPURIOUS_IRQ, &i8259_spurious) == 0);
   default_irqctrl = &i8259A_pic;
 }

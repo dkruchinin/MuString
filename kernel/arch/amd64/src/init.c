@@ -80,12 +80,13 @@ static INITCODE void prepare_lapic_info(void)
   uintptr_t dest_addr;
   int ret, i, cpu;
   uint32_t *lapic_id;
-
   madt = acpi_find_table(MADT_TABLE);
   if (likely(madt != NULL)) {
     lapic_addr = (uintptr_t)madt->lapic_addr;
   }
-  else {
+  else
+  {
+      
     kprintf(KO_WARNING "Can not get lapic address from ACPI!\n");
     lapic_addr = DEFAULT_LAPIC_ADDR;
   }

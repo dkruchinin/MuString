@@ -30,10 +30,9 @@
 #include <arch/asm.h>
 #include <arch/apic.h>
 #include <arch/seg.h>
-#include <arch/interrupt.h>
 #include <mstring/kprintf.h>
-#include <mstring/unistd.h>
 #include <mstring/string.h>
+#include <mstring/timer.h>
 #include <mstring/smp.h>
 #include <arch/smp.h>
 
@@ -41,9 +40,10 @@
 int ap_boot_start, ap_boot_end,
     kernel_jump_addr, ap_jmp_rip;
 
-void arch_smp_init(int ncpus)
+INITCODE void arch_smp_init(void)
 {
-  int i=1,r=0;
+  cpu_id_t c;
+  uint32_t *lapic_id;
   char *ap_code = (char *)0x9000;
   size_t size = &ap_boot_end - &ap_boot_start;
   struct ap_config *apcfg;
@@ -58,25 +58,36 @@ void arch_smp_init(int ncpus)
   apcfg->gdt[APGDT_KCOFF_DESCR] |= (uint64_t)apcfg->page_addr << 16;
 
   /* Change bootstrap entry point (from kernel_main to main_smpap_routine) */
-#if 0
   *(uint64_t *)&kernel_jump_addr = (uint64_t)main_smpap_routine;
-#endif
   /* And finally copy AP initialization code to the proper place */
   memcpy(ap_code, &ap_boot_start, size);
 
   /* ok setup new gdt */
-  while(i<ncpus) {
-    if (apic_send_ipi_init(i))
+  for_each_cpu(c) {
+      int r;
+    if (!c) {
+      continue; /* Skip BSP CPU */
+    }
+
+    lapic_id = raw_percpu_get_var(lapic_ids, c);
+    kprintf("SEND INIT IPI TO CPU %d, cpuid=%d\n", *lapic_id, c);
+    if (apic_init_ipi(*lapic_id)) {
         panic("Can't send init interrupt\n");
-		
-    /* wait maximum 1 second for the start of the next cpu */
-    for (r = 0; (r < 100) && !is_cpu_online(i); r++)
-        atom_usleep(10000);
-
-    if (r == 100)
-        panic("CPU %d did not start!\n", i);
-
-    i++;
+    }
+    interrupts_disable();
+    for (r = 0; r < 100; r++) {
+        default_hwclock->delay(1000);
+        if (is_cpu_online(c)) {
+            kprintf("online!\n");
+            break;
+        }
+    }
+    interrupts_enable();
+    if (!is_cpu_online(c)) {
+        kprintf("fuck! => %d\n", is_cpu_online(c));
+      for (;;);
+      panic("CPU %d is not online\n", c);
+    }
   }
 }
 

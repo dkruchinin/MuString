@@ -300,6 +300,7 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   tss_t *tss;
   regs_t *regs;
 
+  kprintf("megaone\n");
   if( priv == TPL_KERNEL ) {
     reg_size = __setup_kernel_task_context(newtask);
   } else {
@@ -322,7 +323,7 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   *((uint64_t *)fsave) = delta;
 
   fsave -= 8;
-#if 0
+
   /* Now save the return point on the stack depending on type of the thread. */
   if( priv == TPL_KERNEL ) {
     *((uint64_t *)fsave) = (uint64_t)kthread_fork_path;
@@ -333,7 +334,6 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
       *((uint64_t *)fsave) = (uint64_t)user_fork_path;
     }
   }
-#endif
 
   /* Now setup CR3 and _current_ value of new thread's stack. */
   __arch_setup_ctx(newtask,(uint64_t)fsave,priv);

@@ -1,1 +1,1 @@
-obj-y += task.o context.o
+obj-y += task.o context.o sched.o

@@ -120,6 +120,23 @@ void irq_unmask_all(void)
   IRQ_CONTROLLERS_UNLOCK();
 }
 
+bool irq_line_is_registered(irq_t irq)
+{
+  struct irq_line *iline;
+  uint_t irqstat;
+  bool ret = false;
+
+  ASSERT(irq < NUM_IRQ_LINES);
+  iline = &irq_lines[irq];
+  spinlock_lock_irqsave(&iline->irq_line_lock, irqstat);
+  if (IRQLINE_IS_ACTIVE(iline)) {
+    ret = true;
+  }
+
+  spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
+  return ret;
+}
+
 int irq_register_action(irq_t irq, struct irq_action *action)
 {
   struct irq_line *iline;
@@ -140,8 +157,9 @@ int irq_register_action(irq_t irq, struct irq_action *action)
   action->irq = irq;
   list_add2tail(&iline->actions, &action->node);
   iline->num_actions++;
+  iline->irqctl->unmask_irq(irq);
   spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
-
+  
   return 0;
 }
 
@@ -167,6 +185,9 @@ int irq_unregister_action(struct irq_action *action)
   }
   if (!ret) {
     __unregister_irq_action(iline, action);
+  }
+  if (!iline->num_actions) {
+    iline->irqctl->mask_irq(action->irq);
   }
 
   spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);

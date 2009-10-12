@@ -191,7 +191,8 @@ INITCODE void acpi_init(void)
 {
   acpi_rsdp = acpi_rsdp_find();
   if (!acpi_rsdp) {
-    panic("Can not find ACPI RSDP\n");
+    kprintf(KO_WARNING "APCPI is not supported!\n");
+    return;
   }
 
   acpi_rsdt = acpi_get_rsdt();

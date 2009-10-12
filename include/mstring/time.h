@@ -90,5 +90,6 @@ extern struct tm s_epoch;
 
 void setup_time(void);
 void arch_setup_time(void);
+void timer_interrupt_handler(void *data);
 
 #endif

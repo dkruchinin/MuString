@@ -41,7 +41,6 @@ enum {
   APIC_ECR          = 0x410, /* Extended APIC control register */
   APIC_SEOI         = 0x420, /* Specific end-of-interrupt register */
   APIC_IER_BASE     = 0x480, /* Interrupt enable regsiters base(0x480 - 0x4F0) */
-  
 };
 
 #define APIC_VECTOR_MASK 0xFFU
@@ -49,17 +48,14 @@ enum {
 /* APIC Destination formats */
 #define APIC_DFR_FLAT    0xFFFFFFFFU
 #define APIC_DFR_CLUSTER 0x0FFFFFFFU
-
-/* APIC LDR stuff */
-#define APIC_LOGID_SHIFT 24
-#define APIC_LDR_MASK    (0xFFU << APIC_LOGID_SHIFT)
+#define SET_APIC_LOGID(id) ((id) << 24)
 
 /* Number of ISRs on local APIC */
 #define APIC_NUM_ISRS 8
 
 /* Spurious interrupt register related stuff */
 #define APIC_SVR_MASK     0x30FU
-#define APIC_SVR_ENABLED  (1 << 8)
+#define APIC_SVR_ENABLED   (1 << 8)
 #define APIC_FP_DISABLED   (1 << 9)
 
 #define APIC_LVTDM_MASK      0x700
@@ -70,7 +66,11 @@ enum {
 #define APIC_LVTDM_SMI       0x200
 #define APIC_LVTDM_NMI       0x400
 #define APIC_LVTDM_INIT      0x500
+#define APIC_LVTDM_STARTUP   0x600
 #define APIC_LVTDM_EXTINT    0x700
+
+/* LVT level */
+#define APIC_LVTL_ASSERT 0x4000
 
 /* APIC LVT delivery modes */
 #define APIC_LVTDS_IDLE         0
@@ -83,10 +83,37 @@ enum {
 #define APIC_LVT_MASKED        0x10000 /* Interrupt is masked */
 #define APIC_LVT_TIMER_MODE    0x20000 /* Timer mode */
 
+#define APIC_SET_TIMER_BASE(x) ((x) << 18)
+#define APIC_GET_TIMER_BASE(x) (((x) >> 18) & 0x03)
+#define APIC_TDR_DIV_TMBASE 0x04
+
+/* Local APIC timer divide values */
+#define APIC_DV2   0x00
+#define APIC_DV4   0x01
+#define APIC_DV8   0x02
+#define APIC_DV16  0x03
+#define APIC_DV32  0x04
+#define APIC_DV64  0x05
+#define APIC_DV128 0x06
+#define APIC_DV1   0x07
+
+/* APIC LDR stuff */
+#define APIC_LOGID_SHIFT 24
+#define APIC_LDR_MASK    (0xFFU << APIC_LOGID_SHIFT)
+
+/* APIC Error codes */
+#define APIC_ERR_SAE  0x04 /* Sent Accept Error */
+#define APIC_ERR_RAE  0x08 /* Receive Accept Error */
+#define APIC_ERR_SIV  0x20 /* Sent Illegal Vector */
+#define APIC_ERR_RIV  0x40 /* Receive illegal vector */
+#define APIC_ERR_IRA  0x80 /* Illegal register address */
+#define APIC_ERR_MASK 0xEC
+
 extern volatile uintptr_t lapic_addr;
 extern uint32_t PER_CPU_VAR(lapic_ids);
 
 INITCODE void local_apic_init(cpu_id_t cpuid);
+INITCODE int apic_init_ipi(uint32_t apic_id);
 extern void apic_spurious_interrupt(void);
 
 #endif /* !__MSTRING_ARCH_APIC_H__ */

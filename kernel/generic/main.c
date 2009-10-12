@@ -39,11 +39,8 @@
 #include <mstring/resource.h>
 #include <arch/interrupt.h>
 #include <mstring/gc.h>
+#include <arch/smp.h>
 #include <mstring/signal.h>
-
-#if 0
-extern void initialize_common_hardware(void);
-extern void initialize_timer(void);
 
 static void main_routine_stage1(void)
 {
@@ -53,20 +50,18 @@ static void main_routine_stage1(void)
   initialize_ipc();
   initialize_signals();
   initialize_gc();
-
-  arch_initialize_irqs();
-  arch_specific_init();
-
-  /* Initialize known hardware devices. */
-  initialize_common_hardware();
+  
   initialize_resources();
+  kprintf("I am here\n");
+  arch_smp_init();
+  interrupts_enable();
+  for (;;);
   /* Since the PIC is initialized, all interrupts from the hardware
    * is disabled. So we can enable local interrupts since we will
    * receive interrups from the other CPUs via LAPIC upon unleashing
    * the other CPUs.
    */
   setup_time();  
-  interrupts_enable();
   initialize_swks();
 
   /* OK, we can proceed. */
@@ -78,26 +73,19 @@ static void main_routine_stage1(void)
            current_task(), cpu_id() );
   idle_loop();
 }
-#endif
 
 void kernel_main(void)
 {
   arch_prepare_system();
   irqs_init();  
-  kprintf("everything is done\n");
   mm_initialize();
   arch_init();
-  timers_init();
-  interrupts_enable();
-  for (;;);
-#if 0
-  mm_initialize();
-  slab_allocator_init();  
-  vmm_initialize();
+  hardware_timers_init();
+  slab_allocator_init();
+  vmm_initialize();  
   initialize_scheduler();
-  
-  initialize_timer();
-  
+
+  software_timers_init();
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.
    */
@@ -107,21 +95,16 @@ void kernel_main(void)
    */
   
   main_routine_stage1();
-#endif
 }
 
 #ifdef CONFIG_SMP
-#if 0
 static void main_smpap_routine_stage1(cpu_id_t cpu)
 {
-  arch_ap_specific_init();
-
   /* We're online. */
   set_cpu_online(cpu,1);
-  
+  kprintf("CPU %d is here\n", cpu_id());
   sched_add_cpu(cpu);
   interrupts_enable();
-
   spawn_percpu_threads();
 
   /* Entering idle loop. */
@@ -136,19 +119,19 @@ void main_smpap_routine(void)
   static cpu_id_t cpu=1;
 
   kprintf("CPU#%d Hello folks! I'm here\n", cpu);
-
+  set_cpu_online(cpu,1);
   /* Perform generic CPU initialization. Memory will be initialized later. */
   arch_cpu_init(cpu);
+  local_apic_init(cpu);
+  //local_apic_timer_init();
 
   /* Now we can switch stack to our new kernel stack, setup any arch-specific
    * contexts, etc.
    */  
   arch_activate_idle_task(cpu);
   cpu++;
-
   /* Continue CPU initialization in new context. */
-  main_smpap_routine_stage1(cpu - 1);
+  main_smpap_routine_stage1(cpu - 1);  
 }
-#endif
 #endif
 

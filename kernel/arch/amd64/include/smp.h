@@ -44,10 +44,10 @@ struct ap_config {
 
 extern int ap_boot_start, ap_boot_end, ap_config;
 
+INITCODE void arch_smp_init(void);
 extern void ap_boot(void);
 extern void smp_start32(void);
 extern void main_smpap_routine(void);
-void arch_smp_init(int ncpus);
 
 void smp_local_timer_interrupt_handler(void);
 void smp_scheduler_interrupt_handler(void);

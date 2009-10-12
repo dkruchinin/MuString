@@ -39,9 +39,11 @@ void arch_timer_init(void)
   i8254_init();
   if (!cpu_has_feature(X86_FTR_APIC)) {
     kprintf(KO_WARNING "Your CPU doesn't support APIC\n");
+    for (;;);
   }
   else {
     local_apic_init(0);
+    local_apic_timer_init();
   }
   
 #if 0
@@ -62,5 +64,5 @@ void arch_timer_init(void)
 
 uint64_t arch_calibrate_delay_loop(void)
 {
-  return i8254_calibrate_delay_loop();
+  return 0;//i8254_calibrate_delay_loop();
 }

@@ -34,18 +34,17 @@
 #include <mstring/types.h>
 #include <mstring/interrupt.h>
 
-typedef struct __hw_timer_type {
-  list_node_t l;
-  const char *descr;
-  void (*calibrate)(uint32_t hz);
-  void (*resume)(void);
-  void (*suspend)(void);
-  void (*register_callback)(irq_t irq, irq_handler_fn handler);
-} hw_timer_t;
+struct hwclock {
+  char *name;
+  tick_t divisor;
+  uint64_t freq;
+  list_node_t clock_node;
+  void (*delay)(uint64_t nsec);
+  tick_t (*read)(void);
+};
 
-void hw_timer_register(hw_timer_t *ctrl);
 
-typedef void (*timer_handler_t)(ulong_t data);
+extern struct hwclock *default_hwclock;
 
 #define TF_TIMER_ACTIVE  0x1        /* Timer is active and ticking. */
 
@@ -92,7 +91,9 @@ typedef struct __major_timer_tick {
   list_node_t list;
 } major_timer_tick_t;
 
-void init_timers(void);
+INITCODE void hardware_timers_init(void);
+INITCODE void software_timers_init(void);
+void hwclock_register(struct hwclock *clock);
 void init_timer(ktimer_t *t);
 long add_timer(ktimer_t *t);
 void delete_timer(ktimer_t *t);

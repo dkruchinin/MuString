@@ -35,12 +35,17 @@
 #define IRQ_BASE    32 /* First vector in IDT for IRQ #0. */
 #define RESERVED_IRQS 8 /* Reserved IRQ for SMP use. */
 
+#define PIT_IRQ          0
+#define PIC_SPURIOUS_IRQ 7
+
 //#ifdef CONFIG_SMP
 
-#define CPU_SMP_BASE_IRQ        (IRQ_VECTORS - RESERVED_IRQS)
-#define APIC_SPURIOUS_VECTOR    (CPU_SMP_BASE_IRQ + 1)
-#define LOCAL_TIMER_CPU_IRQ_VEC (CPU_SMP_BASE_IRQ + 0)
-#define APIC_ERROR_VECTOR       (CPU_SMP_BASE_IRQ + 2)
+#define CPU_SMP_BASE_IRQ     (IRQ_VECTORS - RESERVED_IRQS)
+#define APIC_SPURIOUS_IRQ    (CPU_SMP_BASE_IRQ + 1)
+#define APIC_ERROR_IRQ       (CPU_SMP_BASE_IRQ + 2)
+#define APIC_TIMER_IRQ       (CPU_SMP_BASE_IRQ + 3)
+
+#define IRQ_NUM_TO_VECTOR(irq_num) ((irq_num) + IRQ_BASE)
 
 //#endif
 
