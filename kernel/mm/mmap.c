@@ -33,10 +33,10 @@
 #include <mm/rmap.h>
 #include <sync/rwsem.h>
 #include <sync/spinlock.h>
-#include <mstring/security.h>
 #include <mstring/usercopy.h>
 #include <mstring/kprintf.h>
 #include <mstring/types.h>
+#include <mstring/process.h>
 
 #define INVALID_ADDRESS (~0UL)
 
@@ -722,10 +722,6 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr,
   if (flags & VMR_PHYS) {
     flags |= VMR_NOCACHE; /* physical pages must not be cached */
     /* and task taht maps them must be trusted */
-    if (!trusted_task(current_task())) {
-      err = -EPERM;
-      goto err;
-    }
 
     /* only generic memory object supports physical mappings */
     if (memobj->id != GENERIC_MEMOBJ_ID) {

@@ -11,7 +11,6 @@
 #include <ds/idx_allocator.h>
 #include <mstring/errno.h>
 #include <mm/page_alloc.h>
-#include <mstring/security.h>
 #include <ipc/ipc.h>
 
 static ipc_channel_t *__allocate_channel(ipc_gen_port_t *port,ulong_t flags)

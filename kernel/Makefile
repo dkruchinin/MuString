@@ -1,1 +1,1 @@
-obj-y += arch/$(ARCH)/src ds generic ipc mm posix sync
+obj-y += arch/$(ARCH)/src ds generic ipc mm posix sync security

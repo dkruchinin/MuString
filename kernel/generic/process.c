@@ -34,7 +34,6 @@
 #include <arch/task.h>
 #include <arch/preempt.h>
 #include <mstring/process.h>
-#include <mstring/security.h>
 #include <arch/current.h>
 #include <sync/spinlock.h>
 #include <kernel/syscalls.h>
@@ -440,9 +439,6 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       }
       return 0;
     case SYS_PR_CTL_SET_UIDGID:
-      if( !trusted_task(current_task()) ) {
-        return -EPERM;
-      }
       if( copy_from_user(&uidgid,(void *)arg,sizeof(uidgid)) ) {
         return -EFAULT;
       }
@@ -578,11 +574,6 @@ long sys_task_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
     }
   }
 
-  if( !security_ops->check_process_control(task,cmd,arg) ) {
-    r = -EACCES;
-    goto out_release;
-  }
-
   r = do_task_control(task,cmd,arg);
 out_release:
   release_task_struct(task);
@@ -594,10 +585,6 @@ long sys_create_task(ulong_t flags,task_creation_attrs_t *a)
   task_t *task;
   long r;
   task_creation_attrs_t attrs,*pa;
-
-  if( !security_ops->check_create_process(flags) ) {
-    return -EPERM;
-  }
 
   if( a ) {
     if( copy_from_user(&attrs,a,sizeof(attrs) ) ) {

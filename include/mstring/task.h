@@ -36,6 +36,7 @@
 #include <mstring/scheduler.h>
 #include <ds/idx_allocator.h>
 #include <arch/atomic.h>
+#include <security/security.h>
 
 typedef uint32_t time_slice_t;
 
@@ -262,6 +263,9 @@ typedef struct __task_struct {
 
   /* Userspace works-reated stuff. */
   uworks_data_t uworks_data;
+
+  /* Security-related stuff */
+  struct __s_subject s_subject;
 
   char short_name[TASK_SHORTNAME_LEN];
 

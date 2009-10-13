@@ -37,7 +37,6 @@
 #include <mstring/sigqueue.h>
 #include <mstring/posix.h>
 #include <arch/scheduler.h>
-#include <mstring/security.h>
 #include <mstring/types.h>
 #include <mstring/process.h>
 #include <config.h>
@@ -426,9 +425,6 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
       ((flags & (CLONE_COW | CLONE_POPULATE)) == (CLONE_COW | CLONE_POPULATE))) {
     return -EINVAL;
   }
-  if ((flags & CLONE_PHYS) && parent && !trusted_task(parent))
-    return -EPERM;
-  
   /* TODO: [mt] Add memory limit check. */
   /* goto task_create_fault; */
   r=__alloc_pid_and_tid(parent,flags,&pid,&tid,priv);

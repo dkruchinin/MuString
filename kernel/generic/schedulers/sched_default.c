@@ -37,7 +37,6 @@
 #include <arch/preempt.h>
 #include <mstring/swks.h>
 #include <arch/interrupt.h>
-#include <mstring/security.h>
 #include <mstring/interrupt.h>
 #include <arch/preempt.h>
 #include <arch/asm.h>
@@ -588,7 +587,6 @@ static void __shuffle_task(task_t *target,mstring_sched_cpudata_t *sched_data, u
 static int def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
 {
   long is;
-  bool trusted=trusted_task(target);
   int r=-EINVAL;
   mstring_sched_taskdata_t *sdata = EZA_TASK_SCHED_DATA(target);
   mstring_sched_cpudata_t *sched_data=get_task_sched_data_locked(target,&is,true);
@@ -610,15 +608,11 @@ static int def_scheduler_control(task_t *target,ulong_t cmd,ulong_t arg)
       break;
     case SYS_SCHED_CTL_SET_PRIORITY:
       if( arg <= EZA_SCHED_PRIORITY_MAX ) {
-        if( trusted ) {
-          if( !(target->flags & TF_USPC_BLOCKED) ) {
-            __shuffle_task(target,sched_data,arg);
-            r=0;
-          } else {
-            r=-EBUSY;
-          }
+        if( !(target->flags & TF_USPC_BLOCKED) ) {
+          __shuffle_task(target,sched_data,arg);
+          r=0;
         } else {
-          r=-EPERM;
+          r=-EBUSY;
         }
       }
       break;
