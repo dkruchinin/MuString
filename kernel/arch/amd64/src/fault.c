@@ -43,7 +43,7 @@ static INITDATA int cur_ist = 0;
  * number corresponds to fault number having error code field.
  * On AMD64 there are 7 faults of such kind.
  */
-static uint32_t faults_with_errcode =
+uint32_t faults_with_errcode =
   (POW2(FLT_DF) | POW2(FLT_TS) | POW2(FLT_NP) |
    POW2(FLT_SS) | POW2(FLT_GP) | POW2(FLT_PF) |
    POW2(FLT_AC));
@@ -158,5 +158,6 @@ void __do_handle_fault(void *rsp, enum fault_idx fault_num)
     }
 
     fill_fault_context(&fctx, rsp, fault_num);
+    kprintf("FLT = > %d .. %d\n", fctx.istack_frame->cs, GDT_SEL(KCODE_DESCR));
     fault_handlers[fault_num](&fctx);    
 }

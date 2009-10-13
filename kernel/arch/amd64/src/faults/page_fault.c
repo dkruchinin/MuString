@@ -271,6 +271,7 @@ dump_user_stack:
 dump_kernel_stack:
   kprintf_fault("Page fault in kernel, address = %p, rip = %p\n", fault_addr,
                 fctx->istack_frame->rip);
+  interrupts_disable();
   for (;;);
 }
 

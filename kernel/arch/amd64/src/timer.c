@@ -45,24 +45,4 @@ void arch_timer_init(void)
     local_apic_init(0);
     local_apic_timer_init(0);
   }
-  
-#if 0
-  kprintf("[LW] Calibrating delay loop ... ");
-  delay_loop=i8254_calibrate_delay_loop();
-
-#if 0
-#ifdef CONFIG_APIC 
-  for(i=0;i<10;i++) {
-    delay_loop=i8254_calibrate_delay_loop0();
-  }
-#endif
-#endif
-
-  kprintf("%ld\n",delay_loop);
-#endif
-}
-
-uint64_t arch_calibrate_delay_loop(void)
-{
-  return 0;//i8254_calibrate_delay_loop();
 }

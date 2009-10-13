@@ -156,10 +156,10 @@
    mov %es, %gs:CPU_SCHED_STAT_USER_ES_OFFT;            \
    mov %fs, %gs:CPU_SCHED_STAT_USER_FS_OFFT;            \
    mov %gs, %gs:CPU_SCHED_STAT_USER_GS_OFFT;            \
-   mov %gs:(CPU_SCHED_STAT_KERN_DS_OFFT),%ds;   \
+   mov %gs:(CPU_SCHED_STAT_KERN_DS_OFFT),%ds;
 
-#define RESTORE_USER_SEGMENT_REGISTERS          \
-   mov %gs:(CPU_SCHED_STAT_USER_DS_OFFT),%ds; \
+#define RESTORE_USER_SEGMENT_REGISTERS        \
+   mov %gs:(CPU_SCHED_STAT_USER_DS_OFFT),%ds;  \
    mov %gs:(CPU_SCHED_STAT_USER_ES_OFFT),%es; \
    mov %gs:(CPU_SCHED_STAT_USER_FS_OFFT),%fs; \
    pushq %rax;     \
@@ -172,17 +172,28 @@
    wrmsr; \
    popq %rdx; \
    popq %rcx; \
-   popq %rax; \
+   popq %rax;
 
-#define ENTER_INTERRUPT_CTX(label,extra_pushes) \
-	cmp $GDT_SEL(KCODE_DESCR),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ;\
-	je label;                                                           \
-    swapgs ;                                                            \
-    SAVE_AND_LOAD_SEGMENT_REGISTERS                                     \
-    label:	;                                                           \
-	incq %gs:CPU_SCHED_STAT_IRQCNT_OFFT ;                               \
-	SAVE_ALL ;                                                          \
-	sti
+#define ENTER_INTERRUPT_CONTEXT(extra_pushes)                           \
+  cmpq $GDT_SEL(KCODE_DESCR), extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ; \
+  je 666f;                                                        \
+  swapgs ;                                                              \
+  SAVE_AND_LOAD_SEGMENT_REGISTERS;                                      \
+666:	;                                                               \
+  SAVE_GPRS ;
+
+#define EXIT_INTERRUPT_CONTEXT(extra_pushes)                            \
+  RESTORE_GPRS;                                                         \
+  cmp $GDT_SEL(KCODE_DESCR),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ; \
+  je 666f;                                                                \
+  RESTORE_USER_SEGMENT_REGISTERS;                                       \
+  cli;                                                                  \
+  movl %gs:(CPU_SCHED_STAT_USER_GS_OFFT), %eax;                         \
+  movl %eax, %gs;                                                       \
+  swapgs;                                                               \
+  sti;                                                                  \
+666: ;                                                                  \
+  popq %rax;
 
 #define COMMON_INTERRUPT_EXIT_PATH \
          jmp return_from_common_interrupt;

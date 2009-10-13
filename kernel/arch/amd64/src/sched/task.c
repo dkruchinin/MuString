@@ -300,7 +300,6 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   tss_t *tss;
   regs_t *regs;
 
-  kprintf("megaone\n");
   if( priv == TPL_KERNEL ) {
     reg_size = __setup_kernel_task_context(newtask);
   } else {

@@ -77,6 +77,8 @@ typedef void (*fault_handler_fn)(struct fault_ctx *fctx);
 #define IS_KERNEL_FAULT(fctx)\
   ((fctx)->istack_frame->cs == GDT_SEL(KCODE_DESCR))
 
+extern uint32_t faults_with_errcode;
+
 INITCODE void arch_faults_init(void);
 extern void __do_handle_fault(void *rsp, enum fault_idx fault_num);
 

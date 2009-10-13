@@ -46,7 +46,7 @@ syscall_table:
 	.quad	sys_free_ioports
 	.quad   sys_create_irq_counter_array
 	.quad   sys_wait_on_irq_array           /* 10 */
-        .quad   sys_ipc_port_poll
+    .quad   sys_ipc_port_poll
 	.quad   sys_nanosleep
 	.quad   sys_scheduler_control
 	.quad   sys_exit
@@ -80,8 +80,8 @@ syscall_table:
 	.quad   sys_fork
 	.quad   sys_grant_pages
 	.quad   sys_waitpid
-        .quad   sys_alloc_dma_pages             /* 45  */
-        .quad   sys_free_dma_pages
+    .quad   sys_alloc_dma_pages             /* 45  */
+    .quad   sys_free_dma_pages
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \
@@ -115,14 +115,45 @@ syscall_point:
 	jb good_syscall_number
 
 	movq $-ENOSYS,%rax
-	//jmp return_from_syscall
+	jmp return_from_syscall
 
-good_syscall_number:
+	good_syscall_number:
 	/* Since %rcx contains the return address, we should reload
 	 * %rcx from %r10.
 	 */
 	movq %r10,%rcx
 
 	call *syscall_table(,%rax,8)
+	jmp return_from_syscall
 
-	//jmp return_from_syscall
+return_from_syscall:
+	  /* Before returning from syscall we should check for pending works.
+	   * Note that %rax contains return code.
+	   */
+      mov %gs:CPU_SCHED_STAT_USER_WORKS_OFFT, %rbx
+
+	  cmp $0,(%rbx)
+	  je no_works_after_syscall
+
+	  pushq %rax
+	  movq $__SYCALL_UWORK, %rdi
+	  movq %rax, %rsi
+	  movq %rsp, %rdx
+	  addq $8, %rdx  /* Skip just saved %rax */
+	  callq handle_uworks
+	  popq %rax
+
+no_works_after_syscall:
+	  RESTORE_GPRS
+
+	  /* Now restore user %gs */
+	  cli
+	  addq $8,%rsp /* Simulate our extra 'push %rax' */
+	  RESTORE_USER_SEGMENT_REGISTERS
+	  pushq %rax
+	  mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
+	  swapgs
+	  mov %eax,%gs
+      popq %rax
+      orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
+      iretq

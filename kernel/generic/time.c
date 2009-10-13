@@ -46,14 +46,6 @@
 
 struct tm s_epoch;
 
-#if 0
-void initialize_timer(void)
-{
-  init_timers();
-  arch_timer_init();
-}
-#endif
-
 void timer_tick(void)
 {
   /* Update the ticks counter. */
