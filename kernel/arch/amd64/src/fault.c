@@ -18,9 +18,6 @@
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  * (c) Copyright 2009 Dan Kruchinin <dk@jarios.h>
  *
- * mstring/amd64/fault.c: contains routines for dealing with x86_64 CPU fauls
- *     and provides routines for dealing with exception fixups.
- *
  */
 
 #include <arch/fault.h>
@@ -28,6 +25,8 @@
 #include <arch/context.h>
 #include <mstring/panic.h>
 #include <mstring/bitwise.h>
+#include <mstring/task.h>
+#include <mstring/smp.h>
 #include <mstring/stddef.h>
 #include <mstring/types.h>
 
@@ -146,6 +145,35 @@ INITCODE void arch_faults_init(void)
   init_reserved_faults();
 }
 
+void fault_describe(const char *fname, struct fault_ctx *fctx)
+{
+  char *fault_type = "USER";
+
+  if (IS_KERNEL_FAULT(fctx)) {
+    fault_type = "KERNEL";
+  }
+
+  kprintf_fault("\n================[%s-SPACE %s #%d]================\n",
+                fault_type, fname, fctx->fault_num);
+  kprintf_fault("  [CPU #%d] Task: %s (PID=%ld, TID=%ld)\n", cpu_id(),
+                current_task()->short_name, current_task()->pid,
+                current_task()->tid);
+  if (fctx->errcode) {
+    kprintf_fault("  Error code: %#x\n", fctx->errcode);
+  }
+}
+
+void fault_dump_info(struct fault_ctx *fctx)
+{
+  dump_gpregs(fctx->gprs);
+  dump_interrupt_stack(fctx->istack_frame);
+  if (IS_KERNEL_FAULT(fctx)) {
+    dump_kernel_stack(current_task(), fctx->istack_frame->rsp);
+  }
+  else {
+    dump_user_stack(current_task()->task_mm, fctx->istack_frame->rsp);
+  }
+}
 
 void __do_handle_fault(void *rsp, enum fault_idx fault_num)
 {
@@ -158,6 +186,5 @@ void __do_handle_fault(void *rsp, enum fault_idx fault_num)
     }
 
     fill_fault_context(&fctx, rsp, fault_num);
-    kprintf("FLT = > %d .. %d\n", fctx.istack_frame->cs, GDT_SEL(KCODE_DESCR));
     fault_handlers[fault_num](&fctx);    
 }

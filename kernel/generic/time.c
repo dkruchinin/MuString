@@ -109,3 +109,4 @@ void smp_local_timer_interrupt_tick(void)
   sched_timer_tick();
 }
 #endif
+

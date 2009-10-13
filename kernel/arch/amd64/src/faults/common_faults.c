@@ -33,8 +33,9 @@
 
 void FH_bound_range(struct fault_ctx *fctx)
 {
-  kprintf_fault("Bound range fault\n");
-  for (;;);
+  fault_describe("BOUND-RANGE", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
 void FH_invalid_opcode(struct fault_ctx *fctx)
@@ -44,52 +45,56 @@ void FH_invalid_opcode(struct fault_ctx *fctx)
     
     kprintf_fault((char *)gprs->r10, (char *)gprs->r11,
                   (char *)gprs->r12, (int)gprs->r13);
-    goto out;
+    fault_dump_info(fctx);
+    __stop_cpu();
   }
 
-  kprintf_fault("Invalid opcode exception!!!\n");
-  
-out:
-  kprintf_fault("assertion done\n");
-  //fault_dump_regs(regs, stack_frame->rip);
-  //show_stack_trace(stack_frame->old_rsp);
-  for(;;);
+  fault_describe("INVALID OPCODE", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
 void FH_device_not_avail(struct fault_ctx *fctx)
 {
-  kprintf_fault("Device not avail fault\n");
-  for (;;);
+  fault_describe("DEVICE NOT AVAIL", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
 void FH_breakpoint(struct fault_ctx *fctx)
 {
-  kprintf_fault("Breakpoint fault handler\n");
-  for (;;);
+  fault_describe("BREAKPOINT EXCEPTION", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
 void FH_debug(struct fault_ctx *fctx)
 {
-  kprintf_fault("Debug fault\n");
-  for (;;);
+  /* TODO DK: implement debug interface... */
+  fault_describe("DEBUG FAULT", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
 void FH_alignment_check(struct fault_ctx *fctx)
 {
-  kprintf_fault("Alignment check foult\n");
-  for (;;);
+  fault_describe("ALIGNMENT-CHECK", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
 void FH_machine_check(struct fault_ctx *fctx)
 {
-  kprintf_fault("Machine check fault!\n");
-  for (;;);
+  fault_describe("MACHINE-CHECK", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
 void FH_security_exception(struct fault_ctx *fctx)
 {
-  kprintf_fault("Security exception!\n");
-  for (;;);
+  fault_describe("SECURITY EXCEPTION", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
 void FH_reserved(struct fault_ctx *fctx)
@@ -100,35 +105,37 @@ void FH_reserved(struct fault_ctx *fctx)
 
 void FH_nmi(struct fault_ctx *fctx)
 {
-  kprintf_fault("NMI fault handler!!!\n");
-  for (;;);
+  fault_describe("NMI EXCEPTION", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
 void FH_double_fault(struct fault_ctx *fctx)
 {
-  uintptr_t fault_addr;
-
-  fault_addr = read_cr2();
-  kprintf_fault("Double fault handler: %p\n", fault_addr);
-  for (;;);
+  fault_describe("DOUBLE FAULT", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
 void FH_invalid_tss(struct fault_ctx *fctx)
 {
-  kprintf_fault("INVALID TSS\n");
-  for (;;);
+  fault_describe("INVALID TSS", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
 void FH_stack_exception(struct fault_ctx *fctx)
 {
-  kprintf_fault("STACK EXCEPTION\n");
-  for (;;);
+  fault_describe("STACK EXCEPTION", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
 void FH_general_protection_fault(struct fault_ctx *fctx)
 {
-  kprintf_fault("GPFAULT\n");
-  for (;;);
+  fault_describe("GPF", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
 void FH_floating_point_exception(struct fault_ctx *fctx)

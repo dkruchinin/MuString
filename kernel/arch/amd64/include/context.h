@@ -17,9 +17,7 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
- *
- * include/mstring/amd64/context.h: structure definion for context and related stuff
- *                              assembler macros and some constants
+ * (c) Copytight 2009 Dan Kruchinin <dk@jarios.org>
  *
  */
 
@@ -92,19 +90,16 @@
   pushq %r12
 
 #define RESTORE_MM \
-  popq %r12; \
-  fxrstor (%rsp); \
-  movq %r12, %rsp;
+  fxrstor (%rsp); 
 
 /* NOTE: SAVE_MM initializes %rsi so that it points to iterrupt/exception stack frame. */
-#define SAVE_ALL \
-  SAVE_GPRS \
-  SAVE_MM \
+#define SAVE_ALL                                \
+  SAVE_MM                                       \
+  //SAVE_GPRS
 
-
-#define RESTORE_ALL \
-  RESTORE_MM \
-  RESTORE_GPRS
+#define RESTORE_ALL                             \
+  RESTORE_GPRS                                  \
+  RESTORE_MM
 
 #define SAVED_REGISTERS_SIZE \
    ((NUM_GPR_SAVED)*8)
@@ -245,6 +240,11 @@ struct intr_stack_frame {
   uint64_t ss;
 };
 
+typedef struct __regs {
+  struct gpregs gpr_regs;
+  struct intr_stack_frame int_frame;
+} regs_t;
+
 typedef struct __arch_context_t {
   uintptr_t cr3, rsp, fs, gs, es, ds, user_rsp;
   uintptr_t uworks;
@@ -267,27 +267,14 @@ typedef struct __arch_context_t {
 
 #define arch_read_pending_uworks(ctx) ((arch_context_t *)(ctx))->uworks
 
-/* Structure that represents GPRs on the stack upon entering
- * kernel mode during a system call.
- */
-struct __gpr_regs {
-  uint64_t rbp, rsi, rdi, rdx, rcx, rbx;
-  uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
-};
+struct __vmm;
+struct __task_struct;
 
-struct __int_stackframe {
-  uint64_t rip, cs, rflags, old_rsp, old_ss;
-};
-
-typedef struct __regs {
-  /* Kernel-saved registers. */
-  struct __gpr_regs gpr_regs;
-  uint64_t rax;
-
-  /* CPU-saved registers. */
-  struct __int_stackframe int_frame;
-} regs_t;
-
+void dump_gpregs(struct gpregs *gprs);
+void dump_interrupt_stack(struct intr_stack_frame *istack_frame);
+void dump_user_stack(struct __vmm *vmm, uintptr_t rsp);
+void dump_kernel_stack(struct __task_struct *task, uintptr_t rsp);
+void __stop_cpu(void);
 #endif /* __ASM__ */
 
 #endif /* __ARCH_CONTEXT_H__ */

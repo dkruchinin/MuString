@@ -38,7 +38,7 @@
 
 #define XMM_CTX_SIZE  512
 
-#define USPACE_TRMPL(a) USPACE_ADDR((a),__utrampoline_virt)
+#define USPACE_TRMPL(a) USPACE_ADDR((uintptr_t)(a),__utrampoline_virt)
 
 uintptr_t __utrampoline_virt;
 
@@ -48,7 +48,7 @@ struct __trampoline_ctx {
 
 struct __gen_ctx {
   uint8_t xmm[XMM_CTX_SIZE];
-  struct __gpr_regs gpr_regs;
+  struct gpregs gpr_regs;
 };
 
 struct __signal_context {
@@ -115,8 +115,8 @@ static void __perform_default_action(int sig)
 static void __handle_cancellation_request(int reason,uintptr_t kstack)
 {
   uintptr_t extra_bytes;
-  struct __int_stackframe *int_frame;
-  struct __gpr_regs *kpregs;
+  struct intr_stack_frame *int_frame;
+  struct gpregs *kpregs;
   uint8_t *xmm;
 
   switch( reason ) {
@@ -136,10 +136,10 @@ static void __handle_cancellation_request(int reason,uintptr_t kstack)
    * the following stack manipulations.
    */
   xmm=(uint8_t *)kstack+8;
-  kpregs=(struct __gpr_regs *)(*(uintptr_t *)kstack);
+  kpregs=(struct gpregs *)(*(uintptr_t *)kstack);
   kstack=(uintptr_t)kpregs + sizeof(*kpregs);
   kstack += extra_bytes;
-  int_frame=(struct __int_stackframe *)kstack;
+  int_frame=(struct intr_stack_frame *)kstack;
 
   /* Prepare cancellation context. */
   kpregs->rdi=current_task()->uworks_data.destructor;
@@ -152,8 +152,8 @@ static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
                                struct __signal_context **pctx)
 {
   uintptr_t ustack,t;
-  struct __int_stackframe *int_frame;
-  struct __gpr_regs *kpregs;
+  struct intr_stack_frame *int_frame;
+  struct gpregs *kpregs;
   struct __signal_context *ctx;
   uint8_t *xmm;
 
@@ -161,7 +161,7 @@ static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
   xmm=(uint8_t *)kstack+8;  /* Skip pointer to saved GPRs. */
 
   /* Locate saved GPRs. */
-  kpregs=(struct __gpr_regs *)(*(uintptr_t *)kstack);
+  kpregs=(struct gpregs *)(*(uintptr_t *)kstack);
 
   kstack=(uintptr_t)kpregs + sizeof(*kpregs);
   /* OK, now we're pointing at saved interrupt number (see asm.S).
@@ -170,10 +170,10 @@ static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
   kstack += extra_bytes;
 
   /* Now we can access hardware interrupt stackframe. */
-  int_frame=(struct __int_stackframe *)kstack;
+  int_frame=(struct intr_stack_frame *)kstack;
 
   /* Now we can create signal context. */
-  ctx=(struct __signal_context *)(int_frame->old_rsp-sizeof(*ctx));
+  ctx=(struct __signal_context *)(int_frame->rsp-sizeof(*ctx));
 
   if( copy_to_user(&ctx->gen_ctx.xmm,xmm,XMM_CTX_SIZE) ) {
     return -EFAULT;
@@ -202,7 +202,7 @@ static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
   *pctx=ctx;
   ustack=(uintptr_t)ctx;
   /* Setup user stack pointer. */
-  int_frame->old_rsp=ustack;
+  int_frame->rsp=ustack;
 
   return 0;
 }
@@ -350,10 +350,10 @@ long sys_sigreturn(uintptr_t ctx)
   /* Since RAX is now also saved upon entering system calls, we must take it into account
    * as extra 'sizeof(long)' bytes on the stack.
    */
-  uintptr_t kctx=(uintptr_t)caller->kernel_stack.high_address-sizeof(struct __gpr_regs)-
-                 sizeof(struct __int_stackframe) - sizeof(long);
-  struct __int_stackframe *sframe=(struct __int_stackframe*)((uintptr_t)caller->kernel_stack.high_address-
-                                   sizeof(struct __int_stackframe));
+  uintptr_t kctx=(uintptr_t)caller->kernel_stack.high_address-sizeof(struct gpregs)-
+                 sizeof(struct intr_stack_frame) - sizeof(long);
+  struct intr_stack_frame *sframe=(struct intr_stack_frame*)((uintptr_t)caller->kernel_stack.high_address-
+                                   sizeof(struct intr_stack_frame));
   uintptr_t skctx=kctx,retaddr;
   sigset_t sa_mask;
 
@@ -375,7 +375,7 @@ long sys_sigreturn(uintptr_t ctx)
   UNLOCK_TASK_SIGNALS(caller);
 
   /* Restore GPRs. */
-  if( copy_from_user((void *)kctx,&uctx->gen_ctx.gpr_regs,sizeof(struct __gpr_regs) ) ) {
+  if( copy_from_user((void *)kctx,&uctx->gen_ctx.gpr_regs,sizeof(struct gpregs) ) ) {
     goto bad_ctx;
   }
 
@@ -407,7 +407,7 @@ long sys_sigreturn(uintptr_t ctx)
 
   uctx++;
   sframe->rip=retaddr;
-  sframe->old_rsp=(uintptr_t)uctx;
+  sframe->rsp=(uintptr_t)uctx;
 
   /* Update pending signals to let any unblocked signals be processed. */
   return retcode;
