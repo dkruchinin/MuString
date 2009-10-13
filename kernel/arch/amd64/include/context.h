@@ -89,17 +89,19 @@
   fxsave (%rsp);                                \
   pushq %r12
 
-#define RESTORE_MM \
-  fxrstor (%rsp); 
+#define RESTORE_MM                              \
+  popq %rax;                                    \
+  fxrstor (%rsp);                               \
+  movq %rax, %rsp;
 
 /* NOTE: SAVE_MM initializes %rsi so that it points to iterrupt/exception stack frame. */
 #define SAVE_ALL                                \
-  SAVE_MM                                       \
-  //SAVE_GPRS
+  SAVE_GPRS                                     \
+  SAVE_MM  
 
 #define RESTORE_ALL                             \
-  RESTORE_GPRS                                  \
-  RESTORE_MM
+  RESTORE_MM                                    \
+  RESTORE_GPRS
 
 #define SAVED_REGISTERS_SIZE \
    ((NUM_GPR_SAVED)*8)

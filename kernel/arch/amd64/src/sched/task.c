@@ -218,12 +218,12 @@ int kernel_thread(void (*fn)(void *), void *data, task_t **out_task)
   return r;
 }
 
-static uint64_t __setup_kernel_task_context(task_t *task)
+static size_t setup_kernel_task_context(task_t *task)
 {
   regs_t *regs = (regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
 
   /* Prepare a fake CPU-saved context */
-  memset( regs, 0, sizeof(regs_t) );
+  memset(regs, 0, sizeof(regs_t));
 
   /* Now setup selectors so them reflect kernel space. */
   regs->int_frame.cs = GDT_SEL(KCODE_DESCR);
@@ -293,15 +293,15 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
                             task_privelege_t priv,task_t *parent,
                             task_creation_attrs_t *attrs)
 {
-  uintptr_t fsave = newtask->kernel_stack.high_address;
-  uint64_t delta, reg_size;
+  uintptr_t fsave = newtask->kernel_stack.high_address, delta;
+  size_t reg_size;
   arch_context_t *parent_ctx = (arch_context_t*)&parent->arch_context[0];
   arch_context_t *task_ctx;
   tss_t *tss;
   regs_t *regs;
 
   if( priv == TPL_KERNEL ) {
-    reg_size = __setup_kernel_task_context(newtask);
+    reg_size = setup_kernel_task_context(newtask);
   } else {
     reg_size = __setup_user_task_context(newtask);
   }
@@ -309,22 +309,18 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   /* Now reserve space for storing XMM context since it requires
    * the address to be 512-bytes aligned.
    */
-  kprintf("[1] %p\n", fsave);
-  fsave &= 0xfffffffffffffff0;
-  kprintf("[2] %p\n", fsave);
+  fsave -= reg_size;
+  delta = fsave;
   fsave-=512;  
+  fsave &= 0xfffffffffffffff0;
+  memset(fsave, 0, 512);
 
-  memset( (char *)fsave, 0, 512 );
-  delta=fsave;
-  fsave-=reg_size;
-  regs=(regs_t*)fsave;
 
   /* Save size of this context for further use in RESTORE_ALL. */
-  //fsave -= 8;
-  //*((uint64_t *)fsave) = delta;
+  fsave -= 8;
+  *((uint64_t *)fsave) = delta;
 
-  //fsave -= 8;
-
+  fsave -= 8;
   /* Now save the return point on the stack depending on type of the thread. */
   if( priv == TPL_KERNEL ) {
     *((uint64_t *)fsave) = (uint64_t)kthread_fork_path;

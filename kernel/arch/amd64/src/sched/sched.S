@@ -27,7 +27,7 @@
 .globl kthread_fork_path
 kthread_fork_path:
         sti
-        RESTORE_MM        
+        RESTORE_MM
         RESTORE_GPRS
         popq %rax
         iretq
