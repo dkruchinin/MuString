@@ -392,12 +392,6 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
     case SYS_PR_CTL_SET_STACK:
       regs->int_frame.old_rsp = arg;
       break;
-    case SYS_PR_CTL_GET_ENTRYPOINT:
-      r = regs->int_frame.rip;
-      break;
-    case SYS_PR_CTL_GET_STACK:
-      r = regs->int_frame.old_rsp;
-      break;
     case SYS_PR_CTL_SET_PERTASK_DATA:
       arch_ctx=(arch_context_t*)&task->arch_context[0];
       if( arch_ctx->ldt ) {
@@ -412,7 +406,6 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
         if( task == current_task() ) {
           load_ldt(cpu_id(),(void *)arch_ctx->ldt,arch_ctx->ldt_limit);
         }
-        
         interrupts_enable();
       } else {
         r=-EINVAL;

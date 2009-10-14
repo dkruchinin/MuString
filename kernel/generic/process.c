@@ -377,27 +377,6 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
   uidgid_t uidgid;
 
   switch( cmd ) {
-    case SYS_PR_CTL_SET_ENTRYPOINT:
-    case SYS_PR_CTL_SET_STACK:
-      if( !valid_user_address(arg) ) {
-        return -EFAULT;
-      }
-      if( target->state == TASK_STATE_JUST_BORN ) {
-        r = arch_process_context_control(target,cmd,arg);
-        if (likely(r == 0))
-          target->ustack = arg;
-
-        return r;
-      }
-
-      break;
-    case SYS_PR_CTL_GET_ENTRYPOINT:
-    case SYS_PR_CTL_GET_STACK:
-      /* No arguments are acceptable for these commands. */
-      if( arg == 0 && target->state == TASK_STATE_JUST_BORN ) {
-        return arch_process_context_control(target,cmd,arg);
-      }
-      break;
     case SYS_PR_CTL_ADD_EVENT_LISTENER:
       if( target->pid == current_task()->pid ) {
         return -EDEADLOCK;
@@ -412,16 +391,6 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
         return -EDEADLOCK;
       }
       return task_event_detach(arg,current_task());
-    case SYS_PR_CTL_SET_PERTASK_DATA:
-      if( !valid_user_address(arg) ) {
-        return -EFAULT;
-      }
-      r = arch_process_context_control(target,SYS_PR_CTL_SET_PERTASK_DATA,
-                                       arg);
-      if (likely(r == 0))
-        target->ptd = arg;
-
-      return r;
     case SYS_PR_CTL_SET_SHORTNAME:
       return __set_shortname(target,arg);
     case SYS_PR_CTL_DISINTEGRATE_TASK:
