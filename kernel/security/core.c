@@ -27,6 +27,7 @@
 #include <security/util.h>
 #include <mm/slab.h>
 #include <arch/atomic.h>
+#include <mstring/process.h>
 
 static struct __s_object system_caps[SYS_CAP_MAX];
 
@@ -50,16 +51,20 @@ void initialize_security(void)
 struct __task_s_object *s_clone_task_object(struct __task_struct *t)
 {
   struct __task_s_object *orig,*s;
+  mac_label_t l;
+  uid_t uid;
 
   if( !t || !(orig=t->sobject) ) {
     return NULL;
   }
 
-  if( (s=memalloc(sizeof(*s))) ) {
-    memset(s,0,sizeof(*s));
+  S_LOCK_OBJECT_R(&orig->sobject);
+  l=orig->sobject.mac_label;
+  uid=orig->sobject.uid;
+  S_UNLOCK_OBJECT_R(&orig->sobject);
 
-    atomic_set(&s->refcount,1);
-    s->sobject=orig->sobject;
+  if( (s=s_alloc_task_object(l,uid)) ) {
+    /* Clone group info here. */
   }
 
   return s;
@@ -73,9 +78,46 @@ struct __task_s_object *s_alloc_task_object(mac_label_t label,uid_t uid)
     memset(s,0,sizeof(*s));
 
     atomic_set(&s->refcount,1);
+    rw_spinlock_initialize(&s->sobject.lock);
     s->sobject.mac_label=label;
     s->sobject.uid=uid;
   }
 
   return s;
+}
+
+bool s_check_access(struct __s_object *actor,struct __s_object *obj)
+{
+  bool can=false;
+
+  if( actor != obj ) {
+    if( actor < obj ) {
+      S_LOCK_OBJECT_R(actor);
+      S_LOCK_OBJECT_R(obj);
+    } else {
+      S_LOCK_OBJECT_R(obj);
+      S_LOCK_OBJECT_R(actor);
+    }
+  } else {
+    S_LOCK_OBJECT_R(actor);
+  }
+
+  if( S_MAC_OK(actor->mac_label,obj->mac_label) ) {
+    /* Check against DAC policies here. */
+    can=true;
+  }
+
+  if( actor != obj ) {
+    if( actor > obj ) {
+      S_UNLOCK_OBJECT_R(actor);
+      S_UNLOCK_OBJECT_R(obj);
+    } else {
+      S_UNLOCK_OBJECT_R(obj);
+      S_UNLOCK_OBJECT_R(actor);
+    }
+  } else {
+    S_UNLOCK_OBJECT_R(actor);
+  }
+
+  return can;
 }

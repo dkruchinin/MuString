@@ -26,11 +26,14 @@
 
 #include <mstring/types.h>
 #include <arch/atomic.h>
+#include <arch/spinlock.h>
+#include <sync/spinlock.h>
 
 typedef unsigned int mac_label_t;
 
 struct __s_object {
   mac_label_t mac_label;
+  rw_spinlock_t lock;
   uid_t uid;
 };
 
@@ -39,19 +42,17 @@ struct __task_s_object {
   struct __s_object sobject;
 };
 
+#define S_LOCK_OBJECT_R(t) spinlock_lock_read(&(t)->lock)
+#define S_UNLOCK_OBJECT_R(t) spinlock_unlock_read(&(t)->lock)
+#define S_LOCK_OBJECT_W(t) spinlock_lock_write(&(t)->lock)
+#define S_UNLOCK_OBJECT_W(t) spinlock_unlock_write(&(t)->lock)
+
 #define s_get_task_object(o) atomic_inc(&(o)->sobject->refcount)
 #define s_put_task_object(o)
 
 #define S_MAC_OK(actor_label,object_label) ((actor_label) <= (object_label))
 
-static inline bool s_check_access(struct __s_object *actor,
-                                  struct __s_object *obj)
-{
-  if( S_MAC_OK(actor->mac_label,obj->mac_label) ) {
-    return true;
-  }
-  return false;
-}
+bool s_check_access(struct __s_object *actor,struct __s_object *obj);
 
 enum __s_system_caps {
   SYS_CAP_ADMIN,
@@ -91,5 +92,10 @@ struct __task_s_object *s_alloc_task_object(mac_label_t label,
  *
  */
 
+/* Control operations for managing MAC labels from userland */
+#define S_MAC_CTL_SET_LABEL  0
+
+struct __mac_ctl_arg {
+};
 
 #endif
