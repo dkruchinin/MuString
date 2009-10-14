@@ -71,7 +71,7 @@ INITCODE void arch_smp_init(void)
 
     lapic_id = raw_percpu_get_var(lapic_ids, c);
     kprintf("SEND INIT IPI TO CPU %d, cpuid=%d\n", *lapic_id, c);
-    if (apic_init_ipi(*lapic_id)) {
+    if (lapic_init_ipi(*lapic_id)) {
         panic("Can't send init interrupt\n");
     }
     interrupts_disable();
@@ -95,8 +95,8 @@ INITCODE void arch_processor_init(cpu_id_t cpuid)
 {
   arch_cpu_init(cpuid);
   if (cpu_has_feature(X86_FTR_APIC)) {
-    local_apic_init(cpuid);
-    local_apic_timer_init(cpuid);
+    lapic_init(cpuid);
+    lapic_timer_init(cpuid);
   }
 }
 

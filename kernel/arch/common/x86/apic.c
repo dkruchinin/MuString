@@ -36,7 +36,7 @@
 volatile uintptr_t lapic_addr;
 uint32_t PER_CPU_VAR(lapic_ids);
 
-static INITCODE void install_apic_irqs(void);
+static INITCODE void install_lapic_irqs(void);
 
 static inline uint32_t apic_read(uint32_t offset)
 {
@@ -96,12 +96,7 @@ static struct hwclock lapic_timer = {
   .delay = lapic_timer_delay,
 };
 
-void apic_spurious_interrupt(void)
-{
-  kprintf("APIC spurious interrupt on CPU #%d\n", cpu_id());
-}
-
-static void setup_apic_ldr_flat(cpu_id_t cpuid)
+static void setup_lapic_ldr_flat(cpu_id_t cpuid)
 {
   uint32_t logid;
   
@@ -278,7 +273,7 @@ static struct irq_action lapic_spurious_irq = {
   .handler = lapic_spurious_handler,
 };
 
-INITCODE void local_apic_init(cpu_id_t cpuid)
+INITCODE void lapic_init(cpu_id_t cpuid)
 {
   int i, j, maxlvt;
   uint32_t val;
@@ -301,7 +296,7 @@ INITCODE void local_apic_init(cpu_id_t cpuid)
   apic_write(APIC_ESR, 0);
   apic_write(APIC_ESR, 0);
 
-  setup_apic_ldr_flat(cpuid);
+  setup_lapic_ldr_flat(cpuid);
   for (i = APIC_NUM_ISRS - 1; i >= 0; i--) {
     val = apic_read(APIC_ISR_BASE + i * 16);
     
@@ -339,7 +334,7 @@ INITCODE void local_apic_init(cpu_id_t cpuid)
 
   val = apic_read(APIC_ESR);
   if (!cpuid) {
-    install_apic_irqs();
+    install_lapic_irqs();
   }
 }
 
@@ -348,7 +343,7 @@ static struct irq_action lapic_timer_irq = {
   .handler = timer_interrupt_handler,
 };
 
-static void apic_icr_wait(void)
+static void lapic_icr_wait(void)
 {
   int i;
   
@@ -359,7 +354,7 @@ static void apic_icr_wait(void)
   }
 }
 
-INITCODE void local_apic_timer_init(cpu_id_t cpuid)
+INITCODE void lapic_timer_init(cpu_id_t cpuid)
 {
   tick_t apictick0, apictick1, delta;
   uint32_t val;
@@ -395,7 +390,7 @@ INITCODE void local_apic_timer_init(cpu_id_t cpuid)
   }
 }
 
-INITCODE int apic_init_ipi(uint32_t apic_id)
+INITCODE int lapic_init_ipi(uint32_t apic_id)
 {
   int i, maxlvts;
 
@@ -408,7 +403,7 @@ INITCODE int apic_init_ipi(uint32_t apic_id)
   apic_write(APIC_ICR_HIGH, apic_id << APIC_LOGID_SHIFT);
   apic_write(APIC_ICR_LOW, APIC_LVTDM_INIT |
              APIC_LVT_TRIGGER_MODE | APIC_LVTL_ASSERT);
-  apic_icr_wait();
+  lapic_icr_wait();
 
   /* wait for 10ms */
   default_hwclock->delay(10);
@@ -416,10 +411,9 @@ INITCODE int apic_init_ipi(uint32_t apic_id)
   apic_write(APIC_ICR_HIGH, apic_id << APIC_LOGID_SHIFT);
   apic_write(APIC_ICR_LOW, APIC_LVTDM_INIT |
              APIC_LVT_TRIGGER_MODE);
-  apic_icr_wait();
+  lapic_icr_wait();
   if (apic_read(APIC_ICR_LOW) & APIC_LVTDS_SEND_PENDING) {
-    kprintf("wtf?\n");
-    return -1;
+    return ERR(-1);
   }
 
   default_hwclock->delay(10);
@@ -429,7 +423,7 @@ INITCODE int apic_init_ipi(uint32_t apic_id)
     }
 
     apic_read(APIC_ESR);
-    apic_icr_wait();
+    lapic_icr_wait();
     apic_write(APIC_ICR_HIGH, apic_id << APIC_LOGID_SHIFT);
     apic_write(APIC_ICR_LOW, APIC_LVTDM_STARTUP |
                (uint8_t)phys_to_pframe_id((void *)0x9000));
@@ -444,7 +438,7 @@ INITCODE int apic_init_ipi(uint32_t apic_id)
   return 0;
 }
 
-static INITCODE void install_apic_irqs(void)
+static INITCODE void install_lapic_irqs(void)
 {
   int ret;
   irq_t irq;

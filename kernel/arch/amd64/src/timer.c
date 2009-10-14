@@ -42,7 +42,7 @@ void arch_timer_init(void)
     for (;;);
   }
   else {
-    local_apic_init(0);
-    local_apic_timer_init(0);
+    lapic_init(0);
+    lapic_timer_init(0);
   }
 }
