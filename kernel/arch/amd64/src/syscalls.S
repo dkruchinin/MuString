@@ -108,7 +108,7 @@ syscall_point:
 
 	/* After changing stack pointer, we can enable IRQs */
 	sti
-	SAVE_GPRS
+	SAVE_ALL
 
 	cmp $NUM_OF_SYSCALLS,%rax
 	jb good_syscall_number
@@ -116,7 +116,7 @@ syscall_point:
 	movq $-ENOSYS,%rax
 	jmp return_from_syscall
 
-	good_syscall_number:
+good_syscall_number:
 	/* Since %rcx contains the return address, we should reload
 	 * %rcx from %r10.
 	 */
@@ -143,7 +143,7 @@ return_from_syscall:
 	  popq %rax
 
 no_works_after_syscall:
-	  RESTORE_GPRS
+	  RESTORE_ALL
 
 	  /* Now restore user %gs */
 	  cli
@@ -153,6 +153,7 @@ no_works_after_syscall:
 	  mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
 	  swapgs
 	  mov %eax,%gs
+      sti
       popq %rax
       orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
       iretq

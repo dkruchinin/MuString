@@ -60,12 +60,13 @@ fault_entry_point:
         
 2:
         sti
-        SAVE_GPRS
-        movq %rsp, %rdi
+        SAVE_ALL
+        movq %r12, %rdi
         movq %rax, %rsi        
         callq __do_handle_fault        
 
-        cmpq $GDT_SEL(KCODE_DESCR), INT_FULL_OFFSET_TO_CS(%rsp)
+        movq (%rsp), %rbp        
+        cmpq $GDT_SEL(KCODE_DESCR), INT_FULL_OFFSET_TO_CS(%rbp)
 	    je 3f
 
 	    /* Process deferred userspace-related works */
@@ -75,7 +76,7 @@ fault_entry_point:
 	    call handle_uworks
 
 3:      
-        RESTORE_GPRS
+        RESTORE_ALL
         cmpq $GDT_SEL(KCODE_DESCR), 16 + INT_STACK_FRAME_CS_OFFT(%rsp)
         je 4f
         
@@ -84,9 +85,9 @@ fault_entry_point:
         swapgs
         sti
 4:
-        popq %rax
+        popq %rax        
         addq $8, %rsp
-        iretq     
+        iretq
         
 .globl __irqs_table
 .globl __do_handle_irq
@@ -99,7 +100,7 @@ irq_entry_point:
 
 1:      
         incq %gs:CPU_SCHED_STAT_IRQCNT_OFFT
-        SAVE_GPRS
+        SAVE_ALL
         subq $32, %rax
         movq %rax, %rdi
         callq __do_handle_irq
@@ -143,7 +144,8 @@ no_preemption_in_interrupt:
 	  popq %rax
 
 	  /* Now let's see if we need to check for userspace works. */
-	  movq %rsp, %rbx
+      jmp exit_from_irq
+	  movq (%rsp), %rbx
 	  cmpq $GDT_SEL(KCODE_DESCR), INT_FULL_OFFSET_TO_CS(%rbx)
 	  je exit_from_irq
 
@@ -163,8 +165,8 @@ no_preemption_in_interrupt:
 	  xorq %rsi, %rsi
 	  movq %rsp, %rdx
 	  callq handle_uworks
+      cli
 
-	  cli
 	  /* Since interrupts were enabled during executing userspace-related
 	   * works, we must make sure that there are no pending deffered IRQ works
 	   * with higher priorities than ours.
@@ -174,12 +176,12 @@ no_preemption_in_interrupt:
 
 exit_from_irq:
         sti
-        RESTORE_GPRS
+        RESTORE_ALL
         cmpq $GDT_SEL(KCODE_DESCR), 8 + INT_STACK_FRAME_CS_OFFT(%rsp)
         je 1f
 
-        RESTORE_USER_SEGMENT_REGISTERS
         cli
+        RESTORE_USER_SEGMENT_REGISTERS
         movl %gs:(CPU_SCHED_STAT_USER_GS_OFFT), %eax
         swapgs
         movl %eax, %gs
@@ -188,7 +190,7 @@ exit_from_irq:
 1:
         popq %rax
         /* Make sure IF is set after returning from interrupt context. */
-        orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
+        //orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
         iretq
 
 .align 16

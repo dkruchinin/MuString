@@ -27,6 +27,7 @@
 #include <mstring/interrupt.h>
 #include <mstring/errno.h>
 #include <mstring/string.h>
+#include <mstring/kprintf.h>
 #include <mstring/types.h>
 
 #ifdef CONFIG_DEBUG_IRQ_ACTIVITY
@@ -263,7 +264,6 @@ int irq_line_unregister(irq_t irq)
   return 0;
 }
 
-#include <mstring/kprintf.h>
 INITCODE void irqs_init(void)
 {
   irq_t irq_num;
@@ -278,7 +278,6 @@ INITCODE void irqs_init(void)
 
   arch_irqs_init();
   ASSERT(default_irqctrl != NULL);
-  kprintf("ARCH IRQS INITIALIZED\n");
 }
 
 void __do_handle_irq(irq_t irq)
@@ -325,7 +324,6 @@ void __do_handle_irq(irq_t irq)
   }
 
   spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
-  //interrupts_enable();
 #ifdef CONFIG_DEBUG_IRQ_ACTIVITY
   serial_write_char('Z');
 #endif

@@ -48,3 +48,4 @@ resume_userspace:
     popq %rax
     orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
     iretq
+

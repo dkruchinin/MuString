@@ -25,16 +25,14 @@
 #include <config.h>
 #include <arch/types.h>
 #include <arch/apic.h>
-#include <mstring/interrupt.h>
-#include <mstring/timer.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
-#include <arch/page.h>
-#include <arch/smp.h>
+#include <mstring/smp.h>
 #include <mstring/kprintf.h>
+#include <mstring/timer.h>
 #include <mstring/unistd.h>
 #include <mstring/swks.h>
-#include <mstring/actbl.h>
+#include <mstring/types.h>
 
 static const int mon_days[12] = {
   31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31

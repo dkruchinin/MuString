@@ -82,6 +82,7 @@ INITCODE void arch_smp_init(void)
             break;
         }
     }
+
     interrupts_enable();
     if (!is_cpu_online(c)) {
         kprintf("fuck! => %d\n", is_cpu_online(c));

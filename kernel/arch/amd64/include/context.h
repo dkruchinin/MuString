@@ -126,16 +126,14 @@
 #define ARCH_CTX_PTD_OFFSET     0x40
 
 #ifdef __ASM__
+#include <arch/current.h>
+#include <arch/page.h>
 
 /* extra bytes on the stack after CPU exception stack frame: %rax */
 #define INT_STACK_EXTRA_PUSHES  8
 
 /* Offset to CS selecetor in case full context is saved on the stack */
 #define INT_FULL_OFFSET_TO_CS (SAVED_GPR_SIZE+8+INT_STACK_FRAME_CS_OFFT)
-#define INT_FULL_OFFSET_TO_CS_ERR (SAVED_GPR_SIZE+8+INT_STACK_FRAME_CS_OFFT+8)
-
-#include <arch/current.h>
-#include <arch/page.h>
 
 /* Since we'll always turn turn on interrupts after executing IRETQ,
  * we should know where saved RFLAGS is located.
@@ -171,34 +169,10 @@
    popq %rcx; \
    popq %rax;
 
-#define ENTER_INTERRUPT_CONTEXT(extra_pushes)                           \
-  cmpq $GDT_SEL(KCODE_DESCR), extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ; \
-  je 666f;                                                        \
-  swapgs ;                                                              \
-  SAVE_AND_LOAD_SEGMENT_REGISTERS;                                      \
-666:	;                                                               \
-  SAVE_GPRS ;
-
-#define EXIT_INTERRUPT_CONTEXT(extra_pushes)                            \
-  RESTORE_GPRS;                                                         \
-  cmp $GDT_SEL(KCODE_DESCR),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ; \
-  je 666f;                                                              \
-  RESTORE_USER_SEGMENT_REGISTERS;                                       \
-  cli;                                                                  \
-  movl %gs:(CPU_SCHED_STAT_USER_GS_OFFT), %eax;                         \
-  swapgs;                                                               \
-  movl %eax, %gs;                                                       \
-  sti;                                                                  \
-1: jmp 1b;                                                              \
-666: ;                                                                  \
-  popq %rax;
-
 #define COMMON_INTERRUPT_EXIT_PATH \
          jmp return_from_common_interrupt;
      
-#endif
-
-#ifndef __ASM__
+#else /* __ASM__ */
 #include <arch/seg.h>
 #include <arch/interrupt.h>
 #include <mstring/types.h>
@@ -278,7 +252,7 @@ void dump_interrupt_stack(struct intr_stack_frame *istack_frame);
 void dump_user_stack(struct __vmm *vmm, uintptr_t rsp);
 void dump_kernel_stack(struct __task_struct *task, uintptr_t rsp);
 void __stop_cpu(void);
-#endif /* __ASM__ */
+#endif /* !__ASM__ */
 
 #endif /* __ARCH_CONTEXT_H__ */
 

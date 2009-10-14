@@ -182,11 +182,13 @@ void fire_deffered_actions(void)
   long is,fired;
   deffered_irq_action_t *action;
 
+  kprintf("FIRE DEFERRED ACTIONS\n");
   /* To prevent recursive invocations. */
   spinlock_lock_irqsave(&acts->lock,is);
   if( acts->executers || list_is_empty(&acts->pending_actions) ) {
     preempt_enable();
     spinlock_unlock_irqrestore(&acts->lock,is);
+    kprintf("DONE 1\n");
     return;
   } else {
     acts->executers++;
@@ -223,6 +225,7 @@ void fire_deffered_actions(void)
   acts->executers--;
   preempt_enable();   /* Trigger preemption. */
   spinlock_unlock_irqrestore(&acts->lock,is);
+  kprintf("DONE 2\n");
 }
 
 void deschedule_deffered_action(deffered_irq_action_t *a)
