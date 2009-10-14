@@ -399,6 +399,7 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
         ldt_dsc=&ldt_dsc[PTD_SELECTOR];
 
         arch_ctx->per_task_data=arg;
+        task->ptd=arg;
         seg_descr_setup(ldt_dsc, SEG_TYPE_DATA, SEG_DPL_USER,
                         (uint32_t)arg, 0, SEG_FLG_PRESENT);
 
