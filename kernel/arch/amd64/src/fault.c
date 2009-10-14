@@ -30,7 +30,6 @@
 #include <mstring/stddef.h>
 #include <mstring/types.h>
 
-long __tmp = 0;
 extern uint8_t __faults_table[];
 static fault_handler_fn fault_handlers[IDT_NUM_FAULTS];
 static INITDATA int cur_ist = 0;

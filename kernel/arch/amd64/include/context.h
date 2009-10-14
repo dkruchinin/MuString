@@ -97,7 +97,7 @@
 /* NOTE: SAVE_MM initializes %rsi so that it points to iterrupt/exception stack frame. */
 #define SAVE_ALL                                \
   SAVE_GPRS                                     \
-  SAVE_MM  
+  SAVE_MM
 
 #define RESTORE_ALL                             \
   RESTORE_MM                                    \

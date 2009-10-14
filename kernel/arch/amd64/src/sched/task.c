@@ -310,6 +310,7 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
    * the address to be 512-bytes aligned.
    */
   fsave -= reg_size;
+  regs = (regs_t *)fsave;
   delta = fsave;
   fsave-=512;  
   fsave &= 0xfffffffffffffff0;
@@ -461,11 +462,11 @@ void arch_activate_task(task_t *to)
     load_ldt(to->cpu,(void *)to_ctx->ldt,to_ctx->ldt_limit);
   }
 
-//#ifdef CONFIG_TEST
-  kprintf( "**  ACTIVATING TASK: %d:%d (CPU: ) **\n",
-         to->pid,to->tid);//,to->cpu);
-//#endif
-  
+#ifdef CONFIG_TEST
+  kprintf( "**  ACTIVATING TASK: %d:%d (CPU: %d) [from %d:%d] **\n",
+           to->pid,to->tid,to->cpu, current_task()->pid, current_task()->tid);
+#endif
+
   /* Let's jump ! */
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
 }

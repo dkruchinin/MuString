@@ -265,7 +265,6 @@ static void __server_task_runner(void *data)
   for(sn=0,a=0;a<i;a++) {
     char *modvbase;
 
-    kprintf("==> %d\n", sn);
     server_ops->get_server_by_num(a, &srv);
     if (srv.name != NULL) {
       kprintf("[LAUNCHER] Starting server: %s\n", srv.name);

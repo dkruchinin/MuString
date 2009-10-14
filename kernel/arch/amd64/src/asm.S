@@ -238,7 +238,7 @@ ret_from_int:
 
   /* Make sure IF is set after returning from interrupt context. */
   orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
-  iretq
+  iretq 
 
 return_from_syscall:
   /* Before returning from syscall we should check for pending works.
@@ -284,7 +284,7 @@ common_exception_path:
   swapgs
 common_exception_path_kern:
   pushq %rax
-  movq online_cpus, %rax
+x  movq online_cpus, %rax
   orq %rax, %rax
   popq %rax
   jz 1f
