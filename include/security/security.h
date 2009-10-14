@@ -56,6 +56,8 @@ static inline bool s_check_access(struct __s_object *actor,
 enum __s_system_caps {
   SYS_CAP_ADMIN=0,
   SYS_CAP_IO_PORT_ALLOC,
+  SYS_CAP_CREATE_PROCESS,
+  SYS_CAP_CREATE_THREAD,
   SYS_CAP_MAX,
 };
 

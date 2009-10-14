@@ -41,6 +41,7 @@
 #include <mstring/usercopy.h>
 #include <ipc/port.h>
 #include <ipc/ipc.h>
+#include <security/security.h>
 
 typedef uint32_t hash_level_t;
 
@@ -575,9 +576,14 @@ long sys_task_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
   }
 
   r = do_task_control(task,cmd,arg);
-out_release:
   release_task_struct(task);
   return r;
+}
+
+static bool __check_creation_perm(ulong_t flags)
+{
+  return s_check_system_capability((flags & CLONE_MM) ?
+                                   SYS_CAP_CREATE_THREAD : SYS_CAP_CREATE_PROCESS);
 }
 
 long sys_create_task(ulong_t flags,task_creation_attrs_t *a)
@@ -585,6 +591,10 @@ long sys_create_task(ulong_t flags,task_creation_attrs_t *a)
   task_t *task;
   long r;
   task_creation_attrs_t attrs,*pa;
+
+  if( !__check_creation_perm(flags) ) {
+    return ERR(-EPERM);
+  }
 
   if( a ) {
     if( copy_from_user(&attrs,a,sizeof(attrs) ) ) {
@@ -610,7 +620,7 @@ long sys_create_task(ulong_t flags,task_creation_attrs_t *a)
   return r;
 }
 
-extern ulong_t syscall_counter;
+#define FORK_FLAGS (CLONE_COW | CLONE_REPL_IPC | CLONE_REPL_SYNC)
 
 long sys_fork(void)
 {
@@ -618,14 +628,17 @@ long sys_fork(void)
   long r;
   task_creation_attrs_t tca;
 
+  if( !__check_creation_perm(FORK_FLAGS) ) {
+    return ERR(-EPERM);
+  }
+
   memset(&tca,0,sizeof(tca));
 
   tca.exec_attrs.stack=0;
   tca.exec_attrs.destructor=caller->uworks_data.destructor;
   tca.exec_attrs.per_task_data=caller->ptd;
 
-  r=create_task(current_task(),CLONE_COW | CLONE_REPL_IPC | CLONE_REPL_SYNC,
-                TPL_USER,&new,&tca);
+  r=create_task(current_task(),FORK_FLAGS,TPL_USER,&new,&tca);
   if( !r ) {
     r=new->pid;
   }

@@ -40,8 +40,6 @@ task_t *idle_tasks[CONFIG_NRCPUS];
 #define STEP 600
 #define TICKS_TO_WAIT 300
 
-ulong_t syscall_counter = 0;
-
 void idle_loop(void)
 {
   long idle_cycles=0;

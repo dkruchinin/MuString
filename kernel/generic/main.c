@@ -40,6 +40,7 @@
 #include <arch/interrupt.h>
 #include <mstring/gc.h>
 #include <mstring/signal.h>
+#include <security/security.h>
 
 extern void initialize_common_hardware(void);
 extern void initialize_timer(void);
@@ -67,6 +68,7 @@ static void main_routine_stage1(void)
   setup_time();  
   interrupts_enable();
   initialize_swks();
+  initialize_security();
 
   /* OK, we can proceed. */
   spawn_percpu_threads();

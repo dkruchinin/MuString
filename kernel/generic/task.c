@@ -91,65 +91,41 @@ void initialize_task_subsystem(void)
   initialize_process_subsystem();
 }
 
-static int __alloc_pid_and_tid(task_t *parent,ulong_t flags,
-                                    pid_t *ppid, tid_t *ptid,
-                                    task_privelege_t priv)
+static int __alloc_pid_and_tid(task_t *task,task_t *parent,ulong_t flags,
+                               task_privelege_t priv)
 {
-  pid_t pid;
-  tid_t tid;
+  pid_t pid=INVALID_PID;
+  tid_t tid=0;
+  int r=-ENOMEM;
 
-  /* Init task ? */
+  /* Allocate PID first. */
   if( flags & TASK_INIT ) {
-    int r;
-
     LOCK_PID_ARRAY;
     if( !init_launched ) {
-      *ppid=1;
-      *ptid=1;
+      pid=1;
       init_launched=true;
-      r=0;
     } else {
       r=-EINVAL;
     }
     UNLOCK_PID_ARRAY;
+  } else {
+    if( (flags & CLONE_MM) && priv != TPL_KERNEL ) {
+      pid=parent->pid;
+      LOCK_TASK_STRUCT(parent);
+      tid=idx_allocate(&parent->group_leader->tg_priv->tid_allocator);
+      UNLOCK_TASK_STRUCT(parent);
+    } else {
+      pid=__allocate_pid();
+    }
+  }
+
+  if( pid == INVALID_PID || tid == IDX_INVAL ) {
     return ERR(r);
   }
 
-  if( (flags & CLONE_MM) && priv != TPL_KERNEL ) {
-    pid=parent->pid;
-
-    LOCK_TASK_STRUCT(parent);
-    tid=idx_allocate(&parent->group_leader->tg_priv->tid_allocator);
-    UNLOCK_TASK_STRUCT(parent);
-
-    if( tid == IDX_INVAL ) {
-      return ERR(-ENOMEM);
-    }
-  } else {
-    pid = __allocate_pid();
-    if( pid == INVALID_PID ) {
-      return ERR(-ENOMEM);
-    }
-    tid=0;
-  }
-
-  *ppid=pid;
-  *ptid=tid;
+  task->pid=pid;
+  task->tid=tid;
   return 0;
-}
-
-static void __free_pid_and_tid(task_t *parent,pid_t pid, tid_t tid,
-                               bool thread)
-{
-  if( thread ) {
-    LOCK_TASK_STRUCT(parent);
-    idx_free(&parent->group_leader->tg_priv->tid_allocator,tid);
-    UNLOCK_TASK_STRUCT(parent);
-  } else {
-    LOCK_PID_ARRAY;
-    index_array_free_value(&pid_array,pid);
-    UNLOCK_PID_ARRAY;
-  }
 }
 
 static int __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
@@ -437,8 +413,6 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   task_t *task;
   int r = -ENOMEM;
   page_frame_t *stack_pages;
-  pid_t pid;
-  tid_t tid;
   task_limits_t *limits;
 
   if ((flags && !parent) ||
@@ -448,24 +422,21 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   }
   /* TODO: [mt] Add memory limit check. */
   /* goto task_create_fault; */
-  r=__alloc_pid_and_tid(parent,flags,&pid,&tid,priv);
-  if( r ) {
-    goto task_create_fault;
-  }
-
   task=__allocate_task_struct(flags,priv);
   if( !task ) {
     r = -ENOMEM;
-    goto free_pid;
+    goto task_create_fault;
   }
 
-  task->pid=pid;
-  task->tid=tid;
+  r=__alloc_pid_and_tid(task,parent,flags,priv);
+  if( r ) {
+    goto free_task;
+  }
 
   /* Create kernel stack for the new task. */
   r = allocate_kernel_stack(&task->kernel_stack);
   if( r != 0 ) {
-    goto free_task;
+    goto free_pid;
   }
 
   r = __initialize_task_mm(parent, task, flags, priv, attrs);
@@ -572,10 +543,10 @@ free_mm:
   /* TODO: Free mm here. [mt] */
 free_stack:
   free_kernel_stack(task->kernel_stack.id);  
+free_pid:
+  /* TODO: free PID/TID here. */
 free_task:
   /* TODO: Free task struct page here. [mt] */
-free_pid:
-  __free_pid_and_tid(parent,pid,tid,(flags & CLONE_MM)!=0);
 task_create_fault:
   *t = NULL;
   return ERR(r);
