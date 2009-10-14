@@ -66,6 +66,14 @@
 #define BITNUM(po2)    bit_find_msf(po2)
 #define ARRAY_SIZE(a)  (sizeof((a))/sizeof((a)[0]))
 
+/**
+ * @def POW2(n)
+ * @brief Get @a n's power of two.
+ * @param n - A power 2 will be reised
+ * @return @a n's power of 2.
+ */
+#define POW2(n) (1 << (n))
+
 #define B2KB(b)   ((b) >> 10)
 #define B2MB(b)   ((b) >> 20)
 #define KB2B(kb)  ((kb) << 10)

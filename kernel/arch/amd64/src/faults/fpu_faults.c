@@ -16,53 +16,48 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copytight 2009 Dan Kruchinin <dk@jarios.org>
  *
  * mstring/amd64/faults/fpu_faults.c: contains routines for dealing with
  *  FPU-related x86_64 CPU fauls.
  *
  */
 
-#include <arch/types.h>
-#include <arch/page.h>
+#include <arch/context.h>
 #include <arch/fault.h>
-#include <arch/interrupt.h>
-#include <mstring/panic.h>
 #include <mstring/kprintf.h>
-#include <arch/mem.h>
-#include <mstring/smp.h>
+#include <mstring/types.h>
 
-void divide_by_zero_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+void FH_devide_by_zero(struct fault_ctx *fctx)
 {
-    kprintf( "  [!!] #DE exception raised !, RIP = %p\n", stack_frame->rip );
-    interrupts_disable();
-    for(;;);
+  /* TODO DK: send SIGFPE in case of user fault */
+  fault_describe("DIVIDE-BY-ZERO FAULT", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
-void overflow_fault_handler_impl(void)
+void FH_overflow(struct fault_ctx *fctx)
 {
-    kprintf( "  [!!] #Overflow exception raised !");
-    interrupts_disable();
-    for(;;);
+  fault_describe("OVERFLOW EXCEPTION", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
-void coprocessor_segment_overrun_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+void FH_segment_not_present(struct fault_ctx *fctx)
 {
-    kprintf( "  [!!] #FPU segment overrun exception raised ! RIP = %p\n", stack_frame->rip );
-    interrupts_disable();
-    for(;;);
+  fault_describe("SEGMENT-NOT-PRESENT", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
-void fpu_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+void FH_simd_floating_point(struct fault_ctx *fctx)
 {
-    kprintf( "  [!!] #FPU exception raised ! RIP = %p\n", stack_frame->rip );
-    interrupts_disable();
-    for(;;);
-}
-
-void simd_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-    kprintf( "  [!!] #SIMD exception raised. RIP = %p!\n", stack_frame->rip );
-    interrupts_disable();
-    for(;;);
+  /*
+   * TODO DK: display more precise information about fault reason
+   * by parsing exception mask in the FPU control word.
+   */
+  fault_describe("SIMD FLOATING POINT", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 

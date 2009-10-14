@@ -16,94 +16,93 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2009 Dan Kruchinin <dk@harios.org>
  *
  * include/mstring/amd64/fault.h: contains types and prototypes for dealing
  *                            with x86_64 CPU fauls.
  *
  */
 
-#ifndef __ARCH_FAULT_H__
-#define __ARCH_FAULT_H__ 
+#ifndef __MSTRING_ARCH_FAULT_H__
+#define __MSTRING_ARCH_FAULT_H__ 
 
-#include <mstring/types.h>
-#include <arch/page.h>
-#include <arch/interrupt.h>
 #include <arch/context.h>
 #include <arch/seg.h>
-#include <mstring/task.h>
+#include <mstring/types.h>
 
-enum __fault_ids {
-  DE_FAULT = 0, /* Divide-by-Zero-Error */
-  DB_FAULT = 1, /* Debug */
-  NMI_FAULT = 2, /* Non-Maskable-Interrupt */
-  BP_FAULT = 3, /* Breakpoint */
-  OF_FAULT = 4, /* Overflow */
-  BR_FAULT = 5, /* Bound-range */
-  UD_FAULT = 6, /* Invalid-Opcode */
-  NM_FAULT = 7, /* Device-Not-Available */
-  DF_FAULT = 8, /* Double fault */
-                /* #10 is reserved */
-  TS_FAULT = 10, /* Invalid TSS */
-  NP_FAULT = 11, /* Segment-Not-Present */
-  SS_FAULT = 12, /* SS register loads and stack references */
-  GP_FAULT = 13, /* General-Protection */
-  PF_FAULT = 14, /* Page-Fault */
-                 /* #15 is reserved. */
-  MF_FAULT = 16, /* x87 Floating-Point Exception */
-  AC_FAULT = 17, /* Alignment-Check */
-  MC_FAULT = 18, /* Machine-Check */
-  XF_FAULT = 19, /* SIMD Floating-Point */
-                 /* #20 - 29 are reserved. */
-  SX_FAULT = 30, /* Security Exception */
-                 /* #31 is reserved */
+enum fault_idx {
+  FLT_DE  = 0, /* Divide-by-Zero-Error */
+  FLT_DB  = 1, /* Debug */
+  FLT_NMI = 2, /* Non-Maskable-Interrupt */
+  FLT_BP  = 3, /* Breakpoint */
+  FLT_OF  = 4, /* Overflow */
+  FLT_BR  = 5, /* Bound-range */
+  FLT_UD  = 6, /* Invalid-Opcode */
+  FLT_NM  = 7, /* Device-Not-Available */
+  FLT_DF  = 8, /* Double fault */
+  /* #9 is reserved */
+  FLT_TS = 10, /* Invalid TSS */
+  FLT_NP = 11, /* Segment-Not-Present */
+  FLT_SS = 12, /* SS register loads and stack references */
+  FLT_GP = 13, /* General-Protection */
+  FLT_PF = 14, /* Page-Fault */
+  /* #15 is reserved. */
+  FLT_MF = 16, /* x87 Floating-Point Exception */
+  FLT_AC = 17, /* Alignment-Check */
+  FLT_MC = 18, /* Machine-Check */
+  FLT_XF = 19, /* SIMD Floating-Point */
+  /* #20 - 29 are reserved. */
+  FLT_SX = 30, /* Security Exception */
+  /* #31 is reserved */
 };
 
-/* Standard CPU fault handlers ranged [0 .. 31] */
-extern void divide_by_zero_fault_handler(void);
-extern void debug_fault_handler(void);
-extern void nmi_fault_handler(void);
-extern void breakpoint_fault_handler(void);
-extern void overflow_fault_handler(void);
-extern void bound_range_fault_handler(void);
-extern void invalid_opcode_fault_handler(void);
-extern void device_not_available_fault_handler(void);
-extern void doublefault_fault_handler(void);
-extern void coprocessor_segment_overrun_fault_handler(void);
-extern void invalid_tss_fault_handler(void);
-extern void segment_not_present_fault_handler(void);
-extern void stack_fault_handler(void);
-extern void general_protection_fault_handler(void);
-extern void page_fault_fault_handler(void);
-extern void reserved_exception_fault_handler(void);
-extern void fpu_fault_handler(void);
-extern void alignment_check_fault_handler(void);
-extern void machine_check_fault_handler(void);
-extern void simd_fault_handler(void);
-extern void security_exception_fault_handler(void);
+#define MIN_FAULT_IDX FLT_DE
+#define MAX_FAULT_IDX 31
+#define IDT_NUM_FAULTS (MAX_FAULT_IDX + 1)
 
-void install_fault_handlers(void);
-void fault_dump_regs(regs_t *r, ulong_t rip);
-void show_stack_trace(uintptr_t stack);
+struct fault_ctx {
+  struct gpregs *gprs;
+  struct intr_stack_frame *istack_frame;
+  uint32_t errcode;
+  enum fault_idx fault_num;
+  void *old_rsp;
+};
 
-static inline struct __int_stackframe *arch_get_userspace_stackframe(task_t *task)
-{
-  return (struct __int_stackframe*)(task->kernel_stack.high_address-sizeof(struct __int_stackframe));
-}
+typedef void (*fault_handler_fn)(struct fault_ctx *fctx);
 
-static inline long get_userspace_stack(task_t *task)
-{
-  return arch_get_userspace_stackframe(task)->old_rsp;
-}
+#define FAULT_IS_RESERVED(fidx)                         \
+  (((fidx) == 9) || ((fidx) == 15) ||                   \
+   (((fidx) > 19) && ((fidx) < 30)) || ((fidx) == 31))
 
-static inline long get_userspace_ip(task_t *task)
-{
-  return arch_get_userspace_stackframe(task)->rip;
-}
+#define IS_KERNEL_FAULT(fctx)\
+  ((fctx)->istack_frame->cs == GDT_SEL(KCODE_DESCR))
 
-#define kernel_fault(stack_frame) \
-    (stack_frame->cs == GDT_SEL(KCODE_DESCR))
+extern uint32_t faults_with_errcode;
+INITCODE void arch_faults_init(void);
+void fault_describe(const char *fname, struct fault_ctx *fctx);
+void fault_dump_info(struct fault_ctx *fctx);
 
-uint64_t fixup_fault_address(uint64_t fault_address);
-void print_fixup_table(void);
-#endif
+extern void __do_handle_fault(void *rsp, enum fault_idx fault_num);
+extern void FH_devide_by_zero(struct fault_ctx *fctx);
+extern void FH_debug(struct fault_ctx *fctx);
+extern void FH_nmi(struct fault_ctx *fctx);
+extern void FH_breakpoint(struct fault_ctx *fctx);
+extern void FH_overflow(struct fault_ctx *fctx);
+extern void FH_bound_range(struct fault_ctx *fctx);
+extern void FH_invalid_opcode(struct fault_ctx *fctx);
+extern void FH_device_not_avail(struct fault_ctx *fctx);
+extern void FH_double_fault(struct fault_ctx *fctx);
+extern void FH_invalid_tss(struct fault_ctx *fctx);
+extern void FH_segment_not_present(struct fault_ctx *fctx);
+extern void FH_stack_exception(struct fault_ctx *fctx);
+extern void FH_general_protection_fault(struct fault_ctx *fctx);
+extern void FH_page_fault(struct fault_ctx *fctx);
+extern void FH_floating_point_exception(struct fault_ctx *fctx);
+extern void FH_alignment_check(struct fault_ctx *fctx);
+extern void FH_machine_check(struct fault_ctx *fctx);
+extern void FH_simd_floating_point(struct fault_ctx *fctx);
+extern void FH_security_exception(struct fault_ctx *fctx);
+extern void FH_reserved(struct fault_ctx *fctx);
+
+#endif /* !__MSTRING_ARCH_FAULT_H__  */
 

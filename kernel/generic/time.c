@@ -46,12 +46,6 @@
 
 struct tm s_epoch;
 
-void initialize_timer(void)
-{
-  init_timers();
-  arch_timer_init();
-}
-
 void timer_tick(void)
 {
   /* Update the ticks counter. */
@@ -115,3 +109,4 @@ void smp_local_timer_interrupt_tick(void)
   sched_timer_tick();
 }
 #endif
+

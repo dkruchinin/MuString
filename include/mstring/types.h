@@ -39,6 +39,8 @@ typedef uint16_t uid_t;
 typedef uint16_t gid_t;
 typedef uint32_t mode_t;
 typedef int cpu_id_t;
+typedef uint32_t irq_t;
+typedef uint64_t tick_t;
 
 #define always_inline __attribute__((always_inline)) inline
 #define likely(x)   __builtin_expect((x), 1)

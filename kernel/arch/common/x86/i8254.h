@@ -21,18 +21,15 @@
  *
  */
 
-#ifndef __ARCH_I8254_H__
-#define __ARCH_I8254_H__
+#ifndef __MSTINRG_ARCH_I8254_H__
+#define __MSTRING_ARCH_I8254_H__
+
+#include <mstring/types.h>
 
 #define I8254_BASE  0x40
-
-#define DCLOCK       150000
 #define PIT_OSC_FREQ 1193182
-#define MAGIC_CLOCKN 1193
 
 void i8254_init(void);
-uint64_t i8254_calibrate_delay_loop(void);
-uint64_t i8254_calibrate_delay_loop0(void);
 
-#endif
+#endif /* !__MSTRING_ARCH_I8254_H__ */
 

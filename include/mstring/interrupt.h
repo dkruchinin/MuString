@@ -16,73 +16,79 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2009 Dan Kruchinin <dk@jarios.org>
  *
  * include/mstring/interrupt.h: contains main kernel types and prototypes for dealing
  *                          with hardware interrupts.
  *
  */
 
-#ifndef __INTERRUPT_H__
-#define __INTERRUPT_H__ 
+#ifndef __MSTRING_INTERRUPT_H__
+#define __MSTRING_INTERRUPT_H__ 
 
-#include <ds/list.h>
 #include <arch/interrupt.h>
+#include <ds/list.h>
+#include <sync/spinlock.h>
 #include <mstring/types.h>
 
-/* Structure that describes abstract hardware interrupt controller.
+#define NUM_IRQ_LINES IRQ_VECTORS
+#define IRQ_INVAL ~(0U)
+
+/**
+ * Structure that describes abstract hardware interrupt controller.
  */
-typedef struct __hw_interrupt_controller {
-  list_node_t l; /*head of list*/
-  const char *descr; /*symboluc name*/
-  bool (*handles_irq)( uint32_t irq ); /*Can this PIC use this irq*/
-  void (*enable_all)(void); /*globally enable/dissble all irqs*/
-  void (*disable_all)(void); 
-  void (*enable_irq)( uint32_t irq ); /*enable irq #n*/
-  void (*disable_irq)( uint32_t irq ); /*disable irq #n*/
-  void (*ack_irq)(uint32_t irq); /*CPU has got interrupt*/
-} hw_interrupt_controller_t;
+struct irq_controller {
+  char *name;
+  list_node_t ctl_node;
+  bool (*can_handle_irq)(irq_t irq);
+  void (*mask_all)(void);
+  void (*unmask_all)(void); 
+  void (*mask_irq)(irq_t irq);
+  void (*unmask_irq)(irq_t irq );
+  void (*ack_irq)(irq_t irq);
+};
 
-typedef struct __irq_line {
+typedef uint8_t irqline_flags_t;
+#define IRQLINE_ACTIVE 0x01
+
+struct irq_line {
+  struct irq_controller *irqctl;
   list_head_t actions;
-  hw_interrupt_controller_t *controller;
-  uint32_t flags;
-} irq_line_t;
+  uint_t num_actions;
+  irq_t irq;
+  spinlock_t irq_line_lock;
+  struct {
+    ulong_t num_irqs;
+    uint_t num_sp_irqs;
+  } stat;
 
+  irqline_flags_t flags;
+};
 
-typedef void (*irq_handler_t)( void *priv );
-typedef uint64_t irq_t;
+typedef void (*irq_handler_fn)(void *data);
 
-typedef struct __irq_action {
-  irq_handler_t handler;
-  uint32_t flags;
-  void *private_data;
-  list_node_t l;
+typedef struct irq_action {
+  char *name;
+  irq_handler_fn handler;
+  list_node_t node;
+  irq_t irq;
+  void *priv_data;  
 } irq_action_t;
 
-/* Low-level IRQ entrypoints. */
-extern uintptr_t irq_entrypoints_array[NUM_IRQS];
+extern struct irq_controller *default_irqctrl;
 
-/* vector irq table */
-extern uint8_t vector_irq_table[NUM_IRQS];
+INITCODE void irqs_init(void);
+INITCODE void irq_register_controller(struct irq_controller *irqctl);
+int irq_line_register(irq_t irq, struct irq_controller *controller);
+int irq_line_unregister(irq_t irq);
+int irq_register_action(irq_t irq, struct irq_action *action);
+int irq_unregister_action(struct irq_action *action);
+int irq_mask(irq_t irq);
+void irq_mask_all(void);
+int irq_unmask(irq_t irq);
+void irq_unmask_all(void);
+bool irq_line_is_registered(irq_t irq);
+extern void __do_handle_irq(irq_t irq);
 
-void initialize_irqs( void );
-int register_irq(irq_t irq, irq_handler_t handler, void *data, uint32_t flags);
-int unregister_irq(irq_t irq, void *data);
-int enable_hw_irq(irq_t irq);
-int disable_hw_irq(irq_t irq);
-void disable_all_irqs(void);
-void enable_all_irqs(void);
-void do_irq(irq_t irq);
-
-void register_hw_interrupt_controller(hw_interrupt_controller_t *ctrl);
-
-/* Arch-specific routines. */
-void arch_initialize_irqs(void);
-
-static inline bool valid_irq_number(irq_t irq)
-{
-  return irq < NUM_IRQS;
-}
-
-#endif
+#endif /* !__MSTRING_INTERRUPT_H__ */
 

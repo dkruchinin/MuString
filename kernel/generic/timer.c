@@ -25,6 +25,7 @@
  */
 
 #include <ds/list.h>
+#include <arch/timer.h>
 #include <mstring/interrupt.h>
 #include <mstring/errno.h>
 #include <sync/spinlock.h>
@@ -41,12 +42,14 @@
 #include <mstring/kconsole.h>
 #include <mstring/serial.h>
 
+struct hwclock *default_hwclock = NULL;
+
 /*spinlock*/
-static SPINLOCK_DEFINE(timer_lock);
+static SPINLOCK_DEFINE(hwclocks_lock);
 static SPINLOCK_DEFINE(sw_timers_lock);
 
 /*list of the timers*/
-static LIST_DEFINE(known_hw_timers);
+static LIST_DEFINE(hwclocks);
 static LIST_DEFINE(expired_major_ticks);
 static LIST_DEFINE(cached_major_ticks);
 static int __num_cached_major_ticks;
@@ -59,8 +62,10 @@ static LIST_DEFINE(timers_list);
 
 static ulong_t __last_processed_timer_tick;
 
-#define GRAB_HW_TIMER_LOCK() spinlock_lock(&timer_lock)
-#define RELEASE_HW_TIMER_LOCK() spinlock_unlock(&timer_lock)
+#define HWCLOCKS_LOCK()                         \
+  spinlock_lock(&hwclocks_lock)
+#define HWCLOCKS_UNLOCK()                       \
+  spinlock_unlock(&hwclocks_lock)
 
 #define LOCK_SW_TIMERS(l)  spinlock_lock_irqsave(&sw_timers_lock,l)
 #define UNLOCK_SW_TIMERS(l) spinlock_unlock_irqrestore(&sw_timers_lock,l)
@@ -88,16 +93,16 @@ static ulong_t __last_processed_timer_tick;
   } while(0)
 
 
-static void init_hw_timers (void)
-{
-  list_init_head(&known_hw_timers);
-}
 
-void hw_timer_register (hw_timer_t *ctrl)
+void hwclock_register(struct hwclock *clock)
 {
-  GRAB_HW_TIMER_LOCK();
-  list_add_before(list_node_first(&known_hw_timers), &ctrl->l);
-  RELEASE_HW_TIMER_LOCK();
+  ASSERT(clock != NULL);
+  ASSERT(clock->delay != NULL);
+  ASSERT(clock->read != NULL);
+
+  HWCLOCKS_LOCK();
+  list_add2tail(&hwclocks, &clock->clock_node);
+  HWCLOCKS_UNLOCK();
 }
 
 void hw_timer_generic_suspend(void)
@@ -123,9 +128,13 @@ static void __init_sw_timers(void)
   }
 }
 
-void init_timers(void)
+INITCODE void hardware_timers_init(void)
 {
-  init_hw_timers();
+  arch_timer_init();
+}
+
+INITCODE void software_timers_init(void)
+{
   __init_sw_timers();
   initialize_deffered_actions();
 }
@@ -250,8 +259,8 @@ void process_timers(void)
       LOCK_SW_TIMERS_R(is);
 #ifndef CONFIG_TIMER_RBTREE
       list_del(&major_tick->list);
-//      list_add2tail(&cached_major_ticks,&major_tick->list);
-//     __num_cached_major_ticks++;
+      list_add2tail(&cached_major_ticks,&major_tick->list);
+     __num_cached_major_ticks++;
 #else
       list_add2tail(&expired_major_ticks,&major_tick->list);
 #endif

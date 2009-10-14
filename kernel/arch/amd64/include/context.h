@@ -17,9 +17,7 @@
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
- *
- * include/mstring/amd64/context.h: structure definion for context and related stuff
- *                              assembler macros and some constants
+ * (c) Copytight 2009 Dan Kruchinin <dk@jarios.org>
  *
  */
 
@@ -44,37 +42,37 @@
 #define OFFSET_TLS  OFFSET_IPL
 
 /* Save all general purpose registers  */
-#define SAVE_GPR \
-    pushq %r8; \
-    pushq %r9; \
-    pushq %r10; \
-    pushq %r11; \
-    pushq %r12; \
-    pushq %r13; \
-    pushq %r14; \
-    pushq %r15; \
-    pushq %rbx; \
-    pushq %rcx; \
-    pushq %rdx; \
-    pushq %rdi; \
-    pushq %rsi; \
-    pushq %rbp; \
+#define SAVE_GPRS                               \
+    pushq %r8;                                  \
+    pushq %r9;                                  \
+    pushq %r10;                                 \
+    pushq %r11;                                 \
+    pushq %r12;                                 \
+    pushq %r13;                                 \
+    pushq %r14;                                 \
+    pushq %r15;                                 \
+    pushq %rbx;                                 \
+    pushq %rcx;                                 \
+    pushq %rdx;                                 \
+    pushq %rdi;                                 \
+    pushq %rsi;                                 \
+    pushq %rbp;                                 \
 
-#define RESTORE_GPR \
-    popq %rbp; \
-    popq %rsi; \
-    popq %rdi; \
-    popq %rdx; \
-    popq %rcx; \
-    popq %rbx; \
-    popq %r15; \
-    popq %r14; \
-    popq %r13; \
-    popq %r12; \
-    popq %r11; \
-    popq %r10; \
-    popq %r9; \
-    popq %r8; \
+#define RESTORE_GPRS                            \
+    popq %rbp;                                  \
+    popq %rsi;                                  \
+    popq %rdi;                                  \
+    popq %rdx;                                  \
+    popq %rcx;                                  \
+    popq %rbx;                                  \
+    popq %r15;                                  \
+    popq %r14;                                  \
+    popq %r13;                                  \
+    popq %r12;                                  \
+    popq %r11;                                  \
+    popq %r10;                                  \
+    popq %r9;                                   \
+    popq %r8;                                   \
 
 #define NUM_GPR_SAVED 14
 #define SAVED_GPR_SIZE (NUM_GPR_SAVED * 8)
@@ -83,28 +81,27 @@
  * Allocate an area for saving MMX & FX state. Finally, we must adjust %rdi
  * to point just after saved GPRs area.
  */
-#define SAVE_MM \
+#define SAVE_MM                                 \
   mov %rsp, %r12;                               \
   sub $512,%rsp;                                \
   movq $0xfffffffffffffff0, %r14;               \
   andq %r14,%rsp;                               \
   fxsave (%rsp);                                \
-  pushq %r12
+  pushq %r12;
 
-#define RESTORE_MM \
-  popq %r12; \
-  fxrstor (%rsp); \
+#define RESTORE_MM                              \
+  popq %r12;                                    \
+  fxrstor (%rsp);                               \
   movq %r12, %rsp;
 
 /* NOTE: SAVE_MM initializes %rsi so that it points to iterrupt/exception stack frame. */
-#define SAVE_ALL \
-  SAVE_GPR \
-  SAVE_MM \
+#define SAVE_ALL                                \
+  SAVE_GPRS                                     \
+  SAVE_MM
 
-
-#define RESTORE_ALL \
-  RESTORE_MM \
-  RESTORE_GPR
+#define RESTORE_ALL                             \
+  RESTORE_MM                                    \
+  RESTORE_GPRS
 
 #define SAVED_REGISTERS_SIZE \
    ((NUM_GPR_SAVED)*8)
@@ -156,10 +153,10 @@
    mov %es, %gs:CPU_SCHED_STAT_USER_ES_OFFT;            \
    mov %fs, %gs:CPU_SCHED_STAT_USER_FS_OFFT;            \
    mov %gs, %gs:CPU_SCHED_STAT_USER_GS_OFFT;            \
-   mov %gs:(CPU_SCHED_STAT_KERN_DS_OFFT),%ds;   \
+   mov %gs:(CPU_SCHED_STAT_KERN_DS_OFFT),%ds;
 
-#define RESTORE_USER_SEGMENT_REGISTERS          \
-   mov %gs:(CPU_SCHED_STAT_USER_DS_OFFT),%ds; \
+#define RESTORE_USER_SEGMENT_REGISTERS        \
+   mov %gs:(CPU_SCHED_STAT_USER_DS_OFFT),%ds;  \
    mov %gs:(CPU_SCHED_STAT_USER_ES_OFFT),%es; \
    mov %gs:(CPU_SCHED_STAT_USER_FS_OFFT),%fs; \
    pushq %rax;     \
@@ -172,17 +169,29 @@
    wrmsr; \
    popq %rdx; \
    popq %rcx; \
-   popq %rax; \
+   popq %rax;
 
-#define ENTER_INTERRUPT_CTX(label,extra_pushes) \
-	cmp $GDT_SEL(KCODE_DESCR),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ;\
-	je label;                                                           \
-    swapgs ;                                                            \
-    SAVE_AND_LOAD_SEGMENT_REGISTERS                                     \
-    label:	;                                                           \
-	incq %gs:CPU_SCHED_STAT_IRQCNT_OFFT ;                               \
-	SAVE_ALL ;                                                          \
-	sti
+#define ENTER_INTERRUPT_CONTEXT(extra_pushes)                           \
+  cmpq $GDT_SEL(KCODE_DESCR), extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ; \
+  je 666f;                                                        \
+  swapgs ;                                                              \
+  SAVE_AND_LOAD_SEGMENT_REGISTERS;                                      \
+666:	;                                                               \
+  SAVE_GPRS ;
+
+#define EXIT_INTERRUPT_CONTEXT(extra_pushes)                            \
+  RESTORE_GPRS;                                                         \
+  cmp $GDT_SEL(KCODE_DESCR),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ; \
+  je 666f;                                                              \
+  RESTORE_USER_SEGMENT_REGISTERS;                                       \
+  cli;                                                                  \
+  movl %gs:(CPU_SCHED_STAT_USER_GS_OFFT), %eax;                         \
+  swapgs;                                                               \
+  movl %eax, %gs;                                                       \
+  sti;                                                                  \
+1: jmp 1b;                                                              \
+666: ;                                                                  \
+  popq %rax;
 
 #define COMMON_INTERRUPT_EXIT_PATH \
          jmp return_from_common_interrupt;
@@ -190,9 +199,9 @@
 #endif
 
 #ifndef __ASM__
-
-#include <mstring/types.h>
 #include <arch/seg.h>
+#include <arch/interrupt.h>
+#include <mstring/types.h>
 
 #define KERNEL_RFLAGS (DEFAULT_RFLAGS_VALUE | (3 << RFLAGS_IOPL_BIT))
      /* The most sensetive bits in RFLAGS.  */
@@ -208,20 +217,36 @@
 /* Initial RFLAGS value for new kernel tasks: IOPL=3. */
 #define KERNEL_RFLAGS (DEFAULT_RFLAGS_VALUE | (3 << RFLAGS_IOPL_BIT))
 
-     
-typedef struct __context_t { /* others don't interesting... */
-  uintptr_t sp;
-  uintptr_t pc;
-
-  uint64_t rbx;
+struct gpregs {
   uint64_t rbp;
-  uint64_t r12;
-  uint64_t r13;
-  uint64_t r14;
+  uint64_t rsi;
+  uint64_t rdi;
+  uint64_t rdx;
+  uint64_t rcx;
+  uint64_t rbx;
   uint64_t r15;
+  uint64_t r14;
+  uint64_t r13;
+  uint64_t r12;
+  uint64_t r11;
+  uint64_t r10;
+  uint64_t r9;
+  uint64_t r8;
+  uint64_t rax;
+};
 
-  ipl_t ipl;
-} __attribute__ ((packed)) context_t;
+struct intr_stack_frame {
+  uint64_t rip;
+  uint64_t cs;
+  uint64_t rflags;
+  uint64_t rsp;
+  uint64_t ss;
+};
+
+typedef struct __regs {
+  struct gpregs gpr_regs;
+  struct intr_stack_frame int_frame;
+} regs_t;
 
 typedef struct __arch_context_t {
   uintptr_t cr3, rsp, fs, gs, es, ds, user_rsp;
@@ -245,27 +270,14 @@ typedef struct __arch_context_t {
 
 #define arch_read_pending_uworks(ctx) ((arch_context_t *)(ctx))->uworks
 
-/* Structure that represents GPRs on the stack upon entering
- * kernel mode during a system call.
- */
-struct __gpr_regs {
-  uint64_t rbp, rsi, rdi, rdx, rcx, rbx;
-  uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
-};
+struct __vmm;
+struct __task_struct;
 
-struct __int_stackframe {
-  uint64_t rip, cs, rflags, old_rsp, old_ss;
-};
-
-typedef struct __regs {
-  /* Kernel-saved registers. */
-  struct __gpr_regs gpr_regs;
-  uint64_t rax;
-
-  /* CPU-saved registers. */
-  struct __int_stackframe int_frame;
-} regs_t;
-
+void dump_gpregs(struct gpregs *gprs);
+void dump_interrupt_stack(struct intr_stack_frame *istack_frame);
+void dump_user_stack(struct __vmm *vmm, uintptr_t rsp);
+void dump_kernel_stack(struct __task_struct *task, uintptr_t rsp);
+void __stop_cpu(void);
 #endif /* __ASM__ */
 
 #endif /* __ARCH_CONTEXT_H__ */

@@ -16,121 +16,178 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
- *
- * mstring/amd64/fault.c: contains routines for dealing with x86_64 CPU fauls
- *     and provides routines for dealing with exception fixups.
+ * (c) Copyright 2009 Dan Kruchinin <dk@jarios.h>
  *
  */
 
-#include <arch/types.h>
-#include <arch/page.h>
 #include <arch/fault.h>
 #include <arch/seg.h>
-#include <arch/interrupt.h>
-#include <arch/mem.h>
+#include <arch/context.h>
 #include <mstring/panic.h>
-#include <mstring/kprintf.h>
+#include <mstring/bitwise.h>
+#include <mstring/task.h>
 #include <mstring/smp.h>
+#include <mstring/stddef.h>
+#include <mstring/types.h>
 
-/* Markers of exception table. */
-extern ulong_t __ex_table_start,__ex_table_end;
+extern uint8_t __faults_table[];
+static fault_handler_fn fault_handlers[IDT_NUM_FAULTS];
+static INITDATA int cur_ist = 0;
 
-struct __fixup_record_t {
-  uint64_t fault_address, fixup_address;
-}; 
+/*
+ * On AMD64 there are two kinds of faults: some faults
+ * has error code field on therir stack frame and some not.
+ * To determine which faults push error code on stack frame
+ * we introduce fault_with_errcode bitmask where each set bit
+ * number corresponds to fault number having error code field.
+ * On AMD64 there are 7 faults of such kind.
+ */
+uint32_t faults_with_errcode =
+  (POW2(FLT_DF) | POW2(FLT_TS) | POW2(FLT_NP) |
+   POW2(FLT_SS) | POW2(FLT_GP) | POW2(FLT_PF) |
+   POW2(FLT_AC));
 
-struct __fault_descr_t {
-  uint32_t slot;
-  void (*handler)();
-  uint8_t ist;
-};
+#define GET_FAULTS_TABLE_ENTRY(idx)             \
+  ((uintptr_t)&__faults_table + (idx) * 0x10)
 
-/* The list of exceptions we want to install. */
-static struct __fault_descr_t faults_to_install[] = {
-  {DE_FAULT, divide_by_zero_fault_handler,0},
-  {DB_FAULT, debug_fault_handler,0},
-  {NMI_FAULT, nmi_fault_handler,0},
-  {BP_FAULT, breakpoint_fault_handler,0},
-  {OF_FAULT, overflow_fault_handler,0},
-  {BR_FAULT, bound_range_fault_handler,0},
-  {UD_FAULT, invalid_opcode_fault_handler,0},
-  {NM_FAULT, device_not_available_fault_handler,0},
-  {DF_FAULT, doublefault_fault_handler,1},
-  {TS_FAULT, invalid_tss_fault_handler,0},
-  {NP_FAULT, segment_not_present_fault_handler,0},
-  {SS_FAULT, stack_fault_handler,0},
-  {GP_FAULT, general_protection_fault_handler,0},
-  {PF_FAULT, page_fault_fault_handler,0},
-  {MF_FAULT, fpu_fault_handler,0},
-  {AC_FAULT, alignment_check_fault_handler,0},
-  {MC_FAULT, machine_check_fault_handler,0},
-  {XF_FAULT, simd_fault_handler,0},
-  {SX_FAULT, security_exception_fault_handler,0},
-  {0,0},
-};
+#define SET_FAULT_HANDLER(idx, fn)              \
+  fault_handlers[(idx)] = (fn)
 
-uint64_t fixup_fault_address(uint64_t fault_address)
+#define FAULT_HAS_ERRCODE(fidx)                 \
+  bit_test(&faults_with_errcode, fidx)
+
+static INITCODE int get_ist_by_fault(enum fault_idx fidx)
 {
-  struct __fixup_record_t *fr=(struct __fixup_record_t *)&__ex_table_start;
-  struct __fixup_record_t *end=(struct __fixup_record_t *)&__ex_table_end;
-
-  while( fr<end ) {
-    if( fr->fault_address == fault_address ) {
-      return fr->fixup_address;
-    }
-    fr++;
+  switch (fidx) {
+      case FLT_DF:
+        return ++cur_ist;
+      default:
+        break;
   }
+
   return 0;
 }
 
-void print_fixup_table(void)
-{
-  int i;
-  struct __fixup_record_t *fr=(struct __fixup_record_t *)&__ex_table_start;
-  struct __fixup_record_t *end=(struct __fixup_record_t *)&__ex_table_end;
-
-  for (i = 1; fr < end; fr++, i++) {
-    kprintf("[%d] %p, %p\n", i, fr->fault_address, fr->fixup_address);
-  }
-}
-
-void install_fault_handlers(void)
-{
-  struct __fault_descr_t *fd=faults_to_install;
-
-  /* Install all known fault handlers. */
-  while( fd->handler ) {
-    idt_install_gate(fd->slot, SEG_TYPE_INTR, SEG_DPL_KERNEL,
-                     (uintptr_t)fd->handler, fd->ist);
-    fd++;
-  }
-}
-
-void fault_dump_regs(regs_t *r, ulong_t rip)
-{
-  if (likely(is_cpu_online(cpu_id()))) {
-    kprintf_fault("[CPU #%d] Current task: PID=%d, TID=0x%X\n",
-            cpu_id(),current_task()->pid,current_task()->tid);
-    kprintf_fault( " Task short name: '%s'\n",current_task()->short_name);
-  }
-  
-  kprintf_fault(" RAX: %p, RBX: %p, RDI: %p, RSI: %p\n RDX: %p, RCX: %p\n",
-          r->rax,r->gpr_regs.rbx,
-          r->gpr_regs.rdi,r->gpr_regs.rsi,
-          r->gpr_regs.rdx,r->gpr_regs.rcx);
-  kprintf_fault(" RIP: %p\n",rip);
-}
-
-void show_stack_trace(uintptr_t stack)
+static INITCODE void init_reserved_faults(void)
 {
   int i;
 
-  kprintf_fault("\nTop %d words of kernel stack (RSP=%p).\n\n",
-                CONFIG_NUM_STACKWORDS, stack);
-  
-  for(i = 0; i < CONFIG_NUM_STACKWORDS; i++) {
-    stack += sizeof(uintptr_t);
-    kprintf_fault("  <%p>\n", *(long *)stack);    
+  for (i = 0; i < IDT_NUM_FAULTS; i++) {
+    if (FAULT_IS_RESERVED(i)) {
+      SET_FAULT_HANDLER(i, FH_reserved);
+    }
   }
 }
 
+static void fill_fault_context(struct fault_ctx *fctx, void *rsp,
+                               enum fault_idx fault_num)
+{
+  uint8_t *p = rsp;
+
+  /* Save fault index */
+  fctx->fault_num = fault_num;
+
+  /* Save pointer to purpose registers [%rax .. %r15] */
+  fctx->gprs = (struct gpregs *)p;
+  p += sizeof(struct gpregs);
+
+  /*
+   * If fault saves error code on the stack frame,
+   * data saved by interrupt itself(i.e. interrupt stack frame)
+   * will lie on 8 bytes higher.
+   */
+  if (FAULT_HAS_ERRCODE(fault_num)) {
+    fctx->errcode = *(uint32_t *)p;
+    p += 8;
+  }
+  else {
+    fctx->errcode = 0;
+  }
+
+  /* Save pointer to interrupt stack frame */
+  fctx->istack_frame = (struct intr_stack_frame *)p;
+  p += sizeof(struct intr_stack_frame);
+
+  /* An address RSP pointed to berfore fault occured. */
+  fctx->old_rsp = p;
+}
+
+INITCODE void arch_faults_init(void)
+{
+  int slot, ist;
+
+  for (slot = 0; slot < IDT_NUM_FAULTS; slot++) {
+    ist = get_ist_by_fault(slot);
+    idt_install_gate(slot, SEG_TYPE_INTR, SEG_DPL_KERNEL,
+                     GET_FAULTS_TABLE_ENTRY(slot), ist);
+  }
+
+  SET_FAULT_HANDLER(FLT_DE,  FH_devide_by_zero);
+  SET_FAULT_HANDLER(FLT_DB,  FH_debug);
+  SET_FAULT_HANDLER(FLT_NMI, FH_nmi);
+  SET_FAULT_HANDLER(FLT_BP,  FH_breakpoint);
+  SET_FAULT_HANDLER(FLT_OF,  FH_overflow);
+  SET_FAULT_HANDLER(FLT_BR,  FH_bound_range);
+  SET_FAULT_HANDLER(FLT_UD,  FH_invalid_opcode);
+  SET_FAULT_HANDLER(FLT_NM,  FH_device_not_avail);
+  SET_FAULT_HANDLER(FLT_DF,  FH_double_fault);
+  SET_FAULT_HANDLER(FLT_TS,  FH_invalid_tss);
+  SET_FAULT_HANDLER(FLT_NP,  FH_segment_not_present);
+  SET_FAULT_HANDLER(FLT_SS,  FH_stack_exception);
+  SET_FAULT_HANDLER(FLT_GP,  FH_general_protection_fault);
+  SET_FAULT_HANDLER(FLT_PF,  FH_page_fault);
+  SET_FAULT_HANDLER(FLT_MF,  FH_floating_point_exception);
+  SET_FAULT_HANDLER(FLT_AC,  FH_alignment_check);
+  SET_FAULT_HANDLER(FLT_MC,  FH_machine_check);
+  SET_FAULT_HANDLER(FLT_XF,  FH_simd_floating_point);
+  SET_FAULT_HANDLER(FLT_SX,  FH_security_exception);
+
+  init_reserved_faults();
+}
+
+void fault_describe(const char *fname, struct fault_ctx *fctx)
+{
+  char *fault_type = "USER";
+
+  if (IS_KERNEL_FAULT(fctx)) {
+    fault_type = "KERNEL";
+  }
+
+  interrupts_disable();
+  kprintf_fault("\n================[%s-SPACE %s #%d]================\n",
+                fault_type, fname, fctx->fault_num);
+#if 0
+  kprintf_fault("  [CPU #%d] Task: %s (PID=%ld, TID=%ld)\n", cpu_id(),
+                current_task()->short_name, current_task()->pid,
+                current_task()->tid);
+#endif
+  if (fctx->errcode) {
+    kprintf_fault("  Error code: %#x\n", fctx->errcode);
+  }
+}
+
+void fault_dump_info(struct fault_ctx *fctx)
+{
+  dump_gpregs(fctx->gprs);
+  dump_interrupt_stack(fctx->istack_frame);
+  if (IS_KERNEL_FAULT(fctx)) {
+    dump_kernel_stack(current_task(), fctx->istack_frame->rsp);
+  }
+  else {
+    dump_user_stack(current_task()->task_mm, fctx->istack_frame->rsp);
+  }
+}
+
+void __do_handle_fault(void *rsp, enum fault_idx fault_num)
+{
+    struct fault_ctx fctx;
+
+    if (unlikely((fault_num < MIN_FAULT_IDX) ||
+                 (fault_num > MAX_FAULT_IDX))) {
+        panic("Unexpected fault number: %d. Expected fault indices in "
+              "range [%d, %d]", fault_num, MIN_FAULT_IDX, MAX_FAULT_IDX);
+    }
+
+    fill_fault_context(&fctx, rsp, fault_num);
+    fault_handlers[fault_num](&fctx);    
+}

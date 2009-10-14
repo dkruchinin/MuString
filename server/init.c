@@ -290,7 +290,7 @@ static void __server_task_runner(void *data)
 
       if( !sn ) {
         if( server->pid != 1 ) {
-          panic( "server_run_tasks(): NameServer has improper PID: %d !\n",
+          panic( "server_run_tasks(): NameServer has impropr PID: %d !\n",
                  server->pid );
         }
       }

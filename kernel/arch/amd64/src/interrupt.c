@@ -22,76 +22,29 @@
  *
  */
 
-#include <mstring/scheduler.h>
-#include <mstring/interrupt.h>
-#include <mstring/time.h>
-#include <arch/i8259.h>
-#include <arch/apic.h>
-#include <mstring/panic.h>
 #include <arch/interrupt.h>
-#include <mstring/smp.h>
-#include <arch/smp.h>
-#include <mstring/idt.h>
-#include <config.h>
+#include <arch/seg.h>
+#include <arch/i8259.h>
+#include <mstring/bitwise.h>
+#include <mstring/panic.h>
+#include <mstring/assert.h>
+#include <mstring/types.h>
 
-extern void timer_interrupt_handler(void *data);
+extern uint8_t __irqs_table[];
 
-#if 0 /* [DEACTIVATED] */
-static void install_generic_irq_handlers(void)
+#define SET_IRQ_GATE(irqnum)                                        \
+    idt_install_gate((irqnum) + IRQ_BASE, SEG_TYPE_INTR,            \
+                     SEG_DPL_KERNEL,                                \
+                     (uintptr_t)&__irqs_table + (irqnum) * 0x10, 0)
+
+INITCODE void arch_irqs_init(void)
 {
-  register_irq(0, timer_interrupt_handler, NULL, 0 );
-}
-#endif
+  int i;
 
-#ifdef CONFIG_SMP
-static void install_smp_irq_handlers(void)
-{
-  const idt_t *idt;
-  long r;
-
-  idt = get_idt();
-  r = idt->install_handler(smp_local_timer_interrupt_handler,
-                           LOCAL_TIMER_CPU_IRQ_VEC);
-  r |= idt->install_handler(smp_scheduler_interrupt_handler,
-                            SCHEDULER_IPI_IRQ_VEC);
-  if(r != 0) {
-    panic( "arch_initialize_irqs(): Can't install SMP irqs !" );
+  for (i = 0; i < IRQ_VECTORS; i++) {
+    SET_IRQ_GATE(i);
   }
-}
-#endif /* CONFIG_SMP */
 
-void arch_initialize_irqs(void)
-{
-  int idx, r;
-  const idt_t *idt;
-  irq_t base;
-
-  idt = get_idt();
-  
-  /* Initialize the PIC */
   i8259a_init();
-
-#ifdef CONFIG_APIC
-  fake_apic_init();
-#endif
-
-  /* Initialize all possible IRQ handlers to stubs. */
-  base=idt->first_available_vector();
-
-  for(idx=0;idx<idt->vectors_available();idx++) {
-    vector_irq_table[idx] = idx;
-		r=idt->install_handler((idt_handler_t)irq_entrypoints_array[idx],idx+base);
-    if( r != 0 ) {
-      panic( "Can't install IDT slot for IRQ #%d\n", idx );
-    }
-  }
-
-  /* Setup all known interrupt handlers. */
-#ifndef CONFIG_APIC
-  install_generic_irq_handlers();  
-#endif
-
-#ifdef CONFIG_SMP
-  install_smp_irq_handlers();
-#endif
 }
+

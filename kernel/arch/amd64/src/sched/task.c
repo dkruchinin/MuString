@@ -218,22 +218,22 @@ int kernel_thread(void (*fn)(void *), void *data, task_t **out_task)
   return r;
 }
 
-static uint64_t __setup_kernel_task_context(task_t *task)
+static size_t setup_kernel_task_context(task_t *task)
 {
   regs_t *regs = (regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
 
   /* Prepare a fake CPU-saved context */
-  memset( regs, 0, sizeof(regs_t) );
+  memset(regs, 0, sizeof(regs_t));
 
   /* Now setup selectors so them reflect kernel space. */
   regs->int_frame.cs = GDT_SEL(KCODE_DESCR);
-  regs->int_frame.old_ss = GDT_SEL(KDATA_DESCR);
+  regs->int_frame.ss = GDT_SEL(KDATA_DESCR);
   regs->int_frame.rip = (uint64_t)kernel_thread_helper;
 
   /* When kernel threads start execution, their 'userspace' stacks are equal
    * to their kernel stacks.
    */
-  regs->int_frame.old_rsp = task->kernel_stack.high_address - 128;
+  regs->int_frame.rsp = task->kernel_stack.high_address - 128;
   regs->int_frame.rflags = KERNEL_RFLAGS;
 
   return sizeof(regs_t);
@@ -247,9 +247,9 @@ static uint64_t __setup_user_task_context(task_t *task)
 
   /* Now setup selectors so them reflect user space. */
   regs->int_frame.cs = GDT_SEL(UCODE_DESCR) | SEG_DPL_USER;
-  regs->int_frame.old_ss = GDT_SEL(UDATA_DESCR) | SEG_DPL_USER;
+  regs->int_frame.ss = GDT_SEL(UDATA_DESCR) | SEG_DPL_USER;
   regs->int_frame.rip = 0;
-  regs->int_frame.old_rsp = 0;
+  regs->int_frame.rsp = 0;
   regs->int_frame.rflags = USER_RFLAGS;
 
   return sizeof(regs_t);
@@ -279,7 +279,7 @@ static void __apply_task_exec_attrs(regs_t *regs,exec_attrs_t *exec_attrs,
                                     arch_context_t *task_ctx)
 {
   if( exec_attrs->stack ) {
-    regs->int_frame.old_rsp=exec_attrs->stack;
+    regs->int_frame.rsp=exec_attrs->stack;
   }
 
   regs->int_frame.rip=exec_attrs->entrypoint;
@@ -293,15 +293,15 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
                             task_privelege_t priv,task_t *parent,
                             task_creation_attrs_t *attrs)
 {
-  uintptr_t fsave = newtask->kernel_stack.high_address;
-  uint64_t delta, reg_size;
+  uintptr_t fsave = newtask->kernel_stack.high_address, delta;
+  size_t reg_size;
   arch_context_t *parent_ctx = (arch_context_t*)&parent->arch_context[0];
   arch_context_t *task_ctx;
   tss_t *tss;
   regs_t *regs;
 
   if( priv == TPL_KERNEL ) {
-    reg_size = __setup_kernel_task_context(newtask);
+    reg_size = setup_kernel_task_context(newtask);
   } else {
     reg_size = __setup_user_task_context(newtask);
   }
@@ -309,14 +309,14 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   /* Now reserve space for storing XMM context since it requires
    * the address to be 512-bytes aligned.
    */
-  fsave-=reg_size;
-  regs=(regs_t*)fsave;
-
-  delta=fsave;
-  fsave-=512;
+  fsave -= reg_size;
+  regs = (regs_t *)fsave;
+  delta = fsave;
+  fsave-=512;  
   fsave &= 0xfffffffffffffff0;
+  memset((void *)fsave, 0, 512);
 
-  memset( (char *)fsave, 0, 512 );
+
   /* Save size of this context for further use in RESTORE_ALL. */
   fsave -= 8;
   *((uint64_t *)fsave) = delta;
@@ -366,7 +366,7 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
     regs_t *pregs=(regs_t *)(parent->kernel_stack.high_address - sizeof(regs_t));
 
     regs->int_frame.rip=pregs->int_frame.rip;
-    regs->int_frame.old_rsp=pregs->int_frame.old_rsp;
+    regs->int_frame.rsp=pregs->int_frame.rsp;
   }
   return 0;
 }
@@ -384,13 +384,13 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
       regs->int_frame.rip = arg;
       break;
     case SYS_PR_CTL_SET_STACK:
-      regs->int_frame.old_rsp = arg;
+      regs->int_frame.rsp = arg;
       break;
     case SYS_PR_CTL_GET_ENTRYPOINT:
       r = regs->int_frame.rip;
       break;
     case SYS_PR_CTL_GET_STACK:
-      r = regs->int_frame.old_rsp;
+      r = regs->int_frame.rsp;
       break;
     case SYS_PR_CTL_SET_PERTASK_DATA:
       arch_ctx=(arch_context_t*)&task->arch_context[0];
@@ -423,7 +423,7 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
 
       /* Setup XMM context. */
       l=((ulong_t)regs-512) & 0xfffffffffffffff0;
-      memset( (char *)l, 0, 512 );
+      memset( (char *)l, 2, 512 );
 
       r=arch_process_context_control(task,SYS_PR_CTL_SET_PERTASK_DATA,
                                      attrs->per_task_data);
@@ -463,10 +463,10 @@ void arch_activate_task(task_t *to)
   }
 
 #ifdef CONFIG_TEST
-  kprintf( "**  ACTIVATING TASK: %d:%d (CPU: %d) **\n",
-           to->pid,to->tid,to->cpu);
+  kprintf( "**  ACTIVATING TASK: %d:%d (CPU: %d) [from %d:%d] **\n",
+           to->pid,to->tid,to->cpu, current_task()->pid, current_task()->tid);
 #endif
-  
+
   /* Let's jump ! */
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
 }

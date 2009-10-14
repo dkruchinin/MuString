@@ -18,33 +18,20 @@
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
  * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
  *
- * include/mstring/amd64/8259.h: Contains base constants for the I8259A PIC.
+ * include/eza/amd64/8259.h: Contains base constants for the I8259A PIC.
  *
  */
 
-#ifndef __8259_H__
-#define __8259_H__
+#ifndef __MSTRING_ARCH_I8259_H__
+#define __MSTRING_ARCH_I8259_H__
 
-#define I8259PIC0_BASE  0x20
-#define I8259PIC1_BASE  0xa0
+#include <mstring/types.h>
 
-typedef enum __i8259_common_constants {
-  MAX_IRQ_NUM = 16,
-} i8259_common_constants;
+#define I8259_PIC_MASTER  0x20
+#define I8259_PIC_SLAVE   0xA0
+#define PIC_EOI           0x20
 
-typedef enum __i8259_ports {
-  A = 10,
-} i8259_ports_t;
+INITCODE void i8259a_init(void);
 
-typedef enum __i8259_commands {
-  PIC_EOI = 0x20, /* End of interrupt */
-} i8259_commands;
-
-typedef enum __i8259a_irq_lines {
-  TIMER_IRQ_LINE = 0,
-} i8259a_irq_lines;
-
-void i8259a_init(void);
-
-#endif
+#endif /* !__MSTRING_ARCH_I8259_H__ */
 

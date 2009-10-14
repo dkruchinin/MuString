@@ -14,15 +14,37 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
- *
- * mstring/generic_api/hardware.c: contains implementation of the generic
- *                             functions that deal with hardware.
  *
  */
 
-void initialize_common_hardware(void)
-{
-}
+#include <arch/context.h>
 
+.code64
+.text
+
+.globl kthread_fork_path
+kthread_fork_path:
+        sti
+        RESTORE_ALL
+        popq %rax
+        iretq
+
+.globl user_fork_path_test
+user_fork_path_test:
+    xorq %rax,%rax
+
+.globl user_fork_path
+user_fork_path:
+    xorq %rax,%rax
+resume_userspace:
+    RESTORE_ALL    
+    RESTORE_USER_SEGMENT_REGISTERS
+    cli
+    movl %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
+    swapgs
+    movl %eax,%gs
+    popq %rax
+    orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
+    iretq

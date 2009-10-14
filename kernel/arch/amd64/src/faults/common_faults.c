@@ -16,110 +16,130 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2009 Dan Kruchinin <dk@jarios.org>
  *
  * mstring/amd64/faults/common_faults.c: contains routines for dealing with
  *   common x86_64 CPU fauls.
  *
  */
 
-#include <arch/types.h>
-#include <arch/page.h>
+#include <config.h>
 #include <arch/fault.h>
-#include <arch/interrupt.h>
-#include <mstring/panic.h>
-#include <mstring/kprintf.h>
-#include <arch/mem.h>
-#include <arch/fault.h>
-#include <mstring/smp.h>
-#include <mstring/kconsole.h>
-#include <arch/cpu.h>
+#include <arch/context.h>
 #include <arch/assert.h>
+#include <arch/cpu.h>
+#include <mstring/kprintf.h>
+#include <mstring/types.h>
 
-void bound_range_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+void FH_bound_range(struct fault_ctx *fctx)
 {
-    kprintf_fault( "  [!!] #Bound range exception raised !\n" );
-    for(;;);
+  fault_describe("BOUND-RANGE", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
-void invalid_opcode_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-  regs_t *regs = (regs_t *)(((uintptr_t)stack_frame)-sizeof(struct __gpr_regs)-8);
-  
-  if (regs->rax == ASSERT_MAGIC) {
-    kprintf_fault((char *)regs->gpr_regs.r10, (char *)regs->gpr_regs.r11,
-            (char *)regs->gpr_regs.r12, (int)regs->gpr_regs.r13);
-    goto out;
+void FH_invalid_opcode(struct fault_ctx *fctx)
+{  
+  if (fctx->gprs->rax == ASSERT_MAGIC) {
+    struct gpregs *gprs = fctx->gprs;
+    
+    kprintf_fault((char *)gprs->r10, (char *)gprs->r11,
+                  (char *)gprs->r12, (int)gprs->r13);
+    fault_dump_info(fctx);
+    __stop_cpu();
   }
-  
-  kprintf_fault("Invalid opcode exception!!!\n");
 
-out:
-  fault_dump_regs(regs, stack_frame->rip);
-  show_stack_trace(stack_frame->old_rsp);
-  for(;;);
+  fault_describe("INVALID OPCODE", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
-void device_not_available_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+void FH_device_not_avail(struct fault_ctx *fctx)
 {
-    kprintf_fault( "  [!!] #Dev not available exception raised !\n" );
-    for(;;);
+  fault_describe("DEVICE NOT AVAIL", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
-void breakpoint_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+void FH_breakpoint(struct fault_ctx *fctx)
 {
-  kprintf_fault( "  [!!] #Breakpoint exception raised !\n" );
-  for(;;);
+  fault_describe("BREAKPOINT EXCEPTION", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
-void debug_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+void FH_debug(struct fault_ctx *fctx)
 {
-  kprintf_fault( "  [!!] #Debug exception raised !\n" );
-  for(;;);
+  /* TODO DK: implement debug interface... */
+  fault_describe("DEBUG FAULT", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
-void alignment_check_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
+void FH_alignment_check(struct fault_ctx *fctx)
 {
-    kprintf_fault( "  [!!] #Alignment check exception raised !\n" );
-    for(;;);
+  fault_describe("ALIGNMENT-CHECK", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
-void machine_check_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+void FH_machine_check(struct fault_ctx *fctx)
 {
-    kprintf_fault( "  [!!] #Machine check exception raised !\n" );
-    for(;;);
+  fault_describe("MACHINE-CHECK", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
-void security_exception_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+void FH_security_exception(struct fault_ctx *fctx)
 {
-    kprintf_fault( "  [!!] #Security exception raised !\n" );
-    for(;;);
+  fault_describe("SECURITY EXCEPTION", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
 }
 
-void reserved_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+void FH_reserved(struct fault_ctx *fctx)
 {
-  kprintf_fault( "  [!!] #Reserved fault exception raised !\n" );  
-  for(;;);
-}
-
-void nmi_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
-{
-  kprintf_fault( "  [!!] #NMI exception raised !\n" );
-  for(;;);
-}
-
-void doublefault_fault_handler_impl(interrupt_stack_frame_err_t *stack_frame)
-{ 
-  //char b[512];
-  uintptr_t inval_addr;
-
-  __asm__ __volatile__("movq %%cr2, %0" : "=r"(inval_addr));  
-  kprintf_fault("[!!] Fatal double fault exception! RIP=%p. (Inval addr = %p) CPU stopped.\n",
-                stack_frame->rip, inval_addr);  
+  kprintf_fault("Reserved fault handler!\n");
   for (;;);
 }
 
-void reserved_exception_fault_handler_impl(interrupt_stack_frame_t *stack_frame)
+void FH_nmi(struct fault_ctx *fctx)
 {
-    kprintf_fault( "  [!!] #Reserved exception raised !\n" );
-    for(;;);
+  fault_describe("NMI EXCEPTION", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
+}
+
+void FH_double_fault(struct fault_ctx *fctx)
+{
+  fault_describe("DOUBLE FAULT", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
+}
+
+void FH_invalid_tss(struct fault_ctx *fctx)
+{
+  fault_describe("INVALID TSS", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
+}
+
+void FH_stack_exception(struct fault_ctx *fctx)
+{
+  fault_describe("STACK EXCEPTION", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
+}
+
+void FH_general_protection_fault(struct fault_ctx *fctx)
+{
+  fault_describe("GPF", fctx);
+  fault_dump_info(fctx);
+  __stop_cpu();
+}
+
+void FH_floating_point_exception(struct fault_ctx *fctx)
+{
+  kprintf_fault("Floating point exception\n");
+  for (;;);
 }

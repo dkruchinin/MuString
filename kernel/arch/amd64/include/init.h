@@ -4,7 +4,7 @@
 #include <mstring/types.h>
 #include <arch/boot.h>
 
-INITCODE void arch_prepare(void);
+INITCODE void arch_prepare_system(void);
 INITCODE void arch_init(void);
 INITCODE void arch_timers_init(void);
 INITCODE void arch_cpu_init(cpu_id_t cpu);

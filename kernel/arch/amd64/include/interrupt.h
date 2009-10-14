@@ -24,27 +24,36 @@
 #ifndef __MSTRING_ARCH_INTERRUPT_H__
 #define __MSTRING_ARCH_INTERRUPT_H__ 
 
-#include <arch/asm.h>
-#include <arch/current.h>
 #include <arch/seg.h>
+#include <arch/fault.h>
+#include <arch/context.h>
+#include <arch/current.h>
 #include <mstring/types.h>
 
 #define HZ  1000 /* Timer frequency. */
-#define IRQ_BASE 32 /* First vector in IDT for IRQ #0. */
+#define IRQ_VECTORS (IDT_ITEMS - IDT_NUM_FAULTS)
+#define IRQ_BASE    32 /* First vector in IDT for IRQ #0. */
 #define RESERVED_IRQS 8 /* Reserved IRQ for SMP use. */
-/* Maximum number of hardware IRQs in the system. */
-#define NUM_IRQS  256 - IRQ_BASE - RESERVED_IRQS
+
+#define PIT_IRQ          0
+#define PIC_SPURIOUS_IRQ 7
 
 //#ifdef CONFIG_SMP
 
-#define CPU_SMP_BASE_IRQ (256 - RESERVED_IRQS)
-#define LOCAL_TIMER_CPU_IRQ_VEC CPU_SMP_BASE_IRQ
-#define SCHEDULER_IPI_IRQ_VEC (CPU_SMP_BASE_IRQ+1)
+#define CPU_SMP_BASE_IRQ     (IRQ_VECTORS - RESERVED_IRQS)
+#define APIC_SPURIOUS_IRQ    (CPU_SMP_BASE_IRQ + 1)
+#define APIC_ERROR_IRQ       (CPU_SMP_BASE_IRQ + 2)
+#define APIC_TIMER_IRQ       (CPU_SMP_BASE_IRQ + 3)
+
+#define IRQ_NUM_TO_VECTOR(irq_num) ((irq_num) + IRQ_BASE)
 
 //#endif
 
 typedef uint64_t ipl_t;
 typedef uint8_t irqvec_t;
+
+INITCODE void arch_irqs_init(void);
+extern void smp_spurious_interrupt(void);
 
 /* AMD 64 interrupt/exception stack frame */
 typedef struct __interrupt_stack_frame {

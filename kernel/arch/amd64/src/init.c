@@ -1,17 +1,13 @@
-#include <config.h>
-#include <server.h>
-#include <arch/boot.h>
 #include <arch/seg.h>
-#include <arch/msr.h>
 #include <arch/fault.h>
-#include <arch/smp.h>
-#include <arch/mem.h>
-#include <arch/current.h>
+#include <arch/msr.h>
+#include <server.h>
 #include <arch/cpufeatures.h>
-#include <mstring/smp.h>
-#include <mstring/string.h>
-#include <mstring/kconsole.h>
+#include <arch/boot.h>
+#include <arch/acpi.h>
+#include <arch/apic.h>
 #include <mstring/kprintf.h>
+#include <mstring/smp.h>
 #include <mstring/types.h>
 
 uint32_t multiboot_info_ptr __attribute__ ((section(".data")));
@@ -77,6 +73,58 @@ static INITCODE void init_cpu_features(void)
   write_cr4(val);
 }
 
+static INITCODE void prepare_lapic_info(void)
+{
+  acpi_madt_t *madt;
+  madt_lapic_t *lapic_tlb;
+  uintptr_t dest_addr;
+  int ret, i, cpu;
+  uint32_t *lapic_id;
+
+  madt = acpi_find_table(MADT_TABLE);
+  if (likely(madt != NULL)) {
+    lapic_addr = (uintptr_t)madt->lapic_addr;
+  }
+  else
+  {
+    kprintf(KO_WARNING "Can not get lapic address from ACPI!\n");
+    lapic_addr = DEFAULT_LAPIC_ADDR;
+  }
+
+#ifdef CONFIG_AMD64
+  dest_addr = __allocate_vregion(LAPIC_NUM_PAGES);
+  if (!dest_addr) {
+    panic("Failed to allocate virtual region for %d local APIC pages!",
+          LAPIC_NUM_PAGES);
+  }
+#else /* CONFIG_AMD64 */
+  dest_addr = DEFAULT_LAPIC_ADDR;
+#endif /* !CONFIG_AMD64 */
+
+  ret = mmap_page(KERNEL_ROOT_PDIR(), dest_addr,
+                  phys_to_pframe_id((void *)lapic_addr),
+                  KMAP_READ | KMAP_WRITE | KMAP_KERN | KMAP_NOCACHE);
+  if (ret) {
+    panic("Failed to map local APIC address %p to address %p. [ERR = %d]",
+          lapic_addr, dest_addr, ret);
+  }
+
+  lapic_addr = dest_addr;
+  i = 1; cpu = 0;
+  for_each_percpu_var(lapic_id, lapic_ids) {
+    lapic_tlb = madt_find_table(madt, MADT_LAPIC, i);
+    if (!lapic_tlb) {
+      panic("Failed to get MADT_LAPIC table for cpu %d\n", cpu);
+    }
+    if (!lapic_tlb->flags.enabled) {
+      panic("Lapic disabled on CPU %d\n", cpu);
+    }
+
+    *lapic_id = lapic_tlb->apic_id;
+    i++;
+    cpu++;
+  }
+}
 
 INITCODE void arch_cpu_init(cpu_id_t cpu)
 {
@@ -92,7 +140,7 @@ INITCODE void arch_cpu_init(cpu_id_t cpu)
   syscall_init();
 }
 
-INITCODE void arch_init(void)
+INITCODE void arch_prepare_system(void)
 {
   kconsole_t *kcons = default_console();
 
@@ -102,6 +150,14 @@ INITCODE void arch_init(void)
 
   multiboot_init();
   arch_cpu_init(0);
-  install_fault_handlers();
-  arch_servers_init();
+  arch_faults_init();
+  arch_servers_init();  
+}
+
+INITCODE void arch_init(void)
+{
+  acpi_init();
+  if (cpu_has_feature(X86_FTR_APIC)) {
+    prepare_lapic_info();
+  }
 }

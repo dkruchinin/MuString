@@ -423,7 +423,7 @@ static int def_del_task(task_t *task)
     interrupts_enable();
 
     /* Leave the CPU forever. */
-    def_schedule();
+   def_schedule();
   }
 
   return r;
@@ -444,7 +444,7 @@ static inline void __reschedule_task(task_t *t)
 {
   set_task_need_resched(t);
   if( t->cpu != cpu_id() ) {
-    apic_broadcast_ipi_vector(SCHEDULER_IPI_IRQ_VEC);
+      //apic_broadcast_ipi_vector(SCHEDULER_IPI_IRQ_VEC);
   }
 }
 

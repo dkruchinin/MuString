@@ -29,126 +29,69 @@
 #include <mstring/kprintf.h>
 #include <mstring/unistd.h>
 
-hw_timer_t i8254;
-
 #define PIT_DIVISOR ((PIT_OSC_FREQ + HZ / 2) / HZ)
 
-/*low level functions*/
-static void __arch_i8254_init(void)
+static tick_t i8254_read(void)
 {
-  outb(I8254_BASE+3,0x36);
-  disable_hw_irq(0x0);
-  outb(I8254_BASE,PIT_DIVISOR & 0xff);
-  outb(I8254_BASE,PIT_DIVISOR >> 8);
-  enable_hw_irq(0x0);
+  uint_t low, high;
+
+  outb(I8254_BASE + 0x03, 0);
+  low = inb(I8254_BASE);
+  high = inb(I8254_BASE);
+  return ((high << 8) | low);
 }
 
-uint64_t i8254_calibrate_delay_loop(void)
+static void i8254_delay(uint64_t usecs)
 {
-  uint8_t cnt;
-  uint32_t tt1,tt2,oo1,oo2;
+  int ticks_left, delta, tick, prev_tick;
 
-  outb(I8254_BASE+3,0x30);
-  outb(I8254_BASE,0xff);
-  outb(I8254_BASE,0xff);
+  prev_tick = i8254_read();
+  if (usecs == 0) {
+    ticks_left = 0;
+  }
+  else if (usecs < 256) {
+    ticks_left = ((uint_t)usecs * 39099 + (1 << 15) - 1) >> 15;
+  }
+  else {
+    ticks_left = ((uint_t)usecs * (long long)PIT_OSC_FREQ + 999999)
+      / 1000000;
+  }
+  while (ticks_left > 0) {
+    tick = i8254_read();
+    delta = prev_tick - tick;
+    prev_tick = tick;
+    if (delta < 0) {
+      delta += PIT_DIVISOR;
+      if (delta < 0) {
+        delta = 0;
+      }
+    }
 
-  do {
-    outb(I8254_BASE+3,0xc2);
-    cnt=(uint8_t)((inb(I8254_BASE) >> 6) & 1);
-    tt1=inb(I8254_BASE);
-    tt1|=inb(I8254_BASE) << 8;
-  } while(cnt);
-  
-  arch_delay_loop(DCLOCK);
-
-  outb(I8254_BASE+3,0xd2);
-  tt2=inb(I8254_BASE);
-  tt2|=inb(I8254_BASE) << 8;
-
-  outb(I8254_BASE+3,0xd2);
-  oo1=inb(I8254_BASE);
-  oo1|=inb(I8254_BASE) << 8;
-
-  arch_fake_loop(DCLOCK);
-
-  outb(I8254_BASE+3,0xd2);
-  oo2=inb(I8254_BASE);
-  oo2|=inb(I8254_BASE) << 8;
-
-  __arch_i8254_init();
-
-  return (((MAGIC_CLOCKN*DCLOCK)/1000) / ((tt1-tt2)-(oo1-oo2)))+
-    (((MAGIC_CLOCKN*DCLOCK)/1000) % ((tt1-tt2)-(oo1-oo2)) ? 1 : 0);
+    ticks_left -= delta;
+  }
 }
 
-uint64_t i8254_calibrate_delay_loop0(void)
-{
-  uint8_t cnt;
-  uint32_t tt1,tt2,oo1,oo2;
+static struct hwclock pit_clock = {
+  .name = "i8254 PIT",
+  .divisor = PIT_DIVISOR,
+  .freq = PIT_OSC_FREQ,
+  .read = i8254_read,
+  .delay = i8254_delay,
+};
 
-  outb(I8254_BASE+3,0x30);
-  outb(I8254_BASE,0xff);
-  outb(I8254_BASE,0xff);
-
-  do {
-    outb(I8254_BASE+3,0xc2);
-    cnt=(uint8_t)((inb(I8254_BASE) >> 6) & 1);
-    tt1=inb(I8254_BASE);
-    tt1|=inb(I8254_BASE) << 8;
-  } while(cnt);
-  
-  atom_usleep(DCLOCK);
-
-  outb(I8254_BASE+3,0xd2);
-  tt2=inb(I8254_BASE);
-  tt2|=inb(I8254_BASE) << 8;
-
-  outb(I8254_BASE+3,0xd2);
-  oo1=inb(I8254_BASE);
-  oo1|=inb(I8254_BASE) << 8;
-
-  arch_fake_loop(DCLOCK);
-
-  outb(I8254_BASE+3,0xd2);
-  oo2=inb(I8254_BASE);
-  oo2|=inb(I8254_BASE) << 8;
-
-  return (((MAGIC_CLOCKN*DCLOCK)/1000) / ((tt1-tt2)-(oo1-oo2)))+
-    (((MAGIC_CLOCKN*DCLOCK)/1000) % ((tt1-tt2)-(oo1-oo2)) ? 1 : 0);
-}
-
-static void i8254_register_callback(irq_t irq,irq_handler_t handler)
-{
-  register_irq(irq,handler,NULL,0);
-}
-
-static void i8254_calibrate(uint32_t v)
-{
-  disable_hw_irq(0x0);
-  outb(I8254_BASE,(DCLOCK/v) & 0xf);
-  outb(I8254_BASE,(DCLOCK/v) >> 8);
-  enable_hw_irq(0x0);
-}
-
-/*static*/ void i8254_suspend(void)
-{
-  outb(I8254_BASE+3,0x30);
-  outb(I8254_BASE,0xff);
-  outb(I8254_BASE,0xff);
-}
-
-static void i8254_resume(void)
-{
-  outb(I8254_BASE+3,0x36);
-}
+static struct irq_action pit_irq = {
+  .name = "PIT timer interrupt",
+  .handler = timer_interrupt_handler,
+};
 
 void i8254_init(void) 
 {
-  __arch_i8254_init();
-  i8254.descr="generic";
-  i8254.calibrate=i8254_calibrate;
-  i8254.resume=i8254_resume;
-  i8254.suspend=i8254_suspend;
-  i8254.register_callback=i8254_register_callback;
-  hw_timer_register(&i8254);
+  outb(I8254_BASE+3,0x34);
+  outb(I8254_BASE,PIT_DIVISOR & 0xff);
+  outb(I8254_BASE,PIT_DIVISOR >> 8);  
+  hwclock_register(&pit_clock);
+  default_hwclock = &pit_clock;
+  ASSERT(irq_line_register(PIT_IRQ, default_irqctrl) == 0);
+  ASSERT(irq_register_action(PIT_IRQ, &pit_irq) == 0);
 }
+

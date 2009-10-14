@@ -57,14 +57,6 @@ static uint8_t rtc_read_register(uint8_t reg)
   return inb(RTC_DATA);
 }
 
-#if 0
-static void rtc_write_register(uint8_t reg, uint8_t val)
-{
-  outb(RTC_ADDRESS, reg);
-  outb(RTC_DATA, val);
-}
-#endif
-
 static void get_rtc_time(struct tm *time)
 {
   /* Overflow of seconds or minutes may happen,

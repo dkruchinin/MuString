@@ -23,27 +23,27 @@
  */
 
 #include <config.h>
-#include <mstring/interrupt.h>
-#include <arch/i8259.h>
-#include <arch/i8254.h>
-#include <arch/types.h>
+#include <arch/init.h>
 #include <arch/asm.h>
 #include <arch/apic.h>
 #include <arch/seg.h>
-#include <arch/interrupt.h>
-#include <mstring/kprintf.h>
-#include <mstring/unistd.h>
-#include <mstring/string.h>
-#include <mstring/smp.h>
 #include <arch/smp.h>
+#include <arch/cpufeatures.h>
+#include <mstring/kprintf.h>
+#include <mstring/interrupt.h>
+#include <mstring/string.h>
+#include <mstring/timer.h>
+#include <mstring/smp.h>
+#include <mstring/types.h>
 
 #ifdef CONFIG_SMP
 int ap_boot_start, ap_boot_end,
     kernel_jump_addr, ap_jmp_rip;
 
-void arch_smp_init(int ncpus)
+INITCODE void arch_smp_init(void)
 {
-  int i=1,r=0;
+  cpu_id_t c;
+  uint32_t *lapic_id;
   char *ap_code = (char *)0x9000;
   size_t size = &ap_boot_end - &ap_boot_start;
   struct ap_config *apcfg;
@@ -63,18 +63,40 @@ void arch_smp_init(int ncpus)
   memcpy(ap_code, &ap_boot_start, size);
 
   /* ok setup new gdt */
-  while(i<ncpus) {
-    if (apic_send_ipi_init(i))
+  for_each_cpu(c) {
+      int r;
+    if (!c) {
+      continue; /* Skip BSP CPU */
+    }
+
+    lapic_id = raw_percpu_get_var(lapic_ids, c);
+    kprintf("SEND INIT IPI TO CPU %d, cpuid=%d\n", *lapic_id, c);
+    if (lapic_init_ipi(*lapic_id)) {
         panic("Can't send init interrupt\n");
-		
-    /* wait maximum 1 second for the start of the next cpu */
-    for (r = 0; (r < 100) && !is_cpu_online(i); r++)
-        atom_usleep(10000);
+    }
+    interrupts_disable();
+    for (r = 0; r < 100; r++) {
+        default_hwclock->delay(1000);
+        if (is_cpu_online(c)) {
+            kprintf("online!\n");
+            break;
+        }
+    }
+    interrupts_enable();
+    if (!is_cpu_online(c)) {
+        kprintf("fuck! => %d\n", is_cpu_online(c));
+      for (;;);
+      panic("CPU %d is not online\n", c);
+    }
+  }
+}
 
-    if (r == 100)
-        panic("CPU %d did not start!\n", i);
-
-    i++;
+INITCODE void arch_processor_init(cpu_id_t cpuid)
+{
+  arch_cpu_init(cpuid);
+  if (cpu_has_feature(X86_FTR_APIC)) {
+    lapic_init(cpuid);
+    lapic_timer_init(cpuid);
   }
 }
 
