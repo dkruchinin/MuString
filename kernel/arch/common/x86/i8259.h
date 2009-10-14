@@ -31,7 +31,7 @@
 #define I8259_PIC_SLAVE   0xA0
 #define PIC_EOI           0x20
 
-INITCODE void pic_init(void);
+INITCODE void i8259a_init(void);
 
 #endif /* !__MSTRING_ARCH_I8259_H__ */
 

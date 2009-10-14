@@ -284,7 +284,7 @@ common_exception_path:
   swapgs
 common_exception_path_kern:
   pushq %rax
-x  movq online_cpus, %rax
+  movq online_cpus, %rax
   orq %rax, %rax
   popq %rax
   jz 1f

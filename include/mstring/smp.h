@@ -27,6 +27,7 @@
 
 #include <config.h>
 #include <arch/cpu.h>
+#include <arch/smp.h>
 #include <arch/scheduler.h>
 #include <mstring/kprintf.h>
 #include <mstring/panic.h>

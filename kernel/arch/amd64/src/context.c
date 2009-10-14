@@ -69,10 +69,10 @@ void dump_user_stack(vmm_t *vmm, uintptr_t rsp)
   kprintf_fault("    ");
   for (i = 1; i <= CONFIG_NUM_STACKWORDS; i++) {
     if (cur_addr <= vmr->bounds.space_start) {
-      goto out;
+      break;
     }
     if (copy_from_user((void *)&cur_addr, &tmp, sizeof(tmp))) {
-      goto out;
+      break;
     }
 
     kprintf_fault("[%#.16lx] ", tmp);

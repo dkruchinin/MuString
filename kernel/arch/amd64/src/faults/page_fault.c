@@ -28,6 +28,7 @@
 #include <mm/vmm.h>
 #include <mstring/kprintf.h>
 #include <mstring/task.h>
+#include <mstring/signal.h>
 #include <mstring/types.h>
 
 
@@ -245,8 +246,9 @@ static void send_sigsegv(uintptr_t fault_addr)
   siginfo.si_addr=(void *)fault_addr;
 
   kprintf_fault("[!!] Sending SIGSEGV to %d:%d ('%s')\n",
-                faulter->pid,faulter->tid,faulter->short_name);
-  send_task_siginfo(faulter,&siginfo,true,NULL);
+                current_task()->pid, current_task()->tid,
+                current_task()->short_name);
+  send_task_siginfo(current_task(), &siginfo, true, NULL);
 }
 #endif /* CONFIG_SEND_SIGSEGV_ON_FAULTS */
 

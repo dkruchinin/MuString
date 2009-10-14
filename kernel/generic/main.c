@@ -23,23 +23,20 @@
  */
 
 #include <config.h>
+#include <server.h>
+#include <arch/platform.h>
+#include <arch/task.h>
 #include <mm/vmm.h>
 #include <mm/slab.h>
-#include <mstring/kprintf.h>
-#include <server.h>
+#include <ipc/ipc.h>
 #include <mstring/smp.h>
-#include <arch/task.h>
 #include <mstring/interrupt.h>
 #include <mstring/scheduler.h>
-#include <arch/platform.h>
 #include <mstring/swks.h>
-#include <arch/scheduler.h>
-#include <arch/smp.h>
-#include <ipc/ipc.h>
+#include <mstring/kprintf.h>
 #include <mstring/resource.h>
-#include <arch/interrupt.h>
 #include <mstring/gc.h>
-#include <arch/smp.h>
+#include <mstring/timer.h>
 #include <mstring/signal.h>
 
 static void main_routine_stage1(void)

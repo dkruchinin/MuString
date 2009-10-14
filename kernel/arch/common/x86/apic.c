@@ -362,7 +362,6 @@ static void apic_icr_wait(void)
 INITCODE void local_apic_timer_init(cpu_id_t cpuid)
 {
   tick_t apictick0, apictick1, delta;
-  uint_t irqstat;
   uint32_t val;
 
   ASSERT(default_hwclock != NULL);
@@ -399,7 +398,6 @@ INITCODE void local_apic_timer_init(cpu_id_t cpuid)
 INITCODE int apic_init_ipi(uint32_t apic_id)
 {
   int i, maxlvts;
-  uint_t val;
 
   maxlvts = apic_get_maxlvt();
   if (maxlvts > 3) {

@@ -81,18 +81,15 @@ static INITCODE void prepare_lapic_info(void)
   int ret, i, cpu;
   uint32_t *lapic_id;
 
-#if 0
   madt = acpi_find_table(MADT_TABLE);
   if (likely(madt != NULL)) {
     lapic_addr = (uintptr_t)madt->lapic_addr;
   }
   else
   {
-
-#endif
     kprintf(KO_WARNING "Can not get lapic address from ACPI!\n");
     lapic_addr = DEFAULT_LAPIC_ADDR;
-    //}
+  }
 
 #ifdef CONFIG_AMD64
   dest_addr = __allocate_vregion(LAPIC_NUM_PAGES);
@@ -115,7 +112,6 @@ static INITCODE void prepare_lapic_info(void)
   lapic_addr = dest_addr;
   i = 1; cpu = 0;
   for_each_percpu_var(lapic_id, lapic_ids) {
-#if 0
     lapic_tlb = madt_find_table(madt, MADT_LAPIC, i);
     if (!lapic_tlb) {
       panic("Failed to get MADT_LAPIC table for cpu %d\n", cpu);
@@ -125,8 +121,6 @@ static INITCODE void prepare_lapic_info(void)
     }
 
     *lapic_id = lapic_tlb->apic_id;
-#endif
-    *lapic_id = cpu;
     i++;
     cpu++;
   }

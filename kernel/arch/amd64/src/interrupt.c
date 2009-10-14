@@ -46,6 +46,5 @@ INITCODE void arch_irqs_init(void)
   }
 
   i8259a_init();
-  kprintf("i8259a initialized!\n");
 }
 

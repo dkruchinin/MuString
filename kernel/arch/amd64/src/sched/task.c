@@ -314,7 +314,7 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   delta = fsave;
   fsave-=512;  
   fsave &= 0xfffffffffffffff0;
-  memset(fsave, 0, 512);
+  memset((void *)fsave, 0, 512);
 
 
   /* Save size of this context for further use in RESTORE_ALL. */

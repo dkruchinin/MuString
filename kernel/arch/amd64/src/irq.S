@@ -65,15 +65,25 @@ fault_entry_point:
         movq %rax, %rsi        
         callq __do_handle_fault        
 
+        cmpq $GDT_SEL(KCODE_DESCR), INT_FULL_OFFSET_TO_CS(%rsp)
+	    je 3f
+
+	    /* Process deferred userspace-related works */
+	    movq $__XCPT_ERR_UWORK, %rdi
+	    xorq %rsi, %rsi
+	    movq %rsp, %rdx
+	    call handle_uworks
+
+3:      
         RESTORE_GPRS
         cmpq $GDT_SEL(KCODE_DESCR), 16 + INT_STACK_FRAME_CS_OFFT(%rsp)
-        je 3f
+        je 4f
         
         cli
         RESTORE_USER_SEGMENT_REGISTERS
         swapgs
         sti
-3:
+4:
         popq %rax
         addq $8, %rsp
         iretq     
@@ -175,7 +185,7 @@ exit_from_irq:
         movl %eax, %gs
         sti
 
-1:      
+1:
         popq %rax
         /* Make sure IF is set after returning from interrupt context. */
         orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
