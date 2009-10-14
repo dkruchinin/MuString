@@ -54,10 +54,12 @@ static inline bool s_check_access(struct __s_object *actor,
 }
 
 enum __s_system_caps {
-  SYS_CAP_ADMIN=0,
+  SYS_CAP_ADMIN,
   SYS_CAP_IO_PORT_ALLOC,
   SYS_CAP_CREATE_PROCESS,
   SYS_CAP_CREATE_THREAD,
+  SYS_CAP_REINCARNATE,
+  SYS_CAP_TASK_EVENTS,
   SYS_CAP_MAX,
 };
 
@@ -79,5 +81,15 @@ struct __task_s_object *s_alloc_task_object(mac_label_t label,
 #define S_UID_MAX 65535
 #define S_INITIAL_UID S_UID_MIN
 #define S_KTHREAD_UID S_UID_MIN
+
+/* List of syscalls that were procected by MAC label check:
+ *    sys_fork
+ *    sys_create_task
+ *    sys_task_control
+ *
+ *
+ *
+ */
+
 
 #endif

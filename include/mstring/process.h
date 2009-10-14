@@ -33,8 +33,6 @@
 
 #define SYS_PR_CTL_SET_ENTRYPOINT      0x0
 #define SYS_PR_CTL_SET_STACK           0x1
-//#define SYS_PR_CTL_GET_ENTRYPOINT      0x2
-//#define SYS_PR_CTL_GET_STACK           0x3
 #define SYS_PR_CTL_ADD_EVENT_LISTENER  0x4
 #define SYS_PR_CTL_SET_PERTASK_DATA    0x5
 #define SYS_PR_CTL_DISINTEGRATE_TASK   0x6  /* Very strong spell. */
