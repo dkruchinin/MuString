@@ -112,7 +112,7 @@ static int __alloc_pid_and_tid(task_t *parent,ulong_t flags,
       r=-EINVAL;
     }
     UNLOCK_PID_ARRAY;
-    return r;
+    return ERR(r);
   }
 
   if( (flags & CLONE_MM) && priv != TPL_KERNEL ) {
@@ -123,12 +123,12 @@ static int __alloc_pid_and_tid(task_t *parent,ulong_t flags,
     UNLOCK_TASK_STRUCT(parent);
 
     if( tid == IDX_INVAL ) {
-      return -ENOMEM;
+      return ERR(-ENOMEM);
     }
   } else {
     pid = __allocate_pid();
     if( pid == INVALID_PID ) {
-      return -ENOMEM;
+      return ERR(-ENOMEM);
     }
     tid=0;
   }
@@ -183,7 +183,7 @@ static int __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
   } else {
     task->ppid=0;
   }
-  return r;
+  return ERR(r);
 }
 
 void cleanup_thread_data(gc_action_t *action)
@@ -257,7 +257,7 @@ static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags,
 
   if( flags & CLONE_IPC ) {
     if( !parent->ipc ) {
-      return -EINVAL;
+      return ERR(-EINVAL);
     }
     task->ipc=parent->ipc;
     r=setup_task_ipc(task);
@@ -271,7 +271,7 @@ static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags,
       r=setup_task_ipc(task);
     }
   }
-  return r;
+  return ERR(r);
 }
 
 static int __setup_task_events(task_t *task,task_t *parent,ulong_t flags,
@@ -280,7 +280,7 @@ static int __setup_task_events(task_t *task,task_t *parent,ulong_t flags,
   if( !(flags & CLONE_MM) || priv == TPL_KERNEL ) {
     task->task_events=memalloc(sizeof(task_events_t));
     if( !task->task_events ) {
-      return -ENOMEM;
+      return ERR(-ENOMEM);
     }
     list_init_head(&task->task_events->my_events);
     list_init_head(&task->task_events->listeners);
@@ -298,7 +298,7 @@ static int __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags,
 {
   if( flags & CLONE_MM ) {
     if( !parent->sync_data && (priv != TPL_KERNEL) ) {
-      return -EINVAL;
+      return ERR(-EINVAL);
     }
     if( parent->sync_data ) {
       task->sync_data=parent->sync_data;
@@ -306,10 +306,31 @@ static int __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags,
     }
   } else if( flags & CLONE_REPL_SYNC ) {
     task->sync_data=replicate_task_sync_data(parent);
-    return task->sync_data ? 0 : -ENOMEM;
+    return task->sync_data ? 0 : ERR(-ENOMEM);
   }
   task->sync_data=allocate_task_sync_data();
-  return task->sync_data ? 0 : -ENOMEM;
+  return task->sync_data ? 0 : ERR(-ENOMEM);
+}
+
+static int __setup_task_security(task_t *task,task_t *parent,ulong_t flags,
+                                 task_privelege_t priv)
+{
+  if( !parent->sobject ) {
+    return ERR(-EINVAL);
+  }
+
+  if( flags & CLONE_MM ) {
+    if( priv == TPL_KERNEL ) {
+      task->sobject = s_alloc_task_object(S_KTHREAD_MAC_LABEL,
+                                          S_KTHREAD_UID);
+    } else {
+      s_get_task_object(parent);
+      task->sobject=parent->sobject;
+    }
+  } else {
+    task->sobject = s_clone_task_object(parent);
+  }
+  return task->sobject ? 0 : ERR(-ENOMEM);
 }
 
 static int __setup_signals(task_t *task,task_t *parent,ulong_t flags)
@@ -319,7 +340,7 @@ static int __setup_signals(task_t *task,task_t *parent,ulong_t flags)
 
   if( flags & CLONE_SIGINFO ) {
     if( !parent->siginfo.handlers ) {
-      return -EINVAL;
+      return ERR(-EINVAL);
     }
     shandlers=parent->siginfo.handlers;
     atomic_inc(&shandlers->use_count);
@@ -331,7 +352,7 @@ static int __setup_signals(task_t *task,task_t *parent,ulong_t flags)
   if( !shandlers ) {
     shandlers=allocate_signal_handlers();
     if( !shandlers ) {
-      return -ENOMEM;
+      return ERR(-ENOMEM);
     }
   }
 
@@ -358,7 +379,7 @@ static long __setup_posix(task_t *task,task_t *parent,
     if( task->posix_stuff ) {
       return 0;
     }
-    return -ENOMEM;
+    return ERR(-ENOMEM);
   }
 }
 
@@ -407,7 +428,7 @@ static int __initialize_task_mm(task_t *orig, task_t *target, task_creation_flag
   }
 
   out:
-  return ret;
+  return ERR(ret);
 }
 
 int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t,
@@ -423,7 +444,7 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   if ((flags && !parent) ||
       ((flags & CLONE_MM) && (flags & (CLONE_COW | CLONE_POPULATE))) ||
       ((flags & (CLONE_COW | CLONE_POPULATE)) == (CLONE_COW | CLONE_POPULATE))) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
   /* TODO: [mt] Add memory limit check. */
   /* goto task_create_fault; */
@@ -504,6 +525,11 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
     goto free_posix;
   }
 
+  r=__setup_task_security(task,parent,flags,priv);
+  if( r ) {
+    goto free_events;
+  }
+
   /* Setup task's initial state. */
   task->state = TASK_STATE_JUST_BORN;
   task->cpu = cpu_id();
@@ -526,6 +552,8 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
     return 0; 
   }
 
+free_events:
+  /* [mt] Free events here. */
 free_posix:
   /* TODO: [mt] Free POSIX data properly. */
 free_signals:
@@ -550,7 +578,7 @@ free_pid:
   __free_pid_and_tid(parent,pid,tid,(flags & CLONE_MM)!=0);
 task_create_fault:
   *t = NULL;
-  return r;
+  return ERR(r);
 }
 
 void release_task_struct(struct __task_struct *t)

@@ -265,7 +265,7 @@ typedef struct __task_struct {
   uworks_data_t uworks_data;
 
   /* Security-related stuff */
-  struct __s_subject s_subject;
+  struct __task_s_object *sobject;
 
   char short_name[TASK_SHORTNAME_LEN];
 

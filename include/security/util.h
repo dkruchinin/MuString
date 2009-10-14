@@ -25,3 +25,6 @@
 #include <mstring/task.h>
 #include <arch/current.h>
 
+#define S_GET_TASK_OBJECT(t)  (&(t)->sobject->sobject)
+
+#define S_GET_INVOKER() S_GET_TASK_OBJECT(current_task())

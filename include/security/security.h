@@ -25,25 +25,57 @@
 #define __SECURITY_H__
 
 #include <mstring/types.h>
+#include <arch/atomic.h>
 
 typedef unsigned int mac_label_t;
 
 struct __s_object {
   mac_label_t mac_label;
+  uid_t uid;
 };
 
-struct __s_subject {
-  mac_label_t mac_label;
+struct __task_s_object {
+  atomic_t refcount;
+  struct __s_object sobject;
 };
 
-#define S_MAC_OK(subject_label,object_label) ((subject_label) <= (object_label))
+#define s_get_task_object(o) atomic_inc(&(o)->sobject->refcount)
+#define s_put_task_object(o)
 
-static inline bool s_access_valid(struct __s_subject *subj,struct __s_object *obj)
+#define S_MAC_OK(actor_label,object_label) ((actor_label) <= (object_label))
+
+static inline bool s_check_access(struct __s_object *actor,
+                                  struct __s_object *obj)
 {
-  if( S_MAC_OK(subj->mac_label,obj->mac_label) ) {
+  if( S_MAC_OK(actor->mac_label,obj->mac_label) ) {
     return true;
   }
   return false;
 }
+
+enum __s_system_caps {
+  SYS_CAP_ADMIN=0,
+  SYS_CAP_IO_PORT_ALLOC,
+  SYS_CAP_MAX,
+};
+
+struct __task_struct;
+
+bool s_check_system_capability(enum __s_system_caps cap);
+void initialize_security(void);
+
+struct __task_s_object *s_clone_task_object(struct __task_struct *t);
+struct __task_s_object *s_alloc_task_object(mac_label_t label,
+                                            uid_t uid);
+
+#define S_MAC_LABEL_MIN 1
+#define S_MAC_LABEL_MAX 65535
+#define S_INITIAL_MAC_LABEL S_MAC_LABEL_MIN
+#define S_KTHREAD_MAC_LABEL S_MAC_LABEL_MIN
+
+#define S_UID_MIN 0
+#define S_UID_MAX 65535
+#define S_INITIAL_UID S_UID_MIN
+#define S_KTHREAD_UID S_UID_MIN
 
 #endif

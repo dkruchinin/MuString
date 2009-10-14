@@ -25,7 +25,57 @@
 #include <mstring/task.h>
 #include <arch/current.h>
 #include <security/util.h>
+#include <mm/slab.h>
+#include <arch/atomic.h>
 
-void s_foo(void)
+static struct __s_object system_caps[SYS_CAP_MAX];
+
+bool s_check_system_capability(enum __s_system_caps cap)
 {
+  if( cap < SYS_CAP_MAX ) {
+    return s_check_access(S_GET_INVOKER(),&system_caps[cap]);
+  }
+  return false;
+}
+
+void initialize_security(void)
+{
+  int i;
+
+  for( i=0; i<SYS_CAP_MAX; i++ ) {
+    system_caps[i].mac_label=S_INITIAL_MAC_LABEL;
+  }
+}
+
+struct __task_s_object *s_clone_task_object(struct __task_struct *t)
+{
+  struct __task_s_object *orig,*s;
+
+  if( !t || !(orig=t->sobject) ) {
+    return NULL;
+  }
+
+  if( (s=memalloc(sizeof(*s))) ) {
+    memset(s,0,sizeof(*s));
+
+    atomic_set(&s->refcount,1);
+    s->sobject=orig->sobject;
+  }
+
+  return s;
+}
+
+struct __task_s_object *s_alloc_task_object(mac_label_t label,uid_t uid)
+{
+  struct __task_s_object *s;
+
+  if( (s=memalloc(sizeof(*s))) ) {
+    memset(s,0,sizeof(*s));
+
+    atomic_set(&s->refcount,1);
+    s->sobject.mac_label=label;
+    s->sobject.uid=uid;
+  }
+
+  return s;
 }

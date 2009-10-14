@@ -41,6 +41,7 @@
 #include <mstring/process.h>
 #include <arch/context.h>
 #include <arch/ptable.h>
+#include <security/security.h>
 #include <config.h>
 
 /* Located on 'amd64/asm.S' */
@@ -127,6 +128,11 @@ void initialize_idle_tasks(void)
     task->pid = task->ppid = 0;
     task->cpu = cpu;
 
+    if( !(task->sobject=s_alloc_task_object(S_KTHREAD_MAC_LABEL,
+                                            S_KTHREAD_UID)) ) {
+      panic("initialize_idle_task(): can't setup security descriptor !");
+    }
+
     if( sched_setup_idle_task(task) != 0 ) {
       panic( "initialize_idle_task(): Can't setup scheduler details !" );
     }
@@ -159,7 +165,7 @@ void initialize_idle_tasks(void)
   }
 
   /* Setup arch-specific task context. */  
-  
+
   /* Now initialize per-CPU scheduler statistics. */
   cpu = 0;
   for_each_percpu_var(sched_stat,cpu_sched_stat) {
