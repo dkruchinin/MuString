@@ -290,8 +290,9 @@ void FH_page_fault(struct fault_ctx *fctx)
     uintptr_t fixup_addr;
 
     fixup_addr = fixup_fault_address(stack_frame->rip);
-    if (!fixup_addr) {
+    if (!fixup_addr) {      
       display_unhandled_pf_info(fctx, fault_addr);
+      kprintf_fault("HERE??\n");
       goto stop_cpu;
     }
 
@@ -299,6 +300,7 @@ void FH_page_fault(struct fault_ctx *fctx)
     return;
   }
   else {
+    kprintf_fault("uspacefault\n");
     vmm_t *vmm = current_task()->task_mm;
     uint32_t errmask = 0;
     int ret = -EFAULT;
@@ -314,9 +316,10 @@ void FH_page_fault(struct fault_ctx *fctx)
 
     ret = vmm_handle_page_fault(vmm, fault_addr, errmask);
     if (!ret) {
+      kprintf_fault("uspacefault: done\n");
       return;
     }
-
+    
     display_unhandled_pf_info(fctx, fault_addr);
 #ifdef CONFIG_SEND_SIGSEGV_ON_FAULTS
     send_sigsegv(fault_addr);
@@ -326,5 +329,6 @@ void FH_page_fault(struct fault_ctx *fctx)
 
 stop_cpu:
   __stop_cpu();
+  kprintf_fault("CPU IS STOPPED\n");
 }
 

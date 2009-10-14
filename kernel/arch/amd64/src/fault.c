@@ -30,6 +30,7 @@
 #include <mstring/stddef.h>
 #include <mstring/types.h>
 
+long __tmp = 0;
 extern uint8_t __faults_table[];
 static fault_handler_fn fault_handlers[IDT_NUM_FAULTS];
 static INITDATA int cur_ist = 0;
@@ -153,11 +154,14 @@ void fault_describe(const char *fname, struct fault_ctx *fctx)
     fault_type = "KERNEL";
   }
 
+  interrupts_disable();
   kprintf_fault("\n================[%s-SPACE %s #%d]================\n",
                 fault_type, fname, fctx->fault_num);
+#if 0
   kprintf_fault("  [CPU #%d] Task: %s (PID=%ld, TID=%ld)\n", cpu_id(),
                 current_task()->short_name, current_task()->pid,
                 current_task()->tid);
+#endif
   if (fctx->errcode) {
     kprintf_fault("  Error code: %#x\n", fctx->errcode);
   }

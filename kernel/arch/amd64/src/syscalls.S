@@ -144,7 +144,7 @@ return_from_syscall:
 	  popq %rax
 
 no_works_after_syscall:
-	  RESTORE_GPRS
+	  RESTORE_ALL
 
 	  /* Now restore user %gs */
 	  cli

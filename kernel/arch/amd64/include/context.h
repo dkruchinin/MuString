@@ -81,18 +81,18 @@
  * Allocate an area for saving MMX & FX state. Finally, we must adjust %rdi
  * to point just after saved GPRs area.
  */
-#define SAVE_MM \
+#define SAVE_MM                                 \
   mov %rsp, %r12;                               \
   sub $512,%rsp;                                \
   movq $0xfffffffffffffff0, %r14;               \
   andq %r14,%rsp;                               \
   fxsave (%rsp);                                \
-  pushq %r12
+  pushq %r12;
 
 #define RESTORE_MM                              \
-  popq %rax;                                    \
+  popq %r12;                                    \
   fxrstor (%rsp);                               \
-  movq %rax, %rsp;
+  movq %r12, %rsp;
 
 /* NOTE: SAVE_MM initializes %rsi so that it points to iterrupt/exception stack frame. */
 #define SAVE_ALL                                \
@@ -182,13 +182,14 @@
 #define EXIT_INTERRUPT_CONTEXT(extra_pushes)                            \
   RESTORE_GPRS;                                                         \
   cmp $GDT_SEL(KCODE_DESCR),extra_pushes+INT_STACK_FRAME_CS_OFFT(%rsp) ; \
-  je 666f;                                                                \
+  je 666f;                                                              \
   RESTORE_USER_SEGMENT_REGISTERS;                                       \
   cli;                                                                  \
   movl %gs:(CPU_SCHED_STAT_USER_GS_OFFT), %eax;                         \
-  movl %eax, %gs;                                                       \
   swapgs;                                                               \
+  movl %eax, %gs;                                                       \
   sti;                                                                  \
+1: jmp 1b;                                                              \
 666: ;                                                                  \
   popq %rax;
 

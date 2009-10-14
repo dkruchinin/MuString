@@ -422,7 +422,7 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
 
       /* Setup XMM context. */
       l=((ulong_t)regs-512) & 0xfffffffffffffff0;
-      memset( (char *)l, 0, 512 );
+      memset( (char *)l, 2, 512 );
 
       r=arch_process_context_control(task,SYS_PR_CTL_SET_PERTASK_DATA,
                                      attrs->per_task_data);
@@ -461,10 +461,10 @@ void arch_activate_task(task_t *to)
     load_ldt(to->cpu,(void *)to_ctx->ldt,to_ctx->ldt_limit);
   }
 
-#ifdef CONFIG_TEST
-  kprintf( "**  ACTIVATING TASK: %d:%d (CPU: %d) **\n",
-           to->pid,to->tid,to->cpu);
-#endif
+//#ifdef CONFIG_TEST
+  kprintf( "**  ACTIVATING TASK: %d:%d (CPU: ) **\n",
+         to->pid,to->tid);//,to->cpu);
+//#endif
   
   /* Let's jump ! */
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);

@@ -423,7 +423,7 @@ static int def_del_task(task_t *task)
     interrupts_enable();
 
     /* Leave the CPU forever. */
-    def_schedule();
+   def_schedule();
   }
 
   return r;

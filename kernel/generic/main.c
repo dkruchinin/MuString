@@ -52,8 +52,9 @@ static void main_routine_stage1(void)
   initialize_gc();
   
   initialize_resources();
-  arch_smp_init();
+  //arch_smp_init();
   interrupts_enable();
+  //for (;;);
   /* Since the PIC is initialized, all interrupts from the hardware
    * is disabled. So we can enable local interrupts since we will
    * receive interrups from the other CPUs via LAPIC upon unleashing

@@ -27,8 +27,7 @@
 .globl kthread_fork_path
 kthread_fork_path:
         sti
-        RESTORE_MM
-        RESTORE_GPRS
+        RESTORE_ALL
         popq %rax
         iretq
 
@@ -40,6 +39,12 @@ user_fork_path_test:
 user_fork_path:
     xorq %rax,%rax
 resume_userspace:
-    RESTORE_ALL
-1:      jmp 1b
-
+    RESTORE_ALL    
+    RESTORE_USER_SEGMENT_REGISTERS
+    cli
+    movl %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
+    swapgs
+    movl %eax,%gs
+    popq %rax
+    orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
+    iretq

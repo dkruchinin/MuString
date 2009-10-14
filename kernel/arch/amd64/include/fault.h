@@ -78,6 +78,7 @@ typedef void (*fault_handler_fn)(struct fault_ctx *fctx);
   ((fctx)->istack_frame->cs == GDT_SEL(KCODE_DESCR))
 
 extern uint32_t faults_with_errcode;
+extern long __tmp;
 INITCODE void arch_faults_init(void);
 void fault_describe(const char *fname, struct fault_ctx *fctx);
 void fault_dump_info(struct fault_ctx *fctx);

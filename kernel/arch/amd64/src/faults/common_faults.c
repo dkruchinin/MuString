@@ -135,6 +135,7 @@ void FH_general_protection_fault(struct fault_ctx *fctx)
 {
   fault_describe("GPF", fctx);
   fault_dump_info(fctx);
+  kprintf_fault("HERE!!!\n");
   __stop_cpu();
 }
 

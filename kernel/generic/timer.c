@@ -259,8 +259,8 @@ void process_timers(void)
       LOCK_SW_TIMERS_R(is);
 #ifndef CONFIG_TIMER_RBTREE
       list_del(&major_tick->list);
-//      list_add2tail(&cached_major_ticks,&major_tick->list);
-//     __num_cached_major_ticks++;
+      list_add2tail(&cached_major_ticks,&major_tick->list);
+     __num_cached_major_ticks++;
 #else
       list_add2tail(&expired_major_ticks,&major_tick->list);
 #endif

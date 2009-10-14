@@ -65,6 +65,8 @@ void dump_user_stack(vmm_t *vmm, uintptr_t rsp)
     kprintf_fault("  CORRUPTED USER STACK: %p\n", rsp);
     goto out;
   }
+
+  kprintf_fault("    ");
   for (i = 1; i <= CONFIG_NUM_STACKWORDS; i++) {
     if (cur_addr <= vmr->bounds.space_start) {
       goto out;

@@ -43,25 +43,56 @@
 fault_entry_point:
         btq %rax, faults_with_errcode
         jc 1f
-        ENTER_INTERRUPT_CONTEXT(8)
-1:
-        ENTER_INTERRUPT_CONTEXT(16)
-        sti
-        movq %rsp, %rdi
-        movq %rax, %rsi
-        callq __do_handle_fault
-        cli
-        jmp exit_from_irq
 
+        subq $8, %rsp
+        pushq %rbx
+        movq 24(%rsp), %rbx
+        movq %rbx, 16(%rsp)
+        movq $0, 24(%rsp)
+        popq %rbx
+        
+1:
+        cmpq $GDT_SEL(KCODE_DESCR), 16 + INT_STACK_FRAME_CS_OFFT(%rsp)
+        je 2f
+
+        swapgs
+        //SAVE_AND_LOAD_SEGMENT_REGISTERS
+        
+2:
+        sti
+        SAVE_ALL
+        movq %r12, %rdi
+        movq %rax, %rsi        
+        callq __do_handle_fault        
+
+        RESTORE_ALL
+        cmpq $GDT_SEL(KCODE_DESCR), 16 + INT_STACK_FRAME_CS_OFFT(%rsp)
+        je 3f
+        
+        cli
+        RESTORE_USER_SEGMENT_REGISTERS
+        swapgs
+        sti
+3:
+        popq %rax
+        addq $8, %rsp
+        iretq     
+        
 .globl __irqs_table
 .globl __do_handle_irq
 irq_entry_point:
-        ENTER_INTERRUPT_CONTEXT(8)
+        cmpq $GDT_SEL(KCODE_DESCR), 8 + INT_STACK_FRAME_CS_OFFT(%rsp)
+        je 1f
+
+        swapgs
+        SAVE_AND_LOAD_SEGMENT_REGISTERS
+
+1:      
         incq %gs:CPU_SCHED_STAT_IRQCNT_OFFT
+        SAVE_ALL
         subq $32, %rax
         movq %rax, %rdi
         callq __do_handle_irq
-        jmp  return_from_irq
 
 return_from_irq:
 	  /*
@@ -102,7 +133,7 @@ no_preemption_in_interrupt:
 	  popq %rax
 
 	  /* Now let's see if we need to check for userspace works. */
-	  movq %rsp, %rbx
+	  movq (%rsp), %rbx
 	  addq $INT_FULL_OFFSET_TO_CS,%rbx
 	  cmpq $GDT_SEL(KCODE_DESCR),(%rbx)
 	  je exit_from_irq
@@ -133,11 +164,24 @@ no_preemption_in_interrupt:
 	  jmp process_irq_deffered_actions
 
 exit_from_irq:
-        EXIT_INTERRUPT_CONTEXT(INT_STACK_EXTRA_PUSHES)
+        sti
+        RESTORE_ALL
+        cmpq $GDT_SEL(KCODE_DESCR), 8 + INT_STACK_FRAME_CS_OFFT(%rsp)
+        je 1f
+
+        RESTORE_USER_SEGMENT_REGISTERS
+        cli
+        movl %gs:(CPU_SCHED_STAT_USER_GS_OFFT), %eax
+        swapgs
+        movl %eax, %gs
+        sti
+
+1:      
+        popq %rax
         /* Make sure IF is set after returning from interrupt context. */
         orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
         iretq
-        
+
 .align 16
 __faults_table:
         GEN_INTRS_TABLE 0, 32, fault_entry_point
@@ -145,3 +189,4 @@ __faults_table:
 .align 16
 __irqs_table:
          GEN_INTRS_TABLE 32, 255, irq_entry_point
+
