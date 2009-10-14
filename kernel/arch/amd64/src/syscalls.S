@@ -109,7 +109,7 @@ syscall_point:
 
 	/* After changing stack pointer, we can enable IRQs */
 	sti
-	SAVE_ALL
+	SAVE_GPRS
 
 	cmp $NUM_OF_SYSCALLS,%rax
 	jb good_syscall_number
@@ -144,7 +144,7 @@ return_from_syscall:
 	  popq %rax
 
 no_works_after_syscall:
-	  RESTORE_ALL
+	  RESTORE_GPRS
 
 	  /* Now restore user %gs */
 	  cli
