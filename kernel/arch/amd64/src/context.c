@@ -71,7 +71,7 @@ void dump_user_stack(vmm_t *vmm, uintptr_t rsp)
     if (cur_addr >= vmr->bounds.space_end) {
       break;
     }
-    if (copy_from_user((void *)&cur_addr, &tmp, sizeof(tmp))) {
+    if (copy_from_user((void *)cur_addr, &tmp, sizeof(tmp))) {
       break;
     }
 
@@ -81,7 +81,7 @@ void dump_user_stack(vmm_t *vmm, uintptr_t rsp)
       kprintf_fault("\n    ");
     }
   }
-  if (i % STACKWORDS_IN_LINE) {
+  if ((i - 1) % STACKWORDS_IN_LINE) {
     kprintf_fault("\n");
   }
 

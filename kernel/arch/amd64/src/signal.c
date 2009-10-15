@@ -170,6 +170,7 @@ static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
   kprintf("======> RSP: %p, RIP: %p\n", int_frame->rsp, int_frame->rip);
   ctx=(struct signal_context *)(int_frame->rsp-sizeof(*ctx));
   kprintf("===> KSTACK: %p, %p, %p\n", kstack, int_frame->rip, &ctx->gpr_regs);
+  kprintf("HANDLER: %p [%d] [%s]\n", act, current_task()->pid, current_task()->short_name);
   if( copy_to_user(&ctx->gpr_regs,kpregs,sizeof(*kpregs))) {
     return -EFAULT;
   }
