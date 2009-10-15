@@ -77,7 +77,6 @@ static void __setup_arch_segment_regs(arch_context_t *ctx,
   ctx->es = es;
   ctx->gs = gs;
   ctx->ds = ds;
-
 }
 
 static void __arch_setup_ctx(task_t *newtask,uint64_t rsp,
@@ -239,11 +238,9 @@ static size_t setup_kernel_task_context(task_t *task)
   return sizeof(regs_t);
 }
 
-static uint64_t __setup_user_task_context(task_t *task)
+static uint64_t setup_user_task_context(task_t *task)
 {
   regs_t *regs = (regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
-  /* Prepare a fake CPU-saved context */
-  memset( regs, 0, sizeof(regs_t) );
 
   /* Now setup selectors so them reflect user space. */
   regs->int_frame.cs = GDT_SEL(UCODE_DESCR) | SEG_DPL_USER;
@@ -303,7 +300,7 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   if( priv == TPL_KERNEL ) {
     reg_size = setup_kernel_task_context(newtask);
   } else {
-    reg_size = __setup_user_task_context(newtask);
+    reg_size = setup_user_task_context(newtask);
   }
 
   /* Now reserve space for storing XMM context since it requires
@@ -377,7 +374,6 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
   int r=0;
   arch_context_t *arch_ctx;
   exec_attrs_t *attrs;
-  ulong_t l;
 
   switch( cmd ) {
     case SYS_PR_CTL_SET_ENTRYPOINT:
@@ -418,12 +414,8 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
 
       /* Reset hardware context. */
       __setup_arch_segment_regs(arch_ctx,TPL_USER);
-      __setup_user_task_context(task);
+      setup_user_task_context(task);
       __apply_task_exec_attrs(regs,attrs,arch_ctx);
-
-      /* Setup XMM context. */
-      l=((ulong_t)regs-512) & 0xfffffffffffffff0;
-      memset( (char *)l, 2, 512 );
 
       r=arch_process_context_control(task,SYS_PR_CTL_SET_PERTASK_DATA,
                                      attrs->per_task_data);
@@ -463,8 +455,9 @@ void arch_activate_task(task_t *to)
   }
 
 #ifdef CONFIG_TEST
-  kprintf( "**  ACTIVATING TASK: %d:%d (CPU: %d) [from %d:%d] **\n",
+  kprintf( "**  ACTIVATING TASK: %d:%d (CPU: %d) [from %d:%d] %p**\n",
            to->pid,to->tid,to->cpu, current_task()->pid, current_task()->tid);
+  kprintf("STACK FROM = %p\n", current_task()->kernel_stack.high_address);
 #endif
 
   /* Let's jump ! */

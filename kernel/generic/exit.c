@@ -287,7 +287,7 @@ void do_exit(int code,ulong_t flags,long exitval)
         event_yield(&exiter->reinc_event);
 
         /* Tell the world that we can be targeted for disintegration again. */
-        LOCK_TASK_STRUCT(exiter);
+        LOCK_TASK_STRUCT(exiter);    
         exiter->uworks_data.disintegration_descr=NULL;
         UNLOCK_TASK_STRUCT(exiter);
 
@@ -299,6 +299,7 @@ void do_exit(int code,ulong_t flags,long exitval)
         update_pending_signals(exiter);
         return;
       }
+
       /* In case of errors just fallthrough and deattach from scheduler. */
     } else {
       /* Tricky situation: we were targeted for termination _after_ starting

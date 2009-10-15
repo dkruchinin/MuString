@@ -58,13 +58,14 @@ fault_entry_point:
         swapgs
 2:
         sti
-        SAVE_ALL
-        movq %r12, %rdi
-        movq %rax, %rsi        
-        callq __do_handle_fault        
+        SAVE_GPRS
+        movq %rsp, %rdi
+        movq %rax, %rsi
+        callq __do_handle_fault 
         
-        movq (%rsp), %rbx   
-        cmpq $GDT_SEL(KCODE_DESCR), INT_FULL_OFFSET_TO_CS(%rbx)
+        //movq (%rsp), %rbx
+        //addq $INT_FULL_OFFSET_TO_CS, %rbx
+        cmpq $GDT_SEL(KCODE_DESCR), INT_FULL_OFFSET_TO_CS(%rsp)
 	    je 3f
 
 	    /* Process deferred userspace-related works */
@@ -74,7 +75,7 @@ fault_entry_point:
 	    call handle_uworks
 
 3:      
-        RESTORE_ALL
+        RESTORE_GPRS
         cli
         cmpq $GDT_SEL(KCODE_DESCR), 16 + INT_STACK_FRAME_CS_OFFT(%rsp)
         je 4f
@@ -98,7 +99,7 @@ irq_entry_point:
 
 1:      
         incq %gs:CPU_SCHED_STAT_IRQCNT_OFFT
-        SAVE_ALL
+        SAVE_GPRS
         subq $32, %rax
         movq %rax, %rdi
         sti
@@ -144,8 +145,9 @@ no_preemption_in_interrupt:
 	  popq %rax
 
 	  /* Now let's see if we need to check for userspace works. */
-	  movq (%rsp), %rbx
-	  cmpq $GDT_SEL(KCODE_DESCR), INT_FULL_OFFSET_TO_CS(%rbx)
+	  //movq (%rsp), %rbx
+      //addq $INT_FULL_OFFSET_TO_CS, %rbx
+	  cmpq $GDT_SEL(KCODE_DESCR), INT_FULL_OFFSET_TO_CS(%rsp)
 	  je exit_from_irq
 
 	  /* Userspace interrupts, need to check for userspace works. */
@@ -175,7 +177,7 @@ no_preemption_in_interrupt:
 
 exit_from_irq:
         sti
-        RESTORE_ALL
+        RESTORE_GPRS
         cmpq $GDT_SEL(KCODE_DESCR), 8 + INT_STACK_FRAME_CS_OFFT(%rsp)
         je 1f
 

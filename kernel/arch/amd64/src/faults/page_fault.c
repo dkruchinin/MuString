@@ -89,21 +89,14 @@ static uint64_t fixup_fault_address(uint64_t fault_address)
 
 void FH_page_fault(struct fault_ctx *fctx)
 {
-  uintptr_t fault_addr;
+  uintptr_t fault_addr, fixup_addr;
   struct intr_stack_frame *stack_frame = fctx->istack_frame;
 
   fault_addr = read_cr2();
-  if (IS_KERNEL_FAULT(fctx)) {
-    uintptr_t fixup_addr;
-
-    fixup_addr = fixup_fault_address(stack_frame->rip);
-    if (!fixup_addr) {      
-      display_unhandled_pf_info(fctx, fault_addr);
-      goto stop_cpu;
-    }
-
-    stack_frame->rip = fixup_addr;
-    return;
+  fixup_addr = fixup_fault_address(stack_frame->rip);    
+  if (IS_KERNEL_FAULT(fctx) && !fixup_addr) {
+    display_unhandled_pf_info(fctx, fault_addr);
+    goto stop_cpu;
   }
   else {
     vmm_t *vmm = current_task()->task_mm;
@@ -129,6 +122,10 @@ void FH_page_fault(struct fault_ctx *fctx)
     send_sigsegv(fault_addr);
     return;
 #endif /* CONFIG_SEND_SIGSEGV_ON_FAULTS */
+  }
+  if (fixup_addr) {
+    stack_frame->rip = fixup_addr;
+    return;
   }
 
 stop_cpu:

@@ -68,7 +68,7 @@ void dump_user_stack(vmm_t *vmm, uintptr_t rsp)
 
   kprintf_fault("    ");
   for (i = 1; i <= CONFIG_NUM_STACKWORDS; i++) {
-    if (cur_addr <= vmr->bounds.space_start) {
+    if (cur_addr >= vmr->bounds.space_end) {
       break;
     }
     if (copy_from_user((void *)&cur_addr, &tmp, sizeof(tmp))) {
@@ -76,7 +76,7 @@ void dump_user_stack(vmm_t *vmm, uintptr_t rsp)
     }
 
     kprintf_fault("[%#.16lx] ", tmp);
-    cur_addr -= sizeof(ulong_t);
+    cur_addr += sizeof(ulong_t);
     if (!(i % STACKWORDS_IN_LINE)) {
       kprintf_fault("\n    ");
     }
@@ -104,17 +104,17 @@ void dump_kernel_stack(task_t *task, uintptr_t rsp)
 
   kprintf_fault("    ");
   for (i = 1; i <= CONFIG_NUM_STACKWORDS; i++) {
-    if (rsp < task->kernel_stack.low_address) {
+    if (addr >= task->kernel_stack.high_address) {
       break;
     }
 
     kprintf_fault("[%#.16lx] ", *(ulong_t *)addr);
-    addr -= sizeof(ulong_t);
+    addr += sizeof(ulong_t);
     if (!(i % STACKWORDS_IN_LINE)) {
       kprintf_fault("\n    ");
     }
   }
-  if (i % STACKWORDS_IN_LINE) {
+  if ((i - 1) % STACKWORDS_IN_LINE) {
     kprintf_fault("\n");
   }
 

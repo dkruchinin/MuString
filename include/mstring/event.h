@@ -118,6 +118,7 @@ static inline int event_yield_state(event_t *event,int state)
     }
     UNLOCK_EVENT(event,is);
   }
+
   return r;
 }
 

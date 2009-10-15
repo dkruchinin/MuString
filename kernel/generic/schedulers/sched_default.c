@@ -459,7 +459,7 @@ static int __change_task_state(task_t *task,task_state_t new_state,
   mstring_sched_cpudata_t *sched_data;
   task_state_t prev_state;
   mstring_sched_taskdata_t *tdata = EZA_TASK_SCHED_DATA(task);
-
+  
   if( task->cpu != cpu_id() ) {
     h=NULL;
   }
@@ -497,6 +497,7 @@ static int __change_task_state(task_t *task,task_state_t new_state,
           r=-EINTR;
           break;
         }
+
         /* Fallthrough. */
       case TASK_STATE_STOPPED:
       case TASK_STATE_SUSPENDED:
@@ -511,7 +512,7 @@ static int __change_task_state(task_t *task,task_state_t new_state,
 
           if( task == sched_data->running_task ) {
             __reschedule_task(task);
-          }
+          }          
           r=0;
         } else if( task->state == TASK_STATE_SLEEPING ) {
           task->state=new_state;
@@ -640,7 +641,7 @@ static int def_change_task_state_deferred(task_t *task, task_state_t state,
                                               deferred_sched_handler_t handler,
                                                void *data,ulong_t mask)
 {
-  return __change_task_state(task,state,handler,data,mask);
+  return  __change_task_state(task,state,handler,data,mask);
 }
 
 static struct __scheduler mstring_default_scheduler = {

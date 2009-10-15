@@ -104,11 +104,11 @@ syscall_point:
 	movq $(GDT_SEL(UDATA_DESCR) | SEG_DPL_USER),HW_INTERRUPT_CTX_SS_OFFT(%rsp)
 	movq %gs:CPU_SCHED_STAT_USTACK_OFFT,%rcx
 	movq %rcx,HW_INTERRUPT_CTX_RSP_OFFT(%rsp)
-	subq $8,%rsp /* Simulate 'push %rax' */
 
 	/* After changing stack pointer, we can enable IRQs */
 	sti
-	SAVE_ALL
+    pushq %rax
+	SAVE_GPRS
 
 	cmp $NUM_OF_SYSCALLS,%rax
 	jb good_syscall_number
@@ -121,7 +121,6 @@ good_syscall_number:
 	 * %rcx from %r10.
 	 */
 	movq %r10,%rcx
-
 	call *syscall_table(,%rax,8)
 
 return_from_syscall:
@@ -130,28 +129,28 @@ return_from_syscall:
 	   */
       mov %gs:CPU_SCHED_STAT_USER_WORKS_OFFT, %rbx
 
-	  cmp $0,(%rbx)
+	  cmpq $0, (%rbx)
 	  je no_works_after_syscall
 
-	  pushq %rax
+      pushq %rax
 	  movq $__SYCALL_UWORK, %rdi
 	  movq %rax, %rsi
 	  movq %rsp, %rdx
-	  addq $8, %rdx  /* Skip just saved %rax */
+      addq $8, %rdx
 	  callq handle_uworks
-	  popq %rax
+      popq %rax
 
 no_works_after_syscall:
-	  RESTORE_ALL
+	  RESTORE_GPRS
 
 	  /* Now restore user %gs */
-	  cli
+	  cli      
 	  addq $8,%rsp /* Simulate our extra 'push %rax' */
 	  RESTORE_USER_SEGMENT_REGISTERS
-	  pushq %rax
-	  mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
+      pushq %rax
+	  movl %gs:(CPU_SCHED_STAT_USER_GS_OFFT), %eax
 	  swapgs
-	  mov %eax,%gs
+	  movl %eax, %gs
       popq %rax
       orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
       iretq

@@ -46,14 +46,10 @@ struct __trampoline_ctx {
   uint64_t handler,arg1,arg2,arg3;
 };
 
-struct __gen_ctx {
-  uint8_t xmm[XMM_CTX_SIZE];
-  struct gpregs gpr_regs;
-};
-
-struct __signal_context {
+struct signal_context {
   struct __trampoline_ctx trampl_ctx;
-  struct __gen_ctx gen_ctx;
+  char xmm[XMM_CTX_SIZE];
+  struct gpregs gpr_regs;  
   usiginfo_t siginfo;
   sigset_t saved_blocked;
   long retcode;
@@ -64,7 +60,7 @@ struct __signal_context {
 extern void trampoline_sighandler_invoker_int(void);
 extern void trampoline_cancellation_invoker(void);
 
-static int __setup_trampoline_ctx(struct __signal_context *__user ctx,
+static int __setup_trampoline_ctx(struct signal_context *__user ctx,
                                   usiginfo_t *siginfo,sa_sigaction_t act)
 {
   struct __trampoline_ctx kt;
@@ -119,6 +115,7 @@ static void __handle_cancellation_request(int reason,uintptr_t kstack)
   struct gpregs *kpregs;
   uint8_t *xmm;
 
+  kprintf("HANDLE_CANCELATION REQUEST!\n");
   switch( reason ) {
     case __SYCALL_UWORK:
       extra_bytes=0;
@@ -149,37 +146,31 @@ static void __handle_cancellation_request(int reason,uintptr_t kstack)
 static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
                                usiginfo_t *info,sa_sigaction_t act,
                                ulong_t extra_bytes,
-                               struct __signal_context **pctx)
+                               struct signal_context **pctx)
 {
   uintptr_t ustack,t;
   struct intr_stack_frame *int_frame;
   struct gpregs *kpregs;
-  struct __signal_context *ctx;
-  uint8_t *xmm;
+  struct signal_context *ctx;
 
   /* Save XMM and GPR context. */
-  xmm=(uint8_t *)kstack+8;  /* Skip pointer to saved GPRs. */
 
   /* Locate saved GPRs. */
-  kpregs=(struct gpregs *)(*(uintptr_t *)kstack);
-
-  kstack=(uintptr_t)kpregs + sizeof(*kpregs);
+  kpregs=(struct gpregs *)kstack;
+  kstack+=sizeof(*kpregs);
   /* OK, now we're pointing at saved interrupt number (see asm.S).
    * So skip it.
    */
-  kstack += extra_bytes;
+  //kstack += extra_bytes;
 
   /* Now we can access hardware interrupt stackframe. */
   int_frame=(struct intr_stack_frame *)kstack;
 
   /* Now we can create signal context. */
-  ctx=(struct __signal_context *)(int_frame->rsp-sizeof(*ctx));
-
-  if( copy_to_user(&ctx->gen_ctx.xmm,xmm,XMM_CTX_SIZE) ) {
-    return -EFAULT;
-  }
-
-  if( copy_to_user(&ctx->gen_ctx.gpr_regs,kpregs,sizeof(*kpregs)) ) {
+  kprintf("======> RSP: %p, RIP: %p\n", int_frame->rsp, int_frame->rip);
+  ctx=(struct signal_context *)(int_frame->rsp-sizeof(*ctx));
+  kprintf("===> KSTACK: %p, %p, %p\n", kstack, int_frame->rip, &ctx->gpr_regs);
+  if( copy_to_user(&ctx->gpr_regs,kpregs,sizeof(*kpregs))) {
     return -EFAULT;
   }
 
@@ -217,7 +208,7 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
   kern_sigaction_t *ka;
   sigset_t sa_mask,kmask;
   int sa_flags;
-  struct __signal_context *pctx;
+  struct signal_context *pctx;
 
   sigitem=extract_one_signal_from_queue(caller);
   if( !sigitem ) {
@@ -276,8 +267,7 @@ out_recalc:
   free_sigqueue_item(sigitem);
   return;
 bad_memory:
-  kprintf( "***** BAD MEMORY !!!\n" );
-  for(;;);
+  panic("***** BAD MEMORY !!! %p: %p\n", &pctx->saved_blocked, pctx);
   return;
 }
 
@@ -287,17 +277,15 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
   task_t *current=current_task();
   int i;
 
-
-  /*
-  kprintf_fault("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
-                reason,retcode,
-                current->pid,current->tid,
-                kstack);
-                kprintf_fault("[UWORKS]: UWORKS=0x%X\n",uworks);*/
   
-
   /* First, check for pending disintegration requests. */
   if( uworks & ARCH_CTX_UWORKS_DISINT_REQ_MASK ) {
+    /*kprintf_fault("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
+                  reason,retcode,
+                  current->pid,current->tid,
+                  kstack);
+                  kprintf_fault("[UWORKS]: UWORKS=0x%X\n",uworks);*/
+
     if( current->uworks_data.flags & DAF_EXIT_PENDING ) {
       do_exit(current->uworks_data.exit_value,0,0);
     } else if( current->uworks_data.flags & DAF_CANCELLATION_PENDING ) {
@@ -309,6 +297,7 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
        * There can be some signals waiting for delivery, so take it
        * into account.
        */
+
       perform_disintegration_work();
       uworks=read_task_pending_uworks(current);
     }
@@ -345,9 +334,10 @@ repeat:
 
 long sys_sigreturn(uintptr_t ctx)
 {
-  struct __signal_context *uctx=(struct __signal_context *)ctx;
+  struct signal_context *uctx=(struct signal_context *)ctx;
   long retcode;
   task_t *caller=current_task();
+  kprintf("SYS SIGRETURN\n");
   /* Since RAX is now also saved upon entering system calls, we must take it into account
    * as extra 'sizeof(long)' bytes on the stack.
    */
@@ -357,8 +347,8 @@ long sys_sigreturn(uintptr_t ctx)
                                    sizeof(struct intr_stack_frame));
   uintptr_t skctx=kctx,retaddr;
   sigset_t sa_mask;
-
-  if( !valid_user_address_range(ctx,sizeof(struct __signal_context)) ) {
+  
+  if( !valid_user_address_range(ctx,sizeof(struct signal_context)) ) {
     goto bad_ctx;
   }
 
@@ -376,18 +366,13 @@ long sys_sigreturn(uintptr_t ctx)
   UNLOCK_TASK_SIGNALS(caller);
 
   /* Restore GPRs. */
-  if( copy_from_user((void *)kctx,&uctx->gen_ctx.gpr_regs,sizeof(struct gpregs) ) ) {
+  if( copy_from_user((void *)kctx,&uctx->gpr_regs,sizeof(struct gpregs) ) ) {
     goto bad_ctx;
   }
 
   /* Area for saving XMM context must be 16-bytes aligned. */
   kctx-=XMM_CTX_SIZE;
   kctx &= 0xfffffffffffffff0;
-
-  /* Restore XMM context. */
-  if( copy_from_user((void *)kctx,uctx->gen_ctx.xmm,XMM_CTX_SIZE) ) {
-    goto bad_ctx;
-  }
 
   /* Save location of saved GPR frame. */
   *((uintptr_t *)(kctx-sizeof(uintptr_t)))=skctx;
