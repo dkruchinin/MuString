@@ -207,14 +207,14 @@ void *madt_find_table(acpi_madt_t *madt, madt_type_t type, int num)
   return NULL;
 }
 
-INITCODE void acpi_init(void)
+INITCODE int acpi_init(void)
 {
   acpi_rsdp = acpi_rsdp_find();
   if (!acpi_rsdp) {
-    kprintf(KO_WARNING "APCPI is not supported!\n");
-    return;
+    return -1;
   }
 
   acpi_rsdt = acpi_get_rsdt();
-  acpi_xsdt = acpi_get_xsdt();  
+  acpi_xsdt = acpi_get_xsdt();
+  return 0;
 }

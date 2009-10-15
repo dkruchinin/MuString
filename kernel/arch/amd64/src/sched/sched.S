@@ -26,7 +26,6 @@
 
 .globl kthread_fork_path
 kthread_fork_path:
-        sti
         RESTORE_ALL
         popq %rax
         iretq

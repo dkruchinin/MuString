@@ -73,24 +73,12 @@ static INITCODE void init_cpu_features(void)
   write_cr4(val);
 }
 
-static INITCODE void prepare_lapic_info(void)
+static INITCODE int map_lapic_page(void)
 {
-  acpi_madt_t *madt;
-  madt_lapic_t *lapic_tlb;
   uintptr_t dest_addr;
-  int ret, i, cpu;
-  uint32_t *lapic_id;
-
-  madt = acpi_find_table(MADT_TABLE);
-  if (likely(madt != NULL)) {
-    lapic_addr = (uintptr_t)madt->lapic_addr;
-  }
-  else
-  {
-    kprintf(KO_WARNING "Can not get lapic address from ACPI!\n");
-    lapic_addr = DEFAULT_LAPIC_ADDR;
-  }
-
+  int ret;
+  
+  ASSERT(lapic_addr != 0);
 #ifdef CONFIG_AMD64
   dest_addr = __allocate_vregion(LAPIC_NUM_PAGES);
   if (!dest_addr) {
@@ -104,12 +92,34 @@ static INITCODE void prepare_lapic_info(void)
   ret = mmap_page(KERNEL_ROOT_PDIR(), dest_addr,
                   phys_to_pframe_id((void *)lapic_addr),
                   KMAP_READ | KMAP_WRITE | KMAP_KERN | KMAP_NOCACHE);
-  if (ret) {
-    panic("Failed to map local APIC address %p to address %p. [ERR = %d]",
-          lapic_addr, dest_addr, ret);
+  if (!ret) {
+    lapic_addr = dest_addr;
   }
 
-  lapic_addr = dest_addr;
+  return ret;
+}
+
+static INITCODE void prepare_lapic_info(void)
+{
+  acpi_madt_t *madt;
+  madt_lapic_t *lapic_tlb;
+  int ret, i, cpu;
+  uint32_t *lapic_id;
+
+  madt = acpi_find_table(MADT_TABLE);
+  if (likely(madt != NULL)) {
+    lapic_addr = (uintptr_t)madt->lapic_addr;
+  }
+  else {
+    kprintf(KO_WARNING "Can not get lapic address from ACPI!\n");
+    lapic_addr = DEFAULT_LAPIC_ADDR;
+  }
+
+  ret = map_lapic_page();
+  if (ret) {
+    panic("Failed to map local APIC page. [ERR = %d]", ret);
+  }
+
   i = 1; cpu = 0;
   for_each_percpu_var(lapic_id, lapic_ids) {
     lapic_tlb = madt_find_table(madt, MADT_LAPIC, i);
@@ -156,8 +166,29 @@ INITCODE void arch_prepare_system(void)
 
 INITCODE void arch_init(void)
 {
-  acpi_init();
+  bool cpu_has_acpi = true;
+
+  if (acpi_init() < 0) {
+    cpu_has_acpi = false;
+    kprintf(KO_WARNING "Your CPU doesn't support ACPI!\n");
+  }
   if (cpu_has_feature(X86_FTR_APIC)) {
-    prepare_lapic_info();
+    if (cpu_has_acpi) {
+      prepare_lapic_info();
+    }
+    else {
+      cpu_id_t c;
+      int ret;
+
+      lapic_addr = DEFAULT_LAPIC_ADDR;
+      for_each_cpu(c) {
+        raw_percpu_set_var(lapic_ids, c, (uint32_t)c);
+      }
+
+      ret = map_lapic_page();
+      if (ret) {
+        panic("Failed to mmap local APIC page: [RET = %d]\n", ret);
+      }
+    }
   }
 }

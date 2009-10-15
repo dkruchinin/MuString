@@ -462,10 +462,10 @@ void arch_activate_task(task_t *to)
     load_ldt(to->cpu,(void *)to_ctx->ldt,to_ctx->ldt_limit);
   }
 
-//#ifdef CONFIG_TEST
+#ifdef CONFIG_TEST
   kprintf( "**  ACTIVATING TASK: %d:%d (CPU: %d) [from %d:%d] **\n",
            to->pid,to->tid,to->cpu, current_task()->pid, current_task()->tid);
-//#endif
+#endif
 
   /* Let's jump ! */
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);

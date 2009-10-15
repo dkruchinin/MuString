@@ -123,7 +123,6 @@ good_syscall_number:
 	movq %r10,%rcx
 
 	call *syscall_table(,%rax,8)
-	jmp return_from_syscall
 
 return_from_syscall:
 	  /* Before returning from syscall we should check for pending works.
@@ -153,7 +152,6 @@ no_works_after_syscall:
 	  mov %gs:(CPU_SCHED_STAT_USER_GS_OFFT),%eax
 	  swapgs
 	  mov %eax,%gs
-      sti
       popq %rax
       orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
       iretq

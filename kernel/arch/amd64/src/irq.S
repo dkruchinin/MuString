@@ -56,17 +56,15 @@ fault_entry_point:
         je 2f
 
         swapgs
-        //SAVE_AND_LOAD_SEGMENT_REGISTERS
-        
 2:
         sti
         SAVE_ALL
         movq %r12, %rdi
         movq %rax, %rsi        
         callq __do_handle_fault        
-
-        movq (%rsp), %rbp        
-        cmpq $GDT_SEL(KCODE_DESCR), INT_FULL_OFFSET_TO_CS(%rbp)
+        
+        movq (%rsp), %rbx   
+        cmpq $GDT_SEL(KCODE_DESCR), INT_FULL_OFFSET_TO_CS(%rbx)
 	    je 3f
 
 	    /* Process deferred userspace-related works */
@@ -77,16 +75,16 @@ fault_entry_point:
 
 3:      
         RESTORE_ALL
+        cli
         cmpq $GDT_SEL(KCODE_DESCR), 16 + INT_STACK_FRAME_CS_OFFT(%rsp)
         je 4f
         
-        cli
         RESTORE_USER_SEGMENT_REGISTERS
         swapgs
-        sti
 4:
         popq %rax        
         addq $8, %rsp
+        orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
         iretq
         
 .globl __irqs_table
@@ -103,7 +101,9 @@ irq_entry_point:
         SAVE_ALL
         subq $32, %rax
         movq %rax, %rdi
+        sti
         callq __do_handle_irq
+        cli
 
 return_from_irq:
 	  /*
@@ -144,7 +144,6 @@ no_preemption_in_interrupt:
 	  popq %rax
 
 	  /* Now let's see if we need to check for userspace works. */
-      jmp exit_from_irq
 	  movq (%rsp), %rbx
 	  cmpq $GDT_SEL(KCODE_DESCR), INT_FULL_OFFSET_TO_CS(%rbx)
 	  je exit_from_irq
@@ -180,17 +179,16 @@ exit_from_irq:
         cmpq $GDT_SEL(KCODE_DESCR), 8 + INT_STACK_FRAME_CS_OFFT(%rsp)
         je 1f
 
-        cli
         RESTORE_USER_SEGMENT_REGISTERS
+        cli
         movl %gs:(CPU_SCHED_STAT_USER_GS_OFFT), %eax
         swapgs
         movl %eax, %gs
-        sti
 
 1:
         popq %rax
         /* Make sure IF is set after returning from interrupt context. */
-        //orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
+        orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
         iretq
 
 .align 16

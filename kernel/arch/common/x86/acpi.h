@@ -112,7 +112,7 @@ typedef enum madt_type {
 #define ACPI_RSDT_SIG  "RSDT"
 #define ACPI_XSDT_SIG  "XSDT"
 
-INITCODE void acpi_init(void);
+INITCODE int acpi_init(void);
 void *acpi_getaddr(uintptr_t phys_addr, size_t length);
 void *acpi_find_table(acpi_tlbid_t type);
 void *madt_find_table(acpi_madt_t *madt, madt_type_t type, int num);
