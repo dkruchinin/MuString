@@ -245,13 +245,18 @@ static uint64_t __setup_kernel_task_context(task_t *task)
   return sizeof(regs_t);
 }
 
-static uint64_t __setup_user_task_context(task_t *task)
+static uint64_t __setup_user_task_context(task_t *task,task_t *parent)
 {
-  regs_t *regs = (regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
-  /* Prepare a fake CPU-saved context */
-  memset( regs, 0, sizeof(regs_t) );
+  regs_t *regs=(regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
 
-  /* Now setup selectors so them reflect user space. */
+  if( parent ) {
+    regs_t *pregs=(regs_t *)(parent->kernel_stack.high_address - sizeof(regs_t));
+    memcpy(regs, pregs, sizeof(*regs));
+  } else {
+    memset(regs,0,sizeof(*regs));
+  }
+
+  /* Now setup selectors to reflect userspace. */
   regs->int_frame.cs = GDT_SEL(UCODE_DESCR) | SEG_DPL_USER;
   regs->int_frame.old_ss = GDT_SEL(UDATA_DESCR) | SEG_DPL_USER;
   regs->int_frame.rip = 0;
@@ -309,7 +314,7 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   if( priv == TPL_KERNEL ) {
     reg_size = __setup_kernel_task_context(newtask);
   } else {
-    reg_size = __setup_user_task_context(newtask);
+    reg_size = __setup_user_task_context(newtask,parent);
   }
 
   /* Now reserve space for storing XMM context since it requires
@@ -418,7 +423,7 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
 
       /* Reset hardware context. */
       __setup_arch_segment_regs(arch_ctx,TPL_USER);
-      __setup_user_task_context(task);
+      __setup_user_task_context(task,NULL);
       __apply_task_exec_attrs(regs,attrs,arch_ctx);
 
       /* Setup XMM context. */
