@@ -217,6 +217,12 @@ config TRACE_SYSCALL_ACTIVITY
        bool "Trace for target task's syscall activity, both enter and return."
        default n
 
-ifdef 
+if TRACE_SYSCALL_ACTIVITY
+
+config TRACE_SYSCALL_ACTIVITY_TARGET
+       int "Process ID of the process whose syscall activity will be traced."
+       default "0"
+
+endif
 
 endmenu

@@ -111,13 +111,15 @@ syscall_point:
 	sti
 	SAVE_ALL
 
-	push %rax
+#ifdef CONFIG_TRACE_SYSCALL_ACTIVITY
+	push %rax /* Extra save of syscall number. */
 	push %rax
 	SAVE_ALL
 	mov %rax,%rdi
 	call trace_sysenter
 	RESTORE_ALL
 	pop %rax
+#endif
 
 	cmp $NUM_OF_SYSCALLS,%rax
 	jb good_syscall_number
@@ -133,10 +135,11 @@ good_syscall_number:
 	call *syscall_table(,%rax,8)
 
 syscall_done:
+#ifdef CONFIG_TRACE_SYSCALL_ACTIVITY
 	pop %rdi /* Restore syscal number saved later */
 	push %rax
 	mov %rax,%rsi
 	call trace_sysreturn
 	pop %rax
-
+#endif
 	jmp return_from_syscall

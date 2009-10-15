@@ -55,22 +55,24 @@ void idle_loop(void)
   }
 }
 
-#define TARGET 10000 /* TODO: [mt] redesign it. */
+#ifdef CONFIG_TRACE_SYSCALL_ACTIVITY
 
 void trace_sysenter(long syscall)
 {
-    if( current_task()->pid == TARGET ) {
-	kprintf_fault("[S] (%d/%d) %d\n",
-	              current_task()->pid,current_task()->tid,
-		      syscall);
-    }
+  if( current_task()->pid == CONFIG_TRACE_SYSCALL_ACTIVITY_TARGET ) {
+    kprintf_fault("[trace_sysenter] Task (%d/%d), S=%d\n",
+                  current_task()->pid,current_task()->tid,
+                  syscall);
+  }
 }
 
 void trace_sysreturn(long syscall, long retcode)
 {
-    if( current_task()->pid == TARGET ) {
-	kprintf_fault("[S] (%d/%d) %d => %d\n",
-	              current_task()->pid,current_task()->tid,
-		      syscall,retcode);
-    }
+  if( current_task()->pid == CONFIG_TRACE_SYSCALL_ACTIVITY_TARGET ) {
+    kprintf_fault("[trace_sysreturn] Task (%d/%d): S=%d, R=%d\n",
+                  current_task()->pid,current_task()->tid,
+                  syscall,retcode);
+  }
 }
+
+#endif
