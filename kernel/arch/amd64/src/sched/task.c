@@ -252,6 +252,7 @@ static uint64_t __setup_user_task_context(task_t *task,task_t *parent)
   if( parent ) {
     regs_t *pregs=(regs_t *)(parent->kernel_stack.high_address - sizeof(regs_t));
     memcpy(regs, pregs, sizeof(*regs));
+    regs->rax=0;
   } else {
     memset(regs,0,sizeof(*regs));
   }

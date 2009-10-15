@@ -24,6 +24,7 @@
 #include <arch/context.h>
 #include <arch/seg.h>
 #include <mstring/errno.h>
+#include <config.h>
 
 .global syscall_point
 
@@ -110,18 +111,32 @@ syscall_point:
 	sti
 	SAVE_ALL
 
+	push %rax
+	push %rax
+	SAVE_ALL
+	mov %rax,%rdi
+	call trace_sysenter
+	RESTORE_ALL
+	pop %rax
+
 	cmp $NUM_OF_SYSCALLS,%rax
 	jb good_syscall_number
 
 	movq $-ENOSYS,%rax
-	jmp return_from_syscall
+	jmp syscall_done
 
 good_syscall_number:
 	/* Since %rcx contains the return address, we should reload
 	 * %rcx from %r10.
 	 */
 	movq %r10,%rcx
-
 	call *syscall_table(,%rax,8)
+
+syscall_done:
+	pop %rdi /* Restore syscal number saved later */
+	push %rax
+	mov %rax,%rsi
+	call trace_sysreturn
+	pop %rax
 
 	jmp return_from_syscall

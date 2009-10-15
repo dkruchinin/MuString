@@ -213,4 +213,10 @@ config TRACE_ERRORS
        bool "Trace all functions returning errors via macro ERR(x)"
        default n
 
+config TRACE_SYSCALL_ACTIVITY
+       bool "Trace for target task's syscall activity, both enter and return."
+       default n
+
+ifdef 
+
 endmenu
