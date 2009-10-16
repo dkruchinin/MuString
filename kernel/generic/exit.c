@@ -27,7 +27,6 @@
 #include <mstring/panic.h>
 #include <mstring/task.h>
 #include <ipc/ipc.h>
-#include <mstring/security.h>
 #include <mstring/process.h>
 #include <ipc/port.h>
 #include <mstring/signal.h>

@@ -40,7 +40,6 @@
 #include <mstring/stddef.h>
 #include <mstring/string.h>
 #include <mstring/process.h>
-#include <mstring/security.h>
 #include <mstring/timer.h>
 #include <mstring/time.h>
 #include <kernel/syscalls.h>
@@ -243,10 +242,6 @@ long do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
       return -EINVAL;
 
     case SYS_SCHED_CTL_SET_AFFINITY_MASK:
-      if( !trusted_task(current_task()) ) {
-        return -EPERM;
-      }
-
       if( !arg || (arg & ~ONLINE_CPUS_MASK) ) {
         return -EINVAL;
       }
@@ -260,9 +255,6 @@ long do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
     case SYS_SCHED_CTL_GET_CPU:
       return task->cpu;
     case SYS_SCHED_CTL_SET_CPU:
-      if( !trusted_task(current_task()) ) {
-        return -EPERM;
-      }
       if( (arg >= CONFIG_NRCPUS) || !cpu_affinity_ok(task,arg) ) {
         return -EINVAL;
       }
@@ -300,11 +292,6 @@ long sys_scheduler_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
 
   if( target->scheduler == NULL ) {
     r = -ENOTTY;
-    goto out_release;
-  }
-
-  if( !security_ops->check_scheduler_control(target,cmd,arg) ) {
-    r = -EPERM ;
     goto out_release;
   }
 

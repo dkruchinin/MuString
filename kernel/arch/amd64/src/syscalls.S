@@ -24,6 +24,7 @@
 #include <arch/context.h>
 #include <arch/seg.h>
 #include <mstring/errno.h>
+#include <config.h>
 
 .global syscall_point
 
@@ -110,11 +111,21 @@ syscall_point:
     pushq %rax
 	SAVE_GPRS
 
+#ifdef CONFIG_TRACE_SYSCALL_ACTIVITY
+    pushq %rax
+	pushq %rax /* Extra save of syscall number. */
+	SAVE_GPRS
+	mov %rax,%rdi
+	call trace_sysenter
+	RESTORE_GPRS
+	popq %rax
+#endif
+
 	cmp $NUM_OF_SYSCALLS,%rax
 	jb good_syscall_number
 
 	movq $-ENOSYS,%rax
-	jmp return_from_syscall
+	jmp syscall_done
 
 good_syscall_number:
 	/* Since %rcx contains the return address, we should reload
@@ -123,6 +134,15 @@ good_syscall_number:
 	movq %r10,%rcx
 	call *syscall_table(,%rax,8)
 
+syscall_done:
+#ifdef CONFIG_TRACE_SYSCALL_ACTIVITY
+	pop %rdi /* Restore syscal number saved earlier */
+	push %rax
+	mov %rax,%rsi
+	call trace_sysreturn
+	pop %rax
+#endif
+        
 return_from_syscall:
 	  /* Before returning from syscall we should check for pending works.
 	   * Note that %rax contains return code.

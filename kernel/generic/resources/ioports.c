@@ -23,7 +23,6 @@
 
 #include <mstring/types.h>
 #include <mstring/errno.h>
-#include <mstring/security.h>
 #include <mstring/smp.h>
 #include <sync/mutex.h>
 #include <mstring/swks.h>
@@ -192,11 +191,6 @@ out:
 static int __check_ioports( task_t *task,ulong_t first_port,
                                  ulong_t end_port)
 {
-  if( !security_ops->check_access_ioports(current_task(),
-                                          first_port,end_port) ) {
-    return -EPERM;
-  }
-
   if( end_port < first_port || first_port >= swks.ioports_available ||
       end_port >= swks.ioports_available ) {
     return -EINVAL;

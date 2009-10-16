@@ -28,7 +28,6 @@
 #include <mstring/smp.h>
 #include <mstring/errno.h>
 #include <mstring/process.h>
-#include <mstring/security.h>
 #include <mstring/usercopy.h>
 #include <ipc/port.h>
 #include <ipc/channel.h>
@@ -124,9 +123,8 @@ long sys_create_port( ulong_t flags, ulong_t queue_size )
   task_t *caller=current_task();
   long r;
 
-  if(!trusted_task(caller)) {
-    flags |= IPC_BLOCKED_ACCESS;
-  }
+  /* TODO: [mt] Check if caller can create unblocked ports. */
+  //flags |= IPC_BLOCKED_ACCESS;
 
   r=ipc_create_port(caller, flags, queue_size);
   return ERR(r);

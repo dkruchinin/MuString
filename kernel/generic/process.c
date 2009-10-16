@@ -34,7 +34,6 @@
 #include <arch/task.h>
 #include <arch/preempt.h>
 #include <mstring/process.h>
-#include <mstring/security.h>
 #include <arch/current.h>
 #include <sync/spinlock.h>
 #include <kernel/syscalls.h>
@@ -42,6 +41,8 @@
 #include <mstring/usercopy.h>
 #include <ipc/port.h>
 #include <ipc/ipc.h>
+#include <security/security.h>
+#include <security/util.h>
 
 typedef uint32_t hash_level_t;
 
@@ -164,7 +165,7 @@ static void __setup_common_task_attributes(task_t *target,exec_attrs_t *attrs)
 }
 
 int create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
-                     task_t **newtask,task_creation_attrs_t *attrs)
+                task_t **newtask,task_creation_attrs_t *attrs)
 {
   task_t *new_task;
   int r;
@@ -205,7 +206,7 @@ int create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
     *newtask = new_task;
   }
 
-  return r;
+  return ERR(r);
 }
 
 static bool __check_task_exec_attrs(exec_attrs_t *ea)
@@ -241,7 +242,7 @@ static int __disintegrate_task(task_t *target,ulong_t pnum)
   ipc_channel_t *channel;
 
   if( !(port=ipc_get_port(current_task(),pnum)) ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   r = ipc_open_channel_raw(port, IPC_KERNEL_SIDE, &channel);
@@ -301,7 +302,7 @@ free_descr:
 put_port:
   ipc_put_port(port);
 out:
-  return r;
+  return ERR(r);
 }
 
 static int __reincarnate_task(task_t *target,ulong_t arg)
@@ -354,7 +355,7 @@ static int __reincarnate_task(task_t *target,ulong_t arg)
     }
   }
 
-  return r;
+  return ERR(r);
 }
 
 static long __set_shortname(task_t *target,ulong_t arg)
@@ -367,7 +368,7 @@ static long __set_shortname(task_t *target,ulong_t arg)
     r=0;
   }
   target->short_name[TASK_SHORTNAME_LEN-1]='\0';
-  return r;
+  return ERR(r);
 }
 
 long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
@@ -376,57 +377,39 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
   long r;
   uidgid_t uidgid;
 
+  if( current_task() != target &&
+      !s_check_access(S_GET_INVOKER(),S_GET_TASK_OBJECT(target)) ) {
+    return ERR(-EPERM);
+  }
+
   switch( cmd ) {
-    case SYS_PR_CTL_SET_ENTRYPOINT:
-    case SYS_PR_CTL_SET_STACK:
-      if( !valid_user_address(arg) ) {
-        return -EFAULT;
-      }
-      if( target->state == TASK_STATE_JUST_BORN ) {
-        r = arch_process_context_control(target,cmd,arg);
-        if (likely(r == 0))
-          target->ustack = arg;
-
-        return r;
-      }
-
-      break;
-    case SYS_PR_CTL_GET_ENTRYPOINT:
-    case SYS_PR_CTL_GET_STACK:
-      /* No arguments are acceptable for these commands. */
-      if( arg == 0 && target->state == TASK_STATE_JUST_BORN ) {
-        return arch_process_context_control(target,cmd,arg);
-      }
-      break;
     case SYS_PR_CTL_ADD_EVENT_LISTENER:
-      if( target->pid == current_task()->pid ) {
-        return -EDEADLOCK;
+      if( !s_check_system_capability(SYS_CAP_TASK_EVENTS) ) {
+        return ERR(-EPERM);
       }
-
+      if( target->pid == current_task()->pid ) {
+        return ERR(-EDEADLOCK);
+      }
       if(copy_from_user(&te_ctl,(void *)arg,sizeof(te_ctl) ) ) {
-        return -EFAULT;
+        return ERR(-EFAULT);
       }
       return task_event_attach(target,current_task(),&te_ctl);
     case SYS_PR_CTL_DEL_EVENT_LISTENER:
+      if( !s_check_system_capability(SYS_CAP_TASK_EVENTS) ) {
+        return ERR(-EPERM);
+      }
       if( current_task()->pid == arg ) {
-        return -EDEADLOCK;
+        return ERR(-EDEADLOCK);
       }
       return task_event_detach(arg,current_task());
-    case SYS_PR_CTL_SET_PERTASK_DATA:
-      if( !valid_user_address(arg) ) {
-        return -EFAULT;
-      }
-      r = arch_process_context_control(target,SYS_PR_CTL_SET_PERTASK_DATA,
-                                       arg);
-      if (likely(r == 0))
-        target->ptd = arg;
-
-      return r;
     case SYS_PR_CTL_SET_SHORTNAME:
       return __set_shortname(target,arg);
     case SYS_PR_CTL_DISINTEGRATE_TASK:
       if( target == current_task() ) {
-        return -EWOULDBLOCK;
+        return ERR(-EWOULDBLOCK);
+      }
+      if( !s_check_system_capability(SYS_CAP_REINCARNATE) ) {
+        return ERR(-EPERM);
       }
       return __disintegrate_task(target,arg);
     case SYS_PR_CTL_GET_UIDGID:
@@ -436,15 +419,15 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       UNLOCK_TASK_STRUCT(target);
 
       if( copy_to_user((void *)arg,&uidgid,sizeof(uidgid)) ) {
-        return -EFAULT;
+        return ERR(-EFAULT);
       }
       return 0;
     case SYS_PR_CTL_SET_UIDGID:
-      if( !trusted_task(current_task()) ) {
-        return -EPERM;
+      if( !s_check_system_capability(SYS_CAP_ADMIN) ) {
+        return ERR(-EPERM);
       }
       if( copy_from_user(&uidgid,(void *)arg,sizeof(uidgid)) ) {
-        return -EFAULT;
+        return ERR(-EFAULT);
       }
       LOCK_TASK_STRUCT(target);
       target->uid = uidgid.uid;
@@ -452,11 +435,14 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       UNLOCK_TASK_STRUCT(target);
       return 0;
     case SYS_PR_CTL_REINCARNATE_TASK:
+      if( !s_check_system_capability(SYS_CAP_REINCARNATE) ) {
+        return ERR(-EPERM);
+      }
       return __reincarnate_task(target,arg);
     case SYS_PR_CTL_SET_CANCEL_STATE:
       if( target != current_task() ||
           (arg != PTHREAD_CANCEL_ENABLE && arg != PTHREAD_CANCEL_DISABLE) ) {
-        return -EINVAL;
+        return ERR(-EINVAL);
       }
 
       LOCK_TASK_STRUCT(target);
@@ -469,11 +455,11 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
         }
       }
       UNLOCK_TASK_STRUCT(target);
-      return r;
+      return ERR(r);
     case SYS_PR_CTL_SET_CANCEL_TYPE:
       if( target != current_task() ||
           (arg != PTHREAD_CANCEL_DEFERRED && arg != PTHREAD_CANCEL_ASYNCHRONOUS) ) {
-        return -EINVAL;
+        return ERR(-EINVAL);
       }
 
       LOCK_TASK_STRUCT(target);
@@ -486,10 +472,10 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
         }
       }
       UNLOCK_TASK_STRUCT(target);
-      return r;
+      return ERR(r);
     case SYS_PR_CTL_CANCEL_TASK:
       if( target->pid != current_task()->pid ) {
-        return -ESRCH;
+        return ERR(-ESRCH);
       }
       LOCK_TASK_STRUCT(target);
       if( !(target->uworks_data.flags & DAF_CANCELLATION_PENDING) ) {
@@ -539,7 +525,7 @@ long sys_task_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
       case SYS_PR_CTL_ADD_EVENT_LISTENER:
       case SYS_PR_CTL_DEL_EVENT_LISTENER:
       case SYS_PR_CTL_SET_UIDGID:
-        return -EINVAL;
+        return ERR(-EINVAL);
     }
   }
 
@@ -549,19 +535,19 @@ long sys_task_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
       if( !pid ) {
         return caller->pid;
       }
-      return -EINVAL;
+      return ERR(-EINVAL);
 
     case SYS_PR_CTL_GETPPID:
       if( !pid ) {
         return caller->ppid;
       }
-      return -EINVAL;
+      return ERR(-EINVAL);
 
     case SYS_PR_CTL_GETTID:
       if( !pid ) {
         return caller->tid;
       }
-      return -EINVAL;
+      return ERR(-EINVAL);
   }
 
   /* Only reincarnation can target zombies. */
@@ -574,19 +560,19 @@ long sys_task_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
     grab_task_struct(task);
   } else {
     if( !(task=lookup_task(pid,tid,lookup_flags)) ) {
-      return -ESRCH;
+      return ERR(-ESRCH);
     }
   }
 
-  if( !security_ops->check_process_control(task,cmd,arg) ) {
-    r = -EACCES;
-    goto out_release;
-  }
-
-  r = do_task_control(task,cmd,arg);
-out_release:
+  r=do_task_control(task,cmd,arg);
   release_task_struct(task);
-  return r;
+  return ERR(r);
+}
+
+static bool __check_creation_perm(ulong_t flags)
+{
+  return s_check_system_capability((flags & CLONE_MM) ?
+                                   SYS_CAP_CREATE_THREAD : SYS_CAP_CREATE_PROCESS);
 }
 
 long sys_create_task(ulong_t flags,task_creation_attrs_t *a)
@@ -595,16 +581,16 @@ long sys_create_task(ulong_t flags,task_creation_attrs_t *a)
   long r;
   task_creation_attrs_t attrs,*pa;
 
-  if( !security_ops->check_create_process(flags) ) {
-    return -EPERM;
+  if( !__check_creation_perm(flags) ) {
+    return ERR(-EPERM);
   }
 
   if( a ) {
     if( copy_from_user(&attrs,a,sizeof(attrs) ) ) {
-      return -EFAULT;
+      return ERR(-EFAULT);
     }
     if( !__check_task_exec_attrs(&attrs.exec_attrs) ) {
-      return -EINVAL;
+      return ERR(-EINVAL);
     }
     pa=&attrs;
   } else {
@@ -619,11 +605,10 @@ long sys_create_task(ulong_t flags,task_creation_attrs_t *a)
       r=task->pid;
     }
   }
-
-  return r;
+  return ERR(r);
 }
 
-extern ulong_t syscall_counter;
+#define FORK_FLAGS (CLONE_COW | CLONE_REPL_IPC | CLONE_REPL_SYNC)
 
 long sys_fork(void)
 {
@@ -631,17 +616,20 @@ long sys_fork(void)
   long r;
   task_creation_attrs_t tca;
 
+  if( !__check_creation_perm(FORK_FLAGS) ) {
+    return ERR(-EPERM);
+  }
+
   memset(&tca,0,sizeof(tca));
 
   tca.exec_attrs.stack=0;
   tca.exec_attrs.destructor=caller->uworks_data.destructor;
   tca.exec_attrs.per_task_data=caller->ptd;
 
-  r=create_task(current_task(),CLONE_COW | CLONE_REPL_IPC | CLONE_REPL_SYNC,
-                TPL_USER,&new,&tca);
+  r=create_task(current_task(),FORK_FLAGS,TPL_USER,&new,&tca);
   if( !r ) {
     r=new->pid;
   }
-  return r;
+  return ERR(r);
 }
 

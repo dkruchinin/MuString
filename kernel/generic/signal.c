@@ -28,7 +28,6 @@
 #include <mstring/signal.h>
 #include <mm/slab.h>
 #include <mm/page_alloc.h>
-#include <mstring/security.h>
 #include <mstring/usercopy.h>
 #include <mstring/posix.h>
 #include <mstring/kconsole.h>
@@ -264,10 +263,6 @@ int sys_kill(pid_t pid,int sig,usiginfo_t *sinfo)
   }
 
   if( sinfo ) {
-    if( !trusted_task(current_task()) ) {
-      return -EPERM;
-    }
-
     if( copy_from_user(&k_siginfo,sinfo,sizeof(k_siginfo)) ) {
       return -EFAULT;
     }

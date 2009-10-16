@@ -37,7 +37,6 @@
 #include <mstring/sigqueue.h>
 #include <mstring/posix.h>
 #include <arch/scheduler.h>
-#include <mstring/security.h>
 #include <mstring/types.h>
 #include <mstring/process.h>
 #include <config.h>
@@ -92,65 +91,41 @@ void initialize_task_subsystem(void)
   initialize_process_subsystem();
 }
 
-static int __alloc_pid_and_tid(task_t *parent,ulong_t flags,
-                                    pid_t *ppid, tid_t *ptid,
-                                    task_privelege_t priv)
+static int __alloc_pid_and_tid(task_t *task,task_t *parent,ulong_t flags,
+                               task_privelege_t priv)
 {
-  pid_t pid;
-  tid_t tid;
+  pid_t pid=INVALID_PID;
+  tid_t tid=0;
+  int r=-ENOMEM;
 
-  /* Init task ? */
+  /* Allocate PID first. */
   if( flags & TASK_INIT ) {
-    int r;
-
     LOCK_PID_ARRAY;
     if( !init_launched ) {
-      *ppid=1;
-      *ptid=1;
+      pid=1;
       init_launched=true;
-      r=0;
     } else {
       r=-EINVAL;
     }
     UNLOCK_PID_ARRAY;
-    return r;
-  }
-
-  if( (flags & CLONE_MM) && priv != TPL_KERNEL ) {
-    pid=parent->pid;
-
-    LOCK_TASK_STRUCT(parent);
-    tid=idx_allocate(&parent->group_leader->tg_priv->tid_allocator);
-    UNLOCK_TASK_STRUCT(parent);
-
-    if( tid == IDX_INVAL ) {
-      return -ENOMEM;
-    }
   } else {
-    pid = __allocate_pid();
-    if( pid == INVALID_PID ) {
-      return -ENOMEM;
+    if( (flags & CLONE_MM) && priv != TPL_KERNEL ) {
+      pid=parent->pid;
+      LOCK_TASK_STRUCT(parent);
+      tid=idx_allocate(&parent->group_leader->tg_priv->tid_allocator);
+      UNLOCK_TASK_STRUCT(parent);
+    } else {
+      pid=__allocate_pid();
     }
-    tid=0;
   }
 
-  *ppid=pid;
-  *ptid=tid;
+  if( pid == INVALID_PID || tid == IDX_INVAL ) {
+    return ERR(r);
+  }
+
+  task->pid=pid;
+  task->tid=tid;
   return 0;
-}
-
-static void __free_pid_and_tid(task_t *parent,pid_t pid, tid_t tid,
-                               bool thread)
-{
-  if( thread ) {
-    LOCK_TASK_STRUCT(parent);
-    idx_free(&parent->group_leader->tg_priv->tid_allocator,tid);
-    UNLOCK_TASK_STRUCT(parent);
-  } else {
-    LOCK_PID_ARRAY;
-    index_array_free_value(&pid_array,pid);
-    UNLOCK_PID_ARRAY;
-  }
 }
 
 static int __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
@@ -184,7 +159,7 @@ static int __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
   } else {
     task->ppid=0;
   }
-  return r;
+  return ERR(r);
 }
 
 void cleanup_thread_data(gc_action_t *action)
@@ -258,7 +233,7 @@ static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags,
 
   if( flags & CLONE_IPC ) {
     if( !parent->ipc ) {
-      return -EINVAL;
+      return ERR(-EINVAL);
     }
     task->ipc=parent->ipc;
     r=setup_task_ipc(task);
@@ -272,7 +247,7 @@ static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags,
       r=setup_task_ipc(task);
     }
   }
-  return r;
+  return ERR(r);
 }
 
 static int __setup_task_events(task_t *task,task_t *parent,ulong_t flags,
@@ -281,7 +256,7 @@ static int __setup_task_events(task_t *task,task_t *parent,ulong_t flags,
   if( !(flags & CLONE_MM) || priv == TPL_KERNEL ) {
     task->task_events=memalloc(sizeof(task_events_t));
     if( !task->task_events ) {
-      return -ENOMEM;
+      return ERR(-ENOMEM);
     }
     list_init_head(&task->task_events->my_events);
     list_init_head(&task->task_events->listeners);
@@ -299,7 +274,7 @@ static int __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags,
 {
   if( flags & CLONE_MM ) {
     if( !parent->sync_data && (priv != TPL_KERNEL) ) {
-      return -EINVAL;
+      return ERR(-EINVAL);
     }
     if( parent->sync_data ) {
       task->sync_data=parent->sync_data;
@@ -307,10 +282,31 @@ static int __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags,
     }
   } else if( flags & CLONE_REPL_SYNC ) {
     task->sync_data=replicate_task_sync_data(parent);
-    return task->sync_data ? 0 : -ENOMEM;
+    return task->sync_data ? 0 : ERR(-ENOMEM);
   }
   task->sync_data=allocate_task_sync_data();
-  return task->sync_data ? 0 : -ENOMEM;
+  return task->sync_data ? 0 : ERR(-ENOMEM);
+}
+
+static int __setup_task_security(task_t *task,task_t *parent,ulong_t flags,
+                                 task_privelege_t priv)
+{
+  if( !parent->sobject ) {
+    return ERR(-EINVAL);
+  }
+
+  if( flags & CLONE_MM ) {
+    if( priv == TPL_KERNEL ) {
+      task->sobject = s_alloc_task_object(S_KTHREAD_MAC_LABEL,
+                                          S_KTHREAD_UID);
+    } else {
+      s_get_task_object(parent);
+      task->sobject=parent->sobject;
+    }
+  } else {
+    task->sobject = s_clone_task_object(parent);
+  }
+  return task->sobject ? 0 : ERR(-ENOMEM);
 }
 
 static int __setup_signals(task_t *task,task_t *parent,ulong_t flags)
@@ -320,7 +316,7 @@ static int __setup_signals(task_t *task,task_t *parent,ulong_t flags)
 
   if( flags & CLONE_SIGINFO ) {
     if( !parent->siginfo.handlers ) {
-      return -EINVAL;
+      return ERR(-EINVAL);
     }
     shandlers=parent->siginfo.handlers;
     atomic_inc(&shandlers->use_count);
@@ -332,7 +328,7 @@ static int __setup_signals(task_t *task,task_t *parent,ulong_t flags)
   if( !shandlers ) {
     shandlers=allocate_signal_handlers();
     if( !shandlers ) {
-      return -ENOMEM;
+      return ERR(-ENOMEM);
     }
   }
 
@@ -359,7 +355,7 @@ static long __setup_posix(task_t *task,task_t *parent,
     if( task->posix_stuff ) {
       return 0;
     }
-    return -ENOMEM;
+    return ERR(-ENOMEM);
   }
 }
 
@@ -408,7 +404,7 @@ static int __initialize_task_mm(task_t *orig, task_t *target, task_creation_flag
   }
 
   out:
-  return ret;
+  return ERR(ret);
 }
 
 int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t,
@@ -417,38 +413,30 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   task_t *task;
   int r = -ENOMEM;
   page_frame_t *stack_pages;
-  pid_t pid;
-  tid_t tid;
   task_limits_t *limits;
 
   if ((flags && !parent) ||
       ((flags & CLONE_MM) && (flags & (CLONE_COW | CLONE_POPULATE))) ||
       ((flags & (CLONE_COW | CLONE_POPULATE)) == (CLONE_COW | CLONE_POPULATE))) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
-  if ((flags & CLONE_PHYS) && parent && !trusted_task(parent))
-    return -EPERM;
-  
   /* TODO: [mt] Add memory limit check. */
   /* goto task_create_fault; */
-  r=__alloc_pid_and_tid(parent,flags,&pid,&tid,priv);
-  if( r ) {
-    goto task_create_fault;
-  }
-
   task=__allocate_task_struct(flags,priv);
   if( !task ) {
     r = -ENOMEM;
-    goto free_pid;
+    goto task_create_fault;
   }
 
-  task->pid=pid;
-  task->tid=tid;
+  r=__alloc_pid_and_tid(task,parent,flags,priv);
+  if( r ) {
+    goto free_task;
+  }
 
   /* Create kernel stack for the new task. */
   r = allocate_kernel_stack(&task->kernel_stack);
   if( r != 0 ) {
-    goto free_task;
+    goto free_pid;
   }
 
   r = __initialize_task_mm(parent, task, flags, priv, attrs);
@@ -508,6 +496,11 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
     goto free_posix;
   }
 
+  r=__setup_task_security(task,parent,flags,priv);
+  if( r ) {
+    goto free_events;
+  }
+
   /* Setup task's initial state. */
   task->state = TASK_STATE_JUST_BORN;
   task->cpu = cpu_id();
@@ -530,6 +523,8 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
     return 0; 
   }
 
+free_events:
+  /* [mt] Free events here. */
 free_posix:
   /* TODO: [mt] Free POSIX data properly. */
 free_signals:
@@ -548,13 +543,13 @@ free_mm:
   /* TODO: Free mm here. [mt] */
 free_stack:
   free_kernel_stack(task->kernel_stack.id);  
+free_pid:
+  /* TODO: free PID/TID here. */
 free_task:
   /* TODO: Free task struct page here. [mt] */
-free_pid:
-  __free_pid_and_tid(parent,pid,tid,(flags & CLONE_MM)!=0);
 task_create_fault:
   *t = NULL;
-  return r;
+  return ERR(r);
 }
 
 void release_task_struct(struct __task_struct *t)
@@ -569,9 +564,6 @@ void release_task_struct(struct __task_struct *t)
         //index_array_free_value(&pid_array,t->pid);
         //UNLOCK_PID_ARRAY;
     }
-
-    kprintf_fault("[DBG] release_task_struct(): freeing task struct for [%d:%d]\n",
-                  t->pid,t->tid);
     free_pages_addr(t,1);
   }
 }

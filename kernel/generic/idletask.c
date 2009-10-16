@@ -40,8 +40,6 @@ task_t *idle_tasks[CONFIG_NRCPUS];
 #define STEP 600
 #define TICKS_TO_WAIT 300
 
-ulong_t syscall_counter = 0;
-
 void idle_loop(void)
 {
   long idle_cycles=0;
@@ -57,3 +55,24 @@ void idle_loop(void)
   }
 }
 
+#ifdef CONFIG_TRACE_SYSCALL_ACTIVITY
+
+void trace_sysenter(long syscall)
+{
+  if( current_task()->pid == CONFIG_TRACE_SYSCALL_ACTIVITY_TARGET ) {
+    kprintf_fault("[trace_sysenter] Task (%d/%d), S=%d\n",
+                  current_task()->pid,current_task()->tid,
+                  syscall);
+  }
+}
+
+void trace_sysreturn(long syscall, long retcode)
+{
+  if( current_task()->pid == CONFIG_TRACE_SYSCALL_ACTIVITY_TARGET ) {
+    kprintf_fault("[trace_sysreturn] Task (%d/%d): S=%d, R=%d\n",
+                  current_task()->pid,current_task()->tid,
+                  syscall,retcode);
+  }
+}
+
+#endif

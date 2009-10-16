@@ -38,6 +38,7 @@
 #include <mstring/gc.h>
 #include <mstring/timer.h>
 #include <mstring/signal.h>
+#include <security/security.h>
 
 static void main_routine_stage1(void)
 {
@@ -58,6 +59,7 @@ static void main_routine_stage1(void)
    */
   setup_time();  
   initialize_swks();
+  initialize_security();
 
   /* OK, we can proceed. */
   spawn_percpu_threads();

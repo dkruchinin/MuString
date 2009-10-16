@@ -229,18 +229,18 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
   }
   
   ptd->ptd_addr=(uintptr_t)ustack_top;
-  r=do_task_control(task,SYS_PR_CTL_SET_PERTASK_DATA,(uintptr_t)ustack_top);
+  r=arch_process_context_control(task,SYS_PR_CTL_SET_PERTASK_DATA,(uintptr_t)ustack_top);
   if(r < 0) {
     panic("Server [#%d]: Failed to set pertask data(%p). (ERR = %d)", num, ustack_top, r);
   }
 
   /* Insufficient return address to prevent task from returning to void. */
   ustack_top-=sizeof(uintptr_t);
-  r=do_task_control(task,SYS_PR_CTL_SET_ENTRYPOINT,ehead.e_entry);
+  r=arch_process_context_control(task,SYS_PR_CTL_SET_ENTRYPOINT,ehead.e_entry);
   if (r < 0)
     panic("Server [#%d]: Failed to set task's entry point(%p). (ERR = %d)", num, ehead.e_entry, r);
   
-  r=do_task_control(task,SYS_PR_CTL_SET_STACK,ustack_top);
+  r=arch_process_context_control(task,SYS_PR_CTL_SET_STACK,ustack_top);
   if (r < 0)
     panic("Server [#%d]: Failed to set task's stack(%p). (ERR = %d)", num, ustack_top, r);
 }

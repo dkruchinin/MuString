@@ -41,6 +41,7 @@
 #include <mstring/process.h>
 #include <arch/context.h>
 #include <arch/ptable.h>
+#include <security/security.h>
 #include <config.h>
 
 /* Located on 'amd64/asm.S' */
@@ -126,6 +127,11 @@ void initialize_idle_tasks(void)
     task->pid = task->ppid = 0;
     task->cpu = cpu;
 
+    if( !(task->sobject=s_alloc_task_object(S_KTHREAD_MAC_LABEL,
+                                            S_KTHREAD_UID)) ) {
+      panic("initialize_idle_task(): can't setup security descriptor !");
+    }
+
     if( sched_setup_idle_task(task) != 0 ) {
       panic( "initialize_idle_task(): Can't setup scheduler details !" );
     }
@@ -158,7 +164,7 @@ void initialize_idle_tasks(void)
   }
 
   /* Setup arch-specific task context. */  
-  
+
   /* Now initialize per-CPU scheduler statistics. */
   cpu = 0;
   for_each_percpu_var(sched_stat,cpu_sched_stat) {
@@ -242,7 +248,15 @@ static uint64_t setup_user_task_context(task_t *task)
 {
   regs_t *regs = (regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
 
-  /* Now setup selectors so them reflect user space. */
+  if( parent ) {
+    regs_t *pregs=(regs_t *)(parent->kernel_stack.high_address - sizeof(regs_t));
+    memcpy(regs, pregs, sizeof(*regs));
+    regs->rax=0;
+  } else {
+    memset(regs,0,sizeof(*regs));
+  }
+
+  /* Now setup selectors to reflect userspace. */
   regs->int_frame.cs = GDT_SEL(UCODE_DESCR) | SEG_DPL_USER;
   regs->int_frame.ss = GDT_SEL(UDATA_DESCR) | SEG_DPL_USER;
   regs->int_frame.rip = 0;
@@ -382,12 +396,6 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
     case SYS_PR_CTL_SET_STACK:
       regs->int_frame.rsp = arg;
       break;
-    case SYS_PR_CTL_GET_ENTRYPOINT:
-      r = regs->int_frame.rip;
-      break;
-    case SYS_PR_CTL_GET_STACK:
-      r = regs->int_frame.rsp;
-      break;
     case SYS_PR_CTL_SET_PERTASK_DATA:
       arch_ctx=(arch_context_t*)&task->arch_context[0];
       if( arch_ctx->ldt ) {
@@ -395,6 +403,7 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
         ldt_dsc=&ldt_dsc[PTD_SELECTOR];
 
         arch_ctx->per_task_data=arg;
+        task->ptd=arg;
         seg_descr_setup(ldt_dsc, SEG_TYPE_DATA, SEG_DPL_USER,
                         (uint32_t)arg, 0, SEG_FLG_PRESENT);
 
@@ -402,7 +411,6 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
         if( task == current_task() ) {
           load_ldt(cpu_id(),(void *)arch_ctx->ldt,arch_ctx->ldt_limit);
         }
-        
         interrupts_enable();
       } else {
         r=-EINVAL;
@@ -414,7 +422,7 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
 
       /* Reset hardware context. */
       __setup_arch_segment_regs(arch_ctx,TPL_USER);
-      setup_user_task_context(task);
+      setup_user_task_context(task, NULL);
       __apply_task_exec_attrs(regs,attrs,arch_ctx);
 
       r=arch_process_context_control(task,SYS_PR_CTL_SET_PERTASK_DATA,
