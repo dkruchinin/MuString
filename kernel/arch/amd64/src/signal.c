@@ -48,7 +48,6 @@ struct __trampoline_ctx {
 
 struct signal_context {
   struct __trampoline_ctx trampl_ctx;
-  char xmm[XMM_CTX_SIZE];
   struct gpregs gpr_regs;  
   usiginfo_t siginfo;
   sigset_t saved_blocked;
@@ -161,16 +160,14 @@ static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
   /* OK, now we're pointing at saved interrupt number (see asm.S).
    * So skip it.
    */
-  //kstack += extra_bytes;
 
   /* Now we can access hardware interrupt stackframe. */
   int_frame=(struct intr_stack_frame *)kstack;
 
   /* Now we can create signal context. */
-  kprintf("======> RSP: %p, RIP: %p\n", int_frame->rsp, int_frame->rip);
+  kprintf("DUMP 2: PID %d, TID %d\n", current_task()->pid, current_task()->tid);
+  dump_interrupt_stack(int_frame);
   ctx=(struct signal_context *)(int_frame->rsp-sizeof(*ctx));
-  kprintf("===> KSTACK: %p, %p, %p\n", kstack, int_frame->rip, &ctx->gpr_regs);
-  kprintf("HANDLER: %p [%d] [%s]\n", act, current_task()->pid, current_task()->short_name);
   if( copy_to_user(&ctx->gpr_regs,kpregs,sizeof(*kpregs))) {
     return -EFAULT;
   }
@@ -193,6 +190,7 @@ static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
 
   *pctx=ctx;
   ustack=(uintptr_t)ctx;
+  kprintf("USTACK = %p\n", ustack);
   /* Setup user stack pointer. */
   int_frame->rsp=ustack;
 
@@ -216,6 +214,9 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
     return;
   }
 
+  if (current_task()->pid == 20) {
+      kprintf("SIG: %d\n", sigitem->info.si_signo);
+  }
   /* Determine if there is a user-specific handler installed. */
   ka=&caller->siginfo.handlers->actions[sigitem->info.si_signo];
   LOCK_TASK_SIGNALS(caller);
@@ -277,7 +278,7 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
   ulong_t uworks=read_task_pending_uworks(current_task());
   task_t *current=current_task();
   int i;
-
+  struct intr_stack_frame *ifr = (struct intr_stack_frame *)(kstack + sizeof(struct gpregs));
   
   /* First, check for pending disintegration requests. */
   if( uworks & ARCH_CTX_UWORKS_DISINT_REQ_MASK ) {
@@ -297,10 +298,12 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
        * Only main threads will return to finalize their reborn.
        * There can be some signals waiting for delivery, so take it
        * into account.
-       */
+       */        
 
       perform_disintegration_work();
+      kprintf("REINCARNATE: 2\n");
       uworks=read_task_pending_uworks(current);
+      kprintf("REINCARNATE: 3\n");
     }
   }
 
@@ -329,6 +332,8 @@ repeat:
       }
     }
 
+    kprintf("XXX: PID %d, TID %d\n", current_task()->pid, current_task()->tid);
+    dump_interrupt_stack(ifr);
     __handle_pending_signals(reason,retcode,kstack);
   }
 }
