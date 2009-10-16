@@ -207,6 +207,7 @@ static void lapic_unmask_irq(irq_t irq_num)
         apic_write(APIC_SIVR, val);
         break;
       default:
+        return;
         panic("Unknown IRQ vector %d\n", irq_num);
   }
 }
@@ -279,10 +280,8 @@ INITCODE void lapic_init(cpu_id_t cpuid)
   uint32_t val;
   
   if (!cpuid) {
-    kprintf("Going to setup lapic\n");
     irq_register_controller(&lapic_controller);
     setup_bsp_apic();
-    kprintf("done");
   }
 
   local_apic_clear();
@@ -339,7 +338,7 @@ INITCODE void lapic_init(cpu_id_t cpuid)
 }
 
 static struct irq_action lapic_timer_irq = {
-  .name = "Local APIC timer",
+  .name = LAPIC_IRQCTRL_NAME,
   .handler = timer_interrupt_handler,
 };
 
@@ -370,11 +369,9 @@ INITCODE void lapic_timer_init(cpu_id_t cpuid)
   apic_write(APIC_TIMER_DCR, val);
   apic_write(APIC_TIMER_ICR, 0xffffffffU);
 
-  //interrupts_save_and_disable(irqstat);
   apictick0 = apic_read(APIC_TIMER_CCR);
   default_hwclock->delay(APIC_CAL_LOOPS * 1000);
   apictick1 = apic_read(APIC_TIMER_CCR);
-  //interrupts_restore(irqstat);
 
   delta = (apictick0 - apictick1) * APIC_DIVISOR / APIC_CAL_LOOPS;  
   val = APIC_LVT_TIMER_MODE; /* periodic timer mode */

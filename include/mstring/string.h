@@ -153,12 +153,15 @@ static inline int strcmp(const char *s1, const char *s2)
     if (*p1 != *p2)
       return (*p1 - *p2);
   }
-  if (*p1 == '\0')
-    return -1;
-  else if (*p2 == '\0')
-    return 1;
-  else
+  if ((*p1 == '\0') && (*p2 == '\0')) {
     return 0;
+  }
+  else if (*p2 == '\0') {
+    return 1;
+  }
+  else {
+    return -1;
+  }
 }
 #else
 #define strcmp(s1, s2) arch_strcmp(s1, s2)

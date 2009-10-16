@@ -26,6 +26,7 @@
 #include <arch/types.h>
 #include <arch/asm.h>
 #include <arch/i8254.h>
+#include <arch/i8259.h>
 #include <mstring/kprintf.h>
 #include <mstring/unistd.h>
 
@@ -86,12 +87,20 @@ static struct irq_action pit_irq = {
 
 void i8254_init(void) 
 {
+  struct irq_controller *irq_ctrl;
+
   outb(I8254_BASE+3,0x34);
   outb(I8254_BASE,PIT_DIVISOR & 0xff);
   outb(I8254_BASE,PIT_DIVISOR >> 8);  
   hwclock_register(&pit_clock);
   default_hwclock = &pit_clock;
-  ASSERT(irq_line_register(PIT_IRQ, default_irqctrl) == 0);
+  irq_ctrl = irq_get_controller(I8259A_IRQCTRL_NAME);
+  if (unlikely(irq_ctrl == NULL)) {
+    panic("Unable to find %s IRQ controller to register "
+          "PIT timer interrupt\n", I8259A_IRQCTRL_NAME);
+  }
+
+  ASSERT(irq_line_register(PIT_IRQ, irq_ctrl) == 0);
   ASSERT(irq_register_action(PIT_IRQ, &pit_irq) == 0);
 }
 

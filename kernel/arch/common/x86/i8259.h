@@ -27,9 +27,10 @@
 
 #include <mstring/types.h>
 
-#define I8259_PIC_MASTER  0x20
-#define I8259_PIC_SLAVE   0xA0
-#define PIC_EOI           0x20
+#define I8259_PIC_MASTER    0x20
+#define I8259_PIC_SLAVE     0xA0
+#define PIC_EOI             0x20
+#define I8259A_IRQCTRL_NAME "i8259A"
 
 INITCODE void i8259a_init(void);
 

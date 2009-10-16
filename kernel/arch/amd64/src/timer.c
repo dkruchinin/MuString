@@ -41,8 +41,7 @@ void arch_timer_init(void)
     kprintf(KO_WARNING "Your CPU doesn't support APIC\n");
     for (;;);
   }
-  else {
-    lapic_init(0);
+  else {    
     lapic_timer_init(0);
   }
 }

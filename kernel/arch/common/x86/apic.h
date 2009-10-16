@@ -26,8 +26,9 @@
 #include <mstring/smp.h>
 #include <mstring/types.h>
 
-#define LAPIC_NUM_PAGES    (PAGE_ALIGN(4096) >> PAGE_WIDTH)
-#define DEFAULT_LAPIC_ADDR 0xFEE00000
+#define LAPIC_NUM_PAGES     (PAGE_ALIGN(4096) >> PAGE_WIDTH)
+#define DEFAULT_LAPIC_ADDR  0xFEE00000
+#define LAPIC_IRQCTRL_NAME  "Local APIC"
 
 enum {
   APIC_ID           = 0x020, /* Local APIC ID */

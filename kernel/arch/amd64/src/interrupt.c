@@ -25,7 +25,10 @@
 #include <arch/interrupt.h>
 #include <arch/seg.h>
 #include <arch/i8259.h>
+#include <arch/apic.h>
+#include <arch/cpufeatures.h>
 #include <mstring/bitwise.h>
+#include <mstring/interrupt.h>
 #include <mstring/panic.h>
 #include <mstring/assert.h>
 #include <mstring/types.h>
@@ -37,6 +40,30 @@ extern uint8_t __irqs_table[];
                      SEG_DPL_KERNEL,                                \
                      (uintptr_t)&__irqs_table + (irqnum) * 0x10, 0)
 
+static INITCODE void register_default_irqctrl(void)
+{
+  struct irq_controller *irq_ctrl;
+
+  /*
+   * At first try to find out if local APIC irq
+   * controller is registered
+   */
+  irq_ctrl = irq_get_controller(LAPIC_IRQCTRL_NAME);
+  if (likely(irq_ctrl != NULL)) {
+    /* If so, make it default controller */
+    default_irqctrl = irq_ctrl;
+    return;
+  }
+
+  /* Otherwise make i8259a default controller */
+  irq_ctrl = irq_get_controller(I8259A_IRQCTRL_NAME);
+  if (unlikely(irq_ctrl == NULL)) {
+    panic("Can not find %s irq controller!", I8259A_IRQCTRL_NAME);
+  }
+
+  default_irqctrl = irq_ctrl;
+}
+
 INITCODE void arch_irqs_init(void)
 {
   int i;
@@ -46,5 +73,10 @@ INITCODE void arch_irqs_init(void)
   }
 
   i8259a_init();
+  if (cpu_has_feature(X86_FTR_APIC)) {
+    lapic_init(0);
+  }
+
+  register_default_irqctrl();
 }
 

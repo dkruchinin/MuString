@@ -92,7 +92,7 @@ static bool i8259a_can_handle_irq(irq_t irq)
 
 
 static struct irq_controller i8259A_pic = {
-  .name = "I8259A",
+  .name = I8259A_IRQCTRL_NAME,
   .can_handle_irq = i8259a_can_handle_irq,
   .mask_all = i8259a_mask_all,
   .unmask_all = i8259a_unmask_all,
@@ -151,5 +151,4 @@ INITCODE void i8259a_init(void)
   irq_register_controller(&i8259A_pic);
   ASSERT(irq_line_register(PIC_SPURIOUS_IRQ, &i8259A_pic) == 0);
   ASSERT(irq_register_action(PIC_SPURIOUS_IRQ, &i8259_spurious) == 0);
-  default_irqctrl = &i8259A_pic;
 }

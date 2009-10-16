@@ -211,6 +211,27 @@ INITCODE void irq_register_controller(struct irq_controller *irqctl)
   IRQ_CONTROLLERS_UNLOCK();
 }
 
+struct irq_controller *irq_get_controller(const char *ctrl_name)
+{
+  struct irq_controller *irqctrl;
+  bool found = false;
+
+  IRQ_CONTROLLERS_LOCK();
+  list_for_each_entry(&irqctls_list, irqctrl, ctl_node) {
+    if (!strcmp(irqctrl->name, ctrl_name)) {
+      found = true;
+      break;
+    }
+  }
+
+  IRQ_CONTROLLERS_UNLOCK();
+  if (!found) {
+    return NULL;
+  }
+
+  return irqctrl;
+}
+
 int irq_line_register(irq_t irq, struct irq_controller *controller)
 {
   struct irq_line *iline;
