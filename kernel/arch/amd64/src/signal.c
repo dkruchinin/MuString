@@ -36,8 +36,6 @@
 #include <config.h>
 #include <mstring/gc.h>
 
-#define XMM_CTX_SIZE  512
-
 #define USPACE_TRMPL(a) USPACE_ADDR((uintptr_t)(a),__utrampoline_virt)
 
 uintptr_t __utrampoline_virt;
@@ -112,9 +110,7 @@ static void __handle_cancellation_request(int reason,uintptr_t kstack)
   uintptr_t extra_bytes;
   struct intr_stack_frame *int_frame;
   struct gpregs *kpregs;
-  uint8_t *xmm;
 
-  kprintf("HANDLE_CANCELATION REQUEST!\n");
   switch( reason ) {
     case __SYCALL_UWORK:
       extra_bytes=0;
@@ -131,8 +127,7 @@ static void __handle_cancellation_request(int reason,uintptr_t kstack)
   /* See '__handle_pending_signals()' for detailed descriptions of
    * the following stack manipulations.
    */
-  xmm=(uint8_t *)kstack+8;
-  kpregs=(struct gpregs *)(*(uintptr_t *)kstack);
+  kpregs=(struct gpregs *)kstack;
   kstack=(uintptr_t)kpregs + sizeof(*kpregs);
   kstack += extra_bytes;
   int_frame=(struct intr_stack_frame *)kstack;
@@ -165,8 +160,6 @@ static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
   int_frame=(struct intr_stack_frame *)kstack;
 
   /* Now we can create signal context. */
-  kprintf("DUMP 2: PID %d, TID %d\n", current_task()->pid, current_task()->tid);
-  dump_interrupt_stack(int_frame);
   ctx=(struct signal_context *)(int_frame->rsp-sizeof(*ctx));
   if( copy_to_user(&ctx->gpr_regs,kpregs,sizeof(*kpregs))) {
     return -EFAULT;
@@ -190,7 +183,6 @@ static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
 
   *pctx=ctx;
   ustack=(uintptr_t)ctx;
-  kprintf("USTACK = %p\n", ustack);
   /* Setup user stack pointer. */
   int_frame->rsp=ustack;
 
@@ -214,9 +206,6 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
     return;
   }
 
-  if (current_task()->pid == 20) {
-      kprintf("SIG: %d\n", sigitem->info.si_signo);
-  }
   /* Determine if there is a user-specific handler installed. */
   ka=&caller->siginfo.handlers->actions[sigitem->info.si_signo];
   LOCK_TASK_SIGNALS(caller);
@@ -278,7 +267,6 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
   ulong_t uworks=read_task_pending_uworks(current_task());
   task_t *current=current_task();
   int i;
-  struct intr_stack_frame *ifr = (struct intr_stack_frame *)(kstack + sizeof(struct gpregs));
   
   /* First, check for pending disintegration requests. */
   if( uworks & ARCH_CTX_UWORKS_DISINT_REQ_MASK ) {
@@ -301,9 +289,7 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
        */        
 
       perform_disintegration_work();
-      kprintf("REINCARNATE: 2\n");
       uworks=read_task_pending_uworks(current);
-      kprintf("REINCARNATE: 3\n");
     }
   }
 
@@ -332,28 +318,23 @@ repeat:
       }
     }
 
-    kprintf("XXX: PID %d, TID %d\n", current_task()->pid, current_task()->tid);
-    dump_interrupt_stack(ifr);
     __handle_pending_signals(reason,retcode,kstack);
   }
 }
 
+#define XMM_CTX_SIZE 512
 long sys_sigreturn(uintptr_t ctx)
 {
   struct signal_context *uctx=(struct signal_context *)ctx;
   long retcode;
   task_t *caller=current_task();
-  kprintf("SYS SIGRETURN\n");
-  /* Since RAX is now also saved upon entering system calls, we must take it into account
-   * as extra 'sizeof(long)' bytes on the stack.
-   */
   uintptr_t kctx=(uintptr_t)caller->kernel_stack.high_address-sizeof(struct gpregs)-
-                 sizeof(struct intr_stack_frame) - sizeof(long);
+                 sizeof(struct intr_stack_frame);
   struct intr_stack_frame *sframe=(struct intr_stack_frame*)((uintptr_t)caller->kernel_stack.high_address-
                                    sizeof(struct intr_stack_frame));
-  uintptr_t skctx=kctx,retaddr;
+  uintptr_t retaddr;
   sigset_t sa_mask;
-  
+
   if( !valid_user_address_range(ctx,sizeof(struct signal_context)) ) {
     goto bad_ctx;
   }
@@ -375,13 +356,6 @@ long sys_sigreturn(uintptr_t ctx)
   if( copy_from_user((void *)kctx,&uctx->gpr_regs,sizeof(struct gpregs) ) ) {
     goto bad_ctx;
   }
-
-  /* Area for saving XMM context must be 16-bytes aligned. */
-  kctx-=XMM_CTX_SIZE;
-  kctx &= 0xfffffffffffffff0;
-
-  /* Save location of saved GPR frame. */
-  *((uintptr_t *)(kctx-sizeof(uintptr_t)))=skctx;
 
   /* Restore retcode. */
   if( copy_from_user(&retcode,&uctx->retcode,sizeof(retcode)) ) {

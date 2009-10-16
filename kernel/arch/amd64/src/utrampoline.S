@@ -35,7 +35,7 @@ trampoline_sighandler_invoker_int:
 	movq 0x8(%rsp),%rdi
 	movq 0x10(%rsp),%rsi
 	movq 0x18(%rsp),%rdx
-	callq *%rsp
+	callq *(%rsp)
 
 	/* Restore context. */
 	movq %rsp,%rdi
@@ -52,7 +52,7 @@ trampoline_sighandler_invoker_int:
 
 trampoline_cancellation_invoker:
 	/* Invoke userspace cancellation handler. */
-	callq *%rdi
+	callq *(%rdi)
 
 	/* Force thread termination with 'PTHREAD_CANCELLED' exit code. */
 	movq $SC_THREAD_EXIT,%rax

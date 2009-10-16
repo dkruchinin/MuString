@@ -244,14 +244,14 @@ static size_t setup_kernel_task_context(task_t *task)
   return sizeof(regs_t);
 }
 
-static uint64_t setup_user_task_context(task_t *task)
+static uint64_t setup_user_task_context(task_t *task, task_t *parent)
 {
   regs_t *regs = (regs_t *)(task->kernel_stack.high_address - sizeof(regs_t));
 
   if( parent ) {
     regs_t *pregs=(regs_t *)(parent->kernel_stack.high_address - sizeof(regs_t));
     memcpy(regs, pregs, sizeof(*regs));
-    regs->rax=0;
+    regs->gpr_regs.rax=0;
   } else {
     memset(regs,0,sizeof(*regs));
   }
@@ -314,7 +314,7 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   if( priv == TPL_KERNEL ) {
     reg_size = setup_kernel_task_context(newtask);
   } else {
-    reg_size = setup_user_task_context(newtask);
+    reg_size = setup_user_task_context(newtask, parent);
   }
 
   /* Now reserve space for storing XMM context since it requires

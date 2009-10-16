@@ -124,6 +124,8 @@ void FH_page_fault(struct fault_ctx *fctx)
 #endif /* CONFIG_SEND_SIGSEGV_ON_FAULTS */
   }
   if (fixup_addr) {
+      kprintf("XXX FAULT %p, FIXUP %p\n",
+              fault_addr, fixup_addr);
     stack_frame->rip = fixup_addr;
     return;
   }
