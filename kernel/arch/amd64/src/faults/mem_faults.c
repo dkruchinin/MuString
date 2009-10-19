@@ -91,6 +91,7 @@ void __dump_stack(uintptr_t ustack,vmm_t *vmm)
       }
     } else {
       kprintf_fault("  <Invalid stack pointer>\n");
+      return;
     }
     ustack += sizeof(uintptr_t);
   }

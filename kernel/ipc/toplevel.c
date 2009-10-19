@@ -45,10 +45,7 @@ static long __ipc_port_msg_write(ulong_t port, ulong_t msg_id, iovec_t *iovecs,
     return ERR(-EINVAL);
   }
 
-  p = ipc_get_port(current_task(), port);
-  if( !p ) {
-    r=-EINVAL;
-  } else {
+  if( (p=ipc_get_port(current_task(), port,&r)) ) {
     processed = 0;
     koffset = offset;
 
@@ -161,13 +158,11 @@ long sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
     piovec = NULL;
   }
 
-  p = ipc_get_port(current_task(), port);
-  if (!p) {
-    return ERR(-EINVAL);
+  if ( (p=ipc_get_port(current_task(), port, &r)) ) {
+    r=ipc_port_receive(p, flags, piovec, 1, msg_info);
+    ipc_put_port(p);
   }
 
-  r = ipc_port_receive(p, flags, piovec, 1, msg_info);
-  ipc_put_port(p);
   return ERR(r);
 }
 
@@ -221,9 +216,8 @@ long sys_port_msg_read(ulong_t port, ulong_t msg_id, uintptr_t recv_buf,
   long r;
   iovec_t iovec;
 
-  p = ipc_get_port(current_task(), port);
-  if (!p) {
-    return ERR(-EINVAL);
+  if (!(p=ipc_get_port(current_task(), port, &r))) {
+    return ERR(r);
   }
 
   iovec.iov_base = (void *)recv_buf;
@@ -242,12 +236,11 @@ long sys_port_control(ulong_t port, ulong_t cmd, ulong_t arg)
   ipc_gen_port_t *p;
   long r;
 
-  p = ipc_get_port(current_task(), port);
-  if (!p) {
-    return ERR(-EINVAL);
+  if ( !(p=ipc_get_port(current_task(), port,&r)) ) {
+    return ERR(r);
   }
 
-  r = ipc_port_control(p, cmd, arg);
+  r=ipc_port_control(p, cmd, arg);
   ipc_put_port(p);
   return ERR(r);
 }

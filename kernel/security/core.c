@@ -144,6 +144,9 @@ bool s_check_access(struct __s_object *actor,struct __s_object *obj)
 
   __S_LOCK_OBJS_RR(actor,obj);
   can=S_MAC_OK(actor->mac_label,obj->mac_label);
+  if( !can ) {
+    kprintf_fault("<!!!> %d > %d\n",actor->mac_label,obj->mac_label);
+  }
   __S_UNLOCK_OBJS_RR(actor,obj);
 
   return can;
@@ -151,8 +154,10 @@ bool s_check_access(struct __s_object *actor,struct __s_object *obj)
 
 void s_copy_mac_label(struct __s_object *src, struct __s_object *dst)
 {
-  __S_LOCK_OBJS_RW(src,dst);
-  dst->mac_label=src->mac_label;
-  dst->uid=src->uid;
-  __S_UNLOCK_OBJS_RW(src,dst);
+  if( src != dst ) {
+    __S_LOCK_OBJS_RW(src,dst);
+    dst->mac_label=src->mac_label;
+    dst->uid=src->uid;
+    __S_UNLOCK_OBJS_RW(src,dst);
+  }
 }

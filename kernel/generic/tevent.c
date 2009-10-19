@@ -110,20 +110,20 @@ int task_event_attach(task_t *target_task,task_t *listener,
 {
   ipc_gen_port_t *port;
   task_event_listener_t *l;
-  int r=-EINVAL;
+  long r=-EINVAL;
   list_node_t *n;
   task_events_t *target_events;
 
   if( !ctl_arg->ev_mask || (ctl_arg->ev_mask & ~(ALL_TASK_EVENTS_MASK)) ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   l=__alloc_listener();
   if( !l ) {
-    return -ENOMEM;
+    return ERR(-ENOMEM);
   }
 
-  if( !(port=ipc_get_port(listener,ctl_arg->port)) ) {
+  if( !(port=ipc_get_port(listener,ctl_arg->port,&r)) ) {
     goto out_free;
   }
 
@@ -173,16 +173,14 @@ dont_add:
   mutex_unlock(&target_events->lock);
   __release_task_events(target_events);
 
-  if( r ) {
-    goto put_channel;
+  if( !r ) {
+    /* Add this listener to our list. */
+    LOCK_TASK_EVENTS(listener);
+    list_add2tail(&listener->task_events->my_events,&l->owner_list);
+    UNLOCK_TASK_EVENTS(listener);
+    return 0;
   }
 
-  /* Add this listener to our list. */
-  LOCK_TASK_EVENTS(listener);
-  list_add2tail(&listener->task_events->my_events,&l->owner_list);
-  UNLOCK_TASK_EVENTS(listener);
-
-  return r;
 put_channel:
   ipc_destroy_channel(l->channel);
   goto out_free; /* Skip 'put_port' since it is freed in 'destroy_channel()' */
@@ -190,7 +188,7 @@ put_port:
   ipc_put_port(port);
 out_free:
   __free_listener(l);
-  return r;
+  return ERR(r);
 }
 
 int task_event_detach(int target,struct __task_struct *listener)

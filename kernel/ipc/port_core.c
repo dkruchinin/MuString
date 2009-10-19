@@ -243,6 +243,8 @@ static int __allocate_port(ipc_gen_port_t **out_port, ulong_t flags,
     goto out_free_port;
   }
 
+  s_copy_mac_label(S_GET_INVOKER(),S_GET_PORT_OBJ(p));
+
   p->flags = flags;
   *out_port = p;
   return 0;
@@ -265,6 +267,8 @@ ipc_gen_port_t *ipc_clone_port(ipc_gen_port_t *p)
                                          p->capacity) ) {
       memfree(port);
       port=NULL;
+    } else {
+      s_copy_mac_label(S_GET_PORT_OBJ(p),S_GET_PORT_OBJ(port));
     }
   }
 
@@ -527,8 +531,6 @@ long ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
     goto free_id;
   }
 
-  s_copy_mac_label(S_GET_INVOKER(),S_GET_PORT_OBJ(port));
-
   /* Install new port. */
   IPC_LOCK_PORTS(ipc);
   ipc->ports[id] = port;
@@ -711,7 +713,7 @@ out:
   return r;
 }
 
-ipc_gen_port_t *ipc_get_port(task_t *task,ulong_t port)
+ipc_gen_port_t *ipc_get_port(task_t *task,ulong_t port,long *e)
 {
   ipc_gen_port_t *p=NULL;
   int r=-EINVAL;
@@ -734,6 +736,17 @@ ipc_gen_port_t *ipc_get_port(task_t *task,ulong_t port)
   }
 
   UNLOCK_TASK_MEMBERS(task);
+
+  if( p && !s_check_access(S_GET_INVOKER(),S_GET_PORT_OBJ(p)) ) {
+    r=-EPERM;
+    ipc_put_port(p);
+    p=NULL;
+  }
+
+  if( r && e ) {
+    *e=r;
+  }
+
   return p;
 }
 
