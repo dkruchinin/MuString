@@ -47,7 +47,7 @@ long sys_mac_control(ulong_t cmd, ulong_t arg, void *data)
           if( !(target=pid_to_task(arg)) ) {
             r=-ESRCH;
           } else {
-            tobject=S_GET_TASK_OBJECT(target);
+            tobject=S_GET_TASK_OBJ(target);
             if( s_check_access(csobject,tobject) ) {
               S_LOCK_OBJECT_W(tobject);
               S_UNLOCK_OBJECT_W(tobject);

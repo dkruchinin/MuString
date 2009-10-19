@@ -378,7 +378,7 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
   uidgid_t uidgid;
 
   if( current_task() != target &&
-      !s_check_access(S_GET_INVOKER(),S_GET_TASK_OBJECT(target)) ) {
+      !s_check_access(S_GET_INVOKER(),S_GET_TASK_OBJ(target)) ) {
     return ERR(-EPERM);
   }
 

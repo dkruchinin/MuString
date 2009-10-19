@@ -65,6 +65,7 @@ enum __s_system_caps {
   SYS_CAP_IPC_PORT,
   SYS_CAP_IPC_CONTROL,
   SYS_CAP_IRQ,
+  SYS_CAP_SCHEDULER,
   SYS_CAP_MAX,
 };
 
@@ -104,9 +105,9 @@ void s_copy_mac_label(struct __s_object *src, struct __s_object *dst);
         SC_WAIT_ON_IRQ_ARRAY   <Not needed - part of SC_CREATE_IRQ_ARRAY>
         SC_IPC_PORT_POLL       <Not needed - part of SC_CREATE_PORT>
 
-#define SC_NANOSLEEP           10
-#define SC_SCHED_CONTROL       11
-#define SC_EXIT                12
+        SC_NANOSLEEP           <Not needed>
+        SC_SCHED_CONTROL       11
+        SC_EXIT                <Not needed>
         SC_OPEN_CHANNEL        <MAC>
         SC_CLOSE_CHANNEL       <Not needed - part of SC_OPEN_CHANNEL>
 

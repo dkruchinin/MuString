@@ -52,6 +52,7 @@ static void main_routine_stage1(void)
   sched_add_cpu(0);
   initialize_ipc();
   initialize_signals();
+  initialize_security();
   initialize_gc();
 
   arch_initialize_irqs();
@@ -68,7 +69,6 @@ static void main_routine_stage1(void)
   setup_time();  
   interrupts_enable();
   initialize_swks();
-  initialize_security();
 
   /* OK, we can proceed. */
   spawn_percpu_threads();

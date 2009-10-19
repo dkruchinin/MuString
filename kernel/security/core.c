@@ -145,7 +145,7 @@ bool s_check_access(struct __s_object *actor,struct __s_object *obj)
   __S_LOCK_OBJS_RR(actor,obj);
   can=S_MAC_OK(actor->mac_label,obj->mac_label);
   if( !can ) {
-    kprintf_fault("<!!!> %d > %d\n",actor->mac_label,obj->mac_label);
+    kprintf_fault("<s_check_access> MAC %d > MAC %d\n",actor->mac_label,obj->mac_label);
   }
   __S_UNLOCK_OBJS_RR(actor,obj);
 
