@@ -26,5 +26,5 @@
 #include <arch/current.h>
 
 #define S_GET_TASK_OBJECT(t)  (&(t)->sobject->sobject)
-
 #define S_GET_INVOKER() S_GET_TASK_OBJECT(current_task())
+#define S_GET_PORT_OBJ(p) &(p)->sobject

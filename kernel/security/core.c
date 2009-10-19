@@ -31,6 +31,62 @@
 
 static struct __s_object system_caps[SYS_CAP_MAX];
 
+#define __S_LOCK_OBJS_RR(actor,obj) do {         \
+  if( (actor) != (obj) ) {                       \
+    if( (actor) > (obj) ) {                      \
+      S_LOCK_OBJECT_R((actor));                  \
+      S_LOCK_OBJECT_R((obj));                    \
+    } else {                                     \
+      S_LOCK_OBJECT_R((obj));                    \
+      S_LOCK_OBJECT_R((actor));                  \
+    }                                            \
+  } else {                                       \
+    S_LOCK_OBJECT_R((actor));                    \
+  }                                              \
+  } while(0)
+
+#define __S_UNLOCK_OBJS_RR(actor,obj) do {      \
+  if( (actor) != (obj) ) {                      \
+    if( (actor) < (obj) ) {                     \
+      S_UNLOCK_OBJECT_R((actor));               \
+      S_UNLOCK_OBJECT_R((obj));                 \
+    } else {                                    \
+      S_UNLOCK_OBJECT_R((obj));                 \
+      S_UNLOCK_OBJECT_R((actor));               \
+    }                                           \
+  } else {                                      \
+    S_UNLOCK_OBJECT_R((actor));                 \
+  }                                             \
+  } while(0)
+
+#define __S_LOCK_OBJS_RW(actor,obj) do {         \
+  if( (actor) != (obj) ) {                       \
+    if( (actor) > (obj) ) {                      \
+      S_LOCK_OBJECT_R((actor));                  \
+      S_LOCK_OBJECT_W((obj));                    \
+    } else {                                     \
+      S_LOCK_OBJECT_W((obj));                    \
+      S_LOCK_OBJECT_R((actor));                  \
+    }                                            \
+  } else {                                       \
+    S_LOCK_OBJECT_W((actor));                    \
+  }                                              \
+  } while(0)
+
+#define __S_UNLOCK_OBJS_RW(actor,obj) do {      \
+  if( (actor) != (obj) ) {                      \
+    if( (actor) < (obj) ) {                     \
+      S_UNLOCK_OBJECT_R((actor));               \
+      S_UNLOCK_OBJECT_W((obj));                 \
+    } else {                                    \
+      S_UNLOCK_OBJECT_W((obj));                 \
+      S_UNLOCK_OBJECT_R((actor));               \
+    }                                           \
+  } else {                                      \
+    S_UNLOCK_OBJECT_W((actor));                 \
+  }                                             \
+  } while(0)
+
 bool s_check_system_capability(enum __s_system_caps cap)
 {
   if( cap < SYS_CAP_MAX ) {
@@ -50,7 +106,7 @@ void initialize_security(void)
 
 struct __task_s_object *s_clone_task_object(struct __task_struct *t)
 {
-  struct __task_s_object *orig,*s;
+  struct __task_s_object *orig;
   mac_label_t l;
   uid_t uid;
 
@@ -63,11 +119,7 @@ struct __task_s_object *s_clone_task_object(struct __task_struct *t)
   uid=orig->sobject.uid;
   S_UNLOCK_OBJECT_R(&orig->sobject);
 
-  if( (s=s_alloc_task_object(l,uid)) ) {
-    /* Clone group info here. */
-  }
-
-  return s;
+  return s_alloc_task_object(l,uid);
 }
 
 struct __task_s_object *s_alloc_task_object(mac_label_t label,uid_t uid)
@@ -88,36 +140,19 @@ struct __task_s_object *s_alloc_task_object(mac_label_t label,uid_t uid)
 
 bool s_check_access(struct __s_object *actor,struct __s_object *obj)
 {
-  bool can=false;
+  bool can;
 
-  if( actor != obj ) {
-    if( actor < obj ) {
-      S_LOCK_OBJECT_R(actor);
-      S_LOCK_OBJECT_R(obj);
-    } else {
-      S_LOCK_OBJECT_R(obj);
-      S_LOCK_OBJECT_R(actor);
-    }
-  } else {
-    S_LOCK_OBJECT_R(actor);
-  }
-
-  if( S_MAC_OK(actor->mac_label,obj->mac_label) ) {
-    /* Check against DAC policies here. */
-    can=true;
-  }
-
-  if( actor != obj ) {
-    if( actor > obj ) {
-      S_UNLOCK_OBJECT_R(actor);
-      S_UNLOCK_OBJECT_R(obj);
-    } else {
-      S_UNLOCK_OBJECT_R(obj);
-      S_UNLOCK_OBJECT_R(actor);
-    }
-  } else {
-    S_UNLOCK_OBJECT_R(actor);
-  }
+  __S_LOCK_OBJS_RR(actor,obj);
+  can=S_MAC_OK(actor->mac_label,obj->mac_label);
+  __S_UNLOCK_OBJS_RR(actor,obj);
 
   return can;
+}
+
+void s_copy_mac_label(struct __s_object *src, struct __s_object *dst)
+{
+  __S_LOCK_OBJS_RW(src,dst);
+  dst->mac_label=src->mac_label;
+  dst->uid=src->uid;
+  __S_UNLOCK_OBJS_RW(src,dst);
 }

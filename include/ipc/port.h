@@ -35,6 +35,7 @@
 #include <mstring/event.h>
 #include <ipc/buffer.h>
 #include <ipc/poll.h>
+#include <security/security.h>
 
 #define IPC_BUFFERED_PORT_LENGTH  PAGE_SIZE
 #define MAX_PORT_MSG_LENGTH  MB2B(2)
@@ -120,7 +121,8 @@ typedef struct __ipc_gen_port {
   ipc_port_msg_ops_t *msg_ops;
   ipc_port_ops_t *port_ops;
   void *data_storage;
-  list_head_t channels;  
+  list_head_t channels;
+  struct __s_object sobject;
 } ipc_gen_port_t;
 
 long ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size);

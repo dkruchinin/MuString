@@ -70,8 +70,8 @@ bool s_check_system_capability(enum __s_system_caps cap);
 void initialize_security(void);
 
 struct __task_s_object *s_clone_task_object(struct __task_struct *t);
-struct __task_s_object *s_alloc_task_object(mac_label_t label,
-                                            uid_t uid);
+struct __task_s_object *s_alloc_task_object(mac_label_t label,uid_t uid);
+void s_copy_mac_label(struct __s_object *src, struct __s_object *dst);
 
 #define S_MAC_LABEL_MIN 1
 #define S_MAC_LABEL_MAX 65535

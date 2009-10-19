@@ -40,6 +40,7 @@
 #include <mstring/signal.h>
 #include <mstring/usercopy.h>
 #include <mm/page_alloc.h>
+#include <security/util.h>
 
 #define POST_MESSAGE_DATA_ACCESS_STEP(_p,_m,_r,_woe)    \
   IPC_LOCK_PORT_W(_p);                             \
@@ -525,6 +526,8 @@ long ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
   if( r != 0 ) {
     goto free_id;
   }
+
+  s_copy_mac_label(S_GET_INVOKER(),S_GET_PORT_OBJ(port));
 
   /* Install new port. */
   IPC_LOCK_PORTS(ipc);
