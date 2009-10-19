@@ -14,6 +14,7 @@
 #include <mstring/kconsole.h>
 #include <mstring/usercopy.h>
 #include <mstring/def_actions.h>
+#include <security/security.h>
 
 static SPINLOCK_DEFINE(descrs_lock);
 static uintr_descr_t descriptors[NUM_IRQS];
@@ -54,7 +55,7 @@ static long register_interrupt_listener(irq_t irq,irq_listener_t listener,
   uintr_descr_t *descr;
 
   if( irq >= NUM_IRQS || !listener ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   descr=&descriptors[irq];
@@ -81,7 +82,7 @@ static long register_interrupt_listener(irq_t irq,irq_listener_t listener,
   return r;
 out_unlock:
   UNLOCK_DESCRIPTORS;
-  return r;
+  return ERR(r);
 }
 
 static void __free_irq_counter_array(irq_counter_array_t *array)
@@ -174,14 +175,18 @@ long sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   page_frame_t *pframe;
   ulong_t *kaddr;
 
+  if( !s_check_system_capability(SYS_CAP_IRQ) ) {
+    return ERR(-EPERM);
+  }
+
   if( !irq_array || !irqs || irqs > MAX_IRQS_PER_THREAD ||
       (addr & PAGE_MASK) ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   if( !valid_user_address_range(irq_array,irqs*sizeof(ulong_t)) ||
       !valid_user_address_range(addr,PAGE_SIZE) ) {
-    return -EFAULT;
+    return ERR(-EFAULT);
   }
 
   /* Make user address be visible to kernel IRQ handlers. */
@@ -277,7 +282,7 @@ unlock:
   if(pframe) {
     unpin_page_frame(pframe);
   }
-  return id;
+  return ERR(id);
 }
 
 static irq_counter_array_t *__get_irq_array(task_t *task,ulong_t id)
@@ -294,7 +299,7 @@ int sys_wait_on_irq_array(ulong_t id)
   irq_counter_array_t *array=__get_irq_array(current_task(),id);
 
   if( !array ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   interrupts_disable();

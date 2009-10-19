@@ -64,6 +64,7 @@ enum __s_system_caps {
   SYS_CAP_IPC_CHANNEL,
   SYS_CAP_IPC_PORT,
   SYS_CAP_IPC_CONTROL,
+  SYS_CAP_IRQ,
   SYS_CAP_MAX,
 };
 
@@ -99,8 +100,8 @@ void s_copy_mac_label(struct __s_object *src, struct __s_object *dst);
 
         SC_ALLOCATE_IOPORTS    <MAC>
         SC_FREE_IOPORTS        <MAC>
-#define SC_CREATE_IRQ_ARRAY    7
-#define SC_WAIT_ON_IRQ_ARRAY   8
+        SC_CREATE_IRQ_ARRAY    <MAC>
+        SC_WAIT_ON_IRQ_ARRAY   <Not needed - part of SC_CREATE_IRQ_ARRAY>
         SC_IPC_PORT_POLL       <Not needed - part of SC_CREATE_PORT>
 
 #define SC_NANOSLEEP           10
