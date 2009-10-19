@@ -80,6 +80,8 @@ extern struct irq_controller *default_irqctrl;
 INITCODE void irqs_init(void);
 INITCODE void irq_register_controller(struct irq_controller *irqctl);
 struct irq_controller *irq_get_controller(const char *ctrl_name);
+int irq_register_line_and_action(irq_t irq, struct irq_controller *irqctrl,
+                                 struct irq_action *irqaction);
 int irq_line_register(irq_t irq, struct irq_controller *controller);
 int irq_line_unregister(irq_t irq);
 int irq_register_action(irq_t irq, struct irq_action *action);

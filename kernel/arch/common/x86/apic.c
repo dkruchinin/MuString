@@ -380,10 +380,16 @@ INITCODE void lapic_timer_init(cpu_id_t cpuid)
 
   apic_write(APIC_TIMER_ICR, delta / APIC_DIVISOR);  
   if (!cpuid) {
+      int ret;
+
       lapic_timer.freq = delta;
       hwclock_register(&lapic_timer);
-      ASSERT(irq_line_register(APIC_TIMER_IRQ, &lapic_controller) == 0);
-      ASSERT(irq_register_action(APIC_TIMER_IRQ, &lapic_timer_irq) == 0);
+      ret = irq_register_line_and_action(APIC_TIMER_IRQ, &lapic_controller,
+                                         &lapic_timer_irq);
+      if (ret) {
+        panic("Failed to register IRQ %s for line %d: [RET = %d]",
+              lapic_timer_irq.name, APIC_TIMER_IRQ, ret);
+      }
   }
 }
 
@@ -441,37 +447,29 @@ static INITCODE void install_lapic_irqs(void)
   irq_t irq;
   struct irq_action *act;
 
-  irq = APIC_ERROR_IRQ;
-  ret = irq_line_register(irq, &lapic_controller);
+  ret = irq_register_line_and_action(APIC_ERROR_IRQ,
+                                     &lapic_controller,
+                                     &lapic_error_irq);
   if (ret) {
-    goto irqline_failed;
+    irq = APIC_ERROR_IRQ;
+    act = &lapic_error_irq;
+    goto error;
   }
 
-  act = &lapic_error_irq;
-  ret = irq_register_action(irq, act);
+  ret = irq_register_line_and_action(APIC_SPURIOUS_IRQ,
+                                     &lapic_controller,
+                                     &lapic_spurious_irq);
   if (ret) {
-    goto irqaction_failed;
+    irq = APIC_SPURIOUS_IRQ;
+    act = &lapic_spurious_irq;
+    goto error;
   }
 
-  irq = APIC_SPURIOUS_IRQ;
-  ret = irq_line_register(irq, &lapic_controller);
-  if (ret) {
-    goto irqline_failed;
-  }
- 
-  act = &lapic_spurious_irq;
-  ret = irq_register_action(irq, act);
-  if (ret) {
-    goto irqaction_failed;
-  }
-  
   return;
-irqline_failed:
-  panic("Failed to register IRQ line #%d: [RET = %d]\n",
-        irq, ret);
-irqaction_failed:
-  panic("Failed to register IRQ action %s: [RET = %d]\n",
-        act->name, ret);
+
+error:
+  panic("Failed to register IRQ %s on line %d: [RET = %d]",
+        act->name, irq, ret);
 #if 0
 #ifdef CONFIG_SMP
   idt->install_handler(smp_spurious_interrupt, APIC_SPURIOUS_VECTOR);

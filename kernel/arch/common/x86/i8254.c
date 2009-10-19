@@ -88,6 +88,7 @@ static struct irq_action pit_irq = {
 void i8254_init(void) 
 {
   struct irq_controller *irq_ctrl;
+  int ret;
 
   outb(I8254_BASE+3,0x34);
   outb(I8254_BASE,PIT_DIVISOR & 0xff);
@@ -100,7 +101,10 @@ void i8254_init(void)
           "PIT timer interrupt\n", I8259A_IRQCTRL_NAME);
   }
 
-  ASSERT(irq_line_register(PIT_IRQ, irq_ctrl) == 0);
-  ASSERT(irq_register_action(PIT_IRQ, &pit_irq) == 0);
+  ret = irq_register_line_and_action(PIT_IRQ, irq_ctrl, &pit_irq);
+  if (ret) {
+    panic("Failed to register irq %s on irq line %d: [RET = %d]\n",
+          pit_irq.name, PIT_IRQ, ret);
+  }
 }
 

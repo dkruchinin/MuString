@@ -25,6 +25,7 @@
 #include <arch/asm.h>
 #include <arch/i8259.h>
 #include <mstring/interrupt.h>
+#include <mstring/panic.h>
 #include <mstring/types.h>
 
 static void i8259a_mask_all(void)
@@ -113,6 +114,8 @@ static struct irq_action i8259_spurious = {
 
 INITCODE void i8259a_init(void)
 {
+  int ret;
+    
   /*
    * ICW1 to set: 
    * 0x10 (offset) | ICW4 is need | cascade mode | edge trigger = 0x11
@@ -149,6 +152,12 @@ INITCODE void i8259a_init(void)
   outb(I8259_PIC_SLAVE + 1, 0x01);
   i8259a_mask_all();
   irq_register_controller(&i8259A_pic);
-  ASSERT(irq_line_register(PIC_SPURIOUS_IRQ, &i8259A_pic) == 0);
-  ASSERT(irq_register_action(PIC_SPURIOUS_IRQ, &i8259_spurious) == 0);
+
+  ret = irq_register_line_and_action(PIC_SPURIOUS_IRQ,
+                                     &i8259A_pic, &i8259_spurious);
+  if (ret) {
+    panic("Failed to register IRQ %s for line %d: [RET = %d]\n",
+          i8259A_pic.name, PIC_SPURIOUS_IRQ, ret);
+  }
 }
+
