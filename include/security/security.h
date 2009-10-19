@@ -56,11 +56,14 @@ bool s_check_access(struct __s_object *actor,struct __s_object *obj);
 
 enum __s_system_caps {
   SYS_CAP_ADMIN,
-  SYS_CAP_IO_PORT_ALLOC,
+  SYS_CAP_IO_PORT,
   SYS_CAP_CREATE_PROCESS,
   SYS_CAP_CREATE_THREAD,
   SYS_CAP_REINCARNATE,
   SYS_CAP_TASK_EVENTS,
+  SYS_CAP_IPC_CHANNEL,
+  SYS_CAP_IPC_PORT,
+  SYS_CAP_IPC_CONTROL,
   SYS_CAP_MAX,
 };
 
@@ -87,6 +90,64 @@ void s_copy_mac_label(struct __s_object *src, struct __s_object *dst);
  *    sys_fork
  *    sys_create_task
  *    sys_task_control
+
+        SC_CREATE_TASK         <MAC>
+        SC_TASK_CONTROL        <MAC>
+#define SC_MMAP                2
+        SC_CREATE_PORT         <MAC>
+        SC_PORT_RECEIVE        <Not needed - part of SC_CREATE_PORT>
+
+        SC_ALLOCATE_IOPORTS    <MAC>
+        SC_FREE_IOPORTS        <MAC>
+#define SC_CREATE_IRQ_ARRAY    7
+#define SC_WAIT_ON_IRQ_ARRAY   8
+        SC_IPC_PORT_POLL       <Not needed - part of SC_CREATE_PORT>
+
+#define SC_NANOSLEEP           10
+#define SC_SCHED_CONTROL       11
+#define SC_EXIT                12
+        SC_OPEN_CHANNEL        <MAC>
+        SC_CLOSE_CHANNEL       <Not needed - part of SC_OPEN_CHANNEL>
+
+        SC_CLOSE_PORT          <Not needed - part of SC_CREATE_PORT>
+        SC_CONTROL_CHANNEL     <Not needed - part of SC_OPEN_CHANNEL>
+#define SC_SYNC_CREATE         17
+#define SC_SYNC_CONTROL        18
+#define SC_SYNC_DESTROY        19
+
+#define SC_KILL                20
+#define SC_SIGNAL              21
+#define SC_SIGRETURN           22
+        SC_PORT_SEND_IOV_V     <Not needed - part of SC_OPEN_CHANNEL>
+        SC_PORT_REPLY_IOV      <Not needed - part of SC_CREATE_PORT>
+
+#define SC_SIGACTION           25
+#define SC_THREAD_KILL         26
+#define SC_SIGPROCMASK         27
+#define SC_THREAD_EXIT         28
+#define SC_TIMER_CREATE        29
+
+#define SC_TIMER_CONTROL       30
+#define SC_MUNMAP              31
+#define SC_THREAD_WAIT         32
+        SC_PORT_MSG_READ       <Not needed - part of SC_CREATE_PORT>
+#define SC_KERNEL_CONTROL      34
+
+#define SC_TIMER_DELETE        35
+#define SC_SIGWAITINFO         36
+#define SC_SCHED_YIELD         37
+#define SC_MEMOBJ_CREATE       38
+#define SC_FORK                39
+
+#define SC_GRANT_PAGES         40
+#define SC_WAITPID             41
+#define SC_ALLOC_DMA           42
+#define SC_FREE_DMA            43
+        SC_PORT_CONTROL        <MAC>
+
+        SC_PORT_MSG_WRITE      <Not needed - part of SC_CREATE_PORT>
+
+
  *
  *
  *

@@ -31,6 +31,7 @@
 #include <mm/page_alloc.h>
 #include <mstring/string.h>
 #include <kernel/syscalls.h>
+#include <security/security.h>
 
 static MUTEX_DEFINE(ioports_lock);
 static struct rb_root ioports_root;
@@ -191,9 +192,13 @@ out:
 static int __check_ioports( task_t *task,ulong_t first_port,
                                  ulong_t end_port)
 {
+  if( !s_check_system_capability(SYS_CAP_IO_PORT) ) {
+    return ERR(-EPERM);
+  }
+
   if( end_port < first_port || first_port >= swks.ioports_available ||
       end_port >= swks.ioports_available ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   return 0;
@@ -202,14 +207,13 @@ static int __check_ioports( task_t *task,ulong_t first_port,
 int sys_allocate_ioports(ulong_t first_port,ulong_t num_ports)
 {
   int r;
-  task_t *port_owner,*caller;
+  task_t *port_owner,*caller=current_task();
   ioport_range_t *range;
   ulong_t end_port=first_port+num_ports-1;
 
-  caller=current_task();
   r=__check_ioports(caller,first_port,end_port);
   if( r )
-    return r;
+    return ERR(r);
   
   LOCK_IOPORTS;
 
@@ -225,34 +229,26 @@ int sys_allocate_ioports(ulong_t first_port,ulong_t num_ports)
     range->owner=caller;
   }
 
-  UNLOCK_IOPORTS;
-  
   r=arch_allocate_ioports(caller,first_port,end_port);
-  if( r ) {
-    LOCK_IOPORTS;
-    goto out_free_ports;
+  if( !r ) {
+    goto out;
   }
 
-  return 0;
-out_free_ports:
   __free_ioports_range(first_port,end_port);
 out:
   UNLOCK_IOPORTS;
-  return r;
+  return ERR(r);
 }
 
 int sys_free_ioports(ulong_t first_port,ulong_t num_ports)
 {
   int r;
-  task_t *port_owner,*caller;
-  ulong_t end_port;
+  task_t *port_owner,*caller=current_task();
+  ulong_t end_port=first_port+num_ports-1;
 
-  end_port=first_port+num_ports-1;
-
-  caller=current_task();
   r=__check_ioports(caller,first_port,end_port);
   if( r ) {
-    return r;
+    return ERR(r);
   }
 
   LOCK_IOPORTS;
@@ -266,7 +262,7 @@ int sys_free_ioports(ulong_t first_port,ulong_t num_ports)
   r=arch_free_ioports(caller,first_port,end_port);
 out:
   UNLOCK_IOPORTS;
-  return r;
+  return ERR(r);
 }
 
 void initialize_ioports(void)

@@ -234,7 +234,7 @@ int task_event_detach(int target,struct __task_struct *listener)
     }
     return 0;
   }
-  return -EINVAL;
+  return ERR(-EINVAL);
 }
 
 /* NOTE: Invoke this function only from task's exit path (i.e. when

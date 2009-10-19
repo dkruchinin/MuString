@@ -31,6 +31,7 @@
 #include <mstring/usercopy.h>
 #include <ipc/port.h>
 #include <ipc/channel.h>
+#include <security/security.h>
 
 static long __ipc_port_msg_write(ulong_t port, ulong_t msg_id, iovec_t *iovecs,
                                  ulong_t numvecs,off_t offset, bool wakeup)
@@ -100,6 +101,10 @@ long sys_open_channel(pid_t pid,ulong_t port,ulong_t flags)
   task_t *task = pid_to_task(pid);
   long r;
 
+  if( !s_check_system_capability(SYS_CAP_IPC_CHANNEL) ) {
+    return ERR(-EPERM);
+  }
+
   if (task == NULL) {
     return ERR(-ESRCH);
   }
@@ -119,6 +124,10 @@ long sys_create_port( ulong_t flags, ulong_t queue_size )
 {
   task_t *caller=current_task();
   long r;
+
+  if( !s_check_system_capability(SYS_CAP_IPC_PORT) ) {
+    return ERR(-EPERM);
+  }  
 
   /* TODO: [mt] Check if caller can create unblocked ports. */
   //flags |= IPC_BLOCKED_ACCESS;
@@ -235,6 +244,10 @@ long sys_port_control(ulong_t port, ulong_t cmd, ulong_t arg)
 {
   ipc_gen_port_t *p;
   long r;
+
+  if( !s_check_system_capability(SYS_CAP_IPC_CONTROL) ) {
+    return ERR(-EPERM);
+  }
 
   if ( !(p=ipc_get_port(current_task(), port,&r)) ) {
     return ERR(r);
