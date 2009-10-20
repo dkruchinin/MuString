@@ -52,16 +52,19 @@ static INITCODE void register_default_irqctrl(void)
   if (likely(irq_ctrl != NULL)) {
     /* If so, make it default controller */
     default_irqctrl = irq_ctrl;
-    return;
   }
 
   /* Otherwise make i8259a default controller */
   irq_ctrl = irq_get_controller(I8259A_IRQCTRL_NAME);
+  if (default_irqctrl) {
+    irq_ctrl->mask_all();
+    return;
+  }
   if (unlikely(irq_ctrl == NULL)) {
     panic("Can not find %s irq controller!", I8259A_IRQCTRL_NAME);
   }
 
-  default_irqctrl = irq_ctrl;
+  default_irqctrl = irq_ctrl;  
 }
 
 INITCODE void arch_irqs_init(void)
@@ -74,9 +77,10 @@ INITCODE void arch_irqs_init(void)
 
   i8259a_init();
   if (cpu_has_feature(X86_FTR_APIC)) {
-    lapic_init(0);
+      lapic_init(0);
   }
 
   register_default_irqctrl();
+  kprintf("DEFAULT CONTROLLER: %s\n", default_irqctrl->name);
 }
 

@@ -333,6 +333,7 @@ void delete_timer(ktimer_t *timer)
       deschedule_deffered_action(&timer->da);
     }
   }
+
   spinlock_unlock(&mtt->lock);
 
   spinlock_lock(&sw_timers_lock);
@@ -359,9 +360,9 @@ void delete_timer(ktimer_t *timer)
   }
 
   spinlock_unlock(&mtt->lock);
-  spinlock_unlock(&sw_timers_lock);
+  spinlock_unlock(&sw_timers_lock);  
   interrupts_restore(is);
-
+  
   switch( how_to_use_mtt ) {
     case 1:
       memfree(mtt);
@@ -392,7 +393,7 @@ long modify_timer(ktimer_t *timer,ulong_t time_x)
   list_init_node(&timer->minor_tick.node);
   list_init_head(&timer->minor_tick.actions);
   r=add_timer(timer);
-  return r;
+  return ERR(r);
 }
 
 #define ___skiplist_add(ptr,lh,type,ln,plh,cv) do {  \

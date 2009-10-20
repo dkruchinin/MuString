@@ -284,8 +284,8 @@ INITCODE void lapic_init(cpu_id_t cpuid)
     setup_bsp_apic();
   }
 
-  local_apic_clear();
-  local_apic_enable();  
+  local_apic_enable();
+  local_apic_clear();  
   
   /* set the lowest possible task priority */  
   val = apic_read(APIC_TPR) & ~APIC_VECTOR_MASK;
@@ -308,7 +308,8 @@ INITCODE void lapic_init(cpu_id_t cpuid)
 
   val = apic_read(APIC_SIVR) & ~APIC_SVR_MASK;
   val &= ~APIC_VECTOR_MASK;
-  val |= (IRQ_NUM_TO_VECTOR(APIC_SPURIOUS_IRQ) | APIC_SVR_ENABLED);
+  val |= APIC_FP_DISABLED | APIC_SVR_ENABLED |
+      IRQ_NUM_TO_VECTOR(APIC_SPURIOUS_IRQ);
   apic_write(APIC_SIVR, val);
 
   if (!cpuid) {
@@ -321,10 +322,6 @@ INITCODE void lapic_init(cpu_id_t cpuid)
   }
 
   lapic_eoi();
-  maxlvt = apic_get_maxlvt();
-  if (maxlvt > 3) {
-    apic_write(APIC_ESR, 0);
-  }
   
   apic_write(APIC_ERROR_LVTE, IRQ_NUM_TO_VECTOR(APIC_ERROR_IRQ));
   if (maxlvt > 3) {
@@ -374,8 +371,7 @@ INITCODE void lapic_timer_init(cpu_id_t cpuid)
   apictick1 = apic_read(APIC_TIMER_CCR);
 
   delta = (apictick0 - apictick1) * APIC_DIVISOR / APIC_CAL_LOOPS;  
-  val = APIC_LVT_TIMER_MODE; /* periodic timer mode */
-  val |= APIC_LVT_MASKED;
+  val = APIC_LVT_TIMER_MODE | APIC_LVT_MASKED; /* periodic timer mode */
   apic_write(APIC_TIMER_LVTE, val);
 
   apic_write(APIC_TIMER_ICR, delta / APIC_DIVISOR);  

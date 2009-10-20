@@ -313,5 +313,5 @@ long sys_timer_control(long id,long cmd,long arg1,long arg2,long arg3)
                 current_task()->pid,current_task()->tid,
                 system_ticks,cmd,id,r);
 #endif
-  return r;
+  return ERR(r);
 }

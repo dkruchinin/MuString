@@ -52,7 +52,7 @@ static void i8259a_unmask_irq(irq_t irq)
   else { /* located on PIC slave */
     mask = inb(I8259_PIC_SLAVE + 1);
     mask &= ~(1 << irq);
-    outb(I8259_PIC_SLAVE, mask);
+    outb(I8259_PIC_SLAVE + 1, mask);
   }
 }
 
@@ -61,7 +61,7 @@ static void i8259a_mask_irq(irq_t irq)
   uint8_t mask;
 
   if(irq < 0x08) {
-    mask= inb(I8259_PIC_MASTER + 1);
+    mask = inb(I8259_PIC_MASTER + 1);
     mask |= (1 << irq);
     outb(I8259_PIC_MASTER + 1, mask);
   }
@@ -77,7 +77,7 @@ static void i8259a_ack_irq(irq_t irq) /*end of irq*/
   if( irq >= 8 ) {
     outb(I8259_PIC_SLAVE, 0x60 + (irq & 7));
     outb(I8259_PIC_MASTER, 0x60 + 2);
-    outb(I8259_PIC_MASTER, PIC_EOI);
+    outb(I8259_PIC_SLAVE, PIC_EOI);
   }
   else {
     outb(I8259_PIC_MASTER, 0x60 + irq);

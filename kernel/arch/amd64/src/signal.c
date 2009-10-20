@@ -149,6 +149,7 @@ static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
 
   /* Save XMM and GPR context. */
 
+  kprintf("UWORK: %s\n", current_task()->short_name);
   /* Locate saved GPRs. */
   kpregs=(struct gpregs *)kstack;
   kstack+=sizeof(*kpregs);
@@ -225,9 +226,11 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
         break;
       case __INT_UWORK:
       case __XCPT_NOERR_UWORK:
+          kprintf("UWORK 1\n");
         r=__setup_int_context(retcode,kstack,&sigitem->info,act,8,&pctx);
         break;
       case __XCPT_ERR_UWORK:
+          kprintf("UWORK 2\n");
         r=__setup_int_context(retcode,kstack,&sigitem->info,act,16,&pctx);
         break;
       default:
@@ -270,7 +273,7 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
   
   /* First, check for pending disintegration requests. */
   if( uworks & ARCH_CTX_UWORKS_DISINT_REQ_MASK ) {
-    /*kprintf_fault("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
+      /*kprintf_fault("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
                   reason,retcode,
                   current->pid,current->tid,
                   kstack);
@@ -322,7 +325,6 @@ repeat:
   }
 }
 
-#define XMM_CTX_SIZE 512
 long sys_sigreturn(uintptr_t ctx)
 {
   struct signal_context *uctx=(struct signal_context *)ctx;

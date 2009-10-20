@@ -88,6 +88,7 @@ static long register_interrupt_listener(irq_t irq,irq_listener_t listener,
   iaction->handler = __raw_uinterrupt_handler;
   iaction->priv_data = descr;
 
+  kprintf("===> %d registered IRQ %d\n", current_task()->pid, irq);
   r = irq_register_action(irq, iaction);
   if( r ) {
     goto error;
@@ -95,7 +96,7 @@ static long register_interrupt_listener(irq_t irq,irq_listener_t listener,
     r=0;
   }
 
-  return r;
+  return ERR(r);
 error:
   __clean_interrupt_descriptor(irq);
   if (iaction) {
@@ -103,7 +104,7 @@ error:
   }
 out_unlock:
   UNLOCK_DESCRIPTORS;
-  return r;
+  return ERR(r);
 }
 
 static void __free_irq_counter_array(irq_counter_array_t *array)

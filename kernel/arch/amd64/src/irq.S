@@ -61,11 +61,11 @@ fault_entry_point:
         SAVE_GPRS
         movq %rsp, %rdi
         movq %rax, %rsi
-        callq __do_handle_fault 
+        callq __do_handle_fault
         
         //movq (%rsp), %rbx
         //addq $INT_FULL_OFFSET_TO_CS, %rbx
-        cmpq $GDT_SEL(KCODE_DESCR), INT_FULL_OFFSET_TO_CS(%rsp)
+        cmpq $GDT_SEL(KCODE_DESCR), 8 + INT_FULL_OFFSET_TO_CS(%rsp)
 	    je 3f
 
 	    /* Process deferred userspace-related works */
@@ -102,9 +102,7 @@ irq_entry_point:
         SAVE_GPRS
         subq $32, %rax
         movq %rax, %rdi
-        sti
         callq __do_handle_irq
-        cli
 
 return_from_irq:
 	  /*

@@ -22,7 +22,7 @@
  */
 
 #ifndef __MSTRING_ARCH_INTERRUPT_H__
-#define __MSTRING_ARCH_INTERRUPT_H__ 
+#define __MSTRING_ARCH_INTERRUPT_H__
 
 #include <arch/seg.h>
 #include <arch/fault.h>
@@ -40,10 +40,9 @@
 
 //#ifdef CONFIG_SMP
 
-#define CPU_SMP_BASE_IRQ     (IRQ_VECTORS - RESERVED_IRQS)
-#define APIC_SPURIOUS_IRQ    (CPU_SMP_BASE_IRQ + 1)
-#define APIC_ERROR_IRQ       (CPU_SMP_BASE_IRQ + 2)
-#define APIC_TIMER_IRQ       (CPU_SMP_BASE_IRQ + 3)
+#define APIC_SPURIOUS_IRQ (IRQ_VECTORS - 1)
+#define APIC_ERROR_IRQ    (IRQ_VECTORS - 2)
+#define APIC_TIMER_IRQ    (IRQ_VECTORS - 17)
 
 #define IRQ_NUM_TO_VECTOR(irq_num) ((irq_num) + IRQ_BASE)
 
@@ -116,10 +115,9 @@ static inline ipl_t interrupts_disable(void)
 {
   ipl_t o;
 
-  __asm__ volatile (
-                    "pushfq\n"
-                    "popq %0\n"
+  __asm__ volatile ("pushfq\n"
                     "cli\n"
+                    "popq %0\n"
                     : "=r" (o)
                     );
 
@@ -145,9 +143,8 @@ static inline bool is_interrupts_enabled(void)
   return (interrupts_read() & 0x200) != 0 ? 1: 0;
 }
 
-#define interrupts_save_and_disable(state) do { \
-    state=is_interrupts_enabled();              \
-    interrupts_disable();                       \
+#define interrupts_save_and_disable(state) do {     \
+    state=((interrupts_disable() & 0x200) != 0);    \
   } while(0)
 
 #define interrupts_restore(state)               \

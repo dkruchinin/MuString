@@ -52,15 +52,16 @@ static void main_routine_stage1(void)
   initialize_resources();
   arch_smp_init();
   interrupts_enable();
+
   /* Since the PIC is initialized, all interrupts from the hardware
    * is disabled. So we can enable local interrupts since we will
    * receive interrups from the other CPUs via LAPIC upon unleashing
    * the other CPUs.
-   */
+   */  
   setup_time();  
   initialize_swks();
   initialize_security();
-
+  
   /* OK, we can proceed. */
   spawn_percpu_threads();
   server_run_tasks();
@@ -74,9 +75,9 @@ static void main_routine_stage1(void)
 void kernel_main(void)
 {
   arch_prepare_system();
-  irqs_init();
   mm_initialize();
-  arch_init();  
+  arch_init();
+  irqs_init();  
   hardware_timers_init();  
   slab_allocator_init();
   vmm_initialize();
