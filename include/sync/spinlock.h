@@ -24,192 +24,176 @@
  *
  */
 
-#ifndef __SPINLOCK_H__ /* there are several spinlock.h with different targets */
-#define __SPINLOCK_H__
+#ifndef __MSTRING_SPINLOCK_H__ /* there are several spinlock.h with different targets */
+#define __MSTRING_SPINLOCK_H__
 
 #include <config.h>
 #include <arch/atomic.h>
 #include <arch/preempt.h>
 #include <arch/interrupt.h>
-#include <arch/spinlock.h>
-#include <mstring/types.h>
-#include <mstring/raw_sync.h>
+#include <sync/spinlock_types.h>
 #include <mstring/assert.h>
+#include <mstring/types.h>
 
 #ifdef CONFIG_SMP
-#define SPINLOCK_INITIALIZE(state)              \
-    { .__spin_val = (state) }
+#include <arch/spinlock.h>
+#include <sync/spinlock_smp.h>
+#else /* CONFIG_SMP */
+#include <sync/spinlock_up.h>
+#endif /* !CONFIG_SMP */
 
-#define RW_SPINLOCK_INITIALIZE(state)           \
-    { .__r = (state), .__w = (state), }
+#define SPINLOCK_DEFINE(s, name)                                \
+  spinlock_t (s) = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V, name)
 
-#define SPINLOCK_DEFINE(s)                      \
-    spinlock_t (s) = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V)
+#define RW_SPINLOCK_DEFINE(s, name)                                 \
+  rw_spinlock_t (s) = RW_SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V, name)
 
-#define RW_SPINLOCK_DEFINE(s)                   \
-    rw_spinlock_t (s) = RW_SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V)
-
-#define spinlock_initialize(x)                              \
-  ((x)->__spin_val = __SPINLOCK_UNLOCKED_V)
-
-#define rw_spinlock_initialize(x)                                   \
-  do {                                                              \
-    ((x)->__r=__SPINLOCK_UNLOCKED_V);                               \
-    ((x)->__w=__SPINLOCK_UNLOCKED_V);                               \
+#define bound_spinlock_initialize(bl, bcpu)             \
+  do {                                                  \
+    (bl)->bound_lock.__cpu = (bcpu);                    \
+    (bl)->bound_lock.__lock = __SPINLOCK_UNLOCKED_V;    \
   } while (0)
 
-#define __lock_spin(type, s...)                 \
+#ifndef CONFIG_DEBUG_SPINLOCKS
+
+#define SPINLOCK_INITIALIZE(state, name)        \
+  { .spin = { .__spin_val = (state) }, }
+
+#define RW_SPINLOCK_INITIALIZE(state, name)     \
+  { .rwlock = { .__r = (state), .__w = (state), } }
+
+#define spinlock_initialize(x, name)            \
+  ((x)->spin.__spin_val = __SPINLOCK_UNLOCKED_V)
+
+#define rw_spinlock_initialize(x, name)        \
   do {                                          \
-    preempt_disable();                          \
-    arch_spinlock_##type(s);                    \
+    ((x)->rwlock.__r=__SPINLOCK_UNLOCKED_V);    \
+    ((x)->rwlock.__w=__SPINLOCK_UNLOCKED_V);    \
   } while (0)
 
-#define __unlock_spin(type, s...)               \
+#else /* !CONFIG_DEBUG_SPINLOCKS */
+
+#define SPINLOCK_INITIALIZE(state, name)            \
+  { .__spin_val = (state), .__spin_name = (name), }
+
+#define RW_SPINLOCK_INITIALIZE(state, name)     \
+  { .__r = (state), __w = (state), __spin_name = (name), }
+
+#define spinlock_initialize(x, sname)           \
   do {                                          \
-    arch_spinlock_##type(s);                    \
-    preempt_enable();                           \
+    (x)->__spin_val = __SPINLOCK_UNLOCKED_V;    \
+    (x)->__spin_name = (sname);                 \
   } while (0)
 
-#define __lock_irqsafe(type, s...)              \
+#define rw_spinlock_initialize(x, sname)        \
   do {                                          \
-    interrupts_disable();                       \
-    arch_spinlock_##type(s);                    \
+    (x)->__r = __SPINLOCK_UNLOCKED_V;           \
+    (x)->__w = __SPINLOCK_UNLOCKED_V;           \
+    (x)->__spin_name = (sname);                 \
   } while (0)
 
-#define __unlock_irqsafe(type, s...)            \
-  do {                                          \
-    arch_spinlock_##type(s);                    \
-    interrupts_enable();                        \
-  } while (0)
+#endif /* CONFIG_DEBUG_SPINLOCKS */
 
-#define __lock_irqsave(type, v, s...)           \
-  do {                                          \
-    (v) = is_interrupts_enabled();              \
-    __lock_irqsafe(type, s);                    \
-  } while (0)
+static inline void spinlock_lock(spinlock_t *spin)
+{
+  preempt_disable();
+  __spin_lock(&spin->spin);
+}
 
-#define __unlock_irqrestore(type, v, s...)      \
-  do {                                          \
-    arch_spinlock_##type(s);                    \
-    if (v) {                                    \
-      interrupts_enable();                      \
-    }                                           \
-  } while (0)
+static inline void spinlock_unlock(spinlock_t *spin)
+{
+  __spin_unlock(&spin->spin);
+  preempt_enable();
+}
 
-/* TODO DK: add trylock and islock for RW locks, irq locks */
-#define spinlock_trylock(s)                     \
-  ({ bool isok; preempt_disable();              \
-     isok = spinlock_trylock(s);                \
-     if (!isok)                                 \
-       preempt_enable();                        \
-     isok; })
+static inline bool spinlcok_trylock(spinlock_t *spin)
+{
+  bool ret;
 
-#define spinlock_is_locked(s) arch_spinlock_is_locked(s)
-
-/* CPU-bound spinlocks. */
-#define bound_spinlock_initialize(b,cpu)        \
-  do {                                          \
-    (b)->__lock=__SPIN_LOCK_UNLOCKED;           \
-    (b)->__cpu=cpu;                             \
-  } while(0)
-
-#define bound_spinlock_lock_cpu(b,cpu)          \
-  preempt_disable();                            \
-  arch_bound_spinlock_lock_cpu((b),cpu)
-
-#define bound_spinlock_unlock(b)                \
-  arch_bound_spinlock_unlock((b));              \
-  preempt_enable()
-
-#define bound_spinlock_trylock_cpu(b,cpu)               \
-  ({bool is_ok;preempt_disable();                       \
-  is_ok=arch_bound_spinlock_trylock_cpu((b),cpu);       \
-  if(!is_ok) {preempt_enable();}                        \
-  is_ok; })
-
-#else
-
-/* FIXME DK: He-he-he, it seems all this stuff wouldn't built properly if SMP is disabled (: */
-#define SPINLOCK_INITIALIZE(state)
-#define RW_SPINLOCK_INITIALIZE(state)
-#define SPINLOCK_DEFINE(s)    spinlock_t (s)
-#define RW_SPINLOCK_DEFINE(s) rw_spinlock_t (s)
-
-#define spinlock_initialize(x)
-#define rw_spinlock_initialize(x)
-
-#define __lock_spin(type, s...) preempt_disable()
-#define __unlock_spin(type, s...) preempt_enable()
-#define __lock_irqsafe(type, s...) interrupts_disable()
-#define __unlock_irqsafe(type, s...) interrupts_enable()
-
-#define __lock_irqsave(type, v, s...)           \
-  do {                                          \
-    (v) = is_interrupts_enabled();              \
-    interrupts_disable();                       \
-  } while (0)
-
-#define __unlock_irqrestore(type, v, s...)      \
-  if (v) {                                      \
-    interrupts_enable();                        \
+  preempt_disable();
+  ret = __spin_trylock(&spin->spin);
+  if (!ret) {
+    preempt_enable();
   }
 
-#define spinlock_trylock(s)  (true)
-#define spinlock_is_locked(s) (false) 
+  return ret;
+}
 
-#endif /* CONFIG_SMP */
+#define spinlock_lock_irqsave(slock, stat)      \
+  do {                                          \
+    interrupts_save_and_disable(stat);          \
+    __spin_lock(&(slock)->spin);                \
+  } while (0)
 
-/* locking functions */
-#define spinlock_lock(s)                        \
-  __lock_spin(lock, s)
-#define spinlock_lock_read(s)                   \
-  __lock_spin(lock_read, s)
-#define spinlock_lock_write(s)                  \
-  __lock_spin(lock_write, s)
-#define spinlock_lock_bit(bitmap, bit)          \
-  __lock_spin(lock_bit, bitmap, bit)
-#define spinlock_lock_irqsafe(s)                \
-  __lock_irqsafe(lock, s)
-#define spinlock_lock_read_irqsafe(s)           \
-  __lock_irqsafe(lock_read, s)
-#define spinlock_lock_write_irqsafe(s)          \
-  __lock_irqsafe(lock_write, s)
-#define spinlock_lock_bit_irqsafe(bitmap, bit)  \
-  __lock_irqsafe(lock_bit, bitmap, bit)
-#define spinlock_lock_irqsave(s, v)             \
-  __lock_irqsave(lock, v, s)
-#define spinlock_lock_read_irqsave(s, v)        \
-  __lock_irqsave(lock_read, v, s)
-#define spinlock_lock_write_irqsave(s)          \
-  __lock_irqsave(lock_write, v, s)
-#define spinlock_lock_bit_irqsave(bitmap, bit, v)   \
-  __lock_irqsave(lock_bit, v, bitmap, bit)
+#define spinlock_unlock_irqrestore(slock, stat) \
+  do {                                          \
+    __spin_unlock(&(slock)->spin);              \
+    interrupts_restore(stat);                   \
+  } while (0)
 
-/* unlocking functions */
-#define spinlock_unlock(s)                      \
-  __unlock_spin(unlock, s)
-#define spinlock_unlock_read(s)                 \
-  __unlock_spin(unlock_read, s)
-#define spinlock_unlock_write(s)                \
-  __unlock_spin(unlock_write, s)
-#define spinlock_unlock_bit(bitmap, bit)        \
-  __unlock_spin(unlock_bit, bitmap, bit)
-#define spinlock_unlock_irqsafe(s)              \
-  __unlock_irqsafe(unlock, s)
-#define spinlock_unlock_read_irqsafe(s)         \
-  __unlock_irqsafe(unlock_read, s)
-#define spinlock_unlock_write_irqsafe(s)        \
-  __unlock_irqsafe(unlock_write, s)
-#define spinlock_unlock_bit_irqsafe(bitmap, bit)    \
-  __unlock_irqsafe(unlock_bit, bitmap, bit)
-#define spinlock_unlock_irqrestore(s, v)        \
-  __unlock_irqrestore(unlock, v, s)
-#define spinlock_unlock_read_irqrestore(s, v)   \
-  __unlock_irqrestore(unlock_read, v, s)
-#define spinlock_unlock_write_irqrestore(s, v)  \
-  __unlock_irqrestore(unlock_write, v, s)
-#define spinlock_unlock_bit_irqrestore(bitmap, bit, v)  \
-  __unlock_irqrestore(unlock_bit, v, bitmap, bit)
+
+static inline void spinlock_lock_read(rw_spinlock_t *rwl)
+{
+  preempt_disable();
+  __rw_lock_read(&rwl->rwlock);
+}
+
+static inline void spinlock_lock_write(rw_spinlock_t *rwl)
+{
+  preempt_disable();
+  __rw_lock_write(&rwl->rwlock);
+}
+
+static inline void spinlock_unlock_read(rw_spinlock_t *rwl)
+{
+  __rw_unlock_read(&rwl->rwlock);
+  preempt_enable();
+}
+
+static inline void spinlock_unlock_write(rw_spinlock_t *rwl)
+{
+  __rw_unlock_write(&rwl->rwlock);
+  preempt_enable();
+}
+
+static inline void spinlock_lock_bit(void *bitmap, int bit)
+{
+  preempt_disable();
+  __spin_lock_bit(bitmap, bit);
+}
+
+static inline void spinlock_unlock_bit(void *bitmap, int bit)
+{
+  __spin_unlock_bit(bitmap, bit);
+  preempt_enable();
+}
+
+static inline void bound_spinlock_lock_cpu(bound_spinlock_t *bsl,
+                                           cpu_id_t cpu)
+{
+  preempt_disable();
+  __bound_spin_lock(&bsl->bound_lock, cpu);
+}
+
+static inline void bound_spinlock_unlock(bound_spinlock_t *bsl)
+{
+  __bound_spin_unlock(&bsl->bound_lock);
+  preempt_enable();
+}
+
+static inline bool bound_spinlock_trylock_cpu(bound_spinlock_t *bsl,
+                                              cpu_id_t cpu)
+{
+  bool isok;
+
+  preempt_disable();
+  isok = __bound_spin_trylock(&bsl->bound_lock, cpu);
+  if (!isok) {
+    preempt_enable();
+  }
+
+  return isok;
+}
 
 static inline void spinlocks_lock2( spinlock_t *lock1, spinlock_t *lock2)
 {
@@ -224,5 +208,5 @@ static inline void spinlocks_lock2( spinlock_t *lock1, spinlock_t *lock2)
   }
 }
 
-#endif /* __EZA_SPINLOCK_H__ */
+#endif /* __MSTRING_SPINLOCK_H__ */
 

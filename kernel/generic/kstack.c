@@ -70,7 +70,7 @@ static void initialize_stack_allocator_context(kernel_stack_allocator_context_t 
     panic( "initialize_stack_allocator_context(): Can't initialize stack context !" );
   }
 
-  spinlock_initialize(&ctx->lock);
+  spinlock_initialize(&ctx->lock, "Stack allocator context");
   list_init_head(&ctx->chunks);
   initialize_stack_chunk(ch1,0);
 

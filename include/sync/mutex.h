@@ -26,7 +26,7 @@
 
 #include <mstring/waitqueue.h>
 #include <sync/spinlock.h>
-#include <arch/types.h>
+#include <mstring/types.h>
 
 /* TODO DK: implement priority inheritance and priority ceiling mutex protocol */
 
@@ -47,12 +47,15 @@ static inline bool mutex_is_locked(mutex_t *mutex)
   return !!mutex->executer;
 }
 
+#define MUTEX_SPINLOCK_NAME "Mutex"
+
 #define MUTEX_DEFINE(name)                      \
     mutex_t (name) = MUTEX_INITIALIZE(name)
 
-#define MUTEX_INITIALIZE(name)                  \
-    {       .lock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V),  \
-            .wq = WQUEUE_INITIALIZE((name).wq),                  \
+#define MUTEX_INITIALIZE(name)                                  \
+    {       .lock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V,  \
+                                        MUTEX_SPINLOCK_NAME),   \
+            .wq = WQUEUE_INITIALIZE((name).wq),                 \
             .executer = NULL,   }
 
 void mutex_initialize(mutex_t *mutex);

@@ -45,8 +45,8 @@
 struct hwclock *default_hwclock = NULL;
 
 /*spinlock*/
-static SPINLOCK_DEFINE(hwclocks_lock);
-static SPINLOCK_DEFINE(sw_timers_lock);
+static SPINLOCK_DEFINE(hwclocks_lock, "HW clocks");
+static SPINLOCK_DEFINE(sw_timers_lock, "SW timers");
 
 /*list of the timers*/
 static LIST_DEFINE(hwclocks);

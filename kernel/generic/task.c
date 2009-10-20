@@ -65,7 +65,7 @@ void initialize_task_subsystem(void)
 {
   pid_t idle;
 
-  spinlock_initialize(&pid_array_lock);
+  spinlock_initialize(&pid_array_lock, "PID array");
 
   if( !index_array_initialize(&pid_array, NUM_PIDS) ) {
     panic( "initialize_task_subsystem(): Can't initialize PID index array !" );
@@ -208,9 +208,9 @@ static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
 
     list_init_head(&task->jointed);
 
-    spinlock_initialize(&task->lock);
-    spinlock_initialize(&task->child_lock);
-    spinlock_initialize(&task->member_lock);
+    spinlock_initialize(&task->lock, "Task");
+    spinlock_initialize(&task->child_lock, "Child");
+    spinlock_initialize(&task->member_lock, "Task members");
 
     atomic_set(&task->refcount,TASK_INITIAL_REFCOUNT); /* One extra ref is for 'wait()' */
     task->flags = 0;
@@ -336,7 +336,7 @@ static int __setup_signals(task_t *task,task_t *parent,ulong_t flags)
   task->siginfo.ignored=ignored;
   task->siginfo.pending=0;
   task->siginfo.handlers=shandlers;
-  spinlock_initialize(&task->siginfo.lock);
+  spinlock_initialize(&task->siginfo.lock, "Siginfo");
   sigqueue_initialize(&task->siginfo.sigqueue,
                       &task->siginfo.pending);
 

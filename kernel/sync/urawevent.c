@@ -156,7 +156,7 @@ static sync_uevent_t *__allocate_uevent(void)
     atomic_set(&e->k_syncobj.refcount,1);
 
     waitqueue_initialize(&e->__wq);
-    spinlock_initialize(&e->__lock);
+    spinlock_initialize(&e->__lock, "Uevent");
   }
 
   return e;

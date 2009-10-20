@@ -101,17 +101,17 @@ void process_timers(void);
 void timer_cleanup_expired_ticks(void);
 long modify_timer(ktimer_t *t,ulong_t time_x);
 
-#define MAJOR_TIMER_TICK_INIT(mt,t)      do {   \
-    int i;                                      \
-    atomic_set(&(mt)->use_counter,1);           \
-    (mt)->time_x=(t);                           \
-    spinlock_initialize(&(mt)->lock);           \
-    list_init_node(&(mt)->list);                \
-                                                \
-    for( i=0;i<MINOR_TICK_GROUPS;i++ ) {        \
-      list_init_head(&(mt)->minor_ticks[i]);    \
-    }                                           \
-  } while(0)
+#define MAJOR_TIMER_TICK_INIT(mt,t)      do {           \
+        int i;                                          \
+        atomic_set(&(mt)->use_counter,1);               \
+        (mt)->time_x=(t);                               \
+        spinlock_initialize(&(mt)->lock, "Major tick"); \
+        list_init_node(&(mt)->list);                    \
+                                                        \
+        for( i=0;i<MINOR_TICK_GROUPS;i++ ) {            \
+            list_init_head(&(mt)->minor_ticks[i]);      \
+        }                                               \
+    } while(0)
 
 #define init_timer(t,tx,tp)                              \
   DEFFERED_ACTION_INIT(&(t)->da,(tp),0);                 \

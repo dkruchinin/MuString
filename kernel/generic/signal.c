@@ -479,7 +479,7 @@ sighandlers_t *allocate_signal_handlers(void)
     int i;
 
     memset(sh,0,sizeof(*sh));
-    spinlock_initialize(&sh->lock);
+    spinlock_initialize(&sh->lock, "Sighandlers");
     atomic_set(&sh->use_count,1);
 
     /* Now setup default signal actions. */

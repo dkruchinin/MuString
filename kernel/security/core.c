@@ -22,6 +22,7 @@
 
 #include <mstring/types.h>
 #include <security/security.h>
+#include <sync/spinlock.h>
 #include <mstring/task.h>
 #include <arch/current.h>
 #include <security/util.h>
@@ -78,7 +79,7 @@ struct __task_s_object *s_alloc_task_object(mac_label_t label,uid_t uid)
     memset(s,0,sizeof(*s));
 
     atomic_set(&s->refcount,1);
-    rw_spinlock_initialize(&s->sobject.lock);
+    rw_spinlock_initialize(&s->sobject.lock, "MAC");
     s->sobject.mac_label=label;
     s->sobject.uid=uid;
   }

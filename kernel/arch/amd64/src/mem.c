@@ -47,7 +47,7 @@ page_idx_t num_phys_pages;
 uintptr_t __kernel_end;
 uintptr_t __utrampoline_virt;
 
-static SPINLOCK_DEFINE(vregion_lock);
+static SPINLOCK_DEFINE(vregion_lock, "Vregion");
 static uintptr_t vregion_cur_ptr = KERNEL_OFFSET;
 static vm_mandmap_t ident_mandmap, utramp_mandmap, swks_mandmap;
 

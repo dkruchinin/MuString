@@ -41,7 +41,7 @@
 static idx_allocator_t memobjs_ida;
 static memcache_t *memobjs_memcache = NULL;
 static ttree_t memobjs_tree;
-static RW_SPINLOCK_DEFINE(memobjs_lock);
+static RW_SPINLOCK_DEFINE(memobjs_lock, "Memory objects");
 
 static int __memobjs_cmp_func(void *k1, void *k2)
 {
@@ -157,7 +157,7 @@ int memobj_create(memobj_nature_t nature, uint32_t flags,
   }
 
   memset(memobj, 0, sizeof(*memobj));
-  rw_spinlock_initialize(&memobj->members_rwlock);
+  rw_spinlock_initialize(&memobj->members_rwlock, "Memobj members");
   if (likely(!memobj_kernel_nature(nature))) {
     spinlock_lock_write(&memobjs_lock);
     memobj->id = idx_allocate(&memobjs_ida);

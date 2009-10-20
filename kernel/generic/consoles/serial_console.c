@@ -4,7 +4,7 @@
 #include <mstring/serial.h>
 #include <config.h>
 
-static SPINLOCK_DEFINE(serial_console_lock);
+static SPINLOCK_DEFINE(serial_console_lock, "Serial console");
 
 #define LOCK_SERIAL_CONSOLE(is)    spinlock_lock_irqsave(&serial_console_lock,is)
 #define UNLOCK_SERIAL_CONSOLE(is)  spinlock_unlock_irqrestore(&serial_console_lock,is)

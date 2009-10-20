@@ -26,7 +26,6 @@
 
 #include <mstring/types.h>
 #include <arch/atomic.h>
-#include <arch/spinlock.h>
 #include <sync/spinlock.h>
 
 typedef unsigned int mac_label_t;

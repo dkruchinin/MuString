@@ -48,7 +48,7 @@ void initialize_deffered_actions(void)
     percpu_def_actions_t *a=&cpu_actions[i];
     memset(a,0,sizeof(*a));
     list_init_head(&a->pending_actions);
-    spinlock_initialize(&a->lock);
+    spinlock_initialize(&a->lock, "PERCPU deferred action");
   }
 }
 

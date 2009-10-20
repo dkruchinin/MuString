@@ -31,7 +31,7 @@
 
 void mutex_initialize(mutex_t *mutex)
 {
-  spinlock_initialize(&mutex->lock);
+  spinlock_initialize(&mutex->lock, MUTEX_SPINLOCK_NAME);
   waitqueue_initialize(&mutex->wq);
   mutex->executer = NULL;
 }

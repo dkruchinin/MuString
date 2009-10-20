@@ -36,7 +36,7 @@
 
 struct irq_controller *default_irqctrl = NULL;
 static LIST_DEFINE(irqctls_list);
-static SPINLOCK_DEFINE(irqctls_lock);
+static SPINLOCK_DEFINE(irqctls_lock, "IRQ controllers");
 static struct irq_line irq_lines[NUM_IRQ_LINES];
 
 #define IRQLINE_IS_ACTIVE(irqline)              \
@@ -338,7 +338,7 @@ INITCODE void irqs_init(void)
     iline = &irq_lines[irq_num];
     memset(iline, 0, sizeof(*iline));
     list_init_head(&iline->actions);
-    spinlock_initialize(&iline->irq_line_lock);    
+    spinlock_initialize(&iline->irq_line_lock, "IRQ line");    
   }
 
   arch_irqs_init();

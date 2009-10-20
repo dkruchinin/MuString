@@ -60,7 +60,7 @@
   memset((p),0,sizeof(ipc_gen_port_t));         \
   atomic_set(&(p)->use_count,1);                \
   atomic_set(&(p)->own_count,1);                \
-  spinlock_initialize(&(p)->lock);              \
+  spinlock_initialize(&(p)->lock, "Port");      \
   (p)->avail_messages=(p)->total_messages=0;    \
   list_init_head(&(p)->channels);               \
   waitqueue_initialize(&(p)->waitqueue)

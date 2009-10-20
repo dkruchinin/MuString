@@ -57,7 +57,7 @@ extern struct pt_ops pt_ops;
 
 static inline int initialize_rpd(rpd_t *rpd, struct __vmm *vmm)
 {
-  spinlock_initialize(&rpd->rpd_lock);
+  spinlock_initialize(&rpd->rpd_lock, "RPD");
   rpd->vmm = vmm;
   return pt_ops.root_pdir_init_arch(rpd);
 }

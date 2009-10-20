@@ -30,6 +30,7 @@
 #include <arch/scheduler.h>
 #include <arch/types.h>
 #include <arch/bits.h>
+#include <sync/spinlock.h>
 #include <mstring/task.h>
 #include <mstring/scheduler.h>
 #include <mstring/kstack.h>
@@ -66,7 +67,7 @@ static list_head_t migration_actions[CONFIG_NRCPUS];
 static void initialize_sched_internals(void)
 {
   list_init_head(&schedulers);
-  spinlock_initialize(&scheduler_lock);
+  spinlock_initialize(&scheduler_lock, "Scheduler");
 }
 
 void initialize_scheduler(void)
@@ -86,7 +87,7 @@ void initialize_scheduler(void)
   initialize_idle_tasks();
 
   for(i=0;i<CONFIG_NRCPUS;i++) {
-    spinlock_initialize(&migration_locks[i]);
+    spinlock_initialize(&migration_locks[i], "Migration");
     list_init_head(&migration_actions[i]);
   }
 }

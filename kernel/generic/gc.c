@@ -67,7 +67,7 @@ void initialize_gc(void)
     panic( "initialize_gc(): Can't create GC actions memcache !" );
   }
 
-  spinlock_initialize(&tasklist_lock);
+  spinlock_initialize(&tasklist_lock, "Tasklist");
 }
 
 static void __gc_thread_logic(void *arg)

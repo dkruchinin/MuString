@@ -61,7 +61,7 @@ void rwsem_initialize(rwsem_t *rwsem)
   rwsem->stat = 0;
   waitqueue_initialize(&rwsem->writers_wq);
   waitqueue_initialize(&rwsem->readers_wq);
-  spinlock_initialize(&rwsem->sem_lock);
+  spinlock_initialize(&rwsem->sem_lock, "R/W semaphore");
 }
 
 void __rwsem_down_write(rwsem_t *rwsem, wqueue_insop_t iop)

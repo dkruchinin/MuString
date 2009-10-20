@@ -41,6 +41,7 @@ typedef uint32_t mode_t;
 typedef int cpu_id_t;
 typedef uint32_t irq_t;
 typedef uint64_t tick_t;
+typedef unsigned long lock_t;
 
 #define always_inline __attribute__((always_inline)) inline
 #define likely(x)   __builtin_expect((x), 1)
@@ -50,7 +51,7 @@ typedef uint64_t tick_t;
 #define INITCODE __attribute__ ((section("initcode")))
 
 #ifndef UNUSED
-#define UNUSED(var) UNUSED_ ## var __attribute__ ((unused))
+#define UNUSED(istr) ((void)(instr))
 #endif /* UNUSED */
 
 #ifdef CONFIG_TRACE_ERRORS

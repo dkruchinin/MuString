@@ -856,7 +856,7 @@ static void tlsf_initialize(mmpool_t *pool)
   check_tlsf_defs(); /* some paranoic checks */
   CT_ASSERT(sizeof(union tlsf_priv) <= sizeof(page_frames_array->_private));
   tlsf->owner = pool;
-  spinlock_initialize(&tlsf->lock);
+  spinlock_initialize(&tlsf->lock, "TLSF");
 
   pool->alloc_ctx = tlsf;
   build_tlsf_map(tlsf);

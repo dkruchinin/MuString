@@ -126,7 +126,7 @@ static void __initialize_cpu_sched_data(mstring_sched_cpudata_t *cpudata, cpu_id
     }
   }
 
-  spinlock_initialize(&cpudata->lock);
+  spinlock_initialize(&cpudata->lock, "CPU data");
   bound_spinlock_initialize(&cpudata->__lock,cpu);
   cpudata->active_array = &cpudata->arrays[0];
   cpudata->expired_array = &cpudata->arrays[1];
@@ -145,7 +145,7 @@ static int __setup_new_task(task_t *task)
   }
 
   list_init_node(&sdata->runlist);
-  spinlock_initialize(&sdata->sched_lock);
+  spinlock_initialize(&sdata->sched_lock, "Scheduler data");
 
   LOCK_TASK_STRUCT(task);
   task->sched_data = sdata;
@@ -432,7 +432,7 @@ static void def_reset(void)
 {
   int i;
 
-  spinlock_initialize(&cpu_data_lock);
+  spinlock_initialize(&cpu_data_lock, "CPU data");
 
   for(i=0;i<EZA_SCHED_CPUS;i++) {
     sched_cpu_data[i] = NULL;

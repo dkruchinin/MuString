@@ -34,7 +34,7 @@ typedef struct __countered_event {
 
 static inline void event_initialize_task(event_t *event,struct __task_struct *task)
 {
-  spinlock_initialize(&event->__lock);
+  spinlock_initialize(&event->__lock, "Event Lock");
   event->flags=event->waitcnt=0;
   event->task=task;
   event->ev_checker=NULL;

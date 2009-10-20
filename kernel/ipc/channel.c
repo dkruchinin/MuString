@@ -20,7 +20,7 @@ static ipc_channel_t *__allocate_channel(ipc_gen_port_t *port,ulong_t flags)
   if( channel ) {
     channel->ipc=NULL;
     channel->flags=flags;
-    spinlock_initialize(&channel->lock);
+    spinlock_initialize(&channel->lock, "Channel");
     channel->server_port=port;
     list_init_node(&channel->ch_list);
     atomic_set(&channel->use_count,1);

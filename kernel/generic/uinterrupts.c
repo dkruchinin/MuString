@@ -15,7 +15,7 @@
 #include <mstring/usercopy.h>
 #include <mstring/def_actions.h>
 
-static SPINLOCK_DEFINE(descrs_lock);
+static SPINLOCK_DEFINE(descrs_lock, "Uinterrupt descriptors");
 static uintr_descr_t descriptors[IRQ_VECTORS];
 
 #define LOCK_DESCRIPTORS spinlock_lock(&descrs_lock)
@@ -131,7 +131,7 @@ struct __userspace_events_data *allocate_task_uspace_events_data(void)
 
     /* Initialize IRQs-related stuff. */
     //mutex_initialize(&uirqs->mutex); /* FIXME DK: uncomment later... (u know when :)) */
-    spinlock_initialize(&uirqs->lock);
+    spinlock_initialize(&uirqs->lock, "UIRQ");
     uirqs->array=NULL;
   }
 

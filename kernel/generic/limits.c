@@ -13,7 +13,7 @@ task_limits_t *allocate_task_limits(void)
     task_limits_t *tl = (task_limits_t*)pframe_to_virt(p);
 
     atomic_set(&tl->use_count,1);
-    spinlock_initialize(&tl->lock);
+    spinlock_initialize(&tl->lock, "Task limits");
     return tl;
   }
   return NULL;

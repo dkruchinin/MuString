@@ -93,7 +93,7 @@ void FH_page_fault(struct fault_ctx *fctx)
   struct intr_stack_frame *stack_frame = fctx->istack_frame;
 
   fault_addr = read_cr2();
-  fixup_addr = fixup_fault_address(stack_frame->rip);    
+  fixup_addr = fixup_fault_address(stack_frame->rip);  
   if (IS_KERNEL_FAULT(fctx) && !fixup_addr) {
     display_unhandled_pf_info(fctx, fault_addr);
     goto stop_cpu;

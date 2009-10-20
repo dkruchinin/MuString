@@ -85,8 +85,8 @@ int setup_task_ipc(task_t *task)
     }
     memset(ipc,0,sizeof(task_ipc_t));
     atomic_set(&ipc->use_count,1);
-    spinlock_initialize(&ipc->port_lock);
-    spinlock_initialize(&ipc->channel_lock);
+    spinlock_initialize(&ipc->port_lock, "Port");
+    spinlock_initialize(&ipc->channel_lock, "Channel");
     mutex_initialize(&ipc->mutex);
 
     if( idx_allocator_init(&ipc->ports_array,CONFIG_IPC_DEFAULT_PORTS) ||

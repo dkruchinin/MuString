@@ -59,7 +59,7 @@ static void vga_cons_enable(void)
   vga_set_fg(KCONS_DEF_FG);
   vga_console.is_enabled = true;
   vga_set_x(0);
-  spinlock_initialize(&vga_console.lock);
+  spinlock_initialize(&vga_console.lock, "VGA console");
 }
 
 static void vga_cons_clear(void)

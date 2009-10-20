@@ -22,6 +22,7 @@
 
 #include <mstring/types.h>
 #include <security/security.h>
+#include <sync/spinlock.h>
 #include <mstring/task.h>
 #include <arch/current.h>
 #include <security/util.h>

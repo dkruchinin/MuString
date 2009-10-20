@@ -30,22 +30,8 @@
 #include <arch/types.h>
 #include <arch/bitwise.h>
 #include <arch/asm.h>
-#include <mstring/raw_sync.h>
-
-#define __SPINLOCK_LOCKED_V   1
-#define __SPINLOCK_UNLOCKED_V 0
-
-typedef unsigned long lock_t;
-
-#ifdef CONFIG_SMP
-typedef struct __spinlock_type {
-    lock_t __spin_val;
-} spinlock_t;
-
-typedef struct __rw_spinlock_type {
-    lock_t __r, __w;
-} rw_spinlock_t;
-
+#include <sync/spinlock_types.h>
+#include <mstring/types.h>
 
 #define arch_spinlock_lock_bit(bitmap, bit)     \
   while (arch_bit_test_and_set(bitmap, bit))
@@ -53,7 +39,7 @@ typedef struct __rw_spinlock_type {
 #define arch_spinlock_unlock_bit(bitmap, bit)   \
   arch_bit_clear(bitmap, bit)
 
-static always_inline void arch_spinlock_lock(spinlock_t *lock)
+static always_inline void arch_spinlock_lock(struct raw_spinlock *lock)
 {
   __asm__ __volatile__(  "movl %2,%%eax\n"
                          "1:" __LOCK_PREFIX "cmpxchgl %0, %1\n"
@@ -63,14 +49,14 @@ static always_inline void arch_spinlock_lock(spinlock_t *lock)
                          : "%rax", "memory" );
 }
 
-static always_inline void arch_spinlock_unlock(spinlock_t *lock)
+static always_inline void arch_spinlock_unlock(struct raw_spinlock *lock)
 {
   __asm__ __volatile__( __LOCK_PREFIX "xchgl %0, %1\n"
                         :: "r"(__SPINLOCK_UNLOCKED_V), "m"( lock->__spin_val )
                         : "memory" );
 }
 
-static always_inline bool arch_spinlock_trylock(spinlock_t *lock)
+static always_inline bool arch_spinlock_trylock(struct raw_spinlock *lock)
 {
   int ret = __SPINLOCK_UNLOCKED_V;
   __asm__ volatile (__LOCK_PREFIX "cmpxchgl %2, %0\n\t"
@@ -80,7 +66,7 @@ static always_inline bool arch_spinlock_trylock(spinlock_t *lock)
   return !ret;
 }
 
-static always_inline bool arch_spinlock_is_locked(spinlock_t *lock)
+static always_inline bool arch_spinlock_is_locked(struct raw_spinlock *lock)
 {
   return (lock->__spin_val == __SPINLOCK_LOCKED_V);
 }
@@ -100,7 +86,7 @@ static always_inline bool arch_spinlock_is_locked(spinlock_t *lock)
  * from the beginning waiting for the writer to decrement the counter.
  */
 
-static always_inline void arch_spinlock_lock_read(rw_spinlock_t *lock)
+static always_inline void arch_spinlock_lock_read(struct raw_rwlock *lock)
 {
   __asm__ __volatile__( "0: movq %0,%%rax\n"
                         "1:" __LOCK_PREFIX "bts %%rax,%1\n"
@@ -115,7 +101,7 @@ static always_inline void arch_spinlock_lock_read(rw_spinlock_t *lock)
                         "m"(lock->__r) : "%rax", "memory" );
 }
 
-static always_inline void arch_spinlock_lock_write(rw_spinlock_t *lock)
+static always_inline void arch_spinlock_lock_write(struct raw_rwlock *lock)
 {
   __asm__ __volatile__( "0: movq %0,%%rax\n"
                         "1:" __LOCK_PREFIX "bts %%rax,%1\n"
@@ -132,14 +118,14 @@ static always_inline void arch_spinlock_lock_write(rw_spinlock_t *lock)
                         "m"(lock->__r) : "%rax", "memory" );  
 }
 
-static always_inline void arch_spinlock_unlock_read(rw_spinlock_t *lock)
+static always_inline void arch_spinlock_unlock_read(struct raw_rwlock *lock)
 {
   __asm__ __volatile__( __LOCK_PREFIX "decl %0\n"
                         :: "m"(lock->__r)
                         : "memory" );
 }
 
-static always_inline void arch_spinlock_unlock_write(rw_spinlock_t *lock)
+static always_inline void arch_spinlock_unlock_write(struct raw_rwlock *lock)
 {
   __asm__ __volatile__( __LOCK_PREFIX "decl %0\n"
                         :: "m"(lock->__w)
@@ -147,8 +133,8 @@ static always_inline void arch_spinlock_unlock_write(rw_spinlock_t *lock)
 }
 
 /* CPU-bound spinlocks. */
-static inline void __arch_bound_spinlock_lock_cpu(bound_spinlock_t *l,
-                                                  ulong_t cpu)
+static inline void arch_bound_spinlock_lock_cpu(struct raw_boundlock *l,
+                                                ulong_t cpu)
 {
   __asm__ __volatile__(
     "cmp %0,%2\n"
@@ -180,7 +166,7 @@ static inline void __arch_bound_spinlock_lock_cpu(bound_spinlock_t *l,
      "memory" );
 }
 
-static inline void __arch_bound_spinlock_unlock_cpu(bound_spinlock_t *l)
+static inline void arch_bound_spinlock_unlock_cpu(struct raw_boundlock *l)
 {
    __asm__ __volatile__(
      __LOCK_PREFIX "btr $15,%0\n"
@@ -189,8 +175,8 @@ static inline void __arch_bound_spinlock_unlock_cpu(bound_spinlock_t *l)
      "memory" );
 }
 
-static inline bool __arch_bound_spinlock_trylock_cpu(bound_spinlock_t *l,
-                                                     ulong_t cpu)
+static inline bool arch_bound_spinlock_trylock_cpu(struct raw_boundlock *l,
+                                                   ulong_t cpu)
 {
   ulong_t locked;
 
@@ -224,22 +210,6 @@ static inline bool __arch_bound_spinlock_trylock_cpu(bound_spinlock_t *l,
 
   return !locked;
 }
-
-#define arch_bound_spinlock_lock_cpu(b,cpu)   \
-  __arch_bound_spinlock_lock_cpu((b),cpu)
-
-#define arch_bound_spinlock_unlock(b) \
-  __arch_bound_spinlock_unlock_cpu((b))
-
-#define arch_bound_spinlock_trylock_cpu(b,cpu) \
-  __arch_bound_spinlock_trylock_cpu((b),cpu)
-
-
-/* TODO DK: implement trylock and is_locked form RW spinlocks */
-#else /* !CONFIG_SMP */
-typedef int spinlock_t;
-typedef int rw_spinlock_t;
-#endif /* CONFIG_SMP */
 
 #endif /* __AMD64_SPINLOCK_H__ */
 

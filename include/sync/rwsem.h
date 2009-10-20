@@ -41,7 +41,7 @@ typedef struct __rwsem {
 #define RWSEM_INITIALIZE(name)                  \
   { .stat = 0, .writers_wq = WQUEUE_INITIALIZE((name).writers_wq),  \
     .readers_wq = WQUEUE_INITIALIZE((name).readers_wq),             \
-    .sem_lock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V),  }
+    .sem_lock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V, "R/W semaphore"),  }
 
 #define rwsem_is_locked(rs)       ((rs)->stat != 0)
 #define rwsem_is_locked4read(rs)  ((rs)->stat > 0)

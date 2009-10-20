@@ -44,13 +44,13 @@ typedef struct __pqueue {
 #define PQUEUE_DEFINE(pq_name)                      \
   pqueue_t (pq_name) = PQUEUE_INITIALIZE(pq_name)
 
-#define PQUEUE_INITIALIZE(pq_name)                               \
-  {   .qlock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V),    \
+#define PQUEUE_INITIALIZE(pq_name)                                      \
+  {   .qlock = SPINLOCK_INITIALIZE(__SPINLOCK_UNLOCKED_V, "Priority queue"),      \
       .queue = LIST_INITIALIZE((pq_name).queue), }
 
 static inline void pqueue_initialize(pqueue_t *pq)
 {
-  spinlock_initialize(&pq->qlock);
+  spinlock_initialize(&pq->qlock, "Priority queue");
   list_init_head(&pq->queue);
 }
 
