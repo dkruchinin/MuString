@@ -220,7 +220,7 @@ int kernel_thread(void (*fn)(void *), void *data, task_t **out_task)
     }
   }
 
-  return r;
+  return ERR(r);
 }
 
 static size_t setup_kernel_task_context(task_t *task)

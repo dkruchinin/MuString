@@ -41,7 +41,6 @@ void panic_core(const char *fname, const char *fmt, ...)
   va_end(ap);
   kprintf("\n========[!!PANIC!!]=========\n");
   kprintf("[%s]: %s\n", fname, panic_buf);  
-
-  for(;;);
+  __stop_cpu();
 }
 

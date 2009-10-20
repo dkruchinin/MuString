@@ -48,7 +48,7 @@ static void main_routine_stage1(void)
   initialize_ipc();
   initialize_signals();
   initialize_gc();
-  
+
   initialize_resources();
   arch_smp_init();
   interrupts_enable();

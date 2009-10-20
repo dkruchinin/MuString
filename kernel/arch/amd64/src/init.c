@@ -1,3 +1,24 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
+ * (c) Copyright 2009 Dan Kruchinin <dk@jarios.org>
+ *
+ */
+
 #include <arch/seg.h>
 #include <arch/fault.h>
 #include <arch/msr.h>
@@ -6,8 +27,10 @@
 #include <arch/boot.h>
 #include <arch/acpi.h>
 #include <arch/apic.h>
+#include <arch/current.h>
 #include <mstring/kprintf.h>
 #include <mstring/smp.h>
+#include <mstring/task.h>
 #include <mstring/types.h>
 
 uint32_t multiboot_info_ptr __attribute__ ((section(".data")));
@@ -16,6 +39,8 @@ multiboot_info_t *mb_info;
 
 int __bss_start, __bss_end, _kernel_end,
   __bootstrap_start, __bootstrap_end;
+
+static INITDATA task_t dummy_task;
 
 static void multiboot_init(void)
 {
@@ -31,8 +56,10 @@ static void multiboot_init(void)
 static INITCODE void init_fs_and_gs(cpu_id_t cpuid)
 {
   msr_write(MSR_GS_BASE, 0);
-  msr_write(MSR_KERN_GS_BASE, (uintptr_t)raw_percpu_get_var(cpu_sched_stat, cpuid));
+  msr_write(MSR_KERN_GS_BASE,
+            (uintptr_t)raw_percpu_get_var(cpu_sched_stat, cpuid));
   msr_write(MSR_FS_BASE, 0);
+  __asm__ volatile ("swapgs");
 }
 
 /* Just clear BSS section */
@@ -138,12 +165,12 @@ static INITCODE void prepare_lapic_info(void)
 
 INITCODE void arch_cpu_init(cpu_id_t cpu)
 {
+  init_fs_and_gs(cpu);
   init_cpu_features();
   arch_seg_init(cpu);
-  arch_idt_init();
-  init_fs_and_gs(cpu);
+  arch_idt_init();  
   syscall_init();
-  if (cpu != 0) {
+  if (cpu != 0) {    
     arch_cpu_enable_paging();
   }
 
@@ -153,8 +180,10 @@ INITCODE void arch_cpu_init(cpu_id_t cpu)
 INITCODE void arch_prepare_system(void)
 {
   kconsole_t *kcons = default_console();
+  cpu_sched_stat_t *sched_stat = raw_percpu_get_var(cpu_sched_stat, 0);  
 
   clear_bss();
+  sched_stat->current_task = &dummy_task;
   kcons->init();
   kcons->enable();
 

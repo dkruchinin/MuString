@@ -124,7 +124,6 @@ out:
 
 void __stop_cpu(void)
 {
-  kprintf("STOP CPU!!!!!!!!!\n");
   interrupts_disable();
   for (;;);
 }

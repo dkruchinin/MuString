@@ -112,8 +112,8 @@ void spawn_percpu_threads(void)
 
   for(j=0;j<NUM_PERCPU_THREADS;j++) {
     if( kernel_thread(__percpu_threads[j],NULL, &ts[j]) || !ts[j] ) {
-      panic( "Can't create system thread N %d for CPU %d !\n",
-             j,cpu_id() );
+      panic("Can't create system thread N %d for CPU %d !\n",
+             j, cpu_id());
     }
   }
 }
