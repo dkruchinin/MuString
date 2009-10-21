@@ -236,13 +236,13 @@ static int __disintegrate_task(task_t *target,ulong_t pnum)
 {
   ipc_gen_port_t *port;
   disintegration_descr_t *descr;
-  int r;
+  long r;
   iovec_t iov;
   disintegration_req_packet_t drp;
   ipc_channel_t *channel;
 
-  if( !(port=ipc_get_port(current_task(),pnum)) ) {
-    return ERR(-EINVAL);
+  if( !(port=ipc_get_port(current_task(),pnum,&r)) ) {
+    return ERR(r);
   }
 
   r = ipc_open_channel_raw(port, IPC_KERNEL_SIDE, &channel);
@@ -378,7 +378,7 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
   uidgid_t uidgid;
 
   if( current_task() != target &&
-      !s_check_access(S_GET_INVOKER(),S_GET_TASK_OBJECT(target)) ) {
+      !s_check_access(S_GET_INVOKER(),S_GET_TASK_OBJ(target)) ) {
     return ERR(-EPERM);
   }
 

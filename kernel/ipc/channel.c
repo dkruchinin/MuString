@@ -96,7 +96,7 @@ int ipc_open_channel_raw(ipc_gen_port_t *server_port, ulong_t flags, ipc_channel
   if (channel)
    ipc_destroy_channel(channel);
 
-  return ret;
+  return ERR(ret);
 }
 
 void ipc_unref_channel(ipc_channel_t *channel,ulong_t c)
@@ -154,13 +154,13 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
                      ulong_t flags)
 {
   task_ipc_t *ipc=get_task_ipc(owner);
-  int r;
+  long r;
   ulong_t id;
   ipc_channel_t *channel = NULL;
   ipc_gen_port_t *server_port;
 
   if( !ipc ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   LOCK_IPC(ipc);
@@ -169,9 +169,7 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
     goto out_unlock;
   }
 
-  server_port=ipc_get_port(server,port);
-  if( !server_port ) {
-    r=-EINVAL;
+  if( !(server_port=ipc_get_port(server,port,&r)) ) {
     goto out_unlock;
   }
 
@@ -220,7 +218,7 @@ out_put_port:
 out_unlock:
   UNLOCK_IPC(ipc);
   release_task_ipc(ipc);
-  return r;
+  return ERR(r);
 }
 
 ipc_channel_t *ipc_clone_channel(ipc_channel_t *target,struct __task_ipc *newipc)

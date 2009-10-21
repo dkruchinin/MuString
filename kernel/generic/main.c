@@ -47,6 +47,7 @@ static void main_routine_stage1(void)
   sched_add_cpu(0);
   initialize_ipc();
   initialize_signals();
+  initialize_security();
   initialize_gc();
 
   initialize_resources();
@@ -61,7 +62,7 @@ static void main_routine_stage1(void)
   setup_time();  
   initialize_swks();
   initialize_security();
-  
+
   /* OK, we can proceed. */
   spawn_percpu_threads();
   server_run_tasks();

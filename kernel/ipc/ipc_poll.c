@@ -96,9 +96,7 @@ long sys_ipc_port_poll(pollfd_t *pfds,ulong_t nfds,timeval_t *timeout)
       break;
     }
 
-    port=ipc_get_port(caller,upfd.fd);
-    if( !port ) {
-      nevents=-EINVAL;
+    if( !(port=ipc_get_port(caller,upfd.fd,&nevents)) ) {
       break;
     }
 

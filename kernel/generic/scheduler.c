@@ -48,6 +48,7 @@
 #include <mstring/gc.h>
 #include <mstring/time.h>
 #include <mstring/sched_default.h>
+#include <security/util.h>
 
 extern void initialize_idle_tasks(void);
 
@@ -161,7 +162,7 @@ int sched_change_task_state_mask(task_t *task,ulong_t state,
 {
   /* TODO: [mt] implement security check on task state change. */
   if(active_scheduler == NULL) {
-    return -ENOTTY;
+    return ERR(-ENOTTY);
   }
   return active_scheduler->change_task_state(task,state,mask);
 }
@@ -174,7 +175,7 @@ int sched_change_task_state_deferred_mask(task_t *task,ulong_t state,
      active_scheduler->change_task_state_deferred != NULL) {
     return active_scheduler->change_task_state_deferred(task,state,handler,data,mask);
   }
-  return -ENOTTY;
+  return ERR(-ENOTTY);
 }
 
 int sched_add_task(task_t *task)
@@ -182,7 +183,7 @@ int sched_add_task(task_t *task)
   if(active_scheduler != NULL) {
     return active_scheduler->add_task(task);
   }
-  return -ENOTTY;
+  return ERR(-ENOTTY);
 }
 
 int sched_setup_idle_task(task_t *task)
@@ -190,7 +191,7 @@ int sched_setup_idle_task(task_t *task)
   if(active_scheduler != NULL) {
     return active_scheduler->setup_idle_task(task);
   }
-  return -ENOTTY;
+  return ERR(-ENOTTY);
 }
 
 int sched_add_cpu(cpu_id_t cpu)
@@ -198,7 +199,7 @@ int sched_add_cpu(cpu_id_t cpu)
   if( active_scheduler != NULL ) {
     return active_scheduler->add_cpu(cpu);
   }
-  return -ENOTTY;
+  return ERR(-ENOTTY);
 }
 
 void update_idle_tick_statistics(scheduler_cpu_stats_t *stats)
@@ -211,7 +212,7 @@ int sched_del_task(task_t *task)
   if( active_scheduler != NULL ) {
     return active_scheduler->del_task(task);
   }
-  return -ENOTTY;
+  return ERR(-ENOTTY);
 }
 
 void schedule(void)
@@ -230,6 +231,8 @@ void sched_timer_tick(void)
 
 long do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
 {
+  bool can=s_check_system_capability(SYS_CAP_SCHEDULER);
+
   switch( cmd ) {
     case SYS_SCHED_CTL_GET_AFFINITY_MASK:
       return task->cpu_affinity_mask;
@@ -240,27 +243,37 @@ long do_scheduler_control(task_t *task, ulong_t cmd, ulong_t arg)
 
     case SYS_SCHED_CTL_MONOPOLIZE_CPU:
     case SYS_SCHED_CTL_DEMONOPOLIZE_CPU:
-      return -EINVAL;
+      return ERR(-EINVAL);
 
     case SYS_SCHED_CTL_SET_AFFINITY_MASK:
+      if( !can ) {
+        return ERR(-EPERM);
+      }
+
       if( !arg || (arg & ~ONLINE_CPUS_MASK) ) {
-        return -EINVAL;
+        return ERR(-EINVAL);
       }
 
       if( task->cpu_affinity_mask != arg ) {
         if( !(task->cpu_affinity_mask & (1 << cpu_id())) ) {
+          /* TODO: [mt] implement CPU affinity masc properly. */
         }
       }
-
       return 0;
     case SYS_SCHED_CTL_GET_CPU:
       return task->cpu;
     case SYS_SCHED_CTL_SET_CPU:
+      if( !can ) {
+        return ERR(-EPERM);
+      }
       if( (arg >= CONFIG_NRCPUS) || !cpu_affinity_ok(task,arg) ) {
-        return -EINVAL;
+        return ERR(-EINVAL);
       }
       return sched_move_task_to_cpu(task,arg);
     default:
+      if( !can ) {
+        return ERR(-EPERM);
+      }
       return task->scheduler->scheduler_control(task,cmd,arg);
   }
 }
@@ -271,7 +284,7 @@ long sys_scheduler_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
   long r;
 
   if(cmd > SCHEDULER_MAX_COMMON_IOCTL) {
-    return  -EINVAL;
+    return ERR(-EINVAL);
   }
 
   if( !pid && !tid ) {
@@ -282,7 +295,13 @@ long sys_scheduler_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
   }
 
   if( !target ) {
-    return -ESRCH;
+    return ERR(-ESRCH);
+  }
+
+  if( target != current_task() &&
+      !s_check_access(S_GET_INVOKER(),S_GET_TASK_OBJ(target))) {
+    r=-EPERM;
+    goto out_release;
   }
 
   /* if TF_USPC_BLOCKED flag is set, task static priority can not be changed by user */
@@ -299,7 +318,7 @@ long sys_scheduler_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
   r = do_scheduler_control(target,cmd,arg);
 out_release:
   release_task_struct(target);
-  return r;
+  return ERR(r);
 }
 
 extern int sched_verbose1;
@@ -393,7 +412,7 @@ unlock_src_data:
   interrupts_restore(is);
   cond_reschedule();
 out:
-  return r;
+  return ERR(r);
 }
 
 int sched_move_task_to_cpu(task_t *task,cpu_id_t cpu)
@@ -401,7 +420,7 @@ int sched_move_task_to_cpu(task_t *task,cpu_id_t cpu)
   gc_action_t *a;
 
   if(cpu >= EZA_SCHED_CPUS || !is_cpu_online(cpu)) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   if( task->cpu == cpu ) {
@@ -410,7 +429,7 @@ int sched_move_task_to_cpu(task_t *task,cpu_id_t cpu)
 
   /* Prevent target task from double migration. */
   if( atomic_test_and_set_bit(&task->flags,__TF_UNDER_MIGRATION_BIT) ) {
-    return -EBUSY;
+    return ERR(-EBUSY);
   }
 
   if( __move_task_to_cpu(task,cpu,false) ) {
@@ -427,7 +446,8 @@ void migration_thread(void *data)
 {
   if( do_scheduler_control(current_task(),SYS_SCHED_CTL_SET_PRIORITY,
                            EZA_SCHED_NONRT_PRIO_BASE) ) {
-    panic( "CPU #%d: migration_thread() can't set its default priority !\n" );
+    panic( "CPU #%d: migration_thread can't set its default priority !\n",
+           cpu_id());
   }
 
   while(true) {
