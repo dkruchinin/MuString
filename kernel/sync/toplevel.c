@@ -26,6 +26,7 @@
 #include <mstring/task.h>
 #include <mstring/usercopy.h>
 #include <mm/slab.h>
+#include <security/security.h>
 
 static int __sync_allocate_id(struct __task_struct *task,
                                    bool shared_id,sync_id_t *p_id)
@@ -35,7 +36,7 @@ static int __sync_allocate_id(struct __task_struct *task,
     return 0;
   } else {
     *p_id=-1;
-    return -ENOMEM;
+    return ERR(-EAGAIN);
   }
 }
 
@@ -83,25 +84,29 @@ int sys_sync_create_object(sync_object_type_t obj_type,
   uint8_t shared;
   task_sync_data_t *sync_data;
 
+  if( !s_check_system_capability(SYS_CAP_SYNC) ) {
+    return ERR(-EPERM);
+  }
+
   if( !uobj || obj_type > __SO_MAX_TYPE ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   if( !attrs ) {
     shared=0;
   } else {
     if( get_user(shared,attrs) ) {
-      return -EINVAL;
+      return ERR(-EINVAL);
     }
     if( shared != PTHREAD_PROCESS_PRIVATE &&
         shared != PTHREAD_PROCESS_SHARED ) {
-      return -EINVAL;
+      return ERR(-EINVAL);
     }
   }
 
   sync_data=get_task_sync_data(caller);
   if( !sync_data ) {
-    return -EAGAIN;
+    return ERR(-EAGAIN);
   }
 
   LOCK_SYNC_DATA_W(sync_data);
@@ -151,10 +156,8 @@ put_sync_data:
     sync_put_object(kobj);
   }
   release_task_sync_data(sync_data);
-  return r;
+  return ERR(r);
 }
-
-extern int __big_verbose;
 
 int sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg)
 {
@@ -163,7 +166,7 @@ int sys_sync_control(sync_id_t id,ulong_t cmd,ulong_t arg)
   int r;
 
   if( !kobj ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   r=kobj->ops->control(kobj,cmd,arg);
@@ -177,15 +180,10 @@ int sys_sync_destroy(sync_id_t id)
   kern_sync_object_t *kobj=__lookup_sync(caller,id);
 
   if( !kobj ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
-  return 0;
-}
-
-int sys_sync_condvar_wait(sync_id_t ucondvar,
-                          sync_id_t umutex)
-{
+  /* TODO: [mt] release sync properly. */
   return 0;
 }
 

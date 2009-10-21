@@ -32,6 +32,7 @@
 #include <mstring/string.h>
 #include <kernel/syscalls.h>
 #include <security/security.h>
+#include <mm/slab.h>
 
 static MUTEX_DEFINE(ioports_lock);
 static struct rb_root ioports_root;
@@ -42,29 +43,33 @@ static struct rb_root ioports_root;
 typedef struct __ioport_range {
   struct rb_node node;
   ulong_t start_port,end_port;
-  task_t *owner;
+  pid_t holder;
 } ioport_range_t;
 
-static ioport_range_t *__allocate_ioports_range(void)
+static ioport_range_t *__allocate_ioports_range(pid_t holder)
 {
-  ioport_range_t *r=alloc_pages_addr(1,MMPOOL_KERN | AF_ZERO);
+  ioport_range_t *r=memalloc(sizeof(*r));
+
+  if( r ) {
+    memset(r,0,sizeof(*r));
+    r->holder=holder;
+  }
+
   return r;
-  /* TODO: [mt] Allocate ioport ranges via slabs. */
 }
 
 static bool __check_ioports_range(ulong_t first_port,ulong_t last_port,
-                                  task_t **owner)
+                                  pid_t *holder)
 {
   struct rb_node *n = ioports_root.rb_node;
-  bool avail=true;
 
-  *owner=NULL;
+  *holder=0;
   while(n) {
     ioport_range_t *range=rb_entry(n,ioport_range_t,node);
 
-    /* First, check if we're completely inside of a known range. */
+     /* First, check if we're completely inside of a known range. */
     if( first_port >= range->start_port && last_port <= range->end_port ) {
-      *owner=range->owner;
+      *holder=range->holder;
       return false;
     }
 
@@ -74,12 +79,11 @@ static bool __check_ioports_range(ulong_t first_port,ulong_t last_port,
       n=n->rb_right;
     } else {
       /* Bad luck - this range is busy. */
-      avail=false;
-      break;
+      return false;
     }
   }
-
-  return avail;
+  
+  return true;
 }
 
 static int __free_ioports_range(ulong_t start_port,ulong_t last_port)
@@ -103,7 +107,7 @@ static int __free_ioports_range(ulong_t start_port,ulong_t last_port)
       } else if( last_port == r->end_port ) {
         r->end_port=start_port-1;
       } else { /* Split this range into two separate ranges. */
-        ioport_range_t *nr=__allocate_ioports_range();
+        ioport_range_t *nr=__allocate_ioports_range(r->holder);
         if( nr == NULL ) {
           return -ENOMEM;
         }
@@ -111,7 +115,6 @@ static int __free_ioports_range(ulong_t start_port,ulong_t last_port)
         nr->end_port=start_port-1;
         nr->node.rb_right=NULL;
         nr->node.rb_left=r->node.rb_left;
-        nr->owner=r->owner;
 
         r->start_port=last_port+1;
 
@@ -134,14 +137,14 @@ static int __free_ioports_range(ulong_t start_port,ulong_t last_port)
 }
 
 static int __add_ioports_range(ulong_t start_port,ulong_t last_port,
-                                    ioport_range_t **out_r,task_t **owner)
+                               ioport_range_t **out_r,pid_t *holder)
 {
   struct rb_node *parent=NULL;
   struct rb_node **p=&ioports_root.rb_node;
   ioport_range_t *r=NULL;
 
   *out_r=NULL;
-  *owner=NULL;
+  *holder=0;
 
   while( *p ) {
     parent=*p;
@@ -149,8 +152,8 @@ static int __add_ioports_range(ulong_t start_port,ulong_t last_port,
 
     /* First, check if we're completely inside of a known range. */
     if( start_port >= r->start_port && last_port <= r->end_port ) {
-      *owner=r->owner;
-      return -EBUSY;
+      *holder=r->holder;
+      return ERR(-EBUSY);
     }
 
     if( last_port < r->start_port ) {
@@ -159,7 +162,7 @@ static int __add_ioports_range(ulong_t start_port,ulong_t last_port,
       p=&(*p)->rb_right;
     } else {
       /* Bad luck - this range is busy. */
-      return -EBUSY;
+      return ERR(-EBUSY);
     }
   }
 
@@ -167,30 +170,30 @@ static int __add_ioports_range(ulong_t start_port,ulong_t last_port,
   if( r != NULL ) {
     if( (last_port+1) == r->start_port ) {
       r->start_port=start_port;
-      *owner=r->owner;
+      *holder=r->holder;
       goto out;
     } else if( (start_port-1) == r->end_port ) {
       r->end_port=last_port;
-      *owner=r->owner;
+      *holder=r->holder;
       goto out;
     }
   }
 
-  r=__allocate_ioports_range();
+  r=__allocate_ioports_range(current_task()->pid);
   if( r == NULL ) {
-    return -ENOMEM;
+    return ERR(-ENOMEM);
   }
 
   rb_link_node(&r->node,parent,p);
   r->start_port=start_port;
   r->end_port=last_port;
+  *holder=current_task()->pid;
 out:
   *out_r=r;
   return 0;
 }
 
-static int __check_ioports( task_t *task,ulong_t first_port,
-                                 ulong_t end_port)
+static int __check_ioports(ulong_t first_port,ulong_t end_port)
 {
   if( !s_check_system_capability(SYS_CAP_IO_PORT) ) {
     return ERR(-EPERM);
@@ -207,34 +210,31 @@ static int __check_ioports( task_t *task,ulong_t first_port,
 int sys_allocate_ioports(ulong_t first_port,ulong_t num_ports)
 {
   int r;
-  task_t *port_owner,*caller=current_task();
+  task_t *caller=current_task();
   ioport_range_t *range;
   ulong_t end_port=first_port+num_ports-1;
+  pid_t port_owner;
 
-  r=__check_ioports(caller,first_port,end_port);
-  if( r )
+  r=__check_ioports(first_port,end_port);
+  if( r ) {
     return ERR(r);
-  
+  }
+
   LOCK_IOPORTS;
 
   r=__add_ioports_range(first_port,end_port,&range,&port_owner);
   if( r ) {
     /* This range is already ours ? */
-    if( r == -EBUSY && port_owner == caller ) {
+    if( r == -EBUSY && port_owner == caller->pid ) {
       r=0;
-    } else {
-      goto out;
     }
-  } else {
-    range->owner=caller;
-  }
-
-  r=arch_allocate_ioports(caller,first_port,end_port);
-  if( !r ) {
     goto out;
   }
 
-  __free_ioports_range(first_port,end_port);
+  r=arch_allocate_ioports(caller,first_port,end_port);
+  if( r ) {
+    __free_ioports_range(first_port,end_port);
+  }
 out:
   UNLOCK_IOPORTS;
   return ERR(r);
@@ -243,24 +243,23 @@ out:
 int sys_free_ioports(ulong_t first_port,ulong_t num_ports)
 {
   int r;
-  task_t *port_owner,*caller=current_task();
+  task_t *caller=current_task();
   ulong_t end_port=first_port+num_ports-1;
+  pid_t port_owner;
 
-  r=__check_ioports(caller,first_port,end_port);
+  r=__check_ioports(first_port,end_port);
   if( r ) {
     return ERR(r);
   }
 
   LOCK_IOPORTS;
   __check_ioports_range(first_port,end_port,&port_owner);
-  if( port_owner != caller ) {
-    r=-EACCES;
-    goto out; 
+  if( port_owner != caller->pid ) {
+    r=(port_owner !=0) ? -EACCES : -EINVAL;
+  } else {
+    __free_ioports_range(first_port,end_port);
+    r=arch_free_ioports(caller,first_port,end_port);
   }
-
-  __free_ioports_range(first_port,end_port);
-  r=arch_free_ioports(caller,first_port,end_port);
-out:
   UNLOCK_IOPORTS;
   return ERR(r);
 }

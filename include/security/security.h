@@ -66,6 +66,7 @@ enum __s_system_caps {
   SYS_CAP_IPC_CONTROL,
   SYS_CAP_IRQ,
   SYS_CAP_SCHEDULER,
+  SYS_CAP_SYNC,
   SYS_CAP_MAX,
 };
 
@@ -89,9 +90,6 @@ void s_copy_mac_label(struct __s_object *src, struct __s_object *dst);
 #define S_KTHREAD_UID S_UID_MIN
 
 /* List of syscalls that were procected by MAC label check:
- *    sys_fork
- *    sys_create_task
- *    sys_task_control
 
         SC_CREATE_TASK         <MAC>
         SC_TASK_CONTROL        <MAC>
@@ -106,7 +104,7 @@ void s_copy_mac_label(struct __s_object *src, struct __s_object *dst);
         SC_IPC_PORT_POLL       <Not needed - part of SC_CREATE_PORT>
 
         SC_NANOSLEEP           <Not needed>
-        SC_SCHED_CONTROL       11
+        SC_SCHED_CONTROL       <MAC>
         SC_EXIT                <Not needed>
         SC_OPEN_CHANNEL        <MAC>
         SC_CLOSE_CHANNEL       <Not needed - part of SC_OPEN_CHANNEL>
