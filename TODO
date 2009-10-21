@@ -1,0 +1,6 @@
+1) Make support of optimized with -O2 option code.
+2) Implement spinlocks debug facility.
+3) Make support of uniprocessor systems
+4) Make cpurelax
+5) Move I/O APIC from userspace to kernel space.
+6) Make proper and clear SMP migration

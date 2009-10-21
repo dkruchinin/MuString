@@ -465,7 +465,6 @@ void arch_activate_task(task_t *to)
 #ifdef CONFIG_TEST
   kprintf( "**  ACTIVATING TASK: %d:%d (CPU: %d) [from %d:%d] %p**\n",
            to->pid,to->tid,to->cpu, current_task()->pid, current_task()->tid);
-  kprintf("STACK FROM = %p\n", current_task()->kernel_stack.high_address);
 #endif
 
   /* Let's jump ! */
