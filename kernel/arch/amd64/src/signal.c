@@ -113,14 +113,11 @@ static void __handle_cancellation_request(int reason,uintptr_t kstack)
 
   switch( reason ) {
     case __SYCALL_UWORK:
-      extra_bytes=0;
-      break;
     case __INT_UWORK:
-    case __XCPT_NOERR_UWORK:
-      extra_bytes=8;
-      break;
+      extra_bytes=0;
+      break;    
     case __XCPT_ERR_UWORK:
-      extra_bytes=16;
+      extra_bytes=8;
       break;
   }
 
@@ -149,7 +146,6 @@ static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
 
   /* Save XMM and GPR context. */
 
-  kprintf("UWORK: %s\n", current_task()->short_name);
   /* Locate saved GPRs. */
   kpregs=(struct gpregs *)kstack;
   kstack+=sizeof(*kpregs);
@@ -158,6 +154,7 @@ static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
    */
 
   /* Now we can access hardware interrupt stackframe. */
+  kstack += extra_bytes;
   int_frame=(struct intr_stack_frame *)kstack;
 
   /* Now we can create signal context. */
@@ -222,16 +219,11 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
   } else {
     switch( reason ) {
       case __SYCALL_UWORK:
-        r=__setup_int_context(retcode,kstack,&sigitem->info,act,8,&pctx);
-        break;
       case __INT_UWORK:
-      case __XCPT_NOERR_UWORK:
-          kprintf("UWORK 1\n");
-        r=__setup_int_context(retcode,kstack,&sigitem->info,act,8,&pctx);
-        break;
+        r=__setup_int_context(retcode,kstack,&sigitem->info,act,0,&pctx);
+        break;      
       case __XCPT_ERR_UWORK:
-          kprintf("UWORK 2\n");
-        r=__setup_int_context(retcode,kstack,&sigitem->info,act,16,&pctx);
+        r=__setup_int_context(retcode,kstack,&sigitem->info,act,8,&pctx);
         break;
       default:
         panic( "Unknown userspace work type: %d in task (%d:%d)\n",
@@ -381,8 +373,7 @@ long sys_sigreturn(uintptr_t ctx)
   return retcode;
 
 bad_ctx:
-  kprintf("[!!!] BAD context for 'sys_sigreturn()' for task %d !\n",
-          caller->tid);
-  for(;;);
+  panic("[!!!] BAD context for 'sys_sigreturn()' for task %d!\n",
+        caller->tid);
   return -1;
 }

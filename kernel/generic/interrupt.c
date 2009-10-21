@@ -362,7 +362,7 @@ void __do_handle_irq(irq_t irq)
 #endif
 
   iline = &irq_lines[irq];
-  //spinlock_lock_irqsave(&iline->irq_line_lock, irqstat);
+  spinlock_lock_irqsave(&iline->irq_line_lock, irqstat);
 
   /* Call all handlers. */
   list_for_each_entry(&iline->actions, action, node) {
@@ -386,10 +386,7 @@ void __do_handle_irq(irq_t irq)
   }
 #endif
 
-  //spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
-  if (irq != 207) {
-    //kprintf("=> %d\n", irq);
-  }
+  spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
 #ifdef CONFIG_DEBUG_IRQ_ACTIVITY
   serial_write_char('Z');
 #endif
