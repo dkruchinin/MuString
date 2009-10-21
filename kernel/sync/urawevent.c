@@ -52,10 +52,10 @@ static int __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
 
         if (cmd == __SYNC_CMD_EVENT_TIMEDWAIT) {
           if (copy_from_user(&tspec, (void *)arg, sizeof(tspec))) {
-            return -EFAULT;
+            return ERR(-EFAULT);
           }
           if (!timeval_is_valid(&tspec)) {
-            return -EINVAL;
+            return ERR(-EINVAL);
           }
 
           __LOCK_EVENT(e);
@@ -121,7 +121,7 @@ static int __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
         break;
 
       default:
-        return -EINVAL;
+        return ERR(-EINVAL);
   }
 
   return 0;
@@ -168,7 +168,7 @@ int sync_create_uevent(kern_sync_object_t **obj,void *uobj,
   sync_uevent_t *e=__allocate_uevent();
 
   if( !e ) {
-    return -ENOMEM;
+    return ERR(-ENOMEM);
   }
 
   *obj=(kern_sync_object_t*)e;

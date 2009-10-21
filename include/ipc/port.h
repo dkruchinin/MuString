@@ -35,6 +35,7 @@
 #include <mstring/event.h>
 #include <ipc/buffer.h>
 #include <ipc/poll.h>
+#include <security/security.h>
 
 #define IPC_BUFFERED_PORT_LENGTH  PAGE_SIZE
 #define MAX_PORT_MSG_LENGTH  MB2B(2)
@@ -47,7 +48,6 @@
 #define WAITQUEUE_MSG_ID     INSUFFICIENT_MSG_ID 
 
 #define REF_PORT(p)  atomic_inc(&p->use_count)
-#define UNREF_PORT(p)  atomic_dec(&p->use_count)
 
 #define IPC_PORT_DIRECT_FLAGS  (IPC_BLOCKED_ACCESS | IPC_AUTOREF)
 #define __MSG_WAS_DEQUEUED  (ipc_port_message_t *)0x007
@@ -120,14 +120,15 @@ typedef struct __ipc_gen_port {
   ipc_port_msg_ops_t *msg_ops;
   ipc_port_ops_t *port_ops;
   void *data_storage;
-  list_head_t channels;  
+  list_head_t channels;
+  struct __s_object sobject;
 } ipc_gen_port_t;
 
 long ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size);
 long ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
                       struct __iovec *iovec, uint32_t numvec,
                       port_msg_info_t *msg_info);
-ipc_gen_port_t *ipc_get_port(task_t *task,ulong_t port);
+ipc_gen_port_t *ipc_get_port(task_t *task,ulong_t port,long *e);
 void ipc_put_port(ipc_gen_port_t *p);
 int ipc_port_reply(ipc_gen_port_t *port, ulong_t msg_id,
                    ulong_t reply_buf,ulong_t reply_len);

@@ -31,6 +31,7 @@
 #include <mstring/usercopy.h>
 #include <ipc/port.h>
 #include <ipc/channel.h>
+#include <security/security.h>
 
 static long __ipc_port_msg_write(ulong_t port, ulong_t msg_id, iovec_t *iovecs,
                                  ulong_t numvecs,off_t offset, bool wakeup)
@@ -45,10 +46,7 @@ static long __ipc_port_msg_write(ulong_t port, ulong_t msg_id, iovec_t *iovecs,
     return ERR(-EINVAL);
   }
 
-  p = ipc_get_port(current_task(), port);
-  if( !p ) {
-    r=-EINVAL;
-  } else {
+  if( (p=ipc_get_port(current_task(), port,&r)) ) {
     processed = 0;
     koffset = offset;
 
@@ -103,6 +101,10 @@ long sys_open_channel(pid_t pid,ulong_t port,ulong_t flags)
   task_t *task = pid_to_task(pid);
   long r;
 
+  if( !s_check_system_capability(SYS_CAP_IPC_CHANNEL) ) {
+    return ERR(-EPERM);
+  }
+
   if (task == NULL) {
     return ERR(-ESRCH);
   }
@@ -122,6 +124,10 @@ long sys_create_port( ulong_t flags, ulong_t queue_size )
 {
   task_t *caller=current_task();
   long r;
+
+  if( !s_check_system_capability(SYS_CAP_IPC_PORT) ) {
+    return ERR(-EPERM);
+  }  
 
   /* TODO: [mt] Check if caller can create unblocked ports. */
   //flags |= IPC_BLOCKED_ACCESS;
@@ -161,13 +167,11 @@ long sys_port_receive(ulong_t port, ulong_t flags, ulong_t recv_buf,
     piovec = NULL;
   }
 
-  p = ipc_get_port(current_task(), port);
-  if (!p) {
-    return ERR(-EINVAL);
+  if ( (p=ipc_get_port(current_task(), port, &r)) ) {
+    r=ipc_port_receive(p, flags, piovec, 1, msg_info);
+    ipc_put_port(p);
   }
 
-  r = ipc_port_receive(p, flags, piovec, 1, msg_info);
-  ipc_put_port(p);
   return ERR(r);
 }
 
@@ -221,9 +225,8 @@ long sys_port_msg_read(ulong_t port, ulong_t msg_id, uintptr_t recv_buf,
   long r;
   iovec_t iovec;
 
-  p = ipc_get_port(current_task(), port);
-  if (!p) {
-    return ERR(-EINVAL);
+  if (!(p=ipc_get_port(current_task(), port, &r))) {
+    return ERR(r);
   }
 
   iovec.iov_base = (void *)recv_buf;
@@ -242,12 +245,15 @@ long sys_port_control(ulong_t port, ulong_t cmd, ulong_t arg)
   ipc_gen_port_t *p;
   long r;
 
-  p = ipc_get_port(current_task(), port);
-  if (!p) {
-    return ERR(-EINVAL);
+  if( !s_check_system_capability(SYS_CAP_IPC_CONTROL) ) {
+    return ERR(-EPERM);
   }
 
-  r = ipc_port_control(p, cmd, arg);
+  if ( !(p=ipc_get_port(current_task(), port,&r)) ) {
+    return ERR(r);
+  }
+
+  r=ipc_port_control(p, cmd, arg);
   ipc_put_port(p);
   return ERR(r);
 }

@@ -65,13 +65,11 @@ static void __init_kernel_memobjs(void)
 
 static int reset_memobj_backend(memobj_t *memobj, task_t *server_task, long backend_port)
 {
-  int ret;
+  long ret;
   ipc_gen_port_t *server_port;
 
   grab_task_struct(server_task);
-  server_port = ipc_get_port(server_task, backend_port);
-  if (!server_port) {
-    ret = -ENOENT;
+  if ( !(server_port=ipc_get_port(server_task, backend_port,&ret)) ) {
     goto release_task;
   }
 
@@ -95,7 +93,7 @@ unlock_memobj:
 
 release_task:
   release_task_struct(server_task);
-  return ret;
+  return ERR(ret);
 }
 
 #if 0

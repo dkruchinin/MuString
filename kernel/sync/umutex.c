@@ -46,13 +46,9 @@ static int __mutex_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
       mutex_unlock(&umutex->__kmutex);
       return 0;
     case __SYNC_CMD_MUTEX_TRYLOCK:
-      if( mutex_trylock(&umutex->__kmutex) ) {
-        return 0;
-      } else {
-        return -EBUSY;
-      }
+      return mutex_trylock(&umutex->__kmutex) ? 0 : ERR(-EBUSY);
     default:
-      return -EINVAL;
+      return ERR(-EINVAL);
   }
 }
 
@@ -90,13 +86,13 @@ static sync_umutex_t *__allocate_umutex(void)
 }
 
 int sync_create_mutex(kern_sync_object_t **obj,void *uobj,
-                           uint8_t *attrs,ulong_t flags)
+                      uint8_t *attrs,ulong_t flags)
 {
   sync_umutex_t *umutex=__allocate_umutex();
   pthread_mutex_t *pum;
 
   if( !umutex ) {
-    return -ENOMEM;
+    return ERR(-ENOMEM);
   }  
 
   if( flags ) {
@@ -121,5 +117,5 @@ out:
     mutex_unlock(&umutex->__kmutex);
   }
   memfree(umutex);
-  return -EINVAL;
+  return ERR(-EFAULT);
 }

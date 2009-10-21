@@ -40,13 +40,13 @@ static int __rwsem_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
   switch(cmd) {
     case __SYNC_CMD_RWSEM_RLOCK:
       rwsem_down_read_intr(&urwsem->krw_sem);
-      return task_was_interrupted(caller) ? ERR(-EINTR) : 0;
+      return task_was_interrupted(caller) ? -EINTR : 0;
     case __SYNC_CMD_RWSEM_RUNLOCK:
       rwsem_up_read(&urwsem->krw_sem);
       break;
     case __SYNC_CMD_RWSEM_WLOCK:
       rwsem_down_write_intr(&urwsem->krw_sem);
-      return task_was_interrupted(caller) ? ERR(-EINTR) : 0;
+      return task_was_interrupted(caller) ? -EINTR : 0;
     case __SYNC_CMD_RWSEM_WUNLOCK:
       rwsem_up_write(&urwsem->krw_sem);
       break;
@@ -55,7 +55,7 @@ static int __rwsem_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
     case __SYNC_CMD_RWSEM_TRY_WLOCK:
       return rwsem_try_down_write_intr(&urwsem->krw_sem) ? 0 : ERR(-EBUSY);
     default:
-      return -EINVAL;
+      return ERR(-EINVAL);
   }
   return 0;
 }
