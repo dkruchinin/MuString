@@ -57,14 +57,11 @@ fault_entry_point:
 
         swapgs
 2:
-        sti
         SAVE_GPRS
         movq %rsp, %rdi
         movq %rax, %rsi
         callq __do_handle_fault
         
-        //movq (%rsp), %rbx
-        //addq $INT_FULL_OFFSET_TO_CS, %rbx
         cmpq $GDT_SEL(KCODE_DESCR), 8 + INT_FULL_OFFSET_TO_CS(%rsp)
 	    je 3f
 

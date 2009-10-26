@@ -20,15 +20,6 @@
  *
  */
 
-#include <arch/fault.h>
-#include <arch/seg.h>
-#include <arch/context.h>
-#include <mstring/panic.h>
-#include <mstring/bitwise.h>
-#include <mstring/task.h>
-#include <mstring/smp.h>
-#include <mstring/stddef.h>
-#include <mstring/types.h>
 
 extern uint8_t __faults_table[];
 static fault_handler_fn fault_handlers[IDT_NUM_FAULTS];
@@ -47,13 +38,10 @@ uint32_t faults_with_errcode =
    POW2(FLT_SS) | POW2(FLT_GP) | POW2(FLT_PF) |
    POW2(FLT_AC));
 
-#define GET_FAULTS_TABLE_ENTRY(idx)             \
   ((uintptr_t)&__faults_table + (idx) * 0x10)
 
-#define SET_FAULT_HANDLER(idx, fn)              \
   fault_handlers[(idx)] = (fn)
 
-#define FAULT_HAS_ERRCODE(fidx)                 \
   bit_test(&faults_with_errcode, fidx)
 
 static INITCODE int get_ist_by_fault(enum fault_idx fidx)
@@ -185,7 +173,17 @@ void __do_handle_fault(void *rsp, enum fault_idx fault_num)
         panic("Unexpected fault number: %d. Expected fault indices in "
               "range [%d, %d]", fault_num, MIN_FAULT_IDX, MAX_FAULT_IDX);
     }
-
+    
     fill_fault_context(&fctx, rsp, fault_num);
+
+    /*
+     * On the momnet we jumped here from low level faults handling function
+     * interrupts are disabled. We should enable interrupts if and only
+     * if they were *enabled* before fault occured.
+     */
+    if (fctx.istack_frame->rflags & RFLAGS_IF) {
+      interrupts_enable();
+    }
+
     fault_handlers[fault_num](&fctx);    
 }
