@@ -20,6 +20,15 @@
  *
  */
 
+#include <arch/fault.h>
+#include <arch/seg.h>
+#include <arch/context.h>
+#include <mstring/panic.h>
+#include <mstring/bitwise.h>
+#include <mstring/task.h>
+#include <mstring/smp.h>
+#include <mstring/stddef.h>
+#include <mstring/types.h>
 
 extern uint8_t __faults_table[];
 static fault_handler_fn fault_handlers[IDT_NUM_FAULTS];
@@ -38,10 +47,13 @@ uint32_t faults_with_errcode =
    POW2(FLT_SS) | POW2(FLT_GP) | POW2(FLT_PF) |
    POW2(FLT_AC));
 
+#define GET_FAULTS_TABLE_ENTRY(idx)             \
   ((uintptr_t)&__faults_table + (idx) * 0x10)
 
+#define SET_FAULT_HANDLER(idx, fn)              \
   fault_handlers[(idx)] = (fn)
 
+#define FAULT_HAS_ERRCODE(fidx)                 \
   bit_test(&faults_with_errcode, fidx)
 
 static INITCODE int get_ist_by_fault(enum fault_idx fidx)
