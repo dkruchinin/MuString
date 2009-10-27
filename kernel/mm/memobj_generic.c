@@ -137,7 +137,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
     atomic_set(&pf->refcount, 0);
     pf->offset = addr2pgoff(vmr, addr);
 
-    pagetable_lock(&vmm->rpd);
+    RPD_LOCK_WRITE(&vmm->rpd);
     ret = __mmap_one_anon_page(vmm, pf, addr, mmap_flags);
     if (ret) {
       /*
@@ -161,7 +161,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
     page_frame_t *page;
     page_idx_t pidx;
 
-    pagetable_lock(&vmm->rpd);
+    RPD_LOCK_WRITE(&vmm->rpd);
     pidx = __vaddr_to_pidx(&vmm->rpd, addr, &pde);
     if (unlikely(pidx == PAGE_IDX_INVAL)) {
       ret = -EFAULT;
@@ -216,7 +216,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
   }
 
 out_unlock:
-  pagetable_unlock(&vmm->rpd);
+  RPD_UNLOCK_WRITE(&vmm->rpd);
   return ret;
 }
 
@@ -237,14 +237,14 @@ static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr,
     }
 
     list_set_head(&chain_head, &pages->chain_node);
-    pagetable_lock(&vmm->rpd);
+    RPD_LOCK_WRITE(&vmm->rpd);
     list_for_each_entry(&chain_head, p, chain_node) {
       ret = __mmap_one_anon_page(vmm, p, addr, vmr->flags);
       if (unlikely(ret)) {
         GMO_DBG("(pid %ld): Failed to mmap anonymous page %#x to address %p. "
                 "[RET = %d]\n", vmm->owner->pid, pframe_number(p), addr, ret);
 
-        pagetable_unlock(&vmm->rpd);
+        RPD_UNLOCK_WRITE(&vmm->rpd);
         return ret;
       }
 
@@ -252,25 +252,25 @@ static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr,
       addr += PAGE_SIZE;
     }
 
-    pagetable_unlock(&vmm->rpd);
+    RPD_UNLOCK_WRITE(&vmm->rpd);
   }
   else {
     page_idx_t idx, i;
 
     idx = addr2pgoff(vmr, addr);
-    pagetable_lock(&vmm->rpd);
+    RPD_LOCK_WRITE(&vmm->rpd);
     for (i = 0; i < npages; i++, addr += PAGE_SIZE) {
       ret = __mmap_one_phys_page(vmm, idx + i, addr, vmr->flags);
       if (ret) {
         GMO_DBG("(pid %ld): Failed to mmap physical page %#x to address %p. "
                 "[RET = %d]\n", i, addr, ret);
 
-        pagetable_unlock(&vmm->rpd);
+        RPD_UNLOCK_WRITE(&vmm->rpd);
         return ret;
       }
     }
 
-    pagetable_unlock(&vmm->rpd);
+    RPD_UNLOCK_WRITE(&vmm->rpd);
   }
 
   return ret;
@@ -324,7 +324,7 @@ static int generic_depopulate_pages(vmrange_t *vmr, uintptr_t va_from,
 
   ASSERT(vmr->memobj == generic_memobj);
 
-  pagetable_lock(&vmm->rpd);
+  RPD_LOCK_WRITE(&vmm->rpd);
   while (va_from < va_to) {
     pidx = vaddr_to_pidx(&vmm->rpd, va_from);
     if (pidx == PAGE_IDX_INVAL) {
@@ -349,7 +349,7 @@ eof_cycle:
   }
 
 out:
-  pagetable_unlock(&vmm->rpd);
+  RPD_UNLOCK_WRITE(&vmm->rpd);
   return 0;
 }
 

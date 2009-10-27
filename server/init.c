@@ -58,7 +58,7 @@ static int mmap_core(vmm_t *vmm, uintptr_t addr, page_idx_t first_page,
 
   vmr = vmrange_find(vmm, addr, addr + 1, NULL);
   ASSERT(vmr != NULL);
-  pagetable_lock(&vmm->rpd);
+  RPD_LOCK_WRITE(&vmm->rpd);
   for (i = 0; i < npages; i++, first_page++, addr += PAGE_SIZE) {
     ret = mmap_page(&vmm->rpd, addr, first_page, flags);
     if (ret)
@@ -75,7 +75,7 @@ static int mmap_core(vmm_t *vmm, uintptr_t addr, page_idx_t first_page,
   }
 
 out:
-  pagetable_unlock(&vmm->rpd);
+  RPD_UNLOCK_WRITE(&vmm->rpd);
   return ret;
 }
 

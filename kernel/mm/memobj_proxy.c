@@ -88,33 +88,33 @@ static int proxy_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
     goto out_unlock_srv;
   }
   
-  pagetable_lock(&serv_vmm->rpd);
+  RPD_LOCK_READ(&serv_vmm->rpd);
   pidx = vaddr_to_pidx(&serv_vmm->rpd, rcvaddr);
   if (pidx == PAGE_IDX_INVAL) {
     ret = -EFAULT;
-    pagetable_unlock(&serv_vmm->rpd);
+    RPD_UNLOCK_READ(&serv_vmm->rpd);
     goto out_unlock_srv;
   }
 
   page = pframe_by_id(pidx);
   pin_page_frame(page);
-  pagetable_unlock(&serv_vmm->rpd);
-  pagetable_lock(&cli_vmm->rpd);
+  RPD_UNLOCK_READ(&serv_vmm->rpd);
+  RPD_LOCK_WRITE(&cli_vmm->rpd);
   ret = mmap_page(&cli_vmm->rpd, addr, pframe_number(page), vmr->flags);
   if (ret) {
     unpin_page_frame(page);
-    pagetable_unlock(&cli_vmm->rpd);
+    RPD_UNLOCK_WRITE(&cli_vmm->rpd);
     goto out_unlock_srv;
   }
 
   ret = rmap_register_mapping(vmr->memobj, page, cli_vmm, addr);
   if (ret) {
     unpin_page_frame(page);
-    pagetable_unlock(&cli_vmm->rpd);
+    RPD_UNLOCK_WRITE(&cli_vmm->rpd);
     goto out_unlock_srv;
   }
   
-  pagetable_unlock(&cli_vmm->rpd);
+  RPD_UNLOCK_WRITE(&cli_vmm->rpd);
   
 out_unlock_srv:
   rwsem_up_read(&serv_vmm->rwsem);
@@ -144,17 +144,17 @@ static int proxy_depopulate_pages(vmrange_t *vmr, uintptr_t va_from, uintptr_t v
   spinlock_unlock_read(&memobj->members_rwlock);
   
   while (va_from < va_to) {
-    pagetable_lock(&vmm->rpd);
+    RPD_LOCK_WRITE(&vmm->rpd);
     pidx = vaddr_to_pidx(&vmm->rpd, va_from);
     if (pidx == PAGE_IDX_INVAL) {
-      pagetable_unlock(&vmm->rpd);
+      RPD_UNLOCK_WRITE(&vmm->rpd);
       goto eof_cycle;
     }
 
     page = pframe_by_id(pidx);
     munmap_page(&vmm->rpd, va_from);
     rmap_unregister_mapping(page, vmm, va_from);
-    pagetable_unlock(&vmm->rpd);
+    RPD_UNLOCK_WRITE(&vmm->rpd);
     if (vmm != server->task_mm) {
       msync.hdr.event = MMEV_MSYNC;
       msync.hdr.memobj_id = memobj->id;
@@ -205,7 +205,7 @@ static int proxy_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npage
   
   list_init_head(&h);
   list_set_head(&h, &pages->chain_node);
-  pagetable_lock(&vmm->rpd);
+  RPD_LOCK_WRITE(&vmm->rpd);
   list_for_each_safe(&h, n, safe) {
     p = list_entry(n, page_frame_t, chain_node);
     list_del(n);
@@ -214,14 +214,14 @@ static int proxy_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npage
     ret = mmap_page(&vmm->rpd, addr, pframe_number(p), vmr->flags);
     if (ret) {
       unpin_page_frame(p);
-      pagetable_unlock(&vmm->rpd);
+      RPD_UNLOCK_WRITE(&vmm->rpd);
       goto out;
     }
 
     ret = rmap_register_mapping(memobj, p, vmm, addr);
     if (ret) {
       unpin_page_frame(p);
-      pagetable_unlock(&vmm->rpd);
+      RPD_UNLOCK_WRITE(&vmm->rpd);
       goto out;
     }
 
@@ -229,7 +229,7 @@ static int proxy_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npage
     addr += PAGE_SIZE;
   }
   
-  pagetable_unlock(&vmm->rpd);
+  RPD_UNLOCK_WRITE(&vmm->rpd);
 out:
   return ret;
 }

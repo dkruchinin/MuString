@@ -485,12 +485,14 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
       for (addr = vmr->bounds.space_start;
            addr < vmr->bounds.space_end; addr += PAGE_SIZE) {
 
-        pagetable_lock(&src->rpd);
+        RPD_LOCK_READ(&src->rpd);
         pidx = vaddr_to_pidx(&src->rpd, addr);        
         if (pidx == PAGE_IDX_INVAL) {
-          pagetable_unlock(&src->rpd);
+          RPD_UNLOCK_READ(&src->rpd);
           continue;
         }
+
+        RPD_UNLOCK_READ(&src->rpd);
         if (((flags & VMM_CLONE_COW) && !(new_vmr->flags & VMR_PHYS))) {
           /*
            * If copy-on-write clone policy was specified all pages in
@@ -504,6 +506,7 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
             mmap_flags &= ~VMR_WRITE;
           }
           if (!(page->flags & PF_COW)) {
+            RPD_LOCK_WRITE(&src->rpd);
             ret = memobj_method_call(vmr->memobj, delete_page, vmr, page);
 
             if (ret) {
@@ -511,7 +514,8 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
                           "(address %p). [ERR = %d]\n", vmm_get_name_dbg(src),
                           pframe_number(page), vmr->bounds.space_start,
                           vmr->bounds.space_end, addr, ret);
-              goto clone_failed_unlock;
+              RPD_UNLOCK_WRITE(&src->rpd);
+              goto clone_failed;
             }
 
             page->flags |= PF_COW;
@@ -522,8 +526,11 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
                           "VM range [%p, %p). [ERR = %d]\n",
                           vmm_get_name_dbg(src), pframe_number(page), addr,
                           vmr->bounds.space_start, vmr->bounds.space_end, ret);
-              goto clone_failed_unlock;
+              RPD_UNLOCK_WRITE(&src->rpd);
+              goto clone_failed;
             }
+
+            RPD_UNLOCK_WRITE(&src->rpd);
           }
         }
         else if ((flags & VMM_CLONE_POPULATE) &&
@@ -536,7 +543,7 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
                         "of page %#x. ENOMEM.\n", vmm_get_name_dbg(dst), pidx);
 
             ret = -ENOMEM;
-            goto clone_failed_unlock;
+            goto clone_failed;
           }
 
           page = pframe_by_id(pidx);
@@ -547,6 +554,12 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
 
         page = pframe_by_id(pidx);
         pin_page_frame(page);
+
+        /*
+         * We don't need to lock address space of destination VMM
+         * because on the moment we're cloning source's address space
+         * destination VMM has not any working threads.
+         */
         ret = memobj_method_call(new_vmr->memobj, insert_page, new_vmr,
                                  page, addr, mmap_flags);
         if (ret) {
@@ -554,10 +567,8 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
                       "during VMM cloning. [ERR = %d]\n",
                       vmm_get_name_dbg(dst), pidx, addr, ret);
           unpin_page_frame(page);
-          goto clone_failed_unlock;
+          goto clone_failed;
         }
-
-        pagetable_unlock(&src->rpd);
       }
     }
 
@@ -568,8 +579,6 @@ int vmm_clone(vmm_t *dst, vmm_t *src, int flags)
   rwsem_up_write(&src->rwsem);
   return ret;
 
-clone_failed_unlock:
-  pagetable_unlock(&src->rpd);
 clone_failed:
   rwsem_up_write(&src->rwsem);
   __clear_vmranges_tree(dst);
@@ -1024,7 +1033,7 @@ int __fault_in_user_page(vmrange_t *vmrange, uintptr_t addr,
   if (pfmask & PFLT_WRITE)
     vmr_mask |= VMR_WRITE;
 
-  pagetable_lock(&vmm->rpd);
+  RPD_LOCK_READ(&vmm->rpd);
   pidx = __vaddr_to_pidx(&vmm->rpd, addr, &pde);
   if (pidx != PAGE_IDX_INVAL) {
     /*
@@ -1032,14 +1041,14 @@ int __fault_in_user_page(vmrange_t *vmrange, uintptr_t addr,
      * protection attributes, we don't need emulate PF on it.
      */
     if ((ptable_to_kmap_flags(pde_get_flags(pde)) & vmr_mask) == vmr_mask) {
-      pagetable_unlock(&vmm->rpd);
+     RPD_UNLOCK_READ(&vmm->rpd);
       goto out;
     }
   }
   else
     pfmask |= PFLT_NOT_PRESENT;
 
-  pagetable_unlock(&vmm->rpd);
+  RPD_UNLOCK_READ(&vmm->rpd);
   ret = memobj_method_call(vmrange->memobj, handle_page_fault,
                            vmrange, addr, pfmask);
   if (ret)
@@ -1349,7 +1358,7 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
       }
     }
 
-    pagetable_lock(&current->task_mm->rpd);
+    RPD_LOCK_WRITE(&current->task_mm->rpd);
 
     /*
      * All pages current task is granting to somebody must be present.
@@ -1358,23 +1367,22 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
     pidx = vaddr_to_pidx(&current->task_mm->rpd, va_from);
     if (pidx == PAGE_IDX_INVAL) {
       ret = -EFAULT;
-      pagetable_unlock(&current->task_mm->rpd);
+      RPD_UNLOCK_WRITE(&current->task_mm->rpd);
       goto unlock_current;
     }
 
     page = pframe_by_id(pidx);
     /* Delete page from source's VM range. Source process */
     ret = memobj_method_call(vmr->memobj, delete_page, vmr, page);
+    RPD_UNLOCK_WRITE(&current->task_mm->rpd);
     if (ret) {
       VMM_VERBOSE("[%s] Failed to delete page %#x from address %p\n",
                   vmm_get_name_dbg(current->task_mm),
                   pframe_number(page), va_from);
-
-      pagetable_unlock(&current->task_mm->rpd);
+      
       goto unlock_current;
     }
 
-    pagetable_unlock(&current->task_mm->rpd);
 
     /*
      * Woops, we just met a page marked as copy-on-write.
@@ -1397,7 +1405,7 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
       page = new_page;
     }
 
-    pagetable_lock(&target->task_mm->rpd);
+    RPD_LOCK_WRITE(&target->task_mm->rpd);
     pidx = vaddr_to_pidx(&target->task_mm->rpd, target_addr);
 
     /*
@@ -1406,7 +1414,7 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
      * just removed from the caller's address range.
      */
     if (pidx != PAGE_IDX_INVAL) {
-      pagetable_unlock(&target->task_mm->rpd);
+      RPD_UNLOCK_WRITE(&target->task_mm->rpd);
       unpin_page_frame(page);
       ret = -EBUSY;
       goto unlock_current;
@@ -1415,13 +1423,11 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
     /* finally page may be inserted in target VM range */
     ret = memobj_method_call(target_vmr->memobj, insert_page, target_vmr,
                              page, target_addr, target_vmr->flags);
-    if (ret) {
-      pagetable_unlock(&target->task_mm->rpd);
+    RPD_UNLOCK_WRITE(&target->task_mm->rpd);
+    if (ret) {      
       unpin_page_frame(page);
       goto unlock_current;
     }
-
-    pagetable_unlock(&target->task_mm->rpd);
   }
 
 unlock_current:

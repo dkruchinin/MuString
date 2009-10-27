@@ -34,7 +34,7 @@
 struct __vmm;
 typedef struct __rpd {
   void *root_dir;
-  spinlock_t rpd_lock;
+  rw_spinlock_t rpd_lock;
   struct __vmm *vmm;
 } rpd_t;
 
@@ -52,12 +52,18 @@ struct pt_ops {
 
 extern struct pt_ops pt_ops;
 
-#define pagetable_lock(rpd) spinlock_lock(&(rpd)->rpd_lock)
-#define pagetable_unlock(rpd) spinlock_unlock(&(rpd)->rpd_lock)
+#define RPD_LOCK_READ(rpd)                      \
+    spinlock_lock_read(&(rpd)->rpd_lock)
+#define RPD_UNLOCK_READ(rpd)                    \
+    spinlock_unlock_read(&(rpd)->rpd_lock)
+#define RPD_LOCK_WRITE(rpd)                     \
+    spinlock_lock_write(&(rpd)->rpd_lock)
+#define RPD_UNLOCK_WRITE(rpd)                   \
+    spinlock_unlock_write(&(rpd)->rpd_lock)
 
 static inline int initialize_rpd(rpd_t *rpd, struct __vmm *vmm)
 {
-  spinlock_initialize(&rpd->rpd_lock, "RPD");
+  rw_spinlock_initialize(&rpd->rpd_lock, "RPD");
   rpd->vmm = vmm;
   return pt_ops.root_pdir_init_arch(rpd);
 }
@@ -114,7 +120,6 @@ static inline bool page_is_mapped(rpd_t *rpd, uintptr_t va)
   return (vaddr_to_pidx(rpd, va) != PAGE_IDX_INVAL);
 }
 
-#include <arch/current.h>
 static inline void unpin_page_frame(page_frame_t *pf)
 {
   if (atomic_dec_and_test(&pf->refcount)) {

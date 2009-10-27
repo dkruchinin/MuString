@@ -75,7 +75,7 @@ static inline int __mmap_page_paranoic(memobj_t *memobj, vmm_t *vmm, page_frame_
 {
   int ret = 0;
 
-  pagetable_lock(&vmm->rpd);
+  RPD_LOCK_WRITE(&vmm->rpd);
   if (page_is_mapped(&vmm->rpd, addr)) {
     PCACHE_DBG("#PF: some page on address %p is already mapped.\n", addr);
     unpin_page_frame(page);
@@ -92,7 +92,7 @@ static inline int __mmap_page_paranoic(memobj_t *memobj, vmm_t *vmm, page_frame_
   }
 
 out:
-  pagetable_unlock(&vmm->rpd);
+  RPD_UNLOCK_WRITE(&vmm->rpd);
   return ret;
 }
 
@@ -367,7 +367,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr,
     page_idx_t pidx;
     pde_t *pde;
     
-    pagetable_lock(&vmm->rpd);
+    RPD_LOCK_WRITE(&vmm->rpd);
     pidx = __vaddr_to_pidx(&vmm->rpd, addr, &pde);
     if (unlikely(pidx == PAGE_IDX_INVAL)) {
       /*
@@ -375,7 +375,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr,
        * a page we faulted on. In this case we can try to populate
        * new page by given address;
        */
-      pagetable_unlock(&vmm->rpd);
+      RPD_UNLOCK_WRITE(&vmm->rpd);
       PCACHE_DBG("#PF on write: Page by address %p is not present in "
                  "address space of faulted process. Try to populate it.\n", addr);
       ret = handle_not_present_fault(vmr, addr, pfmask);
@@ -383,7 +383,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr,
     else {
       if (unlikely(ptable_to_kmap_flags(pde_get_flags(pde)) & KMAP_WRITE)) {
         /* Somebody already remapped page */        
-        pagetable_unlock(&vmm->rpd);
+        RPD_UNLOCK_WRITE(&vmm->rpd);
         return 0;
       }
 
@@ -401,7 +401,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr,
 
         PCACHE_DBG("#PF on write: Remap shared page %#x(offs = %#x) to address %p. [RET = %d]\n",
                    pframe_number(page), page->offset, addr, ret);
-        pagetable_unlock(&vmm->rpd);
+        RPD_UNLOCK_WRITE(&vmm->rpd);
         rwsem_up_read(&pcache->rwlock);
       }
       else {
@@ -413,7 +413,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr,
         page_frame_t *new_page = alloc_page(MMPOOL_USER);
 
         if (!new_page) {
-          pagetable_unlock(&vmm->rpd);
+          RPD_UNLOCK_WRITE(&vmm->rpd);
           return -ENOMEM;
         }
 
@@ -436,7 +436,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr,
       }
     }
 
-    pagetable_unlock(&vmm->rpd);
+    RPD_UNLOCK_WRITE(&vmm->rpd);
   }
 
   return ret;

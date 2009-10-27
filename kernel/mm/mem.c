@@ -284,7 +284,7 @@ int mmap_kern(uintptr_t va_from, page_idx_t first_page, pgoff_t npages, long fla
   pgoff_t i;
   int ret = 0;
 
-  pagetable_lock(KERNEL_ROOT_PDIR());
+  RPD_LOCK_WRITE(KERNEL_ROOT_PDIR());
   for (i = 0; i < npages; i++, va_from += PAGE_SIZE, first_page++) {    
     ret = mmap_page(KERNEL_ROOT_PDIR(), va_from, first_page, flags);
     if (ret)
@@ -292,6 +292,6 @@ int mmap_kern(uintptr_t va_from, page_idx_t first_page, pgoff_t npages, long fla
   }
 
 out:
-  pagetable_unlock(KERNEL_ROOT_PDIR());
+  RPD_UNLOCK_WRITE(KERNEL_ROOT_PDIR());
   return ret;
 }
