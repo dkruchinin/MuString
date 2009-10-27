@@ -81,7 +81,7 @@ enum {
 };
 
 /* Per-process sync info structure. */
-#define SYNC_OBJS_PAGES 1
+#define SYNC_OBJS_PAGES 4
 #define MAX_PROCESS_SYNC_OBJS  ((PAGE_SIZE * SYNC_OBJS_PAGES - (sizeof(atomic_t)+2*sizeof(ulong_t)+sizeof(mutex_t))) / sizeof(long))
 
 typedef struct __task_sync_data {

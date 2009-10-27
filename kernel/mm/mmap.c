@@ -57,7 +57,7 @@ static int __num_mandmaps = 0;
 
 #ifdef CONFIG_DEBUG_MM
 static bool __vmm_verbose = false;
-static SPINLOCK_DEFINE(__vmm_verb_lock);
+static SPINLOCK_DEFINE(__vmm_verb_lock, "VMM verbose");
 
 #define VMM_VERBOSE(fmt, args...)               \
   do {                                          \
