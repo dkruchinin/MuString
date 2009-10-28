@@ -161,13 +161,22 @@ config DEBUG
        bool "Enable general debugging."
        default n
 
-config DEBUG_MM
+menuconfig DEBUG_MM
        bool "Enable memory manager debugging"
        default n
        help
          Enable general memory manager debugging. If the option is enabled
          various runtime checks and special debug functions will be executed.
          Also some debug API will be compiled.
+if DEBUG_MM
+config DUMP_VMM_ON_FAULT
+       bool "Dump VMranges tree on page fault"
+       default n
+       help
+         Switching on this option enables dumping of virtual memory
+         ranges tree on page fault of user space process if page
+         fault handler couldn't handle the fault correctly.
+endif
 
 menuconfig DEBUG_SLAB
        bool "Enable genral slab allocator debugging"

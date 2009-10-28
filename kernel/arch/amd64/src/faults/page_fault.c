@@ -118,6 +118,11 @@ void FH_page_fault(struct fault_ctx *fctx)
     }
     
     display_unhandled_pf_info(fctx, fault_addr);
+#ifdef CONFIG_DUMP_VMM_ON_FAULT
+    kprintf_fault("========= [Vrages Tree] =========");
+    vmranges_print_tree_dbg(vmm);
+#endif /* CONFIG_DUMP_VMM_ON_FAULT */
+
 #ifdef CONFIG_SEND_SIGSEGV_ON_FAULTS
     send_sigsegv(fault_addr);
     return;

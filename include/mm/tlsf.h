@@ -54,6 +54,7 @@
 typedef struct tlsf_percpu_cache {
   int noc_pages;     /**< Number of pages in cache */
   list_head_t pages; /**< List of available pages */
+  bool ready;
 } tlsf_percpu_cache_t;
 #endif /* CONFIG_SMP */
 
@@ -87,7 +88,7 @@ typedef struct tlsf {
   } map[TLSF_FLD_SIZE];               /**< TLSF map that contains FLDs */
 
 #ifdef CONFIG_SMP
-  tlsf_percpu_cache_t *percpu[CONFIG_NRCPUS];
+  tlsf_percpu_cache_t percpu[CONFIG_NRCPUS];
 #endif /* CONFIG_SMP */
 
   spinlock_t lock;
@@ -96,4 +97,4 @@ typedef struct tlsf {
   uint8_t fld_bitmap;  
 } tlsf_t;
 
-#endif /* __MSTRING_TLSF_H__ */
+#endif /* !__MSTRING_TLSF_H__ */

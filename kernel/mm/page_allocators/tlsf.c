@@ -232,11 +232,8 @@ void tlsf_validate_dbg(void *_tlsf)
     cpu_id_t c;
 
     for_each_cpu(c) {
-      if (!tlsf->percpu[c])
-        continue;
-
-      ASSERT(tlsf->percpu[c]->noc_pages >= 0);
-      total_pgs += tlsf->percpu[c]->noc_pages;
+      ASSERT(tlsf->percpu[c].noc_pages >= 0);
+      total_pgs += tlsf->percpu[c].noc_pages;
     }
   }
 #endif /* CONFIG_SMP */
@@ -571,13 +568,14 @@ static page_frame_t *find_suitable_block(tlsf_t *tlsf, tlsf_uint_t size)
 #ifdef CONFIG_SMP
 static int __put_page_to_cache(tlsf_t *tlsf, page_frame_t *page)
 {
-  tlsf_percpu_cache_t *pcpu = tlsf->percpu[cpu_id()];
+  tlsf_percpu_cache_t *pcpu = &tlsf->percpu[cpu_id()];
 
-  if (!pcpu || (pcpu->noc_pages >= TLSF_CPUCACHE_PAGES))
+  if (unlikely(!pcpu->ready) ||
+      pcpu->noc_pages >= TLSF_CPUCACHE_PAGES) {
     return -1;
+  }
 
   preempt_disable();
-  PF_MARK_FREE(page);
   list_add2head(&pcpu->pages, &page->node);
   pcpu->noc_pages++;  
   preempt_enable();
@@ -588,26 +586,25 @@ static int __put_page_to_cache(tlsf_t *tlsf, page_frame_t *page)
 static page_frame_t *__get_page_from_cache(tlsf_t *tlsf)
 {
   page_frame_t *page;
-  tlsf_percpu_cache_t *pcpu = tlsf->percpu[cpu_id()];
+  tlsf_percpu_cache_t *pcpu = &tlsf->percpu[cpu_id()];
   int irqstat;
 
-  if (!pcpu || !pcpu->noc_pages)
+  if (unlikely(!pcpu->ready) || !pcpu->noc_pages) {
     return NULL;
+  }
 
   interrupts_save_and_disable(irqstat);
   page = list_entry(list_node_first(&pcpu->pages), page_frame_t, node);
   list_del(&page->node);
   pcpu->noc_pages--;
-  PF_MARK_BUSY(page);
   interrupts_restore(irqstat);
 
   return page;
 }
-
-#else
+#else /* CONFIG_SMP */
 #define __put_page_to_cache(tlsf, page) -1
 #define __get_page_from_cache(tlsf) NULL
-#endif /* CONFIG_SMP */
+#endif /* !CONFIG_SMP */
 
 static void tlsf_free_pages(page_frame_t *pages, page_idx_t num_pages, void *data)
 {
@@ -787,31 +784,24 @@ static void tlsf_memdump(void *_tlsf)
 }
 
 #ifdef CONFIG_SMP
-#include <mm/slab.h>
 #include <mstring/smp.h>
 #include <mstring/interrupt.h>
 
-static int tlsf_smp_hook(cpu_id_t cpuid, void *_tlsf)
+static INITCODE int initialize_percpu_cache(cpu_id_t cpuid, void *_tlsf)
 {
   tlsf_t *tlsf = _tlsf;
-  tlsf_percpu_cache_t *cache = NULL;
+  tlsf_percpu_cache_t *cache = &tlsf->percpu[cpuid];
   page_frame_t *pages, *p;
-  int ret = -ENOMEM;
   list_head_t h;
   list_node_t *iter, *safe;
 
-  cache = memalloc(sizeof(*cache));
-  if (!cache) {
-    return ERR(ret);
-  }
-
+  kprintf(">>>>> INIT FOR CPU %d\n", cpuid);
   memset(cache, 0, sizeof(*cache));
   list_init_head(&cache->pages);
   list_init_head(&h);
-  tlsf->percpu[cpuid] = cache;
   pages = tlsf_alloc_pages(TLSF_CPUCACHE_PAGES, tlsf);
   if (!pages) {
-    return 0;
+    return ERR(-ENOMEM);
   }
 
   list_set_head(&h, &pages->chain_node);
@@ -823,10 +813,12 @@ static int tlsf_smp_hook(cpu_id_t cpuid, void *_tlsf)
   }
 
   cache->noc_pages = TLSF_CPUCACHE_PAGES;
+  cache->ready = true;
   return 0;
 }
-
-#endif /* CONFIG_SMP */
+#else /* CONFIG_SMP */
+#define initialize_percpu_cache(cpuid, _tlsf) UNUSED(cpuid)
+#endif /* !CONFIG_SMP */
 
 static inline void check_tlsf_defs(void)
 {
@@ -844,6 +836,7 @@ static inline void check_tlsf_defs(void)
 static void tlsf_initialize(mmpool_t *pool)
 {
   tlsf_t *tlsf;
+  cpu_id_t cpu;
 
   ASSERT(pool->allocator != NULL);
   tlsf = ealloc_space(sizeof(*tlsf));
@@ -861,13 +854,10 @@ static void tlsf_initialize(mmpool_t *pool)
   pool->alloc_ctx = tlsf;
   build_tlsf_map(tlsf);
 
-#ifdef CONFIG_SMP_xxx
-  memset(&__percpu_hook, 0, sizeof(__percpu_hook));
-  __percpu_hook.hook = tlsf_smp_hook;
-  __percpu_hook.arg = tlsf;
-  __percpu_hook.name = "TLSF percpu";
-  smp_hook_register(&__percpu_hook);
-#endif /* CONFIG_SMP */
+  /* Initialize per-CPU page caches of TLSF allocatror */
+  for_each_cpu(cpu) {
+    initialize_percpu_cache(cpu, tlsf);
+  }
 
   kprintf("[MM] Pool \"%s\" initialized TLSF O(1) allocator\n", pool->name);
 }
