@@ -87,8 +87,11 @@ static int __rawevent_control(kern_sync_object_t *obj,ulong_t cmd,ulong_t arg)
           __LOCK_EVENT(e);
           if ((cmd == __SYNC_CMD_EVENT_TIMEDWAIT) &&
               (tm <= system_ticks)) {
-            e->__ecount--;
+            if (e->__ecount)
+              e->__ecount--;
+            
             __UNLOCK_EVENT(e);
+            waitqueue_delete(&wt, WQ_DELETE_SIMPLE);
             delete_timer(&ktimer);
             return -ETIMEDOUT;
           }

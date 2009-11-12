@@ -266,10 +266,10 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
   /* First, check for pending disintegration requests. */
   if( uworks & ARCH_CTX_UWORKS_DISINT_REQ_MASK ) {
       /*kprintf_fault("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
-                  reason,retcode,
-                  current->pid,current->tid,
-                  kstack);
-                  kprintf_fault("[UWORKS]: UWORKS=0x%X\n",uworks);*/
+                    reason,retcode,
+                    current->pid,current->tid,
+                    kstack);
+                    kprintf_fault("[UWORKS]: UWORKS=0x%X\n",uworks);*/
 
     if( current->uworks_data.flags & DAF_EXIT_PENDING ) {
       do_exit(current->uworks_data.exit_value,0,0);

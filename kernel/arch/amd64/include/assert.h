@@ -11,7 +11,7 @@ static always_inline void ASSERT_LOW_LEVEL(const char *assert_msg, const char *f
                    "movq %2, %%r11\n\t"
                    "movq %3, %%r12\n\t"
                    "movq %4, %%r13\n\t"
-                   "ud2"                   
+                   "ud2\n"
                    :: "a" (ASSERT_MAGIC), "m" (assert_msg),
                    "m" (file), "m" (function), "Ir" ((long)line)
                    : "memory");

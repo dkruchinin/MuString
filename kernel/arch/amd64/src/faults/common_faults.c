@@ -42,7 +42,8 @@ void FH_invalid_opcode(struct fault_ctx *fctx)
 {  
   if (fctx->gprs->rax == ASSERT_MAGIC) {
     struct gpregs *gprs = fctx->gprs;
-    
+
+    kprintf_fault("================= [KERNEL ASSERTION] =================\n  ");
     kprintf_fault((char *)gprs->r10, (char *)gprs->r11,
                   (char *)gprs->r12, (int)gprs->r13);
     fault_dump_info(fctx);
@@ -56,7 +57,7 @@ void FH_invalid_opcode(struct fault_ctx *fctx)
 
 void FH_device_not_avail(struct fault_ctx *fctx)
 {
-  fault_describe("DEVICE NOT AVAIL", fctx);
+  fault_describe("DEVICE NOT AVAILABLE", fctx);
   fault_dump_info(fctx);
   __stop_cpu();
 }

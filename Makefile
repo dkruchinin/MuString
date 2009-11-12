@@ -216,8 +216,9 @@ help:
 	$(Q)$(ECHO)
 
 help_config:
-	$(Q)$(ECHO) "Before building kernel you should configure it"
-	$(Q)$(ECHO) "Run make config or  make menuconfig."
+	$(Q)$(ECHO) "ERROR: Before building kernel you should configure it"
+	$(Q)$(ECHO) "Run make config or  << make menuconfig >>."
+	$(Q)$(ECHO) "Or run << make help >> to see all available commands and options."
 	$(Q)$(ECHO)
 	$(Q)exit 2
 

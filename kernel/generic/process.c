@@ -265,9 +265,9 @@ static int __disintegrate_task(task_t *target,ulong_t pnum)
   iov.iov_len=sizeof(drp);
 
   descr->channel=channel;
-  descr->msg=ipc_create_port_message_iov_v(channel, &iov, 1, sizeof(drp), NULL, 0, NULL, NULL, 0);
+  descr->msg=ipc_create_port_message_iov_v(channel, &iov, 1, sizeof(drp), NULL, 0, NULL, NULL, 0,
+                                           (int *)&r);
   if (!descr->msg) {
-    r = -ENOMEM;
     ipc_put_channel(channel);
     goto free_descr;
   }

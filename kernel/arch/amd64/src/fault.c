@@ -91,18 +91,8 @@ static void fill_fault_context(struct fault_ctx *fctx, void *rsp,
   fctx->gprs = (struct gpregs *)p;
   p += sizeof(struct gpregs);
 
-  /*
-   * If fault saves error code on the stack frame,
-   * data saved by interrupt itself(i.e. interrupt stack frame)
-   * will lie on 8 bytes higher.
-   */
-  if (FAULT_HAS_ERRCODE(fault_num)) {
-    fctx->errcode = *(uint32_t *)p;
-    p += 8;
-  }
-  else {
-    fctx->errcode = 0;
-  }
+  fctx->errcode = *(uint32_t *)p;
+  p += 8;
 
   /* Save pointer to interrupt stack frame */
   fctx->istack_frame = (struct intr_stack_frame *)p;

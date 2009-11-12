@@ -467,6 +467,6 @@ void arch_activate_task(task_t *to)
            to->pid,to->tid,to->cpu, current_task()->pid, current_task()->tid);
 #endif
 
-  /* Let's jump ! */
+      /* Let's jump ! */
   arch_hw_activate_task(to_ctx,to,from_ctx,to->kernel_stack.high_address);
 }

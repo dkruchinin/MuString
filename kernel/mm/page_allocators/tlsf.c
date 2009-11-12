@@ -795,7 +795,6 @@ static INITCODE int initialize_percpu_cache(cpu_id_t cpuid, void *_tlsf)
   list_head_t h;
   list_node_t *iter, *safe;
 
-  kprintf(">>>>> INIT FOR CPU %d\n", cpuid);
   memset(cache, 0, sizeof(*cache));
   list_init_head(&cache->pages);
   list_init_head(&h);

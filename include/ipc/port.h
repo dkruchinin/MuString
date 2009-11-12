@@ -157,7 +157,7 @@ void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w);
 ipc_port_message_t *ipc_create_port_message_iov_v(struct __ipc_channel *channel, struct __iovec *snd_kiovecs,
                                                   uint32_t snd_numvecs, size_t data_len,
                                                   struct __iovec *rcv_kiovecs, uint32_t rcv_numvecs,
-                                                  ipc_buffer_t *snd_bufs, ipc_buffer_t *rcv_bufs, size_t rcv_size);
+                                                  ipc_buffer_t *snd_bufs, ipc_buffer_t *rcv_bufs, size_t rcv_size, int *err);
 long ipc_port_send_iov(struct __ipc_channel *channel, struct __iovec *snd_kiovecs, ulong_t snd_numvecs,
                        struct __iovec *rcv_kiovecs, ulong_t rcv_numvecs);
 long ipc_port_send_iov_core(ipc_gen_port_t *port,

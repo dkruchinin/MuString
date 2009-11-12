@@ -51,7 +51,7 @@ static int __mmap_one_phys_page(vmm_t *vmm, page_idx_t pidx,
     GMO_DBG("(pid %ld) Failed to mmap one physical page %#x to address %p. "
             "Some other page is already mapped by this address.\n",
             vmm->owner->pid, pidx, addr);
-    return -EBUSY;
+    return ERR(-EBUSY);
   }
 
   ret = mmap_page(&vmm->rpd, addr, pidx, flags);
@@ -81,7 +81,7 @@ static int __mmap_one_anon_page(vmm_t *vmm, page_frame_t *page,
             vmm->owner->pid, pframe_number(page), addr);
 
     free_page(page);
-    return -EBUSY;
+    return ERR(-EBUSY);
   }
 
   ret = mmap_page(&vmm->rpd, addr, pframe_number(page), flags);
@@ -115,9 +115,9 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
   int ret = 0;
   vmm_t *vmm = vmr->parent_vmm;
 
-  if ((vmr->flags & (VMR_PHYS | VMR_NONE)))
-    return -EINVAL;
-
+  if ((vmr->flags & (VMR_PHYS | VMR_NONE))) {
+    return ERR(-EINVAL);
+  }
   if (pfmask & PFLT_NOT_PRESENT) {
     page_frame_t *pf;
     vmrange_flags_t mmap_flags = vmr->flags;
@@ -127,8 +127,9 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
     }
 
     pf = alloc_page(MMPOOL_USER | AF_ZERO);
-    if (!pf)
-      return -ENOMEM;
+    if (!pf) {
+      return ERR(-ENOMEM);
+    }
 
     /*
      * For simple not present faults we have to allocate
@@ -217,7 +218,7 @@ static int generic_handle_page_fault(vmrange_t *vmr, uintptr_t addr,
 
 out_unlock:
   RPD_UNLOCK_WRITE(&vmm->rpd);
-  return ret;
+  return ERR(ret);
 }
 
 static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr,
@@ -233,7 +234,7 @@ static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr,
     list_init_head(&chain_head);
     pages = alloc_pages(npages, AF_ZERO | MMPOOL_USER);
     if (!pages) {
-      return -ENOMEM;
+      return ERR(-ENOMEM);
     }
 
     list_set_head(&chain_head, &pages->chain_node);
@@ -245,7 +246,7 @@ static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr,
                 "[RET = %d]\n", vmm->owner->pid, pframe_number(p), addr, ret);
 
         RPD_UNLOCK_WRITE(&vmm->rpd);
-        return ret;
+        return ERR(ret);
       }
 
       p->offset = addr2pgoff(vmr, addr);
@@ -266,14 +267,14 @@ static int generic_populate_pages(vmrange_t *vmr, uintptr_t addr,
                 "[RET = %d]\n", i, addr, ret);
 
         RPD_UNLOCK_WRITE(&vmm->rpd);
-        return ret;
+        return ERR(ret);
       }
     }
 
     RPD_UNLOCK_WRITE(&vmm->rpd);
   }
 
-  return ret;
+  return ERR(ret);
 }
 
 static int generic_insert_page(vmrange_t *vmr, page_frame_t *page,
@@ -285,10 +286,10 @@ static int generic_insert_page(vmrange_t *vmr, page_frame_t *page,
 
   if ((addr < vmr->bounds.space_start) ||
       (addr >= vmr->bounds.space_end)) {
-    return -EFAULT;
+    return ERR(-EFAULT);
   }
   if (pg_memobj && (pg_memobj != vmr->memobj)) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   ret = mmap_page(&vmm->rpd, addr, pframe_number(page),
@@ -298,7 +299,7 @@ static int generic_insert_page(vmrange_t *vmr, page_frame_t *page,
             "address %p (VMM: %s). [ERR = %d]\n",
             vmr->memobj->id, pframe_number(page), vmr->bounds.space_start,
             vmr->bounds.space_end, addr, vmm_get_name_dbg(vmm), ret);
-    return ret;
+    return ERR(ret);
   }
 
   page->offset = addr2pgoff(vmr, addr);
@@ -319,7 +320,7 @@ static int generic_depopulate_pages(vmrange_t *vmr, uintptr_t va_from,
 {
   vmm_t *vmm = vmr->parent_vmm;
   page_idx_t pidx;
-  int ret;
+  int ret = 0;
   page_frame_t *page;
 
   ASSERT(vmr->memobj == generic_memobj);
@@ -350,7 +351,7 @@ eof_cycle:
 
 out:
   RPD_UNLOCK_WRITE(&vmm->rpd);
-  return 0;
+  return ret;
 }
 
 static memobj_ops_t generic_memobj_ops = {

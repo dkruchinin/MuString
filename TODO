@@ -9,4 +9,4 @@ requirenment based and stress tests
 8) Protect DMA and PHYISCAL mappings
 9) Think about using of AMD64 hardware debug and performance
 registers.
-10) BOGOMIPS+RDTSC support
+10) BOGOMIPS+RDTSC support ...

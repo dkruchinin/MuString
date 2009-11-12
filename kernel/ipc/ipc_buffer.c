@@ -161,8 +161,7 @@ outerror:
   }
 
   UNLOCK_TASK_VM(owner);
-  kprintf("outerror ===> %d\n", r);
-  return r;
+  return ERR(r);
 }
 
 /* TODO DK: unpin pages after transferring is end */
@@ -203,7 +202,7 @@ long ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs, iovec_t 
 
   if (offset) {
     if (!start_buf) {
-      return -E2BIG; /* Too big offset. */
+      return ERR(-E2BIG); /* Too big offset. */
     }
 
     /* Now we can adjust buffer size and get the first data chunk. */
@@ -254,7 +253,7 @@ long ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs, iovec_t 
         r = copy_to_user(user_addr, dest_kaddr, to_copy);
       }
       if (r) {
-        return -EFAULT;
+        return ERR(-EFAULT);
       }
 
       processed += to_copy;

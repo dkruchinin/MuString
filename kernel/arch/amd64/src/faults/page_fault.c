@@ -116,6 +116,9 @@ void FH_page_fault(struct fault_ctx *fctx)
     if (!ret) {
       return;
     }
+    if (fixup_addr) {
+      goto handle_fixup;
+    }
     
     display_unhandled_pf_info(fctx, fault_addr);
 #ifdef CONFIG_DUMP_VMM_ON_FAULT
@@ -128,14 +131,14 @@ void FH_page_fault(struct fault_ctx *fctx)
     return;
 #endif /* CONFIG_SEND_SIGSEGV_ON_FAULTS */
   }
-  if (fixup_addr) {
-      kprintf("XXX FAULT %p, FIXUP %p\n",
-              fault_addr, fixup_addr);
-    stack_frame->rip = fixup_addr;
-    return;
-  }
 
 stop_cpu:
   __stop_cpu();
+
+handle_fixup:
+  kprintf_fault("FIXUP = %p\n", fixup_addr);
+  stack_frame->rip = fixup_addr;
+  return;
+
 }
 

@@ -40,7 +40,7 @@
 #define ASSERT(cond)                                    \
   do {                                                  \
     if (unlikely(!(cond))) {                            \
-      ASSERT_LOW_LEVEL("[KERNEL ASSERTION] " #cond "\n" \
+      ASSERT_LOW_LEVEL("ASSERTION: " #cond "\n" \
                        "    in %s:%s:%d\n", __FILE__,   \
                        __FUNCTION__, __LINE__);         \
     }                                                   \

@@ -185,7 +185,6 @@ void fire_deffered_actions(void)
   /* To prevent recursive invocations. */
   spinlock_lock_irqsave(&acts->lock,is);
   if( acts->executers || list_is_empty(&acts->pending_actions) ) {
-    preempt_enable();
     spinlock_unlock_irqrestore(&acts->lock,is);
     return;
   } else {
@@ -221,7 +220,6 @@ void fire_deffered_actions(void)
 
   spinlock_lock_irqsave(&acts->lock,is);
   acts->executers--;
-  preempt_enable();   /* Trigger preemption. */
   spinlock_unlock_irqrestore(&acts->lock,is);
 }
 

@@ -69,7 +69,7 @@
 static int __calc_msg_length(iovec_t iovecs[], ulong_t num_iovecs, ulong_t *size)
 {
   ulong_t i, msg_size;
-  
+
   ASSERT(size != NULL);
   for (msg_size = 0, i = 0; i < num_iovecs; i++) {
     msg_size += iovecs[i].iov_len;
@@ -133,7 +133,8 @@ void put_ipc_port_message(ipc_port_message_t *msg)
 
 ipc_port_message_t *ipc_create_port_message_iov_v(ipc_channel_t *channel, iovec_t *snd_kiovecs, uint32_t snd_numvecs,
                                                   size_t data_len, iovec_t *rcv_kiovecs, uint32_t rcv_numvecs,
-                                                  ipc_buffer_t *snd_bufs, ipc_buffer_t *rcv_bufs, size_t rcv_size)
+                                                  ipc_buffer_t *snd_bufs, ipc_buffer_t *rcv_bufs, size_t rcv_size,
+                                                  int *err)
 {
   ipc_port_message_t *msg;
   int i, r;
@@ -141,6 +142,8 @@ ipc_port_message_t *ipc_create_port_message_iov_v(ipc_channel_t *channel, iovec_
   task_ipc_priv_t *ipc_priv;
   task_t *owner = current_task();
 
+  ASSERT(err != NULL);
+  *err = -ENOMEM;
   ipc_priv = owner->ipc_priv;
   if (!channel_in_blocked_mode(channel)) {
     if (data_len > IPC_NB_MESSAGE_MAXLEN) {
@@ -172,6 +175,7 @@ ipc_port_message_t *ipc_create_port_message_iov_v(ipc_channel_t *channel, iovec_
                                  (page_idx_t *)ipc_priv->cached_data.cached_page1,
                                  snd_bufs, true);
       if (r) {
+        *err = r;
         goto free_message;
       }
       
@@ -191,6 +195,7 @@ ipc_port_message_t *ipc_create_port_message_iov_v(ipc_channel_t *channel, iovec_
                                    (page_idx_t *)ipc_priv->cached_data.cached_page2,
                                    rcv_bufs, false);
         if (r) {
+          *err = r;
           goto free_message;
         }
         
@@ -352,7 +357,11 @@ static long __transfer_reply_data_iov(ipc_port_message_t *msg,
   if( from_server ) {
     msg->replied_size=reply_len;
   }
-  return r ? r : processed;
+  if (r) {
+    return ERR(r);
+  }
+  
+  return processed;
 }
 
 static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
@@ -365,7 +374,7 @@ static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
 
   if( iovec ) {
     if( offset >= msg->data_size ) {
-      return -EINVAL;
+      return ERR(-EINVAL);
     }
 
     if( msg->extra_data && (offset < (IPC_MSG_EXTRA_SIZE - msg->extra_data_tail)) ) {
@@ -424,7 +433,7 @@ out:
     }
   }
 
-  return r;
+  return ERR(r);
 }
 
 int ipc_close_port(task_ipc_t *ipc,ulong_t port)
@@ -632,6 +641,7 @@ long ipc_port_msg_write(struct __ipc_gen_port *port,ulong_t msg_id,
       event_raise(&msg->event);
     }
   }
+
   return ERR(r);
 }
 
@@ -701,9 +711,9 @@ out:
     if( !(port->flags & IPC_PORT_SHUTDOWN) &&
         !(port->flags & IPC_BLOCKED_ACCESS) ) {
       port->msg_ops->remove_message(port,msg);
-    } 
-    IPC_UNLOCK_PORT_W(port);      
-    
+    }
+    IPC_UNLOCK_PORT_W(port);
+
     if (msg->blocked_mode) {
       POST_MESSAGE_DATA_ACCESS_STEP(port,msg,r,true);
     } else {
@@ -777,16 +787,16 @@ long ipc_port_send_iov(ipc_channel_t *channel, iovec_t snd_kiovecs[], ulong_t sn
       return ret;
     }
   }
-  
+
   ret = ipc_get_channel_port(channel, &port);
   if (ret) {
     return -EINVAL;
   }
 
   msg = ipc_create_port_message_iov_v(channel, snd_kiovecs, snd_numvecs, msg_size,
-                                      rcv_kiovecs, rcv_numvecs, snd_bufs, rcv_bufs, rcv_size);
+                                      rcv_kiovecs, rcv_numvecs, snd_bufs, rcv_bufs, rcv_size,
+                                      (int *)&ret);
   if (!msg) {
-    ret = -ENOMEM;
     goto out;
   }
 
@@ -797,7 +807,7 @@ out:
     ipc_put_port(port);
   }
 
-  return ret;
+  return ERR(ret);
 }
 
 long ipc_port_send_iov_core(ipc_gen_port_t *port,
@@ -843,7 +853,7 @@ long ipc_port_send_iov_core(ipc_gen_port_t *port,
   IPC_UNLOCK_PORT_W(port);
 
   if( r ) {
-    return r;
+    return ERR(r);
   }
 
   /* Sender should wait for the reply, so put it into sleep here. */
@@ -917,7 +927,7 @@ long ipc_port_send_iov_core(ipc_gen_port_t *port,
   } else {
     r=msg_size;
   }
-  return r;
+  return ERR(r);
 }
 
 void ipc_port_remove_poller(ipc_gen_port_t *port,wqueue_task_t *w)

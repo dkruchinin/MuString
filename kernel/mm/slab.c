@@ -83,7 +83,7 @@ static void free_slab_object(slab_t *slab, void *obj);
  */
 #ifdef CONFIG_DEBUG_SLAB_MARK_PAGES
 static int mark_version = SLAB_FIRST_VERSION;
-static SPINLOCK_DEFINE(version_lock);
+static SPINLOCK_DEFINE(version_lock, "Memory cache version");
 
 static inline void memcache_dbg_set_version(memcache_t *memcache)
 {
@@ -553,7 +553,6 @@ static void destroy_slab(slab_t *slab)
 
   SLAB_VERBOSE(memcache, ">> destroy slab %p(state = %s)\n",
                slab,  __slab_state_to_string(slab->state));
-
   if (likely(slab->memcache != &slabs_memcache)) {
     slab_t *slabs_slab;
 
@@ -1143,7 +1142,7 @@ take_new_slab:
 
     slab = slab_tmp;
   }
-  
+
   memcache_unlock(memcache);
 
 alloc_obj:

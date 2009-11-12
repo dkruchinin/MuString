@@ -69,7 +69,7 @@ static void main_routine_stage1(void)
 
   /* Enter idle loop. */
   kprintf( "CPU #0 is entering idle loop. Current task: %p, CPU ID: %d\n",
-           current_task(), cpu_id() );
+           current_task(), cpu_id() );  
   idle_loop();
 }
 

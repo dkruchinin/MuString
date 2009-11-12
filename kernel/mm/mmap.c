@@ -872,7 +872,7 @@ create_vmrange:
    */
   return (!(flags & VMR_STACK) ? addr : (addr + (npages << PAGE_WIDTH)));
 
-  err:
+err:
   if (vmr) {
     ttree_delete_placeful(&cursor);
     destroy_vmrange(vmr);
@@ -920,10 +920,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
                        va_from, va_to);
     
     if (!split_vmrange(vmr, va_from, va_to)) {
-      kprintf(KO_ERROR "unmap_vmranges: Failed to split VM range "
-              "[%p, %p). -ENOMEM\n", vmr->bounds.space_start,
-              vmr->bounds.space_end);
-      return -ENOMEM;
+      return ERR(-ENOMEM);
     }
 
     return 0; /* done */
@@ -1088,12 +1085,12 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
 
   /* don't fuck with me */
   if (!valid_user_address_range(va, (npages << PAGE_WIDTH))) {
-    return -EFAULT;
+    return ERR(-EFAULT);
   }
 
   vmr = vmrange_find(vmm, va, va + 1, &cursor);
   if (!vmr) {
-    return -EFAULT;
+    return ERR(-EFAULT);
   }
 
   while (i < npages) {
@@ -1104,21 +1101,19 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
      */
     if (unlikely(va >= vmr->bounds.space_end)) {
       if (ttree_cursor_next(&cursor) < 0) {
-        return -EFAULT;
+        return ERR(-EFAULT);
       }
+    }
 
-      vmr = ttree_item_from_cursor(&cursor);
-      if (va < vmr->bounds.space_start) {
-        return -EFAULT;
-      }
-      if (!__valid_vmr_rights(vmr, pfmask)) {
-        return -EACCES;
-      }
+    vmr = ttree_item_from_cursor(&cursor);
+    if ((va < vmr->bounds.space_start) ||
+        !__valid_vmr_rights(vmr, pfmask)) {
+      return ERR(-EFAULT);
     }
 
     ret = __fault_in_user_page(vmr, va, pfmask, &pidx);
     if (ret) {
-      return ret;
+      return ERR(ret);
     }
 
     if (callback) {
@@ -1151,7 +1146,7 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
    * has VMR_WRITE flag unset or VMR_NONE flag set, fault can not be handled.
    */
   if (!__valid_vmr_rights(vmr, pfmask)) {
-    ret = -EACCES;
+    ret = -EFAULT;
     goto out;
   }
 
@@ -1159,10 +1154,9 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
   memobj = vmr->memobj;
   ret = memobj_method_call(memobj, handle_page_fault, vmr,
                            PAGE_ALIGN_DOWN(fault_addr), pfmask);
-
 out:
   rwsem_up_read(&vmm->rwsem);
-  return ret;
+  return ERR(ret);
 }
 
 #define MMAP_SIZE_LIMIT MB2B(1024UL)
@@ -1245,7 +1239,7 @@ int sys_munmap(pid_t victim, uintptr_t addr, size_t length)
   else {
     victim_task = pid_to_task(victim);
     if (!victim_task) {
-      return -ESRCH;
+      return ERR(-ESRCH);
     }
   }
 
@@ -1271,7 +1265,7 @@ out:
   if (victim_task && victim)
     release_task_struct(victim_task);
 
-  return ret;
+  return ERR(ret);
 }
 
 /* VM ranges with the followin flags are not allowed to grant pages */

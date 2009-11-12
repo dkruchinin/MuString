@@ -88,7 +88,13 @@ static INITCODE void init_cpu_features(void)
   uint64_t val;
 
   val = read_cr0();
-  val &= ~CR0_AM;
+  val &= ~CR0_AM; /* Disable alignment-check */
+
+  /*
+   * Set write protect bit in order to protect
+   * write access to read-only pages from supervisor mode.
+   */
+  val |= CR0_WP;
   write_cr0(val);
 
   val = rflags_read();

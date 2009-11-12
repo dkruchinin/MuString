@@ -48,21 +48,12 @@ int waitqueue_insert_core(wqueue_t *wq, wqueue_task_t *wq_task, wqueue_insop_t i
                                   TASK_STATE_SLEEPING : TASK_STATE_SUSPENDED);
     if (unlikely(ret == -EAGAIN)) {
       ret = 0;
-      goto remove_task;
-    }
-    
-    /* Check for pending actions. */
-    if (likely(!task_was_interrupted(wq_task->task)))
-      goto out;
-
-    ret = -EINTR;
-    remove_task:
-    wq->num_waiters--;
-    wq_task->wq = NULL;
-    pqueue_delete_core(&wq->pqueue, &wq_task->pq_node);
+      wq->num_waiters--;
+      wq_task->wq = NULL;
+      pqueue_delete_core(&wq->pqueue, &wq_task->pq_node);
+    }  
   }
   
-  out:
   return ret;
 }
 
