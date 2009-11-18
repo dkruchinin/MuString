@@ -48,3 +48,6 @@ resume_userspace:
     orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
     iretq
 
+.globl arch_cpu_relax
+arch_cpu_relax:
+    hlt

@@ -41,9 +41,13 @@ task_t *idle_tasks[CONFIG_NRCPUS];
 #define TICKS_TO_WAIT 300
 
 #include <mstring/sched_default.h>
+#include <arch/scheduler.h>
+
 void idle_loop(void)
 {
+#ifndef ARCH_CPU_RELAX
   long idle_cycles=0;
+#endif
 
 #ifdef CONFIG_TEST
   if( !cpu_id() ) {
@@ -52,7 +56,11 @@ void idle_loop(void)
 #endif
 
   for( ;; ) {
+#ifndef ARCH_CPU_RELAX
     idle_cycles++;
+#else
+    arch_cpu_relax();
+#endif
   }
 }
 
