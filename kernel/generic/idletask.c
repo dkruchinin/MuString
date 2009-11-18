@@ -59,7 +59,8 @@ void idle_loop(void)
 #ifndef ARCH_CPU_RELAX
     idle_cycles++;
 #else
-    arch_cpu_relax();
+    if( !halt_possible() )
+      arch_cpu_relax();
 #endif
   }
 }

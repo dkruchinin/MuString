@@ -51,7 +51,7 @@ void arch_hw_activate_task(arch_context_t *new_ctx, task_t *new_task,
                            arch_context_t *old_ctx, uintptr_t kstack);
 void arch_activate_task(task_t *to);
 
-#define ARCH_CPU_RELAX
+//#define ARCH_CPU_RELAX
 void arch_cpu_relax(void);
 
 #endif
