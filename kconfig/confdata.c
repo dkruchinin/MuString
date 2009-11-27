@@ -11,6 +11,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <errno.h>
 
 #define LKC_DIRECT_LINK
 #include "lkc.h"
