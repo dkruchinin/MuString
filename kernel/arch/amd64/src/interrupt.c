@@ -26,6 +26,7 @@
 #include <arch/seg.h>
 #include <arch/i8259.h>
 #include <arch/apic.h>
+#include <arch/ioapic.h>
 #include <arch/cpufeatures.h>
 #include <mstring/bitwise.h>
 #include <mstring/interrupt.h>
@@ -64,7 +65,7 @@ static INITCODE void register_default_irqctrl(void)
     panic("Can not find %s irq controller!", I8259A_IRQCTRL_NAME);
   }
 
-  default_irqctrl = irq_ctrl;  
+  default_irqctrl = irq_ctrl;
 }
 
 INITCODE void arch_irqs_init(void)
@@ -77,7 +78,8 @@ INITCODE void arch_irqs_init(void)
 
   i8259a_init();
   if (cpu_has_feature(X86_FTR_APIC)) {
-      lapic_init(0);
+    lapic_init(0);
+    ioapic_init();
   }
 
   register_default_irqctrl();

@@ -64,7 +64,7 @@ typedef struct acpi_madt {
   acpi_table_hdr_t hdr;
   uint32_t lapic_addr;     /* Local APIC physical address */
   uint32_t flags;          /* Multiple APIC flags */
-  
+
   /*
    * A list of APIC structures including all of the
    * I/O APIC, I/O SAPIC, Local APIC, Local SAPIC, ISO, NMI src,
@@ -87,6 +87,15 @@ typedef struct madt_lapic {
     unsigned reserved :31;
   } flags;
 } __attribute__ ((packed)) madt_lapic_t;
+
+typedef struct madt_ioapic {
+  madt_hdr_t hdr;
+  uint8_t id;
+  uint8_t __res;
+  uint32_t base_addr;
+  /* global system interrupt where this I/O APIC's interrupt inputs start */
+  uint32_t start_gsi;
+} __attribute__ ((packed)) madt_ioapic_t;
 
 typedef enum acpi_tlbid {
   MADT_TABLE = 0,

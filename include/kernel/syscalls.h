@@ -46,51 +46,53 @@
 #define SC_FREE_IOPORTS        6
 #define SC_CREATE_IRQ_ARRAY    7
 #define SC_WAIT_ON_IRQ_ARRAY   8
-#define SC_IPC_PORT_POLL       9
+#define SC_REGISTER_FREE_IRQ   9
 
-#define SC_NANOSLEEP           10
-#define SC_SCHED_CONTROL       11
-#define SC_EXIT                12
-#define SC_OPEN_CHANNEL        13
-#define SC_CLOSE_CHANNEL       14
+#define SC_UNREGISTER_IRQ      10
+#define SC_IPC_PORT_POLL       11
+#define SC_NANOSLEEP           12
+#define SC_SCHED_CONTROL       13
+#define SC_EXIT                14
 
-#define SC_CLOSE_PORT          15
-#define SC_CONTROL_CHANNEL     16
-#define SC_SYNC_CREATE         17
-#define SC_SYNC_CONTROL        18
-#define SC_SYNC_DESTROY        19
+#define SC_OPEN_CHANNEL        15
+#define SC_CLOSE_CHANNEL       16
+#define SC_CLOSE_PORT          17
+#define SC_CONTROL_CHANNEL     18
+#define SC_SYNC_CREATE         19
 
-#define SC_KILL                20
-#define SC_SIGNAL              21
-#define SC_SIGRETURN           22
-#define SC_PORT_SEND_IOV_V     23
-#define SC_PORT_REPLY_IOV      24
+#define SC_SYNC_CONTROL        20
+#define SC_SYNC_DESTROY        21
+#define SC_KILL                22
+#define SC_SIGNAL              23
+#define SC_SIGRETURN           24
 
-#define SC_SIGACTION           25
-#define SC_THREAD_KILL         26
-#define SC_SIGPROCMASK         27
-#define SC_THREAD_EXIT         28
-#define SC_TIMER_CREATE        29
+#define SC_PORT_SEND_IOV_V     25
+#define SC_PORT_REPLY_IOV      26
+#define SC_SIGACTION           27
+#define SC_THREAD_KILL         28
+#define SC_SIGPROCMASK         29
 
-#define SC_TIMER_CONTROL       30
-#define SC_MUNMAP              31
-#define SC_THREAD_WAIT         32
-#define SC_PORT_MSG_READ       33
-#define SC_KERNEL_CONTROL      34
+#define SC_THREAD_EXIT         30
+#define SC_TIMER_CREATE        31
+#define SC_TIMER_CONTROL       32
+#define SC_MUNMAP              33
+#define SC_THREAD_WAIT         34
 
-#define SC_TIMER_DELETE        35
-#define SC_SIGWAITINFO         36
-#define SC_SCHED_YIELD         37
-#define SC_MEMOBJ_CREATE       38
-#define SC_FORK                39
+#define SC_PORT_MSG_READ       35
+#define SC_KERNEL_CONTROL      36
+#define SC_TIMER_DELETE        37
+#define SC_SIGWAITINFO         38
+#define SC_SCHED_YIELD         39
 
-#define SC_GRANT_PAGES         40
-#define SC_WAITPID             41
-#define SC_ALLOC_DMA           42
-#define SC_FREE_DMA            43
-#define SC_PORT_CONTROL        44
+#define SC_MEMOBJ_CREATE       40
+#define SC_FORK                41
+#define SC_GRANT_PAGES         42
+#define SC_WAITPID             43
+#define SC_ALLOC_DMA           44
 
-#define SC_PORT_MSG_WRITE      45
+#define SC_FREE_DMA            45
+#define SC_PORT_CONTROL        46
+#define SC_PORT_MSG_WRITE      47
 
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */
@@ -169,7 +171,7 @@ long sys_create_task(ulong_t flags,task_creation_attrs_t *a);
  *    EACCESS - calling process is not allowed to perform the command
  *              requested;
  *    EFAULT - argument points to insufficient address in userspace;
- *    
+ *
  */
 long sys_task_control( pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg);
 
@@ -217,7 +219,7 @@ int sys_free_ioports(ulong_t first_port,ulong_t num_ports);
  *                                           ulong_t addr,ulong_t flags)
  * @brief Create a shared memory object for delivering hardware interrupts
  *        to userspace.
- * 
+ *
  * This function creates a so-called 'IRQ array' whcih is used for delivering
  * hardware interrupts (IRQs) to userspace.
  * Such arrays consist of two main parts: events bitmask and IRQ counters.

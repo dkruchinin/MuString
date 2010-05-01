@@ -33,7 +33,7 @@
 #include <mstring/panic.h>
 #include <mstring/types.h>
 
-extern volatile cpu_id_t online_cpus;
+extern volatile cpumask_t online_cpus;
 
 #ifdef CONFIG_SMP
 #include <ds/list.h>
@@ -92,7 +92,7 @@ static inline void smp_hooks_fire(cpu_id_t cpuid)
 
 static inline void set_cpu_online(cpu_id_t cpu, uint32_t online)
 {
-  cpu_id_t mask = 1 << cpu;
+  cpumask_t mask = 1 << cpu;
 
   if( online ) {
     online_cpus |= mask;

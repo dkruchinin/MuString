@@ -41,7 +41,7 @@ static INITCODE void install_lapic_irqs(void);
 static inline uint32_t apic_read(uint32_t offset)
 {
   volatile uint32_t *ret;
-  
+
   ret = (volatile uint32_t *)(lapic_addr + offset);
   return *(uint32_t *)ret;
 }
@@ -50,11 +50,6 @@ static inline void apic_write(uint32_t offset, uint32_t val)
 {
   volatile uint32_t value = val;
   *(volatile uint32_t *)(lapic_addr + offset) = value;
-}
-
-static inline void lapic_eoi(void)
-{
-  apic_write(APIC_EOIR, 0);
 }
 
 static int apic_get_maxlvt(void)
@@ -71,7 +66,7 @@ static INITCODE void setup_bsp_apic(void)
   uint32_t apic_version;
 
   apic_id = apic_read(APIC_ID);
-  apic_version = apic_read(APIC_VERSION);  
+  apic_version = apic_read(APIC_VERSION);
   kprintf("LAPIC ID = %d, version = %d, lvts = %d\n", apic_id, apic_version & 0xff,
           (apic_version >> 16) & 0xff);
 }
@@ -99,7 +94,7 @@ static struct hwclock lapic_timer = {
 static void setup_lapic_ldr_flat(cpu_id_t cpuid)
 {
   uint32_t logid;
-  
+
   ASSERT(cpuid < 256);
   apic_write(APIC_DFR, APIC_DFR_FLAT);
   logid = apic_read(APIC_LDR) & ~APIC_LDR_MASK;
@@ -137,7 +132,7 @@ void local_apic_clear(void)
   apic_write(APIC_LI1_VTE, APIC_LVT_MASKED);
   if (maxlvt >= 3) {
     apic_write(APIC_ERROR_LVTE, APIC_LVT_MASKED);
-  }  
+  }
 }
 
 void local_apic_enable(void)
@@ -161,7 +156,7 @@ void local_apic_disable(void)
 static void lapic_mask_irq(irq_t irq_num)
 {
   uint32_t val;
-  
+
   switch (irq_num) {
       case APIC_ERROR_IRQ:
         val = apic_read(APIC_ERROR_LVTE);
@@ -173,11 +168,6 @@ static void lapic_mask_irq(irq_t irq_num)
       default:
         panic("Unknown vector %d\n", irq_num);
   }
-}
-
-static bool lapic_can_handle_irq(irq_t irq)
-{
-  return true;
 }
 
 static void lapic_mask_all(void)
@@ -221,6 +211,11 @@ static void lapic_ack_irq(irq_t irq_num)
   lapic_eoi();
 }
 
+static void lapic_set_affinity(irq_t irq_num, cpumask_t mask)
+{
+  /* Not implemented yet */
+}
+
 static void lapic_spurious_handler(void *unused)
 {
   kprintf("LAPIC SPURIOUS INTERRUPT\n");
@@ -229,7 +224,7 @@ static void lapic_spurious_handler(void *unused)
 static void lapic_error_interrupt(void *unused)
 {
   uint32_t err, tmp;
-  
+
   err = apic_read(APIC_ESR);
   apic_write(APIC_ESR, 0);
   tmp = apic_read(APIC_ESR);
@@ -256,12 +251,12 @@ static void lapic_error_interrupt(void *unused)
 
 static struct irq_controller lapic_controller = {
   .name = "Local APIC",
-  .can_handle_irq = lapic_can_handle_irq,
   .mask_all = lapic_mask_all,
   .unmask_all = lapic_unmask_all,
   .mask_irq = lapic_mask_irq,
-  .unmask_irq = lapic_unmask_irq,  
+  .unmask_irq = lapic_unmask_irq,
   .ack_irq = lapic_ack_irq,
+  .set_affinity = lapic_set_affinity,
 };
 
 static struct irq_action lapic_error_irq = {
@@ -278,16 +273,17 @@ INITCODE void lapic_init(cpu_id_t cpuid)
 {
   int i, j, maxlvt;
   uint32_t val;
-  
+
   if (!cpuid) {
     irq_register_controller(&lapic_controller);
     setup_bsp_apic();
   }
 
+  maxlvt = apic_get_maxlvt();
   local_apic_enable();
-  local_apic_clear();  
-  
-  /* set the lowest possible task priority */  
+  local_apic_clear();
+
+  /* set the lowest possible task priority */
   val = apic_read(APIC_TPR) & ~APIC_VECTOR_MASK;
   apic_write(APIC_TPR, val);
 
@@ -298,7 +294,7 @@ INITCODE void lapic_init(cpu_id_t cpuid)
   setup_lapic_ldr_flat(cpuid);
   for (i = APIC_NUM_ISRS - 1; i >= 0; i--) {
     val = apic_read(APIC_ISR_BASE + i * 16);
-    
+
     for (j = 31; j >= 0; j--) {
       if (bit_test(&val, j)) {
         lapic_eoi();
@@ -322,7 +318,7 @@ INITCODE void lapic_init(cpu_id_t cpuid)
   }
 
   lapic_eoi();
-  
+
   apic_write(APIC_ERROR_LVTE, IRQ_NUM_TO_VECTOR(APIC_ERROR_IRQ));
   if (maxlvt > 3) {
     apic_write(APIC_ESR, 0);
@@ -342,7 +338,7 @@ static struct irq_action lapic_timer_irq = {
 static void lapic_icr_wait(void)
 {
   int i;
-  
+
   for (i = 0; i < 0x10000; i++) {
     if (!(apic_read(APIC_ICR_LOW) & APIC_LVTDS_SEND_PENDING)) {
       return;
@@ -370,11 +366,11 @@ INITCODE void lapic_timer_init(cpu_id_t cpuid)
   default_hwclock->delay(APIC_CAL_LOOPS * 1000);
   apictick1 = apic_read(APIC_TIMER_CCR);
 
-  delta = (apictick0 - apictick1) * APIC_DIVISOR / APIC_CAL_LOOPS;  
+  delta = (apictick0 - apictick1) * APIC_DIVISOR / APIC_CAL_LOOPS;
   val = APIC_LVT_TIMER_MODE | APIC_LVT_MASKED; /* periodic timer mode */
   apic_write(APIC_TIMER_LVTE, val);
 
-  apic_write(APIC_TIMER_ICR, delta / APIC_DIVISOR);  
+  apic_write(APIC_TIMER_ICR, delta / APIC_DIVISOR);
   if (!cpuid) {
       int ret;
 
@@ -387,6 +383,21 @@ INITCODE void lapic_timer_init(cpu_id_t cpuid)
               lapic_timer_irq.name, APIC_TIMER_IRQ, ret);
       }
   }
+}
+
+int lapic_broadcast_ipi(uint8_t vector)
+{
+    uint32_t icr;
+
+    icr = APIC_DSH_ALL_EXCL | APIC_LVTL_ASSERT | APIC_LVT_TRIGGER_MODE;
+    icr |= APIC_LVTDM_FIXED | APIC_DM_LOGIC | vector;
+    apic_write(APIC_ICR_LOW, icr);
+    lapic_icr_wait();
+    if (apic_read(APIC_ICR_LOW) & APIC_LVTDS_SEND_PENDING) {
+        return ERR(-1);
+    }
+
+    return 0;
 }
 
 INITCODE int lapic_init_ipi(uint32_t apic_id)
@@ -466,10 +477,9 @@ static INITCODE void install_lapic_irqs(void)
 error:
   panic("Failed to register IRQ %s on line %d: [RET = %d]",
         act->name, irq, ret);
-#if 0
-#ifdef CONFIG_SMP
-  idt->install_handler(smp_spurious_interrupt, APIC_SPURIOUS_VECTOR);
-#endif /* CONFIG_SMP */
-#endif
 }
 
+void lapic_eoi(void)
+{
+  apic_write(APIC_EOIR, 0);
+}

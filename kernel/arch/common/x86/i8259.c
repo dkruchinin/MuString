@@ -82,24 +82,24 @@ static void i8259a_ack_irq(irq_t irq) /*end of irq*/
   else {
     outb(I8259_PIC_MASTER, 0x60 + irq);
   }
-  
+
   outb(I8259_PIC_MASTER, PIC_EOI);
 }
 
-static bool i8259a_can_handle_irq(irq_t irq)
+static void i8259a_set_affinity(irq_t irq, cpumask_t mask)
 {
-  return (irq < 16);
+  /* stub */
 }
 
 
 static struct irq_controller i8259A_pic = {
   .name = I8259A_IRQCTRL_NAME,
-  .can_handle_irq = i8259a_can_handle_irq,
   .mask_all = i8259a_mask_all,
   .unmask_all = i8259a_unmask_all,
   .mask_irq = i8259a_mask_irq,
   .unmask_irq = i8259a_unmask_irq,
   .ack_irq = i8259a_ack_irq,
+  .set_affinity = i8259a_set_affinity
 };
 
 static void i8259_spurious_handler(void *unused)
@@ -115,25 +115,25 @@ static struct irq_action i8259_spurious = {
 INITCODE void i8259a_init(void)
 {
   int ret;
-    
+
   /*
-   * ICW1 to set: 
+   * ICW1 to set:
    * 0x10 (offset) | ICW4 is need | cascade mode | edge trigger = 0x11
    */
   outb(I8259_PIC_MASTER, 0x11);
-  
+
   /*
-   * ICW2 to set: 8086 mode (according to intel's manual) 
+   * ICW2 to set: 8086 mode (according to intel's manual)
    * whether irq0 maps to irq base (pin0->base, pin1->base+1, ...)
    */
   outb(I8259_PIC_MASTER + 1, 0x20);
-  
+
   /*
    * ICW3 to set: IRs set to 1 (have a slave)
    * it's mean that slave connected to slave pin irq
    */
   outb(I8259_PIC_MASTER + 1, 0x4);
-  
+
   /*
    * ICW4 to set: 0x01 for 8086 mode
    */

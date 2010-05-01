@@ -40,48 +40,50 @@ syscall_table:
 	.quad 	sys_task_control
 	.quad   sys_mmap
 	.quad   sys_create_port
-	.quad   sys_port_receive            
+	.quad   sys_port_receive
 	.quad   sys_allocate_ioports        /* 5 */
-	.quad	sys_free_ioports
+	.quad	  sys_free_ioports
 	.quad   sys_create_irq_counter_array
-	.quad   sys_wait_on_irq_array           /* 10 */
-    .quad   sys_ipc_port_poll
+	.quad   sys_wait_on_irq_array
+	.quad   sys_register_free_irq
+  .quad   sys_unregister_irq          /* 10 */
+  .quad   sys_ipc_port_poll
 	.quad   sys_nanosleep
 	.quad   sys_scheduler_control
 	.quad   sys_exit
-	.quad   sys_open_channel
+	.quad   sys_open_channel            /* 15 */
 	.quad   sys_close_channel
-	.quad   sys_close_port              /* 15 */
+	.quad   sys_close_port
 	.quad   sys_control_channel
 	.quad   sys_sync_create_object
-	.quad   sys_sync_control
+	.quad   sys_sync_control            /* 20 */
 	.quad   sys_sync_destroy
-	.quad   sys_kill                    /* 20 */
+	.quad   sys_kill
 	.quad   sys_signal
 	.quad   sys_sigreturn
-	.quad   sys_port_send_iov_v
+	.quad   sys_port_send_iov_v         /* 25 */
 	.quad   sys_port_reply_iov
-	.quad   sys_sigaction               /* 25 */
+	.quad   sys_sigaction
 	.quad   sys_thread_kill
 	.quad   sys_sigprocmask
-	.quad   sys_thread_exit
+	.quad   sys_thread_exit             /* 30 */
 	.quad   sys_timer_create
-	.quad   sys_timer_control           /* 30 */
+	.quad   sys_timer_control
 	.quad   sys_munmap
 	.quad   sys_thread_wait
-	.quad   sys_port_msg_read
+	.quad   sys_port_msg_read           /* 35 */
 	.quad   sys_kernel_control
-	.quad   sys_timer_delete            /* 35 */
+	.quad   sys_timer_delete
 	.quad   sys_sigwaitinfo
 	.quad   sys_sched_yield
-	.quad   sys_memobj_create
+	.quad   sys_memobj_create           /* 40 */
 	.quad   sys_fork
-	.quad   sys_grant_pages             /* 40 */
+	.quad   sys_grant_pages
 	.quad   sys_waitpid
-    .quad   sys_alloc_dma_pages
-    .quad   sys_free_dma_pages
+  .quad   sys_alloc_dma_pages
+  .quad   sys_free_dma_pages          /* 45 */
 	.quad   sys_port_control
-	.quad   sys_port_msg_write          /* 45 */
+	.quad   sys_port_msg_write
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \
@@ -142,7 +144,7 @@ syscall_done:
 	call trace_sysreturn
 	pop %rax
 #endif
-        
+
 return_from_syscall:
 	  /* Before returning from syscall we should check for pending works.
 	   * Note that %rax contains return code.
@@ -164,7 +166,7 @@ no_works_after_syscall:
 	  RESTORE_GPRS
 
 	  /* Now restore user %gs */
-	  cli      
+	  cli
 	  addq $8,%rsp /* Simulate our extra 'push %rax' */
 	  RESTORE_USER_SEGMENT_REGISTERS
       pushq %rax

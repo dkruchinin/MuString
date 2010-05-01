@@ -69,7 +69,7 @@ static inline int initialize_rpd(rpd_t *rpd, struct __vmm *vmm)
 }
 
 static inline void deinitialize_rpd(rpd_t *rpd)
-{  
+{
   pt_ops.root_pdir_deinit_arch(rpd);
 }
 
@@ -82,6 +82,7 @@ typedef enum kmap_flags {
   KMAP_WRITE   = 0x04,
   KMAP_EXEC    = 0x08,
   KMAP_NOCACHE = 0x10,
+  KMAP_REMAP   = 0x20
 } kmap_flags_t;
 
 #define KMAP_OFFSET 5
@@ -143,7 +144,7 @@ static inline bool valid_user_address_range(uintptr_t va_start,
 }
 
 static inline void *user_to_kernel_vaddr(rpd_t *rpd, uintptr_t addr)
-{  
+{
   page_idx_t idx;
 
   idx = vaddr_to_pidx(rpd, addr);

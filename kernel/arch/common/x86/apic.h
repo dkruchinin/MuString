@@ -90,6 +90,10 @@ enum {
 #define APIC_LVTDM_STARTUP   0x600
 #define APIC_LVTDM_EXTINT    0x700
 
+/* APIC destination mode */
+#define APIC_DM_PHYS  0
+#define APIC_DM_LOGIC 0x800
+
 /* LVT level */
 #define APIC_LVTL_ASSERT 0x4000
 
@@ -103,6 +107,11 @@ enum {
 #define APIC_LVT_TRIGGER_MODE  0x08000 /* Trigger mode  */
 #define APIC_LVT_MASKED        0x10000 /* Interrupt is masked */
 #define APIC_LVT_TIMER_MODE    0x20000 /* Timer mode */
+
+/* Local APIC destination shorthand */
+#define APIC_DSH_SELF     0x080000
+#define APIC_DSH_ALL      0x100000
+#define APIC_DSH_ALL_EXCL 0x180000
 
 #define APIC_SET_TIMER_BASE(x) ((x) << 18)
 #define APIC_GET_TIMER_BASE(x) (((x) >> 18) & 0x03)
@@ -136,5 +145,8 @@ extern uint32_t PER_CPU_VAR(lapic_ids);
 INITCODE void lapic_init(cpu_id_t cpuid);
 INITCODE int lapic_init_ipi(uint32_t apic_id);
 INITCODE void lapic_timer_init(cpu_id_t cpuid);
+
+void lapic_eoi(void);
+int lapic_broadcast_ipi(uint8_t vector);
 
 #endif /* !__MSTRING_ARCH_APIC_H__ */

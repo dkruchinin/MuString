@@ -27,6 +27,7 @@
 #include <arch/boot.h>
 #include <arch/acpi.h>
 #include <arch/apic.h>
+#include <arch/ioapic.h>
 #include <arch/current.h>
 #include <mstring/kprintf.h>
 #include <mstring/smp.h>
@@ -110,7 +111,7 @@ static INITCODE int map_lapic_page(void)
 {
   uintptr_t dest_addr;
   int ret;
-  
+
   ASSERT(lapic_addr != 0);
 #ifdef CONFIG_AMD64
   dest_addr = __allocate_vregion(LAPIC_NUM_PAGES);
@@ -169,34 +170,89 @@ static INITCODE void prepare_lapic_info(void)
   }
 }
 
+static INITCODE void __prepare_one_ioapic(uintptr_t base_addr, irq_t base_irq)
+{
+  uintptr_t va;
+
+#ifdef CONFIG_AMD64
+  va = __allocate_vregion(IOAPIC_NUM_PAGES);
+  if (!va) {
+    panic("Failed to allocate virtual region for %d IO APIC pages!",
+          IOAPIC_NUM_PAGES);
+  }
+#else /* CONFIG_AMD64 */
+  va = base_addr;
+#endif /* !CONFIG_AMD64 */
+
+  if (mmap_kern(va, phys_to_pframe_id((void*)base_addr), IOAPIC_NUM_PAGES,
+                KMAP_KERN | KMAP_READ | KMAP_WRITE | KMAP_NOCACHE | KMAP_REMAP)) {
+    panic("Failed to map IO APIC space!");
+  }
+
+  save_next_ioapic_info((uint32_t*)va, base_irq);
+}
+
+static INITCODE void prepare_ioapic_info(void)
+{
+  acpi_madt_t *madt;
+  madt_ioapic_t *ioapic_tbl;
+  int i;
+  /* default IOAPIC initialization */
+  bool init_def = false;
+
+  madt = acpi_find_table(MADT_TABLE);
+  if (unlikely(madt == NULL)) {
+    kprintf(KO_WARNING "Can not get the multiple APIC description table from ACPI!\n");
+    init_def = true;
+  } else {
+    for (i = 0; i < MAX_IOAPICS; i++) {
+      ioapic_tbl = madt_find_table(madt, MADT_IO_APIC, i + 1);
+      if (ioapic_tbl == NULL) {
+        if (!i) {
+          kprintf(KO_WARNING "IO APIC records miss in the multiple APIC description table\n");
+          init_def = true;
+        }
+        break;
+      }
+
+      __prepare_one_ioapic((uintptr_t)ioapic_tbl->base_addr, ioapic_tbl->start_gsi);
+    }
+  }
+
+  if (init_def)
+    __prepare_one_ioapic(DEFAULT_IOAPIC_ADDR, 0);
+}
+
 INITCODE void arch_cpu_init(cpu_id_t cpu)
 {
   init_fs_and_gs(cpu);
   init_cpu_features();
   arch_seg_init(cpu);
-  arch_idt_init();  
+  arch_idt_init();
   syscall_init();
-  if (cpu != 0) {    
+  if (cpu != 0) {
     arch_cpu_enable_paging();
   }
-
-  syscall_init();
 }
 
 INITCODE void arch_prepare_system(void)
 {
   kconsole_t *kcons = default_console();
-  cpu_sched_stat_t *sched_stat = raw_percpu_get_var(cpu_sched_stat, 0);  
+  cpu_sched_stat_t *sched_stat = raw_percpu_get_var(cpu_sched_stat, 0);
 
   clear_bss();
   sched_stat->current_task = &dummy_task;
   kcons->init();
   kcons->enable();
 
+  kcons = fault_console();
+  kcons->init();
+  kcons->enable();
+
   multiboot_init();
   arch_cpu_init(0);
   arch_faults_init();
-  arch_servers_init();  
+  arch_servers_init();
 }
 
 INITCODE void arch_init(void)
@@ -205,13 +261,13 @@ INITCODE void arch_init(void)
 
   if (acpi_init() < 0) {
     cpu_has_acpi = false;
-    kprintf(KO_WARNING "Your CPU doesn't support ACPI!\n");
+    kprintf(KO_WARNING "Your BIOS doesn't provide ACPI!\n");
   }
   if (cpu_has_feature(X86_FTR_APIC)) {
     if (cpu_has_acpi) {
       prepare_lapic_info();
-    }
-    else {
+      prepare_ioapic_info();
+    } else {
       cpu_id_t c;
       int ret;
 
@@ -224,6 +280,8 @@ INITCODE void arch_init(void)
       if (ret) {
         panic("Failed to mmap local APIC page: [RET = %d]\n", ret);
       }
+
+      __prepare_one_ioapic(DEFAULT_IOAPIC_ADDR, 0);
     }
   }
 }

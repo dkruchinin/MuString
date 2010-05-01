@@ -37,6 +37,7 @@
 struct irq_controller *default_irqctrl = NULL;
 static LIST_DEFINE(irqctls_list);
 static SPINLOCK_DEFINE(irqctls_lock, "IRQ controllers");
+static SPINLOCK_DEFINE(irq_lines_lock, "IRQ lines");
 static struct irq_line irq_lines[NUM_IRQ_LINES];
 
 #define IRQLINE_IS_ACTIVE(irqline)              \
@@ -72,7 +73,7 @@ static int __register_irq_action(struct irq_line *iline,
                                  irq_t irq)
 {
   if (unlikely(!IRQLINE_IS_ACTIVE(iline))) {
-    return ERR(-EBADF);
+    return ERR(-EINVAL);
   }
 
   iaction->irq = irq;
@@ -182,8 +183,11 @@ int irq_register_action(irq_t irq, struct irq_action *action)
   iline = &irq_lines[irq];
   spinlock_lock_irqsave(&iline->irq_line_lock, irqstat);
   ret = __register_irq_action(iline, action, irq);
-  spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);  
-  
+  if (!ret && (iline->num_actions == 1)) {
+    iline->irqctl->unmask_irq(irq);
+  }
+  spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
+
   return ERR(ret);
 }
 
@@ -193,7 +197,7 @@ int irq_unregister_action(struct irq_action *action)
   struct irq_line *iline;
   int ret = -ENOENT;
   uint_t irqstat;
-  
+
   ASSERT(action != NULL);
   if (action->irq >= NUM_IRQ_LINES) {
     return ERR(-EINVAL);
@@ -221,13 +225,12 @@ int irq_unregister_action(struct irq_action *action)
 INITCODE void irq_register_controller(struct irq_controller *irqctl)
 {
   ASSERT(irqctl != NULL);
-  ASSERT(irqctl->can_handle_irq != NULL);
   ASSERT(irqctl->mask_all != NULL);
   ASSERT(irqctl->unmask_all != NULL);
   ASSERT(irqctl->mask_irq != NULL);
   ASSERT(irqctl->unmask_irq != NULL);
   ASSERT(irqctl->ack_irq != NULL);
-
+  ASSERT(irqctl->set_affinity != NULL);
 
   IRQ_CONTROLLERS_LOCK();
   list_add2tail(&irqctls_list, &irqctl->ctl_node);
@@ -274,6 +277,51 @@ int irq_line_register(irq_t irq, struct irq_controller *controller)
   return ERR(ret);
 }
 
+struct irq_controller *irq_get_line_controller(irq_t irq)
+{
+  long irqstat;
+  struct irq_controller *ctrl;
+  struct irq_line *iline;
+
+  if (irq >= NUM_IRQ_LINES) {
+    return NULL;
+  }
+
+  iline = &irq_lines[irq];
+
+  spinlock_lock_irqsave(&iline->irq_line_lock, irqstat);
+  if (IRQLINE_IS_ACTIVE(iline)) {
+    ctrl = iline->irqctl;
+  } else {
+    ctrl = NULL;
+  }
+  spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
+  return ctrl;
+}
+
+int irq_register_free_line(struct irq_controller *irqctrl, irq_t *irq)
+{
+  irq_t i;
+  uint_t irqstat;
+  int ret = -EAGAIN;
+  struct irq_line *iline;
+
+  spinlock_lock_irqsave(&irq_lines_lock, irqstat);
+  for (i = 0; i < NUM_IRQ_LINES; i++) {
+    if (!irq_line_is_registered(i)) {
+      iline = &irq_lines[i];
+      ret = __register_irq_line(iline, irqctrl);
+      break;
+    }
+  }
+  spinlock_unlock_irqrestore(&irq_lines_lock, irqstat);
+
+  if (!ret)
+    *irq = i;
+
+  return ERR(ret);
+}
+
 int irq_line_unregister(irq_t irq)
 {
   struct irq_line *iline;
@@ -308,7 +356,7 @@ int irq_register_line_and_action(irq_t irq, struct irq_controller *irqctrl,
   int ret;
   uint_t irqstat;
   struct irq_line *iline;
-  
+
   ASSERT(irqctrl != NULL);
   ASSERT(irqaction != NULL);
   if (irq >= NUM_IRQ_LINES) {
@@ -323,7 +371,7 @@ int irq_register_line_and_action(irq_t irq, struct irq_controller *irqctrl,
   }
 
   ret = __register_irq_action(iline, irqaction, irq);
-  
+
 out:
   spinlock_unlock_irqrestore(&iline->irq_line_lock, irqstat);
   return ERR(ret);
@@ -334,11 +382,11 @@ INITCODE void irqs_init(void)
   irq_t irq_num;
   struct irq_line *iline;
 
-  for (irq_num = 0; irq_num < IRQ_VECTORS; irq_num++) {
+  for (irq_num = 0; irq_num < NUM_IRQ_LINES; irq_num++) {
     iline = &irq_lines[irq_num];
     memset(iline, 0, sizeof(*iline));
     list_init_head(&iline->actions);
-    spinlock_initialize(&iline->irq_line_lock, "IRQ line");    
+    spinlock_initialize(&iline->irq_line_lock, "IRQ line");
   }
 
   arch_irqs_init();

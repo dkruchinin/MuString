@@ -28,7 +28,7 @@
 #include <mstring/types.h>
 
 extern void schedule(void);
-extern volatile cpu_id_t online_cpus;
+extern volatile cpumask_t online_cpus;
 
 #define COND_RESCHED_CURRENT \
     if( !in_atomic() && current_task_needs_resched() ) { \
@@ -114,7 +114,7 @@ static inline void unlock_local_interrupts(void)
 static inline bool local_interrupts_locked(void)
 {
   curtype_t v;
-  
+
   read_css_field(irq_lock_count,v);
   return v > 0;
 }

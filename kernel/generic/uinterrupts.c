@@ -16,6 +16,8 @@
 #include <mstring/def_actions.h>
 #include <security/security.h>
 
+#define IRQCTRL_NAME_MAXLEN 64
+
 static SPINLOCK_DEFINE(descrs_lock, "Uinterrupt descriptors");
 static uintr_descr_t descriptors[IRQ_VECTORS];
 
@@ -73,10 +75,7 @@ static long register_interrupt_listener(irq_t irq,irq_listener_t listener,
   descr->irq_num=irq;
 
   if (!irq_line_is_registered(irq)) {
-    r = irq_line_register(irq, default_irqctrl);
-    if (r) {
-      goto error;
-    }
+    return ERR(-EINVAL);
   }
 
   iaction = memalloc(sizeof(*iaction));
@@ -196,6 +195,8 @@ long sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   page_frame_t *pframe;
   ulong_t *kaddr;
 
+  kprintf_fault("%s, line %d\n", __func__, __LINE__);
+
   if( !s_check_system_capability(SYS_CAP_IRQ) ) {
     return ERR(-EPERM);
   }
@@ -279,7 +280,8 @@ long sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
     h->array=array;
     h->mask_to_set=(1<<i);
     *h->counter=0;
- 
+    h->irqcon = irq_get_line_controller(ids[i]);
+
     list_add2tail(&array->counter_handlers,&h->lnode);
     id=register_interrupt_listener(ids[i],__raw_irq_array_handler,h );
     if( id ) {
@@ -341,4 +343,32 @@ int sys_wait_on_irq_array(ulong_t id)
   event_reset(&array->de.d._event);
 
   return 0;
+}
+
+long sys_register_free_irq(const char *irq_backend)
+{
+  char *name[IRQCTRL_NAME_MAXLEN];
+  long ret;
+  irq_t irq;
+  struct irq_controller *irqctrl;
+
+  if (copy_from_user(name, (char*)irq_backend, IRQCTRL_NAME_MAXLEN))
+    return ERR(-EFAULT);
+
+  name[IRQCTRL_NAME_MAXLEN - 1] = '\0';
+  irqctrl = irq_get_controller((char*)name);
+  if (irqctrl == NULL) {
+    ret = -EINVAL;
+  } else {
+    ret = irq_register_free_line(irqctrl, &irq);
+    if (!ret)
+      ret = (long)irq;
+  }
+
+  return ERR(ret);
+}
+
+int sys_unregister_irq(irq_t irq)
+{
+  return irq_line_unregister(irq);
 }

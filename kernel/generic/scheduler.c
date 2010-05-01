@@ -52,7 +52,7 @@
 
 extern void initialize_idle_tasks(void);
 
-volatile cpu_id_t online_cpus = 0;
+volatile cpumask_t online_cpus = 0;
 
 /* Known schedulers. */
 static list_head_t schedulers;
@@ -82,7 +82,7 @@ void initialize_scheduler(void)
   /* Now initialize scheduler. */
   list_init_head(&schedulers);
   if( !sched_register_scheduler(get_default_scheduler())) {
-    panic( "initialize_scheduler(): Can't register default scheduler !" );  
+    panic( "initialize_scheduler(): Can't register default scheduler !" );
   }
 
   initialize_idle_tasks();
@@ -123,10 +123,10 @@ bool sched_register_scheduler(scheduler_t *sched)
   sched->reset();
 
   LOCK_SCHEDULER_LIST;
-  
+
   list_init_node(&sched->l);
-  list_add2tail(&schedulers,&sched->l); 
-  
+  list_add2tail(&schedulers,&sched->l);
+
   if(active_scheduler == NULL) {
     active_scheduler = sched;
   }

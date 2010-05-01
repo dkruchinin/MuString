@@ -41,7 +41,8 @@ typedef struct __irq_counter_handler {
   irq_counter_t *counter;
   irq_counter_array_t *array;
   ulong_t flags;
-  irq_t irq_line;  
+  irq_t irq_line;
+  struct irq_controller *irqcon;
 } irq_counter_handler_t;
 
 #define IRQ_COUNTER_REGISTERED  0x1

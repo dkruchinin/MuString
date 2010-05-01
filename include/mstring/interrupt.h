@@ -24,7 +24,7 @@
  */
 
 #ifndef __MSTRING_INTERRUPT_H__
-#define __MSTRING_INTERRUPT_H__ 
+#define __MSTRING_INTERRUPT_H__
 
 #include <arch/interrupt.h>
 #include <ds/list.h>
@@ -40,12 +40,12 @@
 struct irq_controller {
   char *name;
   list_node_t ctl_node;
-  bool (*can_handle_irq)(irq_t irq);
   void (*mask_all)(void);
-  void (*unmask_all)(void); 
+  void (*unmask_all)(void);
   void (*mask_irq)(irq_t irq);
-  void (*unmask_irq)(irq_t irq );
+  void (*unmask_irq)(irq_t irq);
   void (*ack_irq)(irq_t irq);
+  void (*set_affinity)(irq_t irq, cpumask_t mask);
 };
 
 typedef uint8_t irqline_flags_t;
@@ -72,7 +72,7 @@ typedef struct irq_action {
   irq_handler_fn handler;
   list_node_t node;
   irq_t irq;
-  void *priv_data;  
+  void *priv_data;
 } irq_action_t;
 
 extern struct irq_controller *default_irqctrl;
@@ -82,6 +82,7 @@ INITCODE void irq_register_controller(struct irq_controller *irqctl);
 struct irq_controller *irq_get_controller(const char *ctrl_name);
 int irq_register_line_and_action(irq_t irq, struct irq_controller *irqctrl,
                                  struct irq_action *irqaction);
+int irq_register_free_line(struct irq_controller *irqctrl, irq_t *irq);
 int irq_line_register(irq_t irq, struct irq_controller *controller);
 int irq_line_unregister(irq_t irq);
 int irq_register_action(irq_t irq, struct irq_action *action);
@@ -92,6 +93,8 @@ int irq_unmask(irq_t irq);
 void irq_unmask_all(void);
 bool irq_line_is_registered(irq_t irq);
 extern void __do_handle_irq(irq_t irq);
+int irq_register_free_line(struct irq_controller *irqctrl, irq_t *irq);
+struct irq_controller *irq_get_line_controller(irq_t irq);
 
 #endif /* !__MSTRING_INTERRUPT_H__ */
 

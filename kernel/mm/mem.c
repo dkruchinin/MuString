@@ -124,7 +124,7 @@ static void __validate_mmpools_dbg(void)
 static void *allocate_pagedir(void)
 {
   page_frame_t *page = alloc_page(MMPOOL_KERN | AF_ZERO);
-  
+
   if (!page) {
     return NULL;
   }
@@ -146,7 +146,7 @@ void mm_initialize(void)
   arch_mem_init();
   pt_ops.alloc_pagedir = allocate_pagedir;
   pt_ops.free_pagedir = free_pagedir;
-  
+
   for_each_mmpool(pool) {
     if (mmpool_activate(pool))
       nonempty_pools++;
@@ -239,7 +239,7 @@ int prepare_page_for_cow(vmrange_t *vmr, page_frame_t *page, uintptr_t addr)
     return 0;
 
   lock_page_frame(page, PF_LOCK);
-  
+
   /*
    * In simplest case the page that will be marked with
    * PF_COW flag is changing its state and state of its
@@ -285,7 +285,10 @@ int mmap_kern(uintptr_t va_from, page_idx_t first_page, pgoff_t npages, long fla
   int ret = 0;
 
   RPD_LOCK_WRITE(KERNEL_ROOT_PDIR());
-  for (i = 0; i < npages; i++, va_from += PAGE_SIZE, first_page++) {    
+  for (i = 0; i < npages; i++, va_from += PAGE_SIZE, first_page++) {
+    if (page_is_mapped(KERNEL_ROOT_PDIR(), va_from) && (flags & KMAP_REMAP))
+      munmap_page(KERNEL_ROOT_PDIR(), va_from);
+
     ret = mmap_page(KERNEL_ROOT_PDIR(), va_from, first_page, flags);
     if (ret)
       goto out;
