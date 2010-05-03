@@ -30,6 +30,7 @@
 #include <arch/cpu.h>
 #include <mstring/kprintf.h>
 #include <mstring/types.h>
+#include <mstring/ptrace.h>
 
 void FH_bound_range(struct fault_ctx *fctx)
 {
@@ -39,7 +40,7 @@ void FH_bound_range(struct fault_ctx *fctx)
 }
 
 void FH_invalid_opcode(struct fault_ctx *fctx)
-{  
+{
   if (fctx->gprs->rax == ASSERT_MAGIC) {
     struct gpregs *gprs = fctx->gprs;
 
@@ -64,17 +65,39 @@ void FH_device_not_avail(struct fault_ctx *fctx)
 
 void FH_breakpoint(struct fault_ctx *fctx)
 {
+  task_t *t = current_task();
+
+  if (task_traced(t)) {
+    regs_t *regs = (regs_t*)(t->kernel_stack.high_address -
+                             sizeof(regs_t));
+
+    regs->int_frame.rip--;
+    if (!ptrace_stop(PTRACE_EV_TRAP, 0))
+      return;   /* here the process is resumed by a debugger */
+  }
+
   fault_describe("BREAKPOINT EXCEPTION", fctx);
   fault_dump_info(fctx);
   __stop_cpu();
 }
 
+#include <mstring/usercopy.h>
+
 void FH_debug(struct fault_ctx *fctx)
 {
+  task_t *current = current_task();
+
   /* TODO DK: implement debug interface... */
-  fault_describe("DEBUG FAULT", fctx);
-  fault_dump_info(fctx);
-  __stop_cpu();
+  /* now, only single stepping is used */
+
+  if (check_task_flags(current, TF_SINGLE_STEP)) {
+    ptrace_stop(PTRACE_EV_TRAP, 0);
+  } else {
+    fault_describe("DEBUG FAULT", fctx);
+    fault_dump_info(fctx);
+    __stop_cpu();
+  }
+
 }
 
 void FH_alignment_check(struct fault_ctx *fctx)

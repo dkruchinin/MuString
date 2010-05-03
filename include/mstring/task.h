@@ -22,11 +22,13 @@
 
 
 #ifndef __TASK_H__
-#define __TASK_H__ 
+#define __TASK_H__
 
 #include <mstring/types.h>
 #include <mstring/kstack.h>
+#include <mstring/wait.h>
 #include <arch/context.h>
+#include <arch/current.h>
 #include <mm/page.h>
 #include <mm/vmm.h>
 #include <mstring/limits.h>
@@ -41,7 +43,7 @@
 typedef uint32_t time_slice_t;
 
 
-#define INVALID_PID  ((pid_t)~0) 
+#define INVALID_PID  ((pid_t)~0)
 /* TODO: [mt] Manage NUM_PIDS properly ! */
 #define NUM_PIDS  32768
 
@@ -56,18 +58,27 @@ typedef uint32_t time_slice_t;
 #define LOCK_TASK_STRUCT(t) spinlock_lock(&t->lock)
 #define UNLOCK_TASK_STRUCT(t) spinlock_unlock(&t->lock)
 
-#define LOCK_TASK_CHILDS(t) spinlock_lock(&(t)->child_lock) 
+#define LOCK_TASK_CHILDS(t) spinlock_lock(&(t)->child_lock)
 #define UNLOCK_TASK_CHILDS(t) spinlock_unlock(&(t)->child_lock)
 
 #define LOCK_TASK_MEMBERS(t) spinlock_lock(&t->member_lock)
 #define UNLOCK_TASK_MEMBERS(t) spinlock_unlock(&t->member_lock)
-#define TASK_EVENT_TERMINATION  0x1
+
 #define NUM_TASK_EVENTS  1
 #define ALL_TASK_EVENTS_MASK  ((1<<NUM_TASK_EVENTS)-1)
 #define LOCK_TASK_EVENTS(t) mutex_lock(&t->task_events->lock)
 #define UNLOCK_TASK_EVENTS(t) mutex_unlock(&t->task_events->lock)
 
 #define TASK_SHORTNAME_LEN  32
+
+/* Masks for task-related kernel events. */
+enum {
+  TASK_EVENT_TERMINATION = 1,
+  TASK_EVENT_CPU_CHANGED = 2,
+};
+
+/* Events allowed to be used by userspace. */
+#define USER_TASK_EVENTS (TASK_EVENT_TERMINATION)
 
 typedef struct __task_event_ctl_arg {
   ulong_t ev_mask;
@@ -80,14 +91,21 @@ typedef struct __task_event_descr {
   ulong_t ev_mask;
 } task_event_descr_t;
 
+struct __task_event_listener;
+typedef void (*task_event_logic_t)(struct __task_event_listener *l,
+                                   struct __task_struct *task,ulong_t events);
+typedef void (*task_event_dtor_t)(struct __task_event_listener *l);
+
 struct __ipc_channel;
 
 typedef struct __task_event_listener {
-  struct __ipc_channel *channel;
+  long data;
   struct __task_struct *listener,*target;
   list_node_t owner_list;
   list_node_t llist;
   ulong_t events;
+  task_event_logic_t logic;
+  task_event_dtor_t dtor;
 } task_event_listener_t;
 
 typedef struct __task_events {
@@ -96,6 +114,10 @@ typedef struct __task_events {
   mutex_t lock;
   atomic_t refcount;
 } task_events_t;
+
+extern long tevent_generic_ipc_init(task_event_listener_t **el,
+                                    struct __task_struct *listener,
+                                    ulong_t port,ulong_t events);
 
 typedef enum __task_creation_flag_t {
   CLONE_MM       = 0x01,
@@ -129,6 +151,7 @@ struct __task_mutex_locks;
 struct __task_sync_data;
 struct __mutex;
 struct __posix_stuff;
+struct __user_siginfo;
 
 /* Per-task signal descriptors. */
 struct __sighandlers;
@@ -146,19 +169,62 @@ typedef struct __signal_struct {
 #define __TF_EXITING_BIT  2
 #define __TF_DISINTEGRATION_BIT  3
 #define __TF_GCOLLECTED_BIT      4
+#define __TF_SINGLE_STEP_BIT 5
+#define __TF_INFAULT  6
+#define __TF_RESTORE_SIGMASK_BIT 7
 
 typedef enum __task_privilege {
   TPL_KERNEL = 0,  /* Kernel task - the most serious level. */
   TPL_USER = 1,    /* User task - the least serious level */
 } task_privelege_t;
 
-typedef enum __task_flags {
-  TF_USPC_BLOCKED=(1<<__TF_USPC_BLOCKED_BIT),/**< Block facility to change task's static priority outside the kernel **/
-  TF_UNDER_MIGRATION=(1<<__TF_UNDER_MIGRATION_BIT), /**< Task is currently being migrated. Don't disturb. **/
-  TF_EXITING=(1<<__TF_EXITING_BIT), /**< Task is exiting to avoid faults during 'sys_exit()' **/
-  TF_DISINTEGRATING=(1<<__TF_DISINTEGRATION_BIT), /**< Task is being disintegrated **/
-  TF_GCOLLECTED=(1<<__TF_GCOLLECTED_BIT) /**< Parent collected resources of this thread (threads only)*/
-} task_flags_t;
+/**
+ * Block facility to change task's static priority outside the kernel
+ */
+#define TF_USPC_BLOCKED (1<<__TF_USPC_BLOCKED_BIT)
+
+/**
+ * Task is currently being migrated. Don't disturb.
+ */
+#define TF_EXITING (1<<__TF_EXITING_BIT)
+
+/**
+ * Task is currently being migrated. Don't disturb.
+ */
+#define TF_UNDER_MIGRATION (1<<__TF_UNDER_MIGRATION_BIT)
+
+/**
+ * Task is exiting to avoid faults during 'sys_exit()'
+ */
+#define TF_EXITING (1<<__TF_EXITING_BIT)
+
+/**
+ * Task is being disintegrated
+ */
+#define TF_DISINTEGRATING (1<<__TF_DISINTEGRATION_BIT)
+
+/**
+ * Parent collected resources of this thread (threads only)
+ */
+#define TF_GCOLLECTED (1<<__TF_GCOLLECTED_BIT)
+
+#define TF_SINGLE_STEP (1<<__TF_SINGLE_STEP_BIT)
+
+/* task is stopped in a fault handler */
+#define TF_INFAULT (1 << __TF_INFAULT)
+
+/**
+ * Restore task's sigmask during return from signal handler.
+ */
+#define TF_RESTORE_SIGMASK (1 << __TF_RESTORE_SIGMASK_BIT)
+
+typedef ulong_t task_flags_t;
+
+typedef enum __wait_type {
+  WAIT_SINGLE,
+  WAIT_GROUP,
+  WAIT_ANY
+} wait_type_t;
 
 /* Flags related to deferred userspace action processing */
 #define DAF_CANCELLATION_PENDING 0x1 /**< Thread cancellation requested. */
@@ -179,9 +245,9 @@ typedef struct __uwork_data {
 /* Task that waits another task to exit. */
 typedef struct __jointee {
   event_t e;
+  wait_type_t type;
   list_node_t l;
   struct __task_struct *exiter;
-  long exit_ptr;
 } jointee_t;
 
 typedef struct __tg_leader_private {
@@ -191,11 +257,16 @@ typedef struct __tg_leader_private {
   mutex_t thread_mutex;
 } tg_leader_private_t;
 
+struct ptrace_data {
+  int event;            /* last ptrace event forced the task */
+  ulong_t msg;          /* last event's message */
+  ulong_t mask;         /* mask of event to call debugger on */
+};
+
 /* Abstract object for scheduling. */
 typedef struct __task_struct {
   pid_t pid, ppid;
   tid_t tid;
-  uid_t uid,gid;
 
   /* Scheduler-related stuff. */
   cpu_id_t cpu;
@@ -205,7 +276,7 @@ typedef struct __task_struct {
   kernel_stack_t kernel_stack;
   uintptr_t ustack;
   uintptr_t ptd;
-  
+
   union {
     rpd_t rpd;
     vmm_t *task_mm;
@@ -220,7 +291,8 @@ typedef struct __task_struct {
   struct __task_struct *group_leader;
   spinlock_t child_lock;
   list_head_t children,threads;
-  list_node_t child_list;
+  list_head_t trace_children;
+  list_node_t child_list, trace_list;
 
   /* Scheduler-related stuff. */
   struct __scheduler *scheduler;
@@ -250,12 +322,26 @@ typedef struct __task_struct {
 
   /* Signal-related stuff. */
   signal_struct_t siginfo;
+  /* number of the last signal forced task state change */
+  int last_signum;
+  /*
+   * siginfo with information about reasons forced task
+   * state change, typically needed for ptracer, can be used
+   * when the task is stopped
+   */
+  struct __user_siginfo *last_siginfo;
+  sigset_t saved_sigmask;
 
+  long exit_val;
   /* 'wait()'-related stuff. */
   jointee_t jointee;
   list_head_t jointed;
+  /* status information for waiters */
+  wait_status_t wstat;
   countered_event_t *cwaiter;
   struct __task_struct *terminator;
+  struct __task_struct *tracer; /* process tracing this one */
+  struct ptrace_data pt_data;
   event_t reinc_event;
 
   struct __posix_stuff *posix_stuff;
@@ -300,6 +386,11 @@ typedef struct __task_creation_attrs {
 static inline bool is_kernel_thread(task_t *task)
 {
   return (task->priv == TPL_KERNEL);
+}
+
+static inline bool tasks_in_same_group(task_t *t1, task_t *t2)
+{
+  return (t1->group_leader == t2->group_leader);
 }
 
 static inline rpd_t *task_get_rpd(task_t *task)
@@ -404,13 +495,15 @@ void free_task_struct(task_t *task);
 
 #define is_thread(task)  ((task)->group_leader && (task)->group_leader != (task))
 
-void task_event_notify(ulong_t events);
+task_event_listener_t *task_event_alloc_listener(void);
+void task_event_notify_target(task_t *task,ulong_t events);
 int task_event_attach(struct __task_struct *target,
-                      struct __task_struct *listener,
-                           task_event_ctl_arg *ctl_arg);
+                      task_event_listener_t *l,bool cleanup);
 int task_event_detach(pid_t target,
                       struct __task_struct *listener);
 void exit_task_events(struct __task_struct *target);
+
+#define task_event_notify(e) task_event_notify_target(current_task(),(e))
 
 /* Default kernel threads flags. */
 #define KERNEL_THREAD_FLAGS  (CLONE_MM)
@@ -452,5 +545,8 @@ void exit_task_events(struct __task_struct *target);
 #define __release_task_struct(t) atomic_dec(&(t)->refcount)
 
 void release_task_struct(struct __task_struct *t);
+
+void wakeup_tracer(task_t *task);
+void wakeup_waiters(task_t *task);
 
 #endif

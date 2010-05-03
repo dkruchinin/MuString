@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2009,2010 Dmitry Gromada <gromada@jarios.org>
  *
  * mstring/generic_api/exit.c: Task exit functionality.
  */
@@ -34,6 +35,9 @@
 #include <mstring/wait.h>
 #include <arch/spinlock.h>
 #include <mstring/usercopy.h>
+#include <security/security.h>
+#include <security/util.h>
+#include <mstring/ptrace.h>
 
 #define __set_exiting_flag(exiter)              \
   {                                             \
@@ -49,13 +53,26 @@
     UNLOCK_TASK_STRUCT((exiter));               \
   }
 
+typedef union __wait_value {
+  int status;
+  void *value_ptr;
+} wait_value_t;
+
+struct wait_info {
+  wait_value_t stat;
+  wait_type_t wtype;
+  int options;
+  usiginfo_t sinfo;
+  bool copy_sinfo;
+};
+
 /* Internal flags related to 'wait()' functions.
  */
 #define __WT_ONE_WAITER  0x1  /*Only one waiter is allowed */
 
 static void __exit_ipc(task_t *exiter) {
   task_ipc_t *ipc;
-  task_ipc_priv_t *p;  
+  task_ipc_priv_t *p;
 
   LOCK_TASK_MEMBERS(exiter);
   ipc=exiter->ipc;
@@ -120,6 +137,8 @@ static void __exit_resources(task_t *exiter,ulong_t flags)
   }
 }
 
+extern int __dump_all;
+
 static void __kill_all_threads(task_t *exiter)
 {
   list_head_t zthreads;
@@ -164,6 +183,7 @@ repeat:
   } else {
     UNLOCK_TASK_CHILDS(exiter);
   }
+
   mutex_unlock(&priv->thread_mutex);
 
   /* Stage 2: handle zombies. */
@@ -176,37 +196,72 @@ repeat:
   }
 }
 
-static void __wakeup_waiters(task_t *exiter,long exitval)
+static int __wakeup_waiters(list_head_t *jlist, task_t *task, bool tracer_only)
 {
-  countered_event_t *ce;
+  int cnt = 0;
+  list_node_t *node, *save;
+  jointee_t *j;
+  task_t *waiter;
 
-  if( is_thread(exiter) ) {
-    mutex_lock(&exiter->group_leader->tg_priv->thread_mutex);
-    LOCK_TASK_STRUCT(exiter);
-    exiter->jointee.exit_ptr=exitval;
-    ce=exiter->cwaiter;
-    exiter->cwaiter=__UNUSABLE_PTR;
-    UNLOCK_TASK_STRUCT(exiter);
-    mutex_unlock(&exiter->group_leader->tg_priv->thread_mutex);
-  } else {
-    LOCK_TASK_STRUCT(exiter);
-    exiter->jointee.exit_ptr=exitval;
-    ce=NULL; //exiter->cwaiter;
-    exiter->cwaiter=__UNUSABLE_PTR;
-    UNLOCK_TASK_STRUCT(exiter);
+  list_for_each_safe(jlist, node, save) {
+    j = container_of(node, jointee_t, l);
+    waiter = container_of(j, task_t, jointee);
+    if (!tracer_only || (waiter->group_leader == process_tracer(task))) {
+      /* check if the waiter waits for the task */
+      if ((j->exiter == task) ||
+          (j->type == WAIT_GROUP && j->exiter == task->group_leader) ||
+          (j->type == WAIT_ANY && !task->tid)) {
+        list_del(&j->l);
+        event_raise(&j->e);
+        cnt++;
+      }
+    }
+
+    if (tracer_only && cnt)
+      break;
   }
 
-  if( !list_is_empty(&exiter->jointed) ) { /* Notify all waiting tasks. */
-    jointee_t *j=container_of(list_node_first(&exiter->jointed),jointee_t,l);
-    task_t *waiter=container_of(j,task_t,jointee);
+  return cnt;
+}
 
-    LOCK_TASK_STRUCT(waiter);
-    if( j->exiter == exiter ) {
-      j->exit_ptr=exitval;
-      event_raise(&j->e);
+static void do_wakeup(task_t *task, bool tracer_only)
+{
+  countered_event_t *ce = NULL;
+  task_t *parent, *tracer;
+  int wake_cnt = 0;
+
+  if (task->state == TASK_STATE_ZOMBIE) {
+    if( is_thread(task) ) {
+      LOCK_TASK_STRUCT(task);
+      ce = task->cwaiter;
+      task->cwaiter=__UNUSABLE_PTR;
+      UNLOCK_TASK_STRUCT(task);
+    } else {
+      ce=NULL; //exiter->cwaiter;
+      task->cwaiter=__UNUSABLE_PTR;
     }
-    list_del(&j->l);
-    UNLOCK_TASK_STRUCT(waiter);
+  }
+
+  /* let's wakeup waiters */
+
+  /* at first try to wakeup a debugger if it is */
+  tracer = get_process_tracer(task);
+  if (tracer) {
+    LOCK_TASK_CHILDS(tracer);
+    wake_cnt = __wakeup_waiters(&tracer->jointed, task, tracer_only);
+    UNLOCK_TASK_CHILDS(tracer);
+    release_task_struct(tracer);
+  }
+
+  /* wakeup another waiters */
+  if (!(tracer_only && wake_cnt)) {
+    parent = pid_to_task(task->ppid);
+    if (parent) {
+      LOCK_TASK_CHILDS(parent);
+      __wakeup_waiters(&parent->jointed, task, tracer_only);
+      UNLOCK_TASK_CHILDS(parent);
+      release_task_struct(parent);
+    }
   }
 
   if( ce ) {
@@ -216,13 +271,42 @@ static void __wakeup_waiters(task_t *exiter,long exitval)
 
 static void __unlink_children(task_t *exiter)
 {
-  task_t *child;
+  task_t *child, *tracer;
+  list_node_t *node, *save;
+  bool reap;
 
-  list_for_each_entry(&exiter->children,child,child_list) {
-    LOCK_TASK_STRUCT(child);
-    child->ppid=CHILD_REAPER_PID;
-    UNLOCK_TASK_STRUCT(child);
+  list_for_each_safe(&exiter->children, node, save) {
+    child = container_of(node, task_t, child_list);
+    reap = false;
+    tracer = get_process_tracer(exiter);
+    if (tracer) {
+      if (exiter != tracer)
+        reap = !ptrace_reparent(tracer, child);
+
+      release_task_struct(tracer);
+    }
+
+    if (reap)
+      child->ppid=CHILD_REAPER_PID;
   }
+}
+
+static void __detach_tracings(task_t *exiter)
+{
+  task_t *child;
+  list_node_t *node, *save;
+
+  /*
+   * spinlock holding is critical because someone can want to
+   * concurrently call 'PTRACEME'. List lookup must be safe because
+   * of possibility of all thread group detaching
+   */
+  LOCK_TASK_CHILDS(exiter);
+  list_for_each_safe(&exiter->trace_children, node, save) {
+    child = container_of(node, task_t, trace_list);
+    ptrace_detach(exiter, child, DETACH_FORCE);
+  }
+  UNLOCK_TASK_CHILDS(exiter);
 }
 
 static void __notify_parent(task_t *exiter)
@@ -286,7 +370,7 @@ void do_exit(int code,ulong_t flags,long exitval)
         event_yield(&exiter->reinc_event);
 
         /* Tell the world that we can be targeted for disintegration again. */
-        LOCK_TASK_STRUCT(exiter);    
+        LOCK_TASK_STRUCT(exiter);
         exiter->uworks_data.disintegration_descr=NULL;
         UNLOCK_TASK_STRUCT(exiter);
 
@@ -296,6 +380,10 @@ void do_exit(int code,ulong_t flags,long exitval)
          */
         __clear_exiting_flag(exiter);
         update_pending_signals(exiter);
+
+        if (event_is_traced(exiter, PTRACE_EV_EXEC))
+          ptrace_stop(PTRACE_EV_EXEC, 0);
+
         return;
       }
 
@@ -316,20 +404,358 @@ void do_exit(int code,ulong_t flags,long exitval)
         __notify_disintegration_done(dreq,__DR_EXITED);
       }
     }
+    if (event_is_traced(exiter, PTRACE_EV_EXIT))
+      ptrace_stop(PTRACE_EV_EXIT, 0);
+
     __exit_resources(exiter,flags);
+    __detach_tracings(exiter);
     __unlink_children(exiter);
     __notify_parent(exiter);
   } else { /* is_thread(). */
+    if (event_is_traced(exiter, PTRACE_EV_EXIT))
+      ptrace_stop(PTRACE_EV_EXIT, 0);
+
     __exit_limits(exiter);
     __exit_ipc(exiter);
     __exit_resources(exiter,flags);
   }
 
   zombify_task(exiter);
-  __wakeup_waiters(exiter,exitval);
+  exiter->exit_val = exitval;
+  if (!(exiter->wstat & WSTAT_SIGNALED))
+    exiter->wstat = WSTAT_EXITED;
+
+  wakeup_waiters(exiter);
+  LOCK_TASK_STRUCT(exiter);
+  exiter->last_siginfo = NULL;
+  UNLOCK_TASK_STRUCT(exiter);
+
   sched_del_task(exiter);
   panic( "do_exit(): zombie task <%d:%d> is still running !\n",
          exiter->pid, exiter->tid);
+}
+
+/*
+ * Orphan the child or reparent if it is traced (the tracer will be new parent)
+ * NOTE: if the child is a thread, the function is always called
+ *       under hold child spinlock of the group leader.
+ */
+static bool try_orphan_child(task_t *child, bool tlock)
+{
+  bool r = false;
+  task_t *tracer;
+  task_t *parent;
+  unsigned int flags = DETACH_FORCE;
+
+  if (child->state != TASK_STATE_ZOMBIE || !list_node_is_bound(&child->child_list))
+    return false;
+
+  parent = pid_to_task(child->ppid);
+  tracer = get_process_tracer(child);
+
+  if (!is_thread(child) && tracer) {
+    if (current_task()->group_leader == tracer) {
+      /* release links taken at process attachment */
+      if (!tlock || (tracer == parent))
+        flags |= DETACH_NOLOCK;
+
+      ptrace_detach(tracer, child, flags);
+    } else if (tracer != parent) {
+      r = !ptrace_reparent(tracer, child);
+    }
+
+    if (tracer == parent)
+      r = true;
+
+    release_task_struct(tracer);
+  } else {
+    r = true;
+  }
+
+  if (r) {
+    if (is_thread(child)) {
+      LOCK_TASK_STRUCT(child);
+      child->group_leader->tg_priv->num_threads--;
+      child->group_leader = child;
+      list_init_node(&child->pid_list);
+      UNLOCK_TASK_STRUCT(child);
+    }
+    list_del(&child->child_list);
+  }
+
+  release_task_struct(parent);
+
+  return r;
+}
+
+static bool dump_pt_event(task_t *caller, task_t *child, int *status)
+{
+  bool ret = false;
+
+  if (ptrace_event(child) != PTRACE_EV_NONE &&
+      caller->group_leader == process_tracer(child)) {
+    *status = ptrace_status(child);
+    ret = true;
+  }
+
+  return ret;
+}
+
+static void check_dump_siginfo(struct wait_info *winfo, task_t *task)
+{
+  if (winfo->copy_sinfo) {
+    if (task->last_siginfo) {
+      memcpy(&winfo->sinfo, task->last_siginfo, sizeof(usiginfo_t));
+    } else {
+      memset(&winfo->sinfo, 0, sizeof(usiginfo_t));
+      winfo->sinfo.si_signo = task->last_signum;
+    }
+  }
+}
+
+static bool status_is_waitable(wait_status_t wstat, int options)
+{
+  if ((options & WEXITED) && (wstat & (WSTAT_EXITED | WSTAT_SIGNALED)))
+    return true;
+  else if ((options & WSTOPPED) && (wstat & WSTAT_STOPPED))
+    return true;
+  else if ((options & WCONTINUED) && (wstat & WSTAT_CONTINUED))
+    return true;
+
+  return false;
+}
+
+static int __wait_task(task_t *target, task_t *parent, struct wait_info *winfo)
+{
+  int r = 1;
+  task_t *caller=current_task();
+  bool unref=false;
+  bool unlock = true;
+  wait_status_t wstat;
+  int options = winfo->options;
+  bool isthread = is_thread(target);
+
+  LOCK_TASK_STRUCT(target);
+  if (!dump_pt_event(caller, target, &winfo->stat.status)) {
+    if( target->cwaiter == __UNUSABLE_PTR &&
+        !(isthread && check_task_flags(target, TF_GCOLLECTED))) {
+      check_dump_siginfo(winfo, target);
+      UNLOCK_TASK_STRUCT(target);
+      unlock = false;
+      if (!(options & WNOWAIT)) {
+        unref = try_orphan_child(target, winfo->wtype != WAIT_ANY);
+        if (!unref)
+          options |= WNOWAIT;
+      }
+    }
+
+    wstat = target->wstat;
+    if (status_is_waitable(wstat, winfo->options)) {
+      if (wstat & WSTAT_EXITED) {
+        if (isthread && (winfo->wtype == WAIT_SINGLE))  /* it's waiting for the thread only? */
+          winfo->stat.value_ptr = (void*)target->exit_val;
+        else
+          winfo->stat.status = wstat | ((target->exit_val & 0xFF) << 8);
+      } else {
+        winfo->stat.status = wstat | (target->last_signum << 8);
+      }
+      if (!(options & WNOWAIT))
+        target->wstat = 0;
+    } else {
+      r = 0;
+    }
+  } else if (!(options & WNOWAIT)) {
+    set_ptrace_event(target, PTRACE_EV_NONE);
+    if (target->wstat & WSTAT_STOPPED)
+      target->wstat = 0;
+  }
+
+  if (unlock) {
+    check_dump_siginfo(winfo, target);
+    UNLOCK_TASK_STRUCT(target);
+  }
+
+  if( unref ) { /* Remove task's parent reference. */
+    if (!isthread)
+      unhash_task(target);
+
+    release_task_struct(target);
+  }
+
+  return r;
+}
+
+static long do_wait(task_t *task, wait_value_t *stat, int options, usiginfo_t *sinfo,
+                    wait_type_t type)
+{
+  list_head_t *head = NULL;
+  task_t *target = NULL, *parent, *caller, *gleader = NULL;
+  list_node_t *node, *save;
+  bool trace_pass;
+  long ret;
+  struct wait_info winfo;
+
+  caller = current_task();
+
+  winfo.options = options;
+  winfo.copy_sinfo = (sinfo != NULL);
+  winfo.wtype = type;
+
+  if (type == WAIT_GROUP || (task && is_thread(task))) {
+    LOCK_TASK_STRUCT(task);
+    gleader = task->group_leader;
+    grab_task_struct(gleader);
+    UNLOCK_TASK_STRUCT(task);
+  }
+
+repeat:
+  ret = 0;
+  gleader = NULL;
+  trace_pass = false;
+
+  if (type == WAIT_ANY) {
+    /*
+     * Fixme [dg]: use group leader instead of caller so that to have
+     *    possibility to wait for any child from any thread of the
+     *    process
+     */
+    parent = caller;
+    head = &parent->children;
+  } else {
+    parent = pid_to_task(task->ppid);
+    if (!parent) {
+      ret = -ESRCH;
+      goto out;
+    }
+    if (type == WAIT_GROUP)
+      head = &task->threads;
+
+    target = task;
+  }
+
+  LOCK_TASK_CHILDS(parent);
+  if (!((caller->pid == parent->pid) ||
+        (caller->group_leader == process_tracer(task)) ||
+     tasks_in_same_group(caller, task))) {
+    ret = -ESRCH;
+    goto unlock_parent;
+  }
+
+  if ((type == WAIT_ANY) && list_is_empty(&parent->children) &&
+      list_is_empty(&parent->trace_children)) {
+    ret = -ESRCH;
+    goto unlock_parent;
+  }
+
+  if (gleader)
+    LOCK_TASK_CHILDS(gleader);
+
+  if (target) {
+    ASSERT(caller->sobject != NULL && target->sobject != NULL);
+    if (tasks_in_same_group(caller, target) ||
+        s_check_access(S_GET_TASK_OBJ(caller), S_GET_TASK_OBJ(target))) {
+
+      ret = __wait_task(target, parent, &winfo);
+    } else {
+      ret = -EPERM;
+    }
+  }
+
+  /* wait cycle for children or threads */
+  while (head && !ret) {
+    list_for_each_safe(head, node, save) {
+      if (trace_pass)
+        target = container_of(node, task_t, trace_list);
+      else
+        target = container_of(node, task_t, child_list);
+
+      if (tasks_in_same_group(caller, target) ||
+          s_check_access(S_GET_TASK_OBJ(caller), S_GET_TASK_OBJ(target))) {
+
+        ret = __wait_task(target, parent, &winfo);
+      } else {
+        ret = -EPERM;
+      }
+      if (ret)
+        break;
+    }
+
+    if (!ret && type == WAIT_ANY && !trace_pass) {
+      head = &parent->trace_children;
+      trace_pass = true;
+    } else {
+      head = NULL;
+    }
+  }
+
+  if (gleader)
+    UNLOCK_TASK_CHILDS(gleader);
+
+  if (!(ret || (options & WNOHANG))) {
+    if ((type != WAIT_ANY) && (task->state == TASK_STATE_ZOMBIE)) {
+      ret = -ESRCH;   /* задача уже "собрана" */
+    } else {
+      event_initialize_task(&caller->jointee.e, caller);
+      caller->jointee.type = type;
+      caller->jointee.exiter = task;
+      if (task && (caller->group_leader == process_tracer(task)))
+        list_add2head(&parent->jointed, &caller->jointee.l);
+      else
+        list_add2tail(&parent->jointed, &caller->jointee.l);
+    }
+  }
+
+unlock_parent:
+  UNLOCK_TASK_CHILDS(parent);
+
+  if (!(ret || (options & WNOHANG))) {
+    event_yield(&caller->jointee.e);
+
+    if( task_was_interrupted(caller) ) {
+      /* We take into account only 'fairplay' interruption which means
+       * only interruption while we're on the waiting list. Otherwise,
+       * if target thread woke us up before the signal arrived (in such
+       * a situation we're not bound to it), we assume that -EINTR shouldn't
+       * be returned (but all pending signals will be delivered, nevertheless).
+       */
+      LOCK_TASK_CHILDS(parent);
+      if( list_node_is_bound(&caller->jointee.l) )
+        list_del(&caller->jointee.l);
+      UNLOCK_TASK_CHILDS(parent);
+
+      ret = -EINTR;
+    } else {
+      if (type != WAIT_ANY)
+        release_task_struct(parent);
+
+      goto repeat;
+    }
+  } else if (ret > 0) {
+    if (stat)
+      ret = put_user(winfo.stat.status, stat);
+    if (!ret && sinfo)
+      ret = copy_to_user(sinfo, &winfo.sinfo, sizeof(usiginfo_t));
+    if (!ret)
+      ret = (target->tid || (type == WAIT_GROUP)) ? target->tid : target->pid;
+  }
+
+out:
+  if (gleader)
+    release_task_struct(gleader);
+  if ((type != WAIT_ANY) && parent)
+    release_task_struct(parent);
+
+  return ERR(ret);
+}
+
+void wakeup_waiters(task_t *task)
+{
+  do_wakeup(task, false);
+}
+
+void wakeup_tracer(task_t *task)
+{
+  do_wakeup(task, true);
 }
 
 void sys_exit(int code)
@@ -350,231 +776,72 @@ void sys_thread_exit(long value)
 
 long sys_wait_id(idtype_t idtype,id_t id,usiginfo_t *siginfo,int options)
 {
-  return 0;
+  return ERR(-ENOSYS);
 }
 
-long sys_thread_wait(tid_t tid,void **value_ptr)
+long sys_thread_wait(tid_t tid, void **value_ptr)
 {
-  task_t *target,*caller=current_task();
-  task_t *tgleader;
-  long r,exitval;
+  task_t *target, *caller = current_task();
+  long r;
 
   if( !tid || tid == caller->tid ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
-  if( !(target=lookup_task(current_task()->pid,tid,LOOKUP_ZOMBIES)) ) {
-    return -ESRCH;
-  }
+  if( !(target = lookup_task(caller->pid, tid, LOOKUP_ZOMBIES)) )
+    return ERR(-ESRCH);
 
-  r=0;
-  event_initialize_task(&caller->jointee.e,caller);
+  r = do_wait(target, (wait_value_t*)value_ptr, WEXITED, NULL, WAIT_SINGLE);
+  release_task_struct(target);  /* Initial parent reference. */
 
-  LOCK_TASK_STRUCT(target);
-  tgleader=target->group_leader;
-
-  if( target->cwaiter != __UNUSABLE_PTR ) {
-    /* Only one waiter is available. */
-    if( list_is_empty( &target->jointed ) ) {
-      caller->jointee.exiter=target;
-      list_add2tail(&target->jointed,&caller->jointee.l);
-    } else {
-      r=-EBUSY;
-    }
-    UNLOCK_TASK_STRUCT(target);
-  } else {
-    /* Target task has probably exited. So try to pick up its exit pointer
-     * on a different manner.
-     */
-    UNLOCK_TASK_STRUCT(target);
-
-    LOCK_TASK_CHILDS(tgleader);
-    LOCK_TASK_STRUCT(target);
-
-    if( list_node_is_bound(&target->child_list) &&
-        !(target->flags & TF_GCOLLECTED) ) {
-      tgleader->tg_priv->num_threads--;
-      list_del(&target->child_list);
-      exitval=target->jointee.exit_ptr;
-    } else {
-      r=-EBUSY;
-    }
-
-    UNLOCK_TASK_STRUCT(target);
-    UNLOCK_TASK_CHILDS(tgleader);
-
-    if( !r ) {
-      goto out_copy;
-    } else {
-      goto out_release;
-    }
-  }
-
-  if( !r ) {
-    event_yield(&caller->jointee.e);
-
-    /* Check for asynchronous interruption. */
-    LOCK_TASK_STRUCT(caller);
-    if( task_was_interrupted(caller) ) {
-      /* We take into account only 'fairplay' interruption which means
-       * only interruption while we're on the waiting list. Otherwise,
-       * if target thread woke us up before the signal arrived (in such
-       * a situation we're not bound to it), we assume that -EINTR shouldn't
-       * be returned (but all pending signals will be delivered, nevertheless).
-       */
-      if( list_node_is_bound(&caller->jointee.l) ) {
-        list_del(&caller->jointee.l);
-        r=-EINTR;
-      }
-    } else {
-      exitval=caller->jointee.exit_ptr;
-    }
-    caller->jointee.exiter=NULL;
-    UNLOCK_TASK_STRUCT(caller);
-
-    /* Remove target thread from the list. */
-    LOCK_TASK_CHILDS(tgleader);
-    LOCK_TASK_STRUCT(target);
-    if( list_node_is_bound(&target->child_list) &&
-        !(target->flags & TF_GCOLLECTED) ) {
-      tgleader->tg_priv->num_threads--;
-      list_del(&target->child_list);
-    }
-    UNLOCK_TASK_STRUCT(target);
-    UNLOCK_TASK_CHILDS(tgleader);
-  }
-
-out_copy:
-  if( !r ) {
-    release_task_struct(target);  /* Initial parent reference. */
-    if( value_ptr ) {
-      r=copy_to_user(value_ptr,&exitval,sizeof(exitval));
-      if( r ) {
-        r=-EFAULT;
-      }
-    }
-  }
-
-out_release:
-  release_task_struct(target);
-  return r;
-}
-
-static long __wait_task(task_t *target,int *status,int options)
-{
-  long r=0;
-  task_t *caller=current_task();
-  int exitval;
-  bool unref=false;
-  task_t *parent=pid_to_task(target->ppid);
-
-  if( !parent ) {
-    return -ESRCH;
-  }
-
-  event_initialize_task(&caller->jointee.e,caller);
-
-  LOCK_TASK_STRUCT(target);
-  if( target->cwaiter != __UNUSABLE_PTR ) {
-    if( options & WNOHANG ) {
-      UNLOCK_TASK_STRUCT(target);
-      goto out;
-    }
-    caller->jointee.exiter=target;
-    list_add2tail(&target->jointed,&caller->jointee.l);
-    UNLOCK_TASK_STRUCT(target);
-  } else {
-    /* Target task has probably exited. So try to pick up its exit pointer
-     * on a different manner.
-     */
-    UNLOCK_TASK_STRUCT(target);
-
-    LOCK_TASK_CHILDS(parent);
-    LOCK_TASK_STRUCT(target);
-
-    if( list_node_is_bound(&target->child_list) ) {
-      list_del(&target->child_list);
-      exitval=target->jointee.exit_ptr;
-      unref=true;
-    } else {
-      r=-ESRCH;
-    }
-
-    UNLOCK_TASK_STRUCT(target);
-    UNLOCK_TASK_CHILDS(parent);
-    goto found;
-  }
-
-  if( !r ) {
-    event_yield(&caller->jointee.e);
-
-    /* Check for asynchronous interruption. */
-    LOCK_TASK_STRUCT(caller);
-    if( task_was_interrupted(caller) ) {
-      /* We take into account only 'fairplay' interruption which means
-       * only interruption while we're on the waiting list. Otherwise,
-       * if target thread woke us up before the signal arrived (in such
-       * a situation we're not bound to it), we assume that -EINTR shouldn't
-       * be returned (but all pending signals will be delivered, nevertheless).
-       */
-      if( list_node_is_bound(&caller->jointee.l) ) {
-        list_del(&caller->jointee.l);
-        r=-EINTR;
-      }
-    } else {
-      exitval=caller->jointee.exit_ptr;
-    }
-    caller->jointee.exiter=NULL;
-    UNLOCK_TASK_STRUCT(caller);
-
-    /* Remove target task from the list of its parent. */
-    LOCK_TASK_CHILDS(parent);
-    LOCK_TASK_STRUCT(target);
-    if( list_node_is_bound(&target->child_list) ) {
-      list_del(&target->child_list);
-      unref=true;
-    }
-    UNLOCK_TASK_STRUCT(target);
-    UNLOCK_TASK_CHILDS(parent);
-  }
-
-found:
-  if( !r && status ) {
-    r=copy_to_user(status,&exitval,sizeof(exitval));
-    if( r ) {
-      r=-EFAULT;
-    }
-  }
-
-out:
-  if( unref ) { /* Remove task's parent reference. */
-    unhash_task(target);
-    release_task_struct(target);
-  }
-  release_task_struct(parent);
-  return r;
+  return ERR(r);
 }
 
 long sys_waitpid(pid_t pid,int *status,int options)
 {
-  task_t *target,*caller=current_task();
+  task_t *target = NULL,*caller=current_task();
   long r;
+  wait_type_t wtype;
+  bool release = true;
 
-  if( pid <= 0 ) {
-    return -EINVAL;
+  if( (pid == caller->pid) || (pid == 1) )
+    return ERR(-EINVAL);
+
+  if (options & ~(WNOHANG | WSTOPPED | WCONTINUED | WNOWAIT))
+    return ERR(-EINVAL);
+
+  if ((pid > 0) || (pid < -1)) {
+    if (pid < -1) {
+      /*
+       * wait for any thread belonging to the process with ID equal
+       * to negated 'pid'
+       */
+      pid = -pid;
+      wtype = WAIT_GROUP;
+    } else {
+      wtype = WAIT_SINGLE;
+    }
+
+    target = lookup_task(pid,0,LOOKUP_ZOMBIES);
+    if( !target ) {
+      return ERR(-ESRCH);
+    }
+  } else if (pid == -1) {
+    /* wait for any child */
+    target = NULL;
+    release = false;
+    wtype = WAIT_ANY;
+  } else {
+    /* wait for any thread belonging to the caller's group */
+    release = false;
+    wtype = WAIT_GROUP;
+    target = caller;
   }
 
-  if( pid == caller->pid ) {
-    return -EINVAL;
-  }
+  r = do_wait(target, (wait_value_t*)status, options | WEXITED, NULL, wtype);
 
-  target=lookup_task(pid,0,LOOKUP_ZOMBIES);
-  if( !target ) {
-    return -ESRCH;
-  }
+  if (release)
+    release_task_struct(target);
 
-  r=__wait_task(target,status,options);
-  release_task_struct(target);
-  return r;
+  return ERR(r);
 }
-
