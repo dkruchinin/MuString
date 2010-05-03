@@ -37,6 +37,8 @@
 #include <mstring/kprintf.h>
 #include <mstring/types.h>
 #include <mstring/process.h>
+#include <security/security.h>
+#include <security/util.h>
 
 #define INVALID_ADDRESS (~0UL)
 
@@ -866,6 +868,8 @@ create_vmrange:
       goto err;
   }
 
+  VMM_STAT_ADD_NUM_VPAGES(vmm, npages << PAGE_WIDTH);
+
   /*
    * if VMR_STACK flag was specified, the returned address must be
    * the top address of the VM range.
@@ -887,7 +891,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
   ttree_cursor_t cursor;
   uintptr_t va_to = va_from + ((uintptr_t)npages << PAGE_WIDTH);
   vmrange_t *vmr, *vmr_prev = NULL;
-  
+
   ASSERT_DBG(!(va_from & PAGE_MASK));
   ttree_cursor_init(&vmm->vmranges_tree, &cursor);
 
@@ -923,6 +927,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
       return ERR(-ENOMEM);
     }
 
+    VMM_STAT_SUB_NUM_VPAGES(vmm, va_to - va_from);
     return 0; /* done */
   }
   else if (va_from > vmr->bounds.space_start) {
@@ -935,6 +940,7 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
      */
     memobj_method_call(vmr->memobj, depopulate_pages, vmr,
                        va_from, va_from + (vmr->bounds.space_end - va_from));
+    VMM_STAT_SUB_NUM_VPAGES(vmm, vmr->bounds.space_end - va_from);
     va_from = vmr->bounds.space_end;
     vmr->bounds.space_end = new_end;
 
@@ -970,11 +976,13 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
       vmr->bounds.space_start = va_to;
       memobj_method_call(vmr->memobj, depopulate_pages, vmr,
                          va_from, va_from + (va_to - va_from));
+      VMM_STAT_SUB_NUM_VPAGES(vmm, va_to - va_from);
       break;
     }
 
     memobj_method_call(vmr->memobj, depopulate_pages, vmr,
                        va_from, vmr->bounds.space_end);
+    VMM_STAT_SUB_NUM_VPAGES(vmm, vmr->bounds.space_end - va_from);
     ttree_delete_placeful(&cursor);
     destroy_vmrange(vmr);
     vmr = NULL;
@@ -1014,7 +1022,8 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages)
 }
 
 int __fault_in_user_page(vmrange_t *vmrange, uintptr_t addr,
-                         uint32_t pfmask, page_idx_t *out_pidx)
+                         uint32_t pfmask, page_idx_t *out_pidx,
+			 bool resolve_faults)
 {
   pde_t *pde;
   vmm_t *vmm = vmrange->parent_vmm;
@@ -1046,8 +1055,14 @@ int __fault_in_user_page(vmrange_t *vmrange, uintptr_t addr,
     pfmask |= PFLT_NOT_PRESENT;
 
   RPD_UNLOCK_READ(&vmm->rpd);
-  ret = memobj_method_call(vmrange->memobj, handle_page_fault,
+
+  if (resolve_faults) {
+      ret = memobj_method_call(vmrange->memobj, handle_page_fault,
                            vmrange, addr, pfmask);
+  } else {
+      ret = -EFAULT;
+  }
+
   if (ret)
     return ret;
 
@@ -1070,7 +1085,8 @@ out:
 }
 
 int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t pfmask,
-                        void (*callback)(vmrange_t *vmr, page_frame_t *page, void *data), void *data)
+                        void (*callback)(vmrange_t *vmr, page_frame_t *page, void *data),
+			void *data, bool resolve_faults)
 {
   page_idx_t pidx;
   int ret = 0;
@@ -1101,6 +1117,7 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
      */
     if (unlikely(va >= vmr->bounds.space_end)) {
       if (ttree_cursor_next(&cursor) < 0) {
+        vmranges_print_tree_dbg(vmm);
         return ERR(-EFAULT);
       }
     }
@@ -1111,7 +1128,7 @@ int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t p
       return ERR(-EFAULT);
     }
 
-    ret = __fault_in_user_page(vmr, va, pfmask, &pidx);
+    ret = __fault_in_user_page(vmr, va, pfmask, &pidx,resolve_faults);
     if (ret) {
       return ERR(ret);
     }
@@ -1146,7 +1163,7 @@ int vmm_handle_page_fault(vmm_t *vmm, uintptr_t fault_addr, uint32_t pfmask)
    * has VMR_WRITE flag unset or VMR_NONE flag set, fault can not be handled.
    */
   if (!__valid_vmr_rights(vmr, pfmask)) {
-    ret = -EFAULT;
+    ret = -EPERM;
     goto out;
   }
 
@@ -1169,6 +1186,7 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
   long ret;
   struct mmap_args margs;
   vmrange_flags_t vmrflags;
+  task_t *caller=current_task();
 
   if (likely(!victim)) {
     victim_task = current_task();
@@ -1177,6 +1195,15 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
     victim_task = pid_to_task(victim);
     if (!victim_task)
       return -ESRCH;
+  }
+
+  if (caller->pid != victim_task->pid ) {
+    if( !s_check_system_capability(SYS_CAP_REMOTE_MAP) ||
+        !s_check_access(S_GET_TASK_OBJ(caller),
+                        S_GET_TASK_OBJ(victim_task))) {
+      ret=-EPERM;
+      goto out;
+    }
   }
 
   vmm = victim_task->task_mm;
@@ -1215,7 +1242,8 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
   }
 
   rwsem_down_write(&vmm->rwsem);
-  ret = vmrange_map(memobj, vmm, margs.addr, PAGE_ALIGN(margs.size) >> PAGE_WIDTH,
+  ret = vmrange_map(memobj, vmm, margs.addr,
+                    PAGE_ALIGN(margs.size) >> PAGE_WIDTH,
                     vmrflags, PAGE_ALIGN(margs.offset) >> PAGE_WIDTH);
   rwsem_up_write(&vmm->rwsem);
 
@@ -1233,6 +1261,7 @@ int sys_munmap(pid_t victim, uintptr_t addr, size_t length)
   task_t *victim_task = NULL;
   vmm_t *vmm;
   int ret;
+  task_t *caller=current_task();
 
   if (likely(!victim))
     victim_task = current_task();
@@ -1240,6 +1269,15 @@ int sys_munmap(pid_t victim, uintptr_t addr, size_t length)
     victim_task = pid_to_task(victim);
     if (!victim_task) {
       return ERR(-ESRCH);
+    }
+  }
+
+  if (caller->pid != victim_task->pid ) {
+    if( !s_check_system_capability(SYS_CAP_REMOTE_MAP) ||
+        !s_check_access(S_GET_TASK_OBJ(caller),
+                        S_GET_TASK_OBJ(victim_task))) {
+      ret=-EPERM;
+      goto out;
     }
   }
 
@@ -1298,6 +1336,14 @@ int sys_grant_pages(uintptr_t va_from, size_t length,
   target = pid_to_task(target_pid);
   if (!target)
     return -ESRCH;
+
+  if (current->pid != target->pid ) {
+    if( !s_check_system_capability(SYS_CAP_REMOTE_MAP) ||
+        !s_check_access(S_GET_TASK_OBJ(current),S_GET_TASK_OBJ(target))) {
+      ret=-EPERM;
+      goto unlock_target;
+    }
+  }
 
   rwsem_down_read(&target->task_mm->rwsem);
   /* Find target VM range */

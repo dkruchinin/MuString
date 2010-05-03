@@ -81,7 +81,7 @@ int setup_task_ipc(task_t *task)
   } else {
     ipc=memalloc(sizeof(*ipc));
     if( !ipc ) {
-      return -ENOMEM;
+        return ERR(-ENOMEM);
     }
     memset(ipc,0,sizeof(task_ipc_t));
     atomic_set(&ipc->use_count,1);
@@ -134,7 +134,7 @@ free_ipc:
   if(ipc) {
     release_task_ipc(ipc);
   }
-  return -ENOMEM;
+  return ERR(-ENOMEM);
 }
 
 void *allocate_ipc_memory(long size)
@@ -173,7 +173,7 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
 
   if( ipc ) {
     if( setup_task_ipc(rcpt) ) {
-      return -ENOMEM;
+        return ERR(-ENOMEM);
     }
 
     tipc=rcpt->ipc;
@@ -185,6 +185,7 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
       }
       tipc->allocated_ports=ipc->allocated_ports;
       tipc->max_port_num=ipc->max_port_num;
+      tipc->num_ports = ipc->num_ports;
 
       for(i=0;i<=ipc->max_port_num;i++) {
         if( ipc->ports[i] ) {
@@ -206,6 +207,7 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
       }
       tipc->allocated_channels=ipc->allocated_channels;
       tipc->max_channel_num=ipc->max_channel_num;
+      tipc->num_channels = ipc->num_channels;
 
       for(i=0;i<=ipc->max_channel_num;i++) {
         if( ipc->channels[i] ) {
@@ -223,7 +225,7 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
   r=0;
 out_unlock:
   UNLOCK_IPC(ipc);
-  return r;
+  return ERR(r);
 put_channels:
   for(i=0;i<tipc->allocated_channels;i++) {
     if( tipc->channels[i] ) {
@@ -239,5 +241,5 @@ put_ports:
   }
   free_ipc_memory(tipc->ports,tipc->allocated_ports*sizeof(ipc_gen_port_t *));
   release_task_ipc(tipc);
-  return -ENOMEM;
+  return ERR(-ENOMEM);
 }

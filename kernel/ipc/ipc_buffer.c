@@ -80,15 +80,16 @@ void ipc_release_buffer_pages(ipc_buffer_t *bufs, uint32_t numbufs)
   }
 }
 
-int ipc_setup_buffer_pages(iovec_t *iovecs, uint32_t numvecs, page_idx_t *idx_array,
-                           ipc_buffer_t *bufs, bool is_sender_buffer)
+int ipc_setup_task_buffer_pages(iovec_t *iovecs, uint32_t numvecs, page_idx_t *idx_array,
+                                ipc_buffer_t *bufs, bool is_sender_buffer,
+                                struct __task_struct *owner)
 {
   int r = -EFAULT;
   struct setup_buf_helper buf_data;
   ipc_buffer_t *buf;
-  task_t *owner = current_task();
   int i;
   iovec_t *iovs;
+  bool resolve_faults = (owner == current_task());
 
   LOCK_TASK_VM(owner);
   for (buf = bufs, i = 0, iovs = iovecs; i < numvecs; i++, iovs++, buf++) {
@@ -97,7 +98,7 @@ int ipc_setup_buffer_pages(iovec_t *iovecs, uint32_t numvecs, page_idx_t *idx_ar
     buf_data.chunk_num = 0;
 
     /*
-     * We assume that ipc_setup_buffer_pages receives already checked iovectors.
+     * We assume that ipc_setup_task_buffer_pages receives already checked iovectors.
      * So if iovec's address range is not belong to user-space, then the buffer is
      * in kernel and we don't need to fault and pin each iovec page.
      */
@@ -115,9 +116,12 @@ int ipc_setup_buffer_pages(iovec_t *iovecs, uint32_t numvecs, page_idx_t *idx_ar
        * Also all pages that are used by the buffer must be pinned and locked.
        * We don't want that pages be unmapped from the owner's address space or simply swapped out
        * while we are resolving their indices.
+       * Since it is possible to map indirect messages from servers directly, we should
+       * fault in user pages only when the caller is target itself.
        */
       r = fault_in_user_pages(owner->task_mm, (uintptr_t)iovs->iov_base, iovs->iov_len,
-                              pfmask, __save_pfns_in_buffer, &buf_data);
+                              pfmask, __save_pfns_in_buffer, &buf_data,
+                              resolve_faults);
       if (r) {
         goto outerror;
       }

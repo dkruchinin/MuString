@@ -24,7 +24,7 @@
 #ifndef __SIGNAL_H__
 #define  __SIGNAL_H__
 
-#include <arch/types.h>
+#include <mstring/types.h>
 #include <mstring/time.h>
 #include <mstring/task.h>
 #include <sync/spinlock.h>
@@ -34,65 +34,29 @@
 #include <mstring/bits.h>
 #include <ds/list.h>
 #include <mstring/sigqueue.h>
+#include <mstring/siginfo.h>
 #include <mstring/gc.h>
+#include <security/security.h>
+#include <security/util.h>
 
 #define NUM_POSIX_SIGNALS  32
 #define NUM_RT_SIGNALS     32
 
-#define SIGRTMIN  NUM_POSIX_SIGNALS
-#define SIGRTMAX  ((SIGRTMIN+NUM_RT_SIGNALS)-1)
+#define	_SIG_MAXSIG	63
 #define NR_SIGNALS  (NUM_POSIX_SIGNALS + NUM_RT_SIGNALS)
 
 #define valid_signal(n)  ((n)>0 && (n) <= SIGRTMAX )
 #define rt_signal(n)  ((n)>=SIGRTMIN && (n) <= SIGRTMAX)
 
-typedef union sigval {
-  int sival_int;
-  void *sival_ptr;
-} sigval_t;
-
-typedef struct __user_siginfo {
-  int       si_signo;    /* Signal number */
-  int       si_errno;    /* An errno value */
-  int       si_code;     /* Signal code */
-  pid_t     si_pid;      /* Sending process ID */
-  uid_t     si_uid;      /* Real user ID of sending process */
-  int       si_status;   /* Exit value or signal */
-  clock_t   si_utime;    /* User time consumed */
-  clock_t   si_stime;    /* System time consumed */
-  sigval_t  si_value;    /* Signal value */
-  int       si_int;      /* POSIX.1b signal */
-  void     *si_ptr;      /* POSIX.1b signal */
-  void     *si_addr;     /* Memory location which caused fault */
-  int       si_band;     /* Band event */
-  int      si_fd;       /* File descriptor */
-} usiginfo_t;
-
-#define INIT_USIGINFO_CURR(s)  do {              \
-  memset((s),0,sizeof(usiginfo_t));              \
-  (s)->si_pid=current_task()->pid;  \
-  (s)->si_uid=current_task()->uid;  \
-  } while(0)
-
-#define INIT_KSIGINFO_CURR(s) do {              \
-    INIT_USIGINFO_CURR(&(s)->user_siginfo);     \
-    (s)->target=NULL;                           \
-  } while(0)
-
-#define SI_USER    0 /* Sent by user */
-#define SI_KERNEL  1 /* Sent by kernel */
-
-typedef struct __ksiginfo {
-  usiginfo_t user_siginfo;
-  task_t *target;
-} ksiginfo_t;
 
 typedef void (*sa_handler_t)(int);
 typedef void (*sa_sigaction_t)(int,usiginfo_t *,void *);
 
 typedef struct __sigaction {
-  sa_handler_t sa_handler;
-  sa_sigaction_t sa_sigaction;
+  union {
+    sa_handler_t sa_handler;
+    sa_sigaction_t sa_sigaction;
+  };
   sigset_t   sa_mask;
   int        sa_flags;
   void     (*sa_restorer)(void);
@@ -143,45 +107,52 @@ static inline void put_signal_handlers(sighandlers_t *s)
 #define SIG_UNBLOCK  1
 #define SIG_SETMASK  2  /* Must be the maximum value. */
 
-#define SIGHUP     1
-#define SIGINT     2
-#define SIGQUIT    3
-#define SIGILL     4
-#define SIGTRAP    5
-#define SIGABRT    6
-#define SIGIOT     6
-#define SIGBUS     7
-#define SIGFPE     8
-#define SIGKILL    9
-#define SIGUSR1    10
-#define SIGSEGV    11
-#define SIGUSR2    12
-#define SIGPIPE	   13
-#define SIGALRM	   14
-#define SIGTERM	   15
-#define SIGSTKFLT  16
-#define SIGCHLD    17
-#define SIGCONT    18
-#define SIGSTOP    19
-#define SIGTSTP    20
-#define SIGTTIN	   21
-#define SIGTTOU	   22
-#define SIGURG	   23
-#define SIGXCPU    24
-#define SIGXFSZ	   25
-#define SIGVTALRM  26
-#define SIGPROF	   27
-#define SIGWINCH   28
-#define SIGIO      29
-#define SIGPOLL    SIGIO
-#define SIGPWR     30
-#define SIGSYS     31
+/*
+ * System defined signals.
+ */
+#define	SIGHUP		1	/* hangup */
+#define	SIGINT		2	/* interrupt */
+#define	SIGQUIT		3	/* quit */
+#define	SIGILL		4	/* illegal instr. (not reset when caught) */
+#define	SIGTRAP		5	/* trace trap (not reset when caught) */
+#define	SIGABRT		6	/* abort() */
+#define	SIGIOT		SIGABRT	/* compatibility */
+#define	SIGEMT		7	/* EMT instruction */
+#define	SIGFPE		8	/* floating point exception */
+#define	SIGKILL		9	/* kill (cannot be caught or ignored) */
+#define	SIGBUS		10	/* bus error */
+#define	SIGSEGV		11	/* segmentation violation */
+#define	SIGSYS		12	/* non-existent system call invoked */
+#define	SIGPIPE		13	/* write on a pipe with no one to read it */
+#define	SIGALRM		14	/* alarm clock */
+#define	SIGTERM		15	/* software termination signal from kill */
+#define	SIGURG		16	/* urgent condition on IO channel */
+#define	SIGSTOP		17	/* sendable stop signal not from tty */
+#define	SIGTSTP		18	/* stop signal from tty */
+#define	SIGCONT		19	/* continue a stopped process */
+#define	SIGCHLD		20	/* to parent on child stop or exit */
+#define	SIGTTIN		21	/* to readers pgrp upon background tty read */
+#define	SIGTTOU		22	/* like TTIN if (tp->t_local&LTOSTOP) */
+#define	SIGIO		23	/* input/output possible signal */
+#define	SIGXCPU		24	/* exceeded CPU time limit */
+#define	SIGXFSZ		25	/* exceeded file size limit */
+#define	SIGVTALRM	26	/* virtual time alarm */
+#define	SIGPROF		27	/* profiling time alarm */
+#define	SIGWINCH	28	/* window size changes */
+#define	SIGINFO		29	/* information request */
+#define	SIGUSR1		30	/* user defined signal 1 */
+#define	SIGUSR2		31	/* user defined signal 2 */
+#define	SIGTHR		32	/* reserved by thread library. */
+#define	SIGLWP		SIGTHR
+
+#define SIGSTKFLT   33
+#define SIGPOLL     SIGIO /* Pollable event occurred (System V) */
+#define SIGPWR      34    /* Power failure restart (System V) */
+
+#define	SIGRTMIN	35
+#define	SIGRTMAX	(_SIG_MAXSIG - 1)
 
 #define process_wide_signal(s)  ((s) & (_BM(SIGTERM) | _BM(SIGSTOP)) )
-
-/* si_code for SIGSEGV signal. */
-#define SEGV_MAPERR  0x1  /** address not mapped **/
-#define SEGV_ACCERR  0x2  /** invalid permissions **/
 
 #define DEFAULT_IGNORED_SIGNALS (_BM(SIGCHLD) | _BM(SIGURG) | _BM(SIGWINCH))
 #define UNTOUCHABLE_SIGNALS (_BM(SIGKILL) | _BM(SIGSTOP))
@@ -208,9 +179,43 @@ sigq_item_t *extract_one_signal_from_queue(task_t *task);
 
 #define pending_signals_present(t) ((t)->siginfo.pending != 0)
 
+/**
+ * @fn int send_task_siginfo(task_t *task,usiginfo_t *info,bool force_delivery,
+ *                           void *kern_priv,task_t *sender);
+ * Send a signal to target task, forcing delivery if necessary.
+ *
+ * This function sends a signal to target task. If the signal is unblocked
+ * in task's set of ignored signals, kernel makes the signal pending for
+ * the process if it is not set in process's set of blocked signals too.
+ * If all chescks are passed, the signal will be delivered during the nearest
+ * return to userspace. Othherwise, the signal will be delayed.
+ * Note: only one instance of non-realtime signals may be pending at the same
+ * moment.
+ *
+ * @param task target task.
+ * @param info extended signal information to be send along with the signal.
+ * @param force_delivery prevent the signal from being ignored by the process's
+ *        set of ignored signals, and set its action to default in case it was
+ *        explicitely set to default.
+ * @param kern_priv kernel private data to be sent along with the signal.
+ * @param sender task that initiated this operation. In case the signal is being
+ * sent by the kernel, this value should be NULL.
+ *
+ * @return In case the signal was successfully queued (or discarded), this
+ * function returns zero. Otherwise, one of the following error codes returned
+ * (negated values).
+ *
+ *     ENOMEM no memory was available for a new signal structure.
+ *
+ *     EPERM  sending task can't send signals to the target.
+ *
+ */
 int send_task_siginfo(task_t *task,usiginfo_t *info,bool force_delivery,
-                      void *kern_priv);
-int send_process_siginfo(pid_t pid,usiginfo_t *siginfo,void *kern_priv);
+                      void *kern_priv,task_t *sender);
+
+int send_process_siginfo(pid_t pid,usiginfo_t *siginfo,void *kern_priv,
+                         task_t *sender, bool broadcast);
+
 bool update_pending_signals(task_t *task);
 bool __update_pending_signals(task_t *task);
 sighandlers_t * allocate_signal_handlers(void);
@@ -221,7 +226,8 @@ void schedule_user_deferred_action(task_t *target,gc_action_t *a,bool force);
 #define first_signal_in_set(s) (arch_bit_find_lsf(*(long *)(s)))
 
 static inline bool task_was_interrupted(task_t *t) {
-  return read_task_pending_uworks(t) != 0 || deliverable_signals_present(&t->siginfo);
+    return read_task_pending_uworks(t) != 0 ||
+        deliverable_signals_present(&t->siginfo);
 }
 
 #endif

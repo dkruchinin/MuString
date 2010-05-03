@@ -234,7 +234,7 @@ static long __port_ctl_reply_retcode(ipc_gen_port_t *p,
   }
 
   r=ipc_port_msg_write(p,kgap.msg_id,NULL,0,NULL,
-                       0,true,kgap.d.code);
+                       0,true,kgap.d.code,false);
 
   return r >= 0 ? 0 : r;
 }

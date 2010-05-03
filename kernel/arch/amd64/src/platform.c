@@ -23,13 +23,14 @@
  */
 
 #include <config.h>
-#include <arch/types.h>
+#include <mstring/types.h>
 #include <arch/apic.h>
 #include <mm/page.h>
 #include <mm/page_alloc.h>
 #include <mstring/smp.h>
 #include <mstring/kprintf.h>
 #include <mstring/timer.h>
+#include <mstring/time.h>
 #include <mstring/unistd.h>
 #include <mstring/swks.h>
 #include <mstring/types.h>
@@ -42,6 +43,7 @@ static ulong_t __init_tsepoch(void)
 {
   ulong_t r=0; /* -1900 */
   int i;
+  int year = s_epoch.tm_year - 70;
 
   r=s_epoch.tm_sec + s_epoch.tm_min * 60 + s_epoch.tm_hour*3600 +
     (s_epoch.tm_mday-1)*86400;
@@ -49,12 +51,12 @@ static ulong_t __init_tsepoch(void)
   /* month */
   for(i=0;i<s_epoch.tm_mon;i++) {
     r+=mon_days[i]*86400;
-    if((i==1) && (s_epoch.tm_year % 4 ==2 ))
+    if((i==1) && (year % 4 ==2 ))
       r+=86400;
   }
 
   /* year */
-  for(i=0;i<s_epoch.tm_year;i++) {
+  for(i=0;i<year;i++) {
     r+=365*86400;
     if(i % 4 == 2) r +=86400;
   }

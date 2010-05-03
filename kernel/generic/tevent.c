@@ -32,14 +32,14 @@
 
 #define __free_listener(l)  memfree(l)
 
-static task_event_listener_t *__alloc_listener(void)
+task_event_listener_t *task_event_alloc_listener(void)
 {
   task_event_listener_t *l=memalloc(sizeof(*l));
 
   if( l ) {
+    memset(l,0,sizeof(*l));
     list_init_node(&l->owner_list);
     list_init_node(&l->llist);
-    l->channel=NULL;
   }
 
   return l;
@@ -47,7 +47,9 @@ static task_event_listener_t *__alloc_listener(void)
 
 static void __release_listener(task_event_listener_t *l)
 {
-  ipc_unpin_channel(l->channel);
+  if (l->dtor) {
+    l->dtor(l);
+  }
   __free_listener(l);
 }
 
@@ -73,76 +75,100 @@ static void __release_task_events(task_events_t *te)
   }
 }
 
-void task_event_notify(ulong_t events)
+static void tevent_generic_ipc_logic(struct __task_event_listener *l,
+                                     struct __task_struct *task,ulong_t events)
 {
-  task_t *task=current_task();
+  task_event_descr_t e;
+  iovec_t iov;
 
+  e.pid=task->pid;
+  e.tid=task->tid;
+  e.ev_mask=l->events & events;
+
+  iov.iov_base=&e;
+  iov.iov_len=sizeof(e);
+  ipc_port_send_iov((ipc_channel_t *)l->data, &iov, 1, NULL, 0);
+}
+
+static void tevent_generic_ipc_dtor(struct __task_event_listener *l)
+{
+  ipc_unpin_channel((ipc_channel_t*)l->data);
+}
+
+long tevent_generic_ipc_init(task_event_listener_t **el,
+                             struct __task_struct *listener,
+                             ulong_t port,ulong_t ev_mask)
+{
+  ipc_gen_port_t *p;
+  ipc_channel_t *c;
+  task_event_listener_t *l;
+  long r=-EINVAL;
+
+  if( !ev_mask || (ev_mask & ~(ALL_TASK_EVENTS_MASK)) || !listener) {
+    return ERR(-EINVAL);
+  }
+
+  l=task_event_alloc_listener();
+  if( !l ) {
+    return ERR(-ENOMEM);
+  }
+
+  if( !(p=ipc_get_port(listener,port,&r)) ) {
+    goto out_free;
+  }
+
+  if( p->flags & IPC_BLOCKED_ACCESS ) {
+    goto put_port;
+  }
+
+  r = ipc_open_channel_raw(p, IPC_KERNEL_SIDE, &c);
+  if (r) {
+    goto put_port;
+  }
+
+  l->events=ev_mask;
+  l->listener=listener;
+  l->data = (long)c;
+  l->logic = tevent_generic_ipc_logic;
+  l->dtor = tevent_generic_ipc_dtor;
+
+  *el = l;
+  return 0;
+put_port:
+  ipc_put_port(p);
+out_free:
+  __free_listener(l);
+  return ERR(r);
+}
+
+void task_event_notify_target(task_t *task,ulong_t events)
+{
   LOCK_TASK_EVENTS(task);
   if( !list_is_empty(&task->task_events->listeners) ) {
     list_node_t *n;
-    task_event_descr_t e;
-    iovec_t iov;
-
-    e.pid=task->pid;
-    e.tid=task->tid;
-
-    iov.iov_base=&e;
-    iov.iov_len=sizeof(e);
 
     list_for_each(&task->task_events->listeners,n) {
       task_event_listener_t *l=container_of(n,task_event_listener_t,llist);
 
       if( l->events & events ) {
-        iovec_t iov;
-
-        e.ev_mask=l->events & events;
-        iov.iov_base=&e;
-        iov.iov_len=sizeof(e);
-        ipc_port_send_iov(l->channel, &iov, 1, NULL, 0);
+        l->logic(l,task,(l->events & events));
       }
     }
   }
   UNLOCK_TASK_EVENTS(task);
 }
 
-int task_event_attach(task_t *target_task,task_t *listener,
-                      task_event_ctl_arg *ctl_arg)
+int task_event_attach(task_t *target_task,task_event_listener_t *l,
+                      bool cleanup)
 {
-  ipc_gen_port_t *port;
-  task_event_listener_t *l;
-  long r=-EINVAL;
-  list_node_t *n;
+  int r;
   task_events_t *target_events;
-
-  if( !ctl_arg->ev_mask || (ctl_arg->ev_mask & ~(ALL_TASK_EVENTS_MASK)) ) {
-    return ERR(-EINVAL);
-  }
-
-  l=__alloc_listener();
-  if( !l ) {
-    return ERR(-ENOMEM);
-  }
-
-  if( !(port=ipc_get_port(listener,ctl_arg->port,&r)) ) {
-    goto out_free;
-  }
-
-  if( port->flags & IPC_BLOCKED_ACCESS ) {
-    goto put_port;
-  }
-
-  r = ipc_open_channel_raw(port, IPC_KERNEL_SIDE, &l->channel);
-  if (r) {
-    goto put_port;
-  }
-
-  l->events=ctl_arg->ev_mask;
-  l->listener=listener;
-  l->target=target_task;
+  list_node_t *n;
+  task_t *listener = l->listener;
 
   if( !(target_events=__get_task_events(target_task)) ) {
     r=-ESRCH;
-    goto put_channel;
+    goto cleanup;
   }
 
   mutex_lock(&target_events->lock);
@@ -156,14 +182,16 @@ int task_event_attach(task_t *target_task,task_t *listener,
   }
   UNLOCK_TASK_STRUCT(target_task);
 
-  if( !r ) {
-    list_for_each(&target_events->listeners,n) {
-      task_event_listener_t *tl=container_of(n,task_event_listener_t,llist);
+  if (!r) {
+    if (listener) {
+      list_for_each(&target_events->listeners,n) {
+        task_event_listener_t *tl=container_of(n,task_event_listener_t,llist);
 
-      /* Make sure caller hasn't installed another listeners for this process. */
-      if( tl->listener == listener ) {
-        r=-EBUSY;
-        goto dont_add;
+        /* Make sure caller hasn't installed another listeners for this process. */
+        if( tl->listener == listener ) {
+          r=-EBUSY;
+          goto dont_add;
+        }
       }
     }
     list_add2tail(&target_events->listeners,&l->llist);
@@ -174,20 +202,21 @@ dont_add:
   __release_task_events(target_events);
 
   if( !r ) {
-    /* Add this listener to our list. */
-    LOCK_TASK_EVENTS(listener);
-    list_add2tail(&listener->task_events->my_events,&l->owner_list);
-    UNLOCK_TASK_EVENTS(listener);
+    l->target = target_task;
+
+    if (listener) {
+      /* Add this listener to our list. */
+      LOCK_TASK_EVENTS(listener);
+      list_add2tail(&listener->task_events->my_events,&l->owner_list);
+      UNLOCK_TASK_EVENTS(listener);
+    }
     return 0;
   }
 
-put_channel:
-  ipc_destroy_channel(l->channel);
-  goto out_free; /* Skip 'put_port' since it is freed in 'destroy_channel()' */
-put_port:
-  ipc_put_port(port);
-out_free:
-  __free_listener(l);
+cleanup:
+  if (cleanup) {
+    __release_listener(l);
+  }
   return ERR(r);
 }
 

@@ -47,6 +47,7 @@
 #define SYS_PR_CTL_SET_SHORTNAME       0xF
 #define SYS_PR_CTL_SET_UIDGID          0x10
 #define SYS_PR_CTL_GET_UIDGID          0x11
+#define SYS_PR_CTL_GET_VMM_STATISTICS  0x12
 
 #define PTHREAD_CANCEL_ENABLE   1
 #define PTHREAD_CANCEL_DISABLE  0
@@ -100,7 +101,6 @@ typedef enum {
 } exit_flags_t;
 
 void do_exit(int code,ulong_t flags,long exitval);
-
 void perform_disintegrate_work(void);
 
 #define perform_disintegration_work()  do_exit(0,EF_DISINTEGRATE,0)

@@ -35,6 +35,7 @@
 #include <mstring/usercopy.h>
 #include <config.h>
 #include <mstring/gc.h>
+#include <mstring/ptrace.h>
 
 #define USPACE_TRMPL(a) USPACE_ADDR((uintptr_t)(a),__utrampoline_virt)
 
@@ -46,7 +47,8 @@ struct __trampoline_ctx {
 
 struct signal_context {
   struct __trampoline_ctx trampl_ctx;
-  struct gpregs gpr_regs;  
+  struct gpregs gpr_regs;
+  uint8_t xmm_ctx[XMM_CTX_SIZE] __aligned(16);
   usiginfo_t siginfo;
   sigset_t saved_blocked;
   long retcode;
@@ -75,34 +77,54 @@ static int __setup_trampoline_ctx(struct signal_context *__user ctx,
     return -EFAULT;
   }
 
-  kprintf_dbg( "TRAMPLCTX: %p, handler: %p, arg1=%p,arg2=%p,arg3=%p\n",
-               &ctx->trampl_ctx,
-               ctx->trampl_ctx.handler,ctx->trampl_ctx.arg1,
-               ctx->trampl_ctx.arg2,ctx->trampl_ctx.arg3);
-
   return 0;
 }
 
 static void __perform_default_action(int sig)
 {
   int sm=_BM(sig);
+  task_t *t = current_task();
 
 #ifdef CONFIG_DEBUG_SIGNALS
-  kprintf_fault("[!!] [%d:%d] Default action for signal %d is: ",
-                current_task()->pid,current_task()->tid,sig);
+  kprintf("[!!] [%d:%d] Default action for signal %d is: ",
+          current_task()->pid,current_task()->tid,sig);
 #endif
 
   if( sm & LETHAL_SIGNALS ) {
-
 #ifdef CONFIG_DEBUG_SIGNALS
-    kprintf_fault("TERMINATE\n");
+    kprintf("TERMINATE\n");
 #endif
-    do_exit(EXITCODE(sig,0),0,0);
+    t->wstat = WSTAT_SIGNALED;
+    t->last_signum = sig;
+    do_exit(0,0,0);
   }
 
 #ifdef CONFIG_DEBUG_SIGNALS
-    kprintf_fault("IGNORE\n");
+  kprintf("IGNORE\n");
 #endif
+
+  if (sig == SIGSTOP) {
+    LOCK_TASK_STRUCT(t);
+
+    sched_change_task_state(t, TASK_STATE_STOPPED);
+
+    if (task_traced(t))
+          set_ptrace_event(t, PTRACE_EV_STOPPED);
+
+    t->wstat = WSTAT_STOPPED;
+    t->last_signum = SIGSTOP;
+
+    /*
+     * It's needed to atomicaly change state to avoid spurious
+     * ptrace calls. In the other hand one should not to wakeup
+     * under hold lock to avoid deadlock.
+     */
+    preempt_disable();
+    UNLOCK_TASK_STRUCT(t);
+
+    wakeup_waiters(t);
+    preempt_enable();
+  }
 }
 
 static void __handle_cancellation_request(int reason,uintptr_t kstack)
@@ -115,7 +137,7 @@ static void __handle_cancellation_request(int reason,uintptr_t kstack)
     case __SYCALL_UWORK:
     case __INT_UWORK:
       extra_bytes=0;
-      break;    
+      break;
     case __XCPT_ERR_UWORK:
       extra_bytes=8;
       break;
@@ -143,32 +165,35 @@ static int __setup_int_context(uint64_t retcode,uintptr_t kstack,
   struct intr_stack_frame *int_frame;
   struct gpregs *kpregs;
   struct signal_context *ctx;
-
-  /* Save XMM and GPR context. */
+  uint8_t xmm_ctx[XMM_CTX_SIZE + XMM_ALIGNMENT];
 
   /* Locate saved GPRs. */
   kpregs=(struct gpregs *)kstack;
   kstack+=sizeof(*kpregs);
+
   /* OK, now we're pointing at saved interrupt number (see asm.S).
    * So skip it.
    */
 
+  fxsave(align_up((uintptr_t)xmm_ctx, XMM_ALIGNMENT));
   /* Now we can access hardware interrupt stackframe. */
   kstack += extra_bytes;
   int_frame=(struct intr_stack_frame *)kstack;
-
   /* Now we can create signal context. */
   ctx=(struct signal_context *)(int_frame->rsp-sizeof(*ctx));
   if( copy_to_user(&ctx->gpr_regs,kpregs,sizeof(*kpregs))) {
-    return -EFAULT;
+    return ERR(-EFAULT);
+  }
+  if (copy_to_user(&ctx->xmm_ctx, xmm_ctx, XMM_CTX_SIZE)) {
+    return ERR(-EFAULT);
   }
 
   if( __setup_trampoline_ctx(ctx,info,act) ) {
-    return -EFAULT;
+    return ERR(-EFAULT);
   }
 
   if( copy_to_user(&ctx->retcode,&retcode,sizeof(retcode)) ) {
-    return -EFAULT;
+    return ERR(-EFAULT);
   }
 
   t=int_frame->rip;
@@ -215,13 +240,14 @@ static void __handle_pending_signals(int reason, uint64_t retcode,
   if( act == SIG_IGN ) {
     goto out_recalc;
   } else if( act == SIG_DFL ) {
+    caller->last_siginfo = &sigitem->info;
     __perform_default_action(sigitem->info.si_signo);
   } else {
     switch( reason ) {
       case __SYCALL_UWORK:
       case __INT_UWORK:
         r=__setup_int_context(retcode,kstack,&sigitem->info,act,0,&pctx);
-        break;      
+        break;
       case __XCPT_ERR_UWORK:
         r=__setup_int_context(retcode,kstack,&sigitem->info,act,8,&pctx);
         break;
@@ -262,7 +288,7 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
   ulong_t uworks=read_task_pending_uworks(current_task());
   task_t *current=current_task();
   int i;
-  
+
   /* First, check for pending disintegration requests. */
   if( uworks & ARCH_CTX_UWORKS_DISINT_REQ_MASK ) {
       /*kprintf_fault("[UWORKS]: %d/%d. Processing works for %d:0x%X, KSTACK: %p\n",
@@ -281,7 +307,7 @@ void handle_uworks(int reason, uint64_t retcode,uintptr_t kstack)
        * Only main threads will return to finalize their reborn.
        * There can be some signals waiting for delivery, so take it
        * into account.
-       */        
+       */
 
       perform_disintegration_work();
       uworks=read_task_pending_uworks(current);
@@ -328,6 +354,10 @@ long sys_sigreturn(uintptr_t ctx)
                                    sizeof(struct intr_stack_frame));
   uintptr_t retaddr;
   sigset_t sa_mask;
+  uint8_t xmm_ctx[XMM_CTX_SIZE + XMM_ALIGNMENT];
+  uintptr_t xmm_ctx_addr = align_up((uintptr_t)xmm_ctx, XMM_ALIGNMENT);
+  uint32_t *xmm_reg;
+  int restore_sigmask;
 
   if( !valid_user_address_range(ctx,sizeof(struct signal_context)) ) {
     goto bad_ctx;
@@ -341,8 +371,16 @@ long sys_sigreturn(uintptr_t ctx)
   /* Don't touch these signals ! */
   sa_mask &= ~UNTOUCHABLE_SIGNALS;
 
+  LOCK_TASK_STRUCT(caller);
+  restore_sigmask = check_task_flags(caller, TF_RESTORE_SIGMASK);
+  clear_task_flag(caller, TF_RESTORE_SIGMASK);
+  UNLOCK_TASK_STRUCT(caller);
+
   LOCK_TASK_SIGNALS(caller);
-  caller->siginfo.blocked=sa_mask;
+  if (restore_sigmask)
+    caller->siginfo.blocked = caller->saved_sigmask;
+  else
+    caller->siginfo.blocked = sa_mask;
   __update_pending_signals(caller);
   UNLOCK_TASK_SIGNALS(caller);
 
@@ -350,7 +388,18 @@ long sys_sigreturn(uintptr_t ctx)
   if( copy_from_user((void *)kctx,&uctx->gpr_regs,sizeof(struct gpregs) ) ) {
     goto bad_ctx;
   }
+  if (copy_from_user((void *)xmm_ctx_addr, &uctx->xmm_ctx, XMM_CTX_SIZE)) {
+    goto bad_ctx;
+  }
 
+  /*
+   * Fixme [dg]: the ugly hack set the mxcsr content such wich will
+   *             not cause an exception, redo this.
+   */
+  xmm_reg = (uint32_t*)xmm_ctx_addr;
+  xmm_reg[6] = 0x1f80;  /* see AMD64 Architecture Programmer's Manual, vol.1, p.118 */
+
+  fxrstor(xmm_ctx_addr);
   /* Restore retcode. */
   if( copy_from_user(&retcode,&uctx->retcode,sizeof(retcode)) ) {
     goto bad_ctx;

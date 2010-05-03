@@ -64,8 +64,10 @@ typedef enum __ipc_msg_state {
 #define IPC_MSG_EXTRA_SIZE  PAGE_SIZE
 #define IPC_MSG_EXTRA_PAGES 1
 
+struct __iovec;
+
 typedef struct __ipc_port_message_t {
-  ulong_t data_size,reply_size,id;
+  ulong_t data_size,reply_size,id,flags;
   long replied_size;
   void *send_buffer,*receive_buffer;
   list_node_t l,messages_list;
@@ -79,6 +81,9 @@ typedef struct __ipc_port_message_t {
 
   void *extra_data;
   long extra_data_tail;
+  struct __iovec *rcv_kiovecs;
+  long rcv_knumvecs;
+  struct __s_creds creds;
 } ipc_port_message_t;
 
 typedef struct __port_msg_info {
@@ -88,6 +93,7 @@ typedef struct __port_msg_info {
   tid_t sender_tid;
   uid_t sender_uid;
   uid_t sender_gid;
+  mac_label_t sender_label;
 } port_msg_info_t;
 
 struct __ipc_gen_port;
@@ -123,6 +129,14 @@ typedef struct __ipc_gen_port {
   list_head_t channels;
   struct __s_object sobject;
 } ipc_gen_port_t;
+
+/* Set when server writes to an indirect message. This will prevent
+ * the sender form inconsistent receive buffer state when writes
+ * occur not from the beginning of the indirect receive buffer.
+ * This bit is set up when the first write to a small receive buffer
+ * occurs on behalf on server.
+ */
+#define MSG_SMALL_RCV_BUF_MAPPED  8
 
 long ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size);
 long ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
@@ -168,7 +182,7 @@ long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
                        struct __iovec *rcv_iov,ulong_t numvecs,ulong_t offset);
 long ipc_port_msg_write(struct __ipc_gen_port *port,ulong_t msg_id,
                         struct __iovec *iovecs,ulong_t numvecs,off_t *offset,
-                        long len, bool wakeup,long msg_size);
+                        long len, bool wakeup,long msg_size,bool map_rcv_buffer);
 
 ipc_gen_port_t *ipc_clone_port(ipc_gen_port_t *p);
 void put_ipc_port_message(ipc_port_message_t *msg);
@@ -189,7 +203,10 @@ void put_ipc_port_message(ipc_port_message_t *msg);
 
 long ipc_port_control(ipc_gen_port_t *p, ulong_t cmd, ulong_t arg);
 
-#define message_writable(msg)  ((msg)->state != MSG_STATE_REPLY_BEGIN && (msg)->state != MSG_STATE_DATA_UNDER_ACCESS )
+#define message_writable(msg)  ((msg)->state != MSG_STATE_REPLY_BEGIN && \
+                                (msg)->state != MSG_STATE_DATA_UNDER_ACCESS && \
+                                (msg)->state != MSG_STATE_RECEIVED)
+
 #define mark_message_waccess(msg) do { (msg)->state = MSG_STATE_DATA_UNDER_ACCESS; } while(0)
 #define unmark_message_waccess(msg) do { (msg)->state = MSG_STATE_DATA_TRANSFERRED; } while(0)
 

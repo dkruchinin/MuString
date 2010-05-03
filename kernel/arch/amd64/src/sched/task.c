@@ -42,6 +42,7 @@
 #include <arch/context.h>
 #include <arch/ptable.h>
 #include <security/security.h>
+#include <mstring/ptrace.h>
 #include <config.h>
 
 /* Located on 'amd64/asm.S' */
@@ -86,7 +87,7 @@ static void __arch_setup_ctx(task_t *newtask,uint64_t rsp,
   arch_context_t *ctx = (arch_context_t*)&(newtask->arch_context[0]);
 
   __setup_arch_segment_regs(ctx,priv);
- 
+
   ctx->rsp = rsp;
   /* Setup CR3 */
   ctx->cr3 = KVIRT_TO_PHYS((uintptr_t)task_get_rpd(newtask)->root_dir);
@@ -116,7 +117,7 @@ void initialize_idle_tasks(void)
   for( cpu = 0; cpu < CONFIG_NRCPUS; cpu++ ) {
     ts_page = alloc_page(MMPOOL_KERN | AF_ZERO);
     if( ts_page == NULL ) {
-      panic( "initialize_idle_tasks(): Can't allocate main structure for idle task !" );  
+      panic( "initialize_idle_tasks(): Can't allocate main structure for idle task !" );
     }
 
     task = pframe_to_virt(ts_page);
@@ -128,7 +129,7 @@ void initialize_idle_tasks(void)
     task->cpu = cpu;
 
     if( !(task->sobject=s_alloc_task_object(S_KTHREAD_MAC_LABEL,
-                                            S_KTHREAD_UID)) ) {
+                                            S_KTHREAD_UID,S_KTHREAD_GID)) ) {
       panic("initialize_idle_task(): can't setup security descriptor !");
     }
 
@@ -143,13 +144,13 @@ void initialize_idle_tasks(void)
      * API that relies on 'cpu_id'.
      */
     if( allocate_kernel_stack(&task->kernel_stack) != 0 ) {
-      panic( "initialize_idle_tasks(): Can't initialize kernel stack for idle task !" ); 
+      panic( "initialize_idle_tasks(): Can't initialize kernel stack for idle task !" );
     }
 
     /* FIXME DK: redisign! */
     {
         page_frame_t *pf = alloc_pages(KERNEL_STACK_PAGES, MMPOOL_KERN | AF_CONTIG);
-        
+
         if (!pf)
             panic("Can't allocate %d pages for kernel stack!", KERNEL_STACK_PAGES);
 
@@ -163,7 +164,7 @@ void initialize_idle_tasks(void)
     __arch_setup_ctx(task,0,TPL_KERNEL);
   }
 
-  /* Setup arch-specific task context. */  
+  /* Setup arch-specific task context. */
 
   /* Now initialize per-CPU scheduler statistics. */
   cpu = 0;
@@ -310,6 +311,7 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   arch_context_t *task_ctx;
   tss_t *tss;
   regs_t *regs;
+  uint32_t *mxcr;
 
   if( priv == TPL_KERNEL ) {
     reg_size = setup_kernel_task_context(newtask);
@@ -323,10 +325,11 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
   fsave -= reg_size;
   regs = (regs_t *)fsave;
   delta = fsave;
-  fsave-=512;  
+  fsave-=512;
   fsave &= 0xfffffffffffffff0;
-  memset((void *)fsave, 0, 512);
-
+  fxsave(fsave);
+  mxcr = (uint32_t *)(fsave + 0x18);
+  //*mxcr = 4096;
 
   /* Save size of this context for further use in RESTORE_ALL. */
   fsave -= 8;
@@ -362,7 +365,7 @@ int arch_setup_task_context(task_t *newtask,task_creation_flags_t cflags,
     if( !task_ctx->ldt ) {
       return -ENOMEM;
     }
-    
+
     __setup_user_ldt(task_ctx->ldt);
   }
 
@@ -399,7 +402,7 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
     case SYS_PR_CTL_SET_PERTASK_DATA:
       arch_ctx=(arch_context_t*)&task->arch_context[0];
       if( arch_ctx->ldt ) {
-        segment_descr_t *ldt_dsc=(segment_descr_t*)arch_ctx->ldt;        
+        segment_descr_t *ldt_dsc=(segment_descr_t*)arch_ctx->ldt;
         ldt_dsc=&ldt_dsc[PTD_SELECTOR];
 
         arch_ctx->per_task_data=arg;
@@ -427,6 +430,11 @@ int arch_process_context_control(task_t *task, ulong_t cmd,ulong_t arg)
 
       r=arch_process_context_control(task,SYS_PR_CTL_SET_PERTASK_DATA,
                                      attrs->per_task_data);
+
+      /* notify the task tracer about new program execution begin */
+      if (task_traced(task) & event_is_traced(task, PTRACE_EV_EXEC))
+        set_ptrace_event(task, PTRACE_EV_EXEC);
+
       break;
     default:
       r=-EINVAL;
@@ -444,18 +452,19 @@ void arch_activate_task(task_t *to)
   tss_t *tss=to_ctx->tss;
   uint16_t tss_limit;
 
-  if( !tss ) {
+  if (!tss) {
     tss=get_cpu_tss(to->cpu);
     tss_limit=TSS_DEFAULT_LIMIT;
-  } else {
+  }
+  else {
     tss_limit=to_ctx->tss_limit;
   }
 
   /* We should setup TSS to reflect new task's kernel stack. */
   tss->rsp0 = to->kernel_stack.high_address;
-  
+
   /* Reload TSS. */
-  load_tss(to->cpu,tss,tss_limit);
+  load_tss(to->cpu, tss, tss_limit);
 
   /* Setup LDT for new task. */
   if( to_ctx->ldt ) {

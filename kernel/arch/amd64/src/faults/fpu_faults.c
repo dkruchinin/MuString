@@ -58,6 +58,15 @@ void FH_simd_floating_point(struct fault_ctx *fctx)
    */
   fault_describe("SIMD FLOATING POINT", fctx);
   fault_dump_info(fctx);
+
+  uint8_t xmm_ctx[XMM_CTX_SIZE + XMM_ALIGNMENT];
+  uintptr_t xmm_ctx_addr = align_up((uintptr_t)xmm_ctx, XMM_ALIGNMENT);
+  uint32_t *xmm_reg;
+
+  xmm_reg = (uint32_t*)xmm_ctx_addr;
+  fxsave(xmm_ctx_addr);
+  kprintf_fault("\n  > MXCSR: %#.16lx\n", xmm_reg[6]);
+
   __stop_cpu();
 }
 

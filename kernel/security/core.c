@@ -90,6 +90,8 @@ static struct __s_object system_caps[SYS_CAP_MAX];
 
 bool s_check_system_capability(enum __s_system_caps cap)
 {
+  return true;
+
   if( cap < SYS_CAP_MAX ) {
     return s_check_access(S_GET_INVOKER(),&system_caps[cap]);
   }
@@ -101,7 +103,8 @@ void initialize_security(void)
   int i;
 
   for( i=0; i<SYS_CAP_MAX; i++ ) {
-    system_caps[i].mac_label=S_INITIAL_MAC_LABEL;
+    rw_spinlock_initialize(&system_caps[i].lock, "MAC");
+    system_caps[i].creds.mac_label=S_INITIAL_MAC_LABEL;
   }
 }
 
@@ -110,20 +113,22 @@ struct __task_s_object *s_clone_task_object(struct __task_struct *t)
   struct __task_s_object *orig;
   mac_label_t l;
   uid_t uid;
+  gid_t gid;
 
   if( !t || !(orig=t->sobject) ) {
     return NULL;
   }
 
   S_LOCK_OBJECT_R(&orig->sobject);
-  l=orig->sobject.mac_label;
-  uid=orig->sobject.uid;
+  l=orig->sobject.creds.mac_label;
+  uid=orig->sobject.creds.uid;
+  gid=orig->sobject.creds.gid;
   S_UNLOCK_OBJECT_R(&orig->sobject);
 
-  return s_alloc_task_object(l,uid);
+  return s_alloc_task_object(l,uid,gid);
 }
 
-struct __task_s_object *s_alloc_task_object(mac_label_t label,uid_t uid)
+struct __task_s_object *s_alloc_task_object(mac_label_t label,uid_t uid,gid_t gid)
 {
   struct __task_s_object *s;
 
@@ -132,8 +137,9 @@ struct __task_s_object *s_alloc_task_object(mac_label_t label,uid_t uid)
 
     atomic_set(&s->refcount,1);
     rw_spinlock_initialize(&s->sobject.lock, "MAC");
-    s->sobject.mac_label=label;
-    s->sobject.uid=uid;
+    s->sobject.creds.mac_label=label;
+    s->sobject.creds.uid=uid;
+    s->sobject.creds.gid=gid;
   }
 
   return s;
@@ -143,11 +149,10 @@ bool s_check_access(struct __s_object *actor,struct __s_object *obj)
 {
   bool can;
 
+  return true;
+
   __S_LOCK_OBJS_RR(actor,obj);
-  can=S_MAC_OK(actor->mac_label,obj->mac_label);
-  if( !can ) {
-    kprintf_fault("<s_check_access> MAC %d > MAC %d\n",actor->mac_label,obj->mac_label);
-  }
+  can=S_MAC_OK(actor->creds.mac_label,obj->creds.mac_label);
   __S_UNLOCK_OBJS_RR(actor,obj);
 
   return can;
@@ -157,8 +162,92 @@ void s_copy_mac_label(struct __s_object *src, struct __s_object *dst)
 {
   if( src != dst ) {
     __S_LOCK_OBJS_RW(src,dst);
-    dst->mac_label=src->mac_label;
-    dst->uid=src->uid;
+    dst->creds.mac_label=src->creds.mac_label;
+    dst->creds.uid=src->creds.uid;
+    dst->creds.gid=src->creds.gid;
     __S_UNLOCK_OBJS_RW(src,dst);
   }
+}
+
+long s_set_obj_cred(struct __s_object *target, enum s_cred_type cred,
+                    struct __s_creds *new)
+{
+  long r=0;
+
+  S_LOCK_OBJECT_W(target);
+  switch( cred ) {
+    case S_CRED_MAC_LABEL:
+      if( S_MAC_LABEL_VALID(new->mac_label) ) {
+        target->creds.mac_label=new->mac_label;
+      } else {
+        r=-EINVAL;
+      }
+      break;
+    case S_CRED_UID:
+      if( S_UID_VALID(new->uid) ) {
+        target->creds.uid=new->uid;
+      } else {
+        r=-EINVAL;
+      }
+      break;
+    case S_CRED_WHOLE:
+      if( S_MAC_LABEL_VALID(new->mac_label) &&
+          S_UID_VALID(new->uid) ) {
+        target->creds=*new;
+      } else {
+        r=-EINVAL;
+      }
+      break;
+    default:
+      r=-EINVAL;
+      break;
+  }
+  S_UNLOCK_OBJECT_W(target);
+  return ERR(r);
+}
+
+long s_get_obj_cred(struct __s_object *target, enum s_cred_type cred,
+                    struct __s_creds *out)
+{
+  long r=0;
+
+  S_LOCK_OBJECT_R(target);
+  switch( cred ) {
+    case S_CRED_MAC_LABEL:
+      out->mac_label=target->creds.mac_label;
+      break;
+    case S_CRED_UID:
+      out->uid=target->creds.uid;
+      break;
+    case S_CRED_WHOLE:
+      *out=target->creds;
+      break;
+    default:
+      r=-EINVAL;
+      break;
+  }
+  S_UNLOCK_OBJECT_R(target);
+  return ERR(r);
+}
+
+long s_get_sys_mac_label(ulong_t cap,mac_label_t *out)
+{
+  if( cap < SYS_CAP_MAX) {
+    S_LOCK_OBJECT_R(&system_caps[cap]);
+    *out=system_caps[cap].creds.mac_label;
+    S_UNLOCK_OBJECT_R(&system_caps[cap]);
+    return 0;
+  }
+  return -EINVAL;
+}
+
+long s_set_sys_mac_label(ulong_t cap,mac_label_t *in)
+{
+  if( cap < SYS_CAP_MAX) {
+    S_LOCK_OBJECT_W(&system_caps[cap]);
+    system_caps[cap].creds.mac_label=*in;
+    S_UNLOCK_OBJECT_W(&system_caps[cap]);
+    return 0;
+  }
+  return -EINVAL;
 }

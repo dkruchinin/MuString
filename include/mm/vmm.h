@@ -83,8 +83,14 @@ typedef struct __vm_mandmap {
   uintptr_t virt_addr;
   uintptr_t phys_addr;
   ulong_t num_pages;
-  kmap_flags_t flags;  
+  kmap_flags_t flags;
 } vm_mandmap_t;
+
+#ifdef CONFIG_VMM_STATISTICS
+struct vmm_statistics {
+  ulong_t num_vpages;
+};
+#endif /* CONFIG_VMM_STATISTICS */
 
 typedef struct __vmrange {
   struct range_bounds bounds;
@@ -93,7 +99,7 @@ typedef struct __vmrange {
   uintptr_t hole_size;
   list_node_t rmap_node;
   pgoff_t offset;
-  vmrange_flags_t flags;  
+  vmrange_flags_t flags;
 } vmrange_t;
 
 typedef struct __vmm {
@@ -102,8 +108,11 @@ typedef struct __vmm {
   rpd_t rpd;
   rwsem_t rwsem;
   ulong_t num_vmrs;
-  page_idx_t num_pages;
-  page_idx_t max_pages;
+
+#ifdef CONFIG_VMM_STATISTICS
+  struct vmm_statistics stat;
+#endif /* CONFIG_VMM_STATISTICS */
+
 #ifdef CONFIG_DEBUG_MM
   char name_dbg[VMM_DBG_NAME_LEN];
 #endif /* CONFIG_DEBUG_MM */
@@ -137,7 +146,8 @@ int unmap_vmranges(vmm_t *vmm, uintptr_t va_from, page_idx_t npages);
 vmrange_t *vmrange_find(vmm_t *vmm, uintptr_t va_start, uintptr_t va_end, ttree_cursor_t *cursor);
 void vmranges_find_covered(vmm_t *vmm, uintptr_t va_from, uintptr_t va_to, vmrange_set_t *vmrs);
 int fault_in_user_pages(vmm_t *vmm, uintptr_t address, size_t length, uint32_t pfmask,
-                        void (*callback)(vmrange_t *vmr, page_frame_t *page, void *data), void *data);
+                        void (*callback)(vmrange_t *vmr, page_frame_t *page, void *data),
+			void *data,bool resolve_faults);
 
 static inline void vmrange_set_next(vmrange_set_t *vmrs)
 {
@@ -178,6 +188,16 @@ struct mmap_args;
 long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs);
 int sys_munmap(pid_t victim, uintptr_t addr, size_t length);
 int sys_grant_pages(uintptr_t va_from, size_t length, pid_t target_pid, uintptr_t target_addr);
+
+#ifdef CONFIG_VMM_STATISTICS
+#define VMM_STAT_ADD_NUM_VPAGES(vmm, nbytes)            \
+  ((vmm)->stat.num_vpages += ((nbytes) >> PAGE_WIDTH))
+#define VMM_STAT_SUB_NUM_VPAGES(vmm, nbytes)            \
+  ((vmm)->stat.num_vpages -= ((nbytes) >> PAGE_WIDTH))
+#else /* CONFIG_VMM_STATISTICS */
+#define VMM_STAT_ADD_NUM_VPAGES(vmm, nbytes)
+#define VMM_STAT_SUB_NUM_VPAGES(vmm, nbytes)
+#endif /* !CONFIG_VMM_STATISTICS */
 
 #ifdef CONFIG_DEBUG_MM
 static inline char *vmm_get_name_dbg(vmm_t *vmm)

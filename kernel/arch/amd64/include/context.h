@@ -24,6 +24,9 @@
 #ifndef __ARCH_CONTEXT_H__
 #define __ARCH_CONTEXT_H__ /* there are several context.h(es) */
 
+#define XMM_CTX_SIZE       512
+#define XMM_ALIGNMENT      16
+
 #define __SYCALL_UWORK     0  /**< Syscall-related works **/
 #define __INT_UWORK        1  /**< Interrupt-related works **/
 #define __XCPT_NOERR_UWORK 2  /**< Exception-related works (no error code on the stack) **/

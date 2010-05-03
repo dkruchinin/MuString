@@ -36,8 +36,11 @@ typedef struct __ipc_buffer {
 } ipc_buffer_t;
 
 struct __iovec;
-int ipc_setup_buffer_pages(struct __iovec *iovecs, uint32_t numvecs,
-                           page_idx_t *idx_array, ipc_buffer_t *bufs, bool is_sender_buffer);
+struct __task_struct;
+
+int ipc_setup_task_buffer_pages(struct __iovec *iovecs, uint32_t numvecs,
+                                page_idx_t *idx_array, ipc_buffer_t *bufs,
+                                bool is_sender_buffer,struct __task_struct *owner);
 long ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs,
                                   struct __iovec *iovecs, uint32_t numvecs,
                                   ulong_t offset, bool to_buffer);

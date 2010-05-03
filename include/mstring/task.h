@@ -393,6 +393,11 @@ static inline bool tasks_in_same_group(task_t *t1, task_t *t2)
   return (t1->group_leader == t2->group_leader);
 }
 
+static inline bool task_traced(task_t *task)
+{
+  return task->group_leader->tracer != NULL;
+}
+
 static inline rpd_t *task_get_rpd(task_t *task)
 {
   if (likely(!is_kernel_thread(task)))

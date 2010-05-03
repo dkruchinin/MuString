@@ -26,10 +26,12 @@
 
 #include <ds/list.h>
 #include <arch/timer.h>
+#include <mm/slab.h>
 #include <mstring/interrupt.h>
 #include <mstring/errno.h>
 #include <sync/spinlock.h>
 #include <mstring/string.h>
+#include <mstring/signal.h>
 #include <mstring/swks.h>
 #include <mstring/kprintf.h>
 #include <mstring/timer.h>

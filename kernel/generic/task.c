@@ -21,7 +21,6 @@
  */
 
 #include <ds/list.h>
-#include <mstring/index_array.h>
 #include <mstring/task.h>
 #include <mstring/smp.h>
 #include <mstring/kstack.h>
@@ -42,7 +41,7 @@
 #include <config.h>
 
 /* Available PIDs live here. */
-static index_array_t pid_array;
+static idx_allocator_t pid_array;
 static spinlock_t pid_array_lock;
 static bool init_launched;
 
@@ -54,8 +53,10 @@ void initialize_process_subsystem(void);
 
 static pid_t __allocate_pid(void)
 {
+  pid_t pid;
+
   LOCK_PID_ARRAY;
-  pid_t pid = index_array_alloc_value(&pid_array);
+  pid = idx_allocate(&pid_array);
   UNLOCK_PID_ARRAY;
 
   return pid;
@@ -64,11 +65,12 @@ static pid_t __allocate_pid(void)
 void initialize_task_subsystem(void)
 {
   pid_t idle;
+  int ret;
 
   spinlock_initialize(&pid_array_lock, "PID array");
-
-  if( !index_array_initialize(&pid_array, NUM_PIDS) ) {
-    panic( "initialize_task_subsystem(): Can't initialize PID index array !" );
+  ret = idx_allocator_init(&pid_array, NUM_PIDS);
+  if (ret < 0) {
+    panic("Can't initialize PID idx_allocator. [RET = %d]!", ret);
   }
 
   /* Sanity check: allocate PID 0 for idle tasks, so the next available PID
@@ -86,7 +88,7 @@ void initialize_task_subsystem(void)
     panic( "initialize_task_subsystem(): Can't allocate PID for Init task ! (%d returned)\n",
            idle );
   }
-  
+
   init_launched=false;
   initialize_process_subsystem();
 }
@@ -134,10 +136,9 @@ static int __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
   int r=0;
 
   if( parent && parent->pid ) {
-    task->ppid = parent->pid;
-
     if( (flags & CLONE_MM) && priv != TPL_KERNEL ) {
-      task->group_leader=parent->group_leader;
+      task->ppid = parent->ppid;  /* parent is set to the parent of group leader */
+      task->group_leader = parent->group_leader;
       LOCK_TASK_CHILDS(task->group_leader);
       LOCK_TASK_STRUCT(task->group_leader);
 
@@ -151,6 +152,7 @@ static int __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
       UNLOCK_TASK_STRUCT(task->group_leader);
       UNLOCK_TASK_CHILDS(task->group_leader);
     } else {
+      task->ppid = parent->pid;
       LOCK_TASK_CHILDS(parent);
       list_add2tail(&parent->children,
                     &task->child_list);
@@ -205,6 +207,7 @@ static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
 
     list_init_head(&task->children);
     list_init_head(&task->threads);
+    list_init_head(&task->trace_children);
 
     list_init_head(&task->jointed);
 
@@ -298,7 +301,7 @@ static int __setup_task_security(task_t *task,task_t *parent,ulong_t flags,
   if( flags & CLONE_MM ) {
     if( priv == TPL_KERNEL ) {
       task->sobject = s_alloc_task_object(S_KTHREAD_MAC_LABEL,
-                                          S_KTHREAD_UID);
+                                          S_KTHREAD_UID,S_KTHREAD_GID);
     } else {
       s_get_task_object(parent);
       task->sobject=parent->sobject;
@@ -363,7 +366,7 @@ static int __initialize_task_mm(task_t *orig, task_t *target, task_creation_flag
                                 task_privelege_t priv, task_creation_attrs_t *attrs)
 {
   int ret = 0;
-  
+
   if (!orig || priv == TPL_KERNEL) {
     /* FIXME DK: This arch-dependent code must be removed out from here */
     rpd_t *rpd = task_get_rpd(target);
@@ -372,7 +375,7 @@ static int __initialize_task_mm(task_t *orig, task_t *target, task_creation_flag
   else if (flags & CLONE_MM) {
     target->task_mm = orig->task_mm;
   }
-  else {    
+  else {
     target->task_mm = vmm_create(target);
     if (!target->task_mm)
       ret = -ENOMEM;
@@ -511,16 +514,13 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   task->flags = 0;
   task->priv = priv;
 
-  task->uid=parent->uid;
-  task->gid=parent->gid;
-
   if( parent->short_name[0] ) {
     strcpy(task->short_name,parent->short_name);
   }
 
   if( !(r=__add_to_parent(task,parent,flags,priv)) ) {
     *t = task;
-    return 0; 
+    return 0;
   }
 
 free_events:
@@ -538,11 +538,11 @@ free_ipc:
 free_limits:
   /* TODO: Unmap stack pages here. [mt] */
 free_stack_pages:
-  /* TODO: Free all stack pages here. [mt] */  
+  /* TODO: Free all stack pages here. [mt] */
 free_mm:
   /* TODO: Free mm here. [mt] */
 free_stack:
-  free_kernel_stack(task->kernel_stack.id);  
+  free_kernel_stack(task->kernel_stack.id);
 free_pid:
   /* TODO: free PID/TID here. */
 free_task:
@@ -560,10 +560,11 @@ void release_task_struct(struct __task_struct *t)
       idx_free(&t->group_leader->tg_priv->tid_allocator,t->tid);
       UNLOCK_TASK_STRUCT(t->group_leader);
     } else {
-        //LOCK_PID_ARRAY;
-        //index_array_free_value(&pid_array,t->pid);
-        //UNLOCK_PID_ARRAY;
+        LOCK_PID_ARRAY;
+        idx_free(&pid_array, t->pid);
+        UNLOCK_PID_ARRAY;
     }
+
     free_pages_addr(t,1);
   }
 }

@@ -29,6 +29,7 @@
 #include <arch/interrupt.h>
 #include <mstring/process.h>
 #include <mstring/kconsole.h>
+#include <security/security.h>
 
 long sys_timer_create(clockid_t clockid,struct sigevent *evp,
                       posixid_t *timerid)
@@ -40,16 +41,20 @@ long sys_timer_create(clockid_t clockid,struct sigevent *evp,
   posix_timer_t *ptimer=NULL;
   ksiginfo_t *ksiginfo;
 
+  if( !s_check_system_capability(SYS_CAP_TIMER) ) {
+    return ERR(-EPERM);
+  }
+
   if( clockid != CLOCK_REALTIME ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   if( evp ) {
     if( copy_from_user(&kevp,evp,sizeof(kevp)) ) {
-      return -EFAULT;
+      return ERR(-EFAULT);
     }
     if( !posix_validate_sigevent(&kevp) ) {
-      return -EINVAL;
+      return ERR(-EINVAL);
     }
   } else {
     INIT_SIGEVENT(kevp);
@@ -57,7 +62,7 @@ long sys_timer_create(clockid_t clockid,struct sigevent *evp,
 
   ptimer=memalloc(sizeof(*ptimer));
   if( !ptimer ) {
-    return -ENOMEM;
+    return ERR(-ENOMEM);
   }
 
   memset(ptimer,0,sizeof(*ptimer));
@@ -84,7 +89,7 @@ long sys_timer_create(clockid_t clockid,struct sigevent *evp,
   ptimer->overrun=0;
 
   ksiginfo=&ptimer->ktimer.da.d.siginfo;
-  INIT_KSIGINFO_CURR(ksiginfo);
+  siginfo_initialize(current_task(), &ksiginfo->user_siginfo);
   ksiginfo->user_siginfo.si_signo=kevp.sigev_signo;
   ksiginfo->user_siginfo.si_value=kevp.sigev_value;
 
@@ -137,7 +142,7 @@ out:
   if( ptimer ) {
     memfree(ptimer);
   }
-  return r;
+  return ERR(r);
 }
 
 long sys_timer_delete(long id)
@@ -168,7 +173,7 @@ out_unlock:
     release_posix_object(&ptimer->kpo);
   }
 
-  return r;      
+  return ERR(r);
 }
 
 static void __get_timer_status(posix_timer_t *ptimer,itimerspec_t *kspec)

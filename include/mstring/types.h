@@ -47,9 +47,10 @@ typedef unsigned long lock_t;
 #define always_inline __attribute__((always_inline)) inline
 #define likely(x)   __builtin_expect((x), 1)
 #define unlikely(x) __builtin_expect((x), 0)
-#define MEMBARIER() __asm__ volatile()
+#define mbarrier()  __asm__ volatile("")
 #define INITDATA __attribute__ ((section("initdata")))
 #define INITCODE __attribute__ ((section("initcode")))
+#define __aligned(x) __attribute__ ((aligned(x)))
 
 #ifndef UNUSED
 #define UNUSED(istr) ((void)(instr))

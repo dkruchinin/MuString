@@ -29,6 +29,7 @@
 #include <arch/i8259.h>
 #include <mstring/kprintf.h>
 #include <mstring/unistd.h>
+#include <mstring/time.h>
 
 #define PIT_DIVISOR ((PIT_OSC_FREQ + HZ / 2) / HZ)
 
@@ -85,14 +86,14 @@ static struct irq_action pit_irq = {
   .handler = timer_interrupt_handler,
 };
 
-void i8254_init(void) 
+void i8254_init(void)
 {
   struct irq_controller *irq_ctrl;
   int ret;
 
   outb(I8254_BASE+3,0x34);
   outb(I8254_BASE,PIT_DIVISOR & 0xff);
-  outb(I8254_BASE,PIT_DIVISOR >> 8);  
+  outb(I8254_BASE,PIT_DIVISOR >> 8);
   hwclock_register(&pit_clock);
   default_hwclock = &pit_clock;
   irq_ctrl = irq_get_controller(I8259A_IRQCTRL_NAME);

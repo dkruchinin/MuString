@@ -31,35 +31,44 @@
 #include <mstring/signal.h>
 #include <mstring/types.h>
 
-static inline void display_unhandled_pf_info(struct fault_ctx *fctx, uintptr_t fault_addr)
+static inline void display_unhandled_pf_info(struct fault_ctx *fctx,
+                                             uintptr_t fault_addr)
 {
+  interrupts_disable();
   fault_describe("PAGE FAULT", fctx);
   kprintf_fault("  Invalid address: %p, RIP: %p\n",
                 fault_addr, fctx->istack_frame->rip);
   fault_dump_info(fctx);
+  interrupts_enable();
 }
 
 #ifdef CONFIG_SEND_SIGSEGV_ON_FAULTS
-static void send_sigsegv(uintptr_t fault_addr)
-{  
+static void send_sigsegv(uintptr_t fault_addr, int errcode)
+{
   usiginfo_t siginfo;
 
   /* Send user the SIGSEGV signal. */
-  INIT_USIGINFO_CURR(&siginfo);
+  siginfo_initialize(current_task(), &siginfo);
   siginfo.si_signo=SIGSEGV;
-  siginfo.si_code=SEGV_MAPERR;
-  siginfo.si_addr=(void *)fault_addr;
+  if (errcode == -EPERM) {
+      siginfo.si_code = SEGV_ACCERR;
+  }
+  else {
+      siginfo.si_code = SEGV_MAPERR;
+  }
 
+  siginfo.si_addr = (void *)fault_addr;
+  siginfo.si_trapno = FLT_PF;
   kprintf_fault("[!!] Sending SIGSEGV to %d:%d ('%s')\n",
                 current_task()->pid, current_task()->tid,
                 current_task()->short_name);
-  send_task_siginfo(current_task(), &siginfo, true, NULL);
+  send_task_siginfo(current_task(), &siginfo, true, NULL,NULL);
 }
 #endif /* CONFIG_SEND_SIGSEGV_ON_FAULTS */
 
 struct fixup_record {
   uint64_t fault_address, fixup_address;
-}; 
+};
 
 extern int __ex_table_start, __ex_table_end;
 
@@ -93,7 +102,7 @@ void FH_page_fault(struct fault_ctx *fctx)
   struct intr_stack_frame *stack_frame = fctx->istack_frame;
 
   fault_addr = read_cr2();
-  fixup_addr = fixup_fault_address(stack_frame->rip);  
+  fixup_addr = fixup_fault_address(stack_frame->rip);
   if (IS_KERNEL_FAULT(fctx) && !fixup_addr) {
     display_unhandled_pf_info(fctx, fault_addr);
     goto stop_cpu;
@@ -116,10 +125,11 @@ void FH_page_fault(struct fault_ctx *fctx)
     if (!ret) {
       return;
     }
+
     if (fixup_addr) {
       goto handle_fixup;
     }
-    
+
     display_unhandled_pf_info(fctx, fault_addr);
 #ifdef CONFIG_DUMP_VMM_ON_FAULT
     kprintf_fault("========= [Vrages Tree] =========");
@@ -127,7 +137,7 @@ void FH_page_fault(struct fault_ctx *fctx)
 #endif /* CONFIG_DUMP_VMM_ON_FAULT */
 
 #ifdef CONFIG_SEND_SIGSEGV_ON_FAULTS
-    send_sigsegv(fault_addr);
+    send_sigsegv(fault_addr, ret);
     return;
 #endif /* CONFIG_SEND_SIGSEGV_ON_FAULTS */
   }

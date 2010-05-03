@@ -43,6 +43,7 @@
 #include <ipc/ipc.h>
 #include <security/security.h>
 #include <security/util.h>
+#include <mstring/ptrace.h>
 
 typedef uint32_t hash_level_t;
 
@@ -191,7 +192,20 @@ int create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
 
         /* If user requests to start this task immediately, do so. */
         if( attrs && attrs->task_attrs.run_immediately == __ATTR_ON ) {
-          sched_change_task_state(new_task,TASK_STATE_RUNNABLE);
+          /*
+           * Stop the new thread if the clone event is traced
+           * TODO [dg]: add the same functionality for fork too
+           */
+           if ((flags & CLONE_MM) && event_is_traced(new_task, PTRACE_EV_CLONE)) {
+             usiginfo_t uinfo;
+
+             memset(&uinfo, 0, sizeof(uinfo));
+             uinfo.si_signo = SIGSTOP;
+             set_ptrace_event(new_task, PTRACE_EV_STOPPED);
+             send_task_siginfo(new_task, &uinfo, false, NULL, current_task());
+           }
+
+          sched_change_task_state(new_task, TASK_STATE_RUNNABLE);
         }
       }
     } else {
@@ -247,7 +261,7 @@ static int __disintegrate_task(task_t *target,ulong_t pnum)
 
   r = ipc_open_channel_raw(port, IPC_KERNEL_SIDE, &channel);
   if (r)
-    goto put_port;  
+    goto put_port;
   if( port->flags & IPC_BLOCKED_ACCESS ) {
     r=-EINVAL;
     ipc_unpin_channel(channel);
@@ -296,7 +310,7 @@ static int __disintegrate_task(task_t *target,ulong_t pnum)
   }
 
   put_ipc_port_message(descr->msg);
-  
+
 free_descr:
   memfree(descr);
 put_port:
@@ -337,6 +351,7 @@ static int __reincarnate_task(task_t *target,ulong_t arg)
            * requests.
            */
           LOCK_TASK_STRUCT(target);
+
           if( target->terminator == current_task() &&
               check_task_flags(target,TF_DISINTEGRATING) ) {
             target->terminator=NULL;
@@ -371,11 +386,15 @@ static long __set_shortname(task_t *target,ulong_t arg)
   return ERR(r);
 }
 
+/* TODO: [mt] move old-style UID/GID syscalls to the new location. */
+extern long get_task_creds(task_t *target, void *ubuffer);
+extern long set_task_creds(task_t *target, void *ubuffer);
+
 long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
 {
   task_event_ctl_arg te_ctl;
   long r;
-  uidgid_t uidgid;
+  task_event_listener_t *el;
 
   if( current_task() != target &&
       !s_check_access(S_GET_INVOKER(),S_GET_TASK_OBJ(target)) ) {
@@ -383,6 +402,16 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
   }
 
   switch( cmd ) {
+      case SYS_PR_CTL_GET_VMM_STATISTICS:
+#ifndef CONFIG_VMM_STATISTICS
+        return ERR(-ENOTSUP);
+#else /* !CONFIG_VMM_STATUSTICS */
+        if (copy_to_user((void *)arg, &target->task_mm->stat, sizeof(target->task_mm->stat))) {
+          return ERR(-EFAULT);
+        }
+
+        return 0;
+#endif /* CONFIG_VMM_STATISTICS */
     case SYS_PR_CTL_ADD_EVENT_LISTENER:
       if( !s_check_system_capability(SYS_CAP_TASK_EVENTS) ) {
         return ERR(-EPERM);
@@ -393,7 +422,11 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       if(copy_from_user(&te_ctl,(void *)arg,sizeof(te_ctl) ) ) {
         return ERR(-EFAULT);
       }
-      return task_event_attach(target,current_task(),&te_ctl);
+      if (!(r=tevent_generic_ipc_init(&el,current_task(),te_ctl.port,
+                                      (te_ctl.ev_mask & USER_TASK_EVENTS)))) {
+        r=task_event_attach(target,el,true);
+      }
+      return ERR(r);
     case SYS_PR_CTL_DEL_EVENT_LISTENER:
       if( !s_check_system_capability(SYS_CAP_TASK_EVENTS) ) {
         return ERR(-EPERM);
@@ -413,27 +446,9 @@ long do_task_control(task_t *target,ulong_t cmd, ulong_t arg)
       }
       return __disintegrate_task(target,arg);
     case SYS_PR_CTL_GET_UIDGID:
-      LOCK_TASK_STRUCT(target);
-      uidgid.uid = target->uid;
-      uidgid.gid = target->gid;
-      UNLOCK_TASK_STRUCT(target);
-
-      if( copy_to_user((void *)arg,&uidgid,sizeof(uidgid)) ) {
-        return ERR(-EFAULT);
-      }
-      return 0;
+      return get_task_creds(target,(void *)arg);
     case SYS_PR_CTL_SET_UIDGID:
-      if( !s_check_system_capability(SYS_CAP_ADMIN) ) {
-        return ERR(-EPERM);
-      }
-      if( copy_from_user(&uidgid,(void *)arg,sizeof(uidgid)) ) {
-        return ERR(-EFAULT);
-      }
-      LOCK_TASK_STRUCT(target);
-      target->uid = uidgid.uid;
-      target->gid = uidgid.gid;
-      UNLOCK_TASK_STRUCT(target);
-      return 0;
+      return set_task_creds(target,(void *)arg);
     case SYS_PR_CTL_REINCARNATE_TASK:
       if( !s_check_system_capability(SYS_CAP_REINCARNATE) ) {
         return ERR(-EPERM);
@@ -604,7 +619,12 @@ long sys_create_task(ulong_t flags,task_creation_attrs_t *a)
     } else {
       r=task->pid;
     }
+
+    /* notify debugger about new thread creation */
+    if (event_is_traced(task, PTRACE_EV_CLONE))
+      ptrace_stop(PTRACE_EV_CLONE, r);
   }
+
   return ERR(r);
 }
 

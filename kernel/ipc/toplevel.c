@@ -34,12 +34,13 @@
 #include <security/security.h>
 
 static long __ipc_port_msg_write(ulong_t port, ulong_t msg_id, iovec_t *iovecs,
-                                 ulong_t numvecs,off_t offset, bool wakeup)
+                                 ulong_t numvecs,off_t offset, bool wakeup,
+                                 bool map_rcv_buffer)
 {
   ipc_gen_port_t *p;
   long r;
   iovec_t kiovecs[MAX_IOVECS];
-  long size,processed;
+  long size,processed = 0;
   off_t koffset;
 
   if( !numvecs || numvecs > IPC_ABS_IOVEC_LIM ) {
@@ -61,7 +62,8 @@ static long __ipc_port_msg_write(ulong_t port, ulong_t msg_id, iovec_t *iovecs,
 
       /* Wake up sender only when processing the last set of I/O vecs. */
       r=ipc_port_msg_write(p,msg_id,kiovecs,nc,&koffset,size,
-                           (numvecs <= MAX_IOVECS && wakeup), processed);
+                           (numvecs <= MAX_IOVECS && wakeup), processed,
+                           map_rcv_buffer);
       if( r < 0 ) {
         processed = r;
         break;
@@ -144,7 +146,7 @@ int sys_close_port(ulong_t port)
 long sys_port_reply_iov(ulong_t port, ulong_t msg_id,
                         iovec_t reply_iov[], uint32_t numvecs)
 {
-  long r = __ipc_port_msg_write(port,msg_id,reply_iov,numvecs,0,true);
+  long r = __ipc_port_msg_write(port,msg_id,reply_iov,numvecs,0,true,false);
   return r > 0 ? 0 : ERR(r);
 }
 
@@ -261,6 +263,6 @@ long sys_port_control(ulong_t port, ulong_t cmd, ulong_t arg)
 long sys_port_msg_write(ulong_t port, ulong_t msg_id, iovec_t *iovecs,
                                  ulong_t numvecs,off_t offset)
 {
-  long r=__ipc_port_msg_write(port,msg_id,iovecs,numvecs,offset,0);
+  long r=__ipc_port_msg_write(port,msg_id,iovecs,numvecs,offset,false,true);
   return ERR(r);
 }

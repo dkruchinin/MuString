@@ -47,9 +47,8 @@ static inline uintptr_t get_stack_base(void)
 
 static inline uint8_t inb(uint16_t port)
 {
-    uint8_t val;
-
-    __asm__ volatile("inb %1, %0\n"
+    volatile uint8_t val;
+    __asm__ volatile("inb %%dx, %%al\n"
                      : "=a" (val)
                      : "d" (port));
 
@@ -59,8 +58,8 @@ static inline uint8_t inb(uint16_t port)
 
 static inline void outb(uint16_t port, uint8_t val)
 {
-    __asm__ volatile ("outb %0, %1\n"
-                      : : "a" (val), "Nd" (port));
+    __asm__ volatile ("outb %%al, %%dx\n"
+                      :: "a" (val), "d" (port));
 }
 
 static inline void gdtr_load(struct table_reg *gdtr_reg)
@@ -86,6 +85,19 @@ static inline void idtr_load(struct table_reg *idtr_reg)
 static inline void tr_load(uint16_t s)
 {
   asm volatile("ltr %0" : : "r" (s));
+}
+
+static inline void fxsave(uintptr_t saveptr)
+{
+    __asm__ volatile ("fxsave (%1)\n"
+                      : "=m" (*(long*)saveptr)
+                      : "r" (saveptr));
+}
+
+static inline void fxrstor(uintptr_t resaddr)
+{
+    __asm__ volatile ("fxrstor (%%rdx)\n"
+                      :: "d" (resaddr));
 }
 
 /* Load RSP with a given value. It MUST NOT be a function since after

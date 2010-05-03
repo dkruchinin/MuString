@@ -38,7 +38,7 @@
 
 static percpu_def_actions_t cpu_actions[CONFIG_NRCPUS];
 
-#define cpu_actions_host()  &cpu_actions[0]
+#define cpu_actions_host()  &cpu_actions[cpu_id()]
 
 void initialize_deffered_actions(void)
 {
@@ -164,10 +164,11 @@ void execute_deffered_action(deffered_irq_action_t *a)
 
       if( ksiginfo->target ) {
         send_task_siginfo(ksiginfo->target,&ksiginfo->user_siginfo,
-                          false,a->kern_priv);
+                          false,a->kern_priv,NULL);
       } else {
         send_process_siginfo(ksiginfo->user_siginfo.si_pid,
-                             &ksiginfo->user_siginfo,a->kern_priv);
+                             &ksiginfo->user_siginfo,a->kern_priv,
+                             NULL, false);
       }
       break;
    case  DEF_ACTION_UNBLOCK:
@@ -179,8 +180,8 @@ void execute_deffered_action(deffered_irq_action_t *a)
 void fire_deffered_actions(void)
 {
   percpu_def_actions_t *acts=cpu_actions_host();
-  long is,fired;
-  deffered_irq_action_t *action;
+  long is,fired = 0;
+  deffered_irq_action_t *action = NULL;
 
   /* To prevent recursive invocations. */
   spinlock_lock_irqsave(&acts->lock,is);
@@ -192,7 +193,6 @@ void fire_deffered_actions(void)
   }
   spinlock_unlock_irqrestore(&acts->lock,is);
 
-  fired=0;
   do {
     spinlock_lock_irqsave(&acts->lock,is);
     action=NULL;
@@ -210,8 +210,8 @@ void fire_deffered_actions(void)
     if( !action ) {
       arch_sched_reset_def_works_pending();
     }
-    spinlock_unlock_irqrestore(&acts->lock,is);
 
+    spinlock_unlock_irqrestore(&acts->lock,is);
     if( action ) {
       execute_deffered_action(action);
       fired++;

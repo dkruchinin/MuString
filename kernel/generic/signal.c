@@ -20,17 +20,21 @@
  * mstring/generic_api/signal.c: generic code of kernel signal delivery subsystem.
  */
 
-#include <arch/types.h>
+#include <mstring/types.h>
 #include <mstring/task.h>
 #include <mstring/process.h>
 #include <mstring/errno.h>
 #include <arch/context.h>
 #include <mstring/signal.h>
+#include <mstring/siginfo.h>
 #include <mm/slab.h>
 #include <mm/page_alloc.h>
 #include <mstring/usercopy.h>
 #include <mstring/posix.h>
 #include <mstring/kconsole.h>
+#include <security/security.h>
+#include <security/util.h>
+#include <mstring/ptrace.h>
 
 static memcache_t *sigq_cache;
 
@@ -46,6 +50,13 @@ static bool __deferred_sig_check(void *d)
   struct __def_sig_data *sd=(struct __def_sig_data *)d;
   return !signal_matches(sd->blocked,sd->sig) &&
     signal_matches(sd->pending,sd->sig);
+}
+
+static bool __continue_state_check(void *d)
+{
+  task_t *t = (task_t*)d;
+
+  return (t->state == TASK_STATE_STOPPED);
 }
 
 void initialize_signals(void)
@@ -86,18 +97,28 @@ bool update_pending_signals(task_t *task)
   return r;
 }
 
-/* NOTE: Caller must hold the signal lock !
- * Return codes:
- *   0: signal was successfully queued.
- *   1: signal wasn't queued since it was ignored.
- * -ENOMEM: no memory for a new queue item.
- */
+/* NOTE: Caller must hold the signal lock ! */
 static int __send_task_siginfo(task_t *task,usiginfo_t *info,
                                void *kern_priv,bool force_delivery)
 {
   int sig=info->si_signo;
   int r;
   bool send_signal;
+
+  if (sig == SIGCONT && !(task->state & (TASK_STATE_RUNNING | TASK_STATE_RUNNABLE))) {
+    /* resume the task */
+    LOCK_TASK_STRUCT(task);
+    set_ptrace_event(task, PTRACE_EV_NONE);
+    task->wstat = WSTAT_CONTINUED;
+    task->last_signum = SIGCONT;
+    task->last_siginfo = NULL;
+    UNLOCK_TASK_STRUCT(task);
+
+    wakeup_waiters(task);
+    sched_change_task_state_deferred(task, TASK_STATE_RUNNABLE,
+                                     __continue_state_check, task);
+    return 0;
+  }
 
   if( force_delivery ) {
     sa_sigaction_t act=task->siginfo.handlers->actions[sig].a.sa_sigaction;
@@ -151,10 +172,27 @@ static void __send_siginfo_postlogic(task_t *task,usiginfo_t *info)
   }
 }
 
+void siginfo_initialize(task_t *caller, usiginfo_t *siginfo)
+{
+    struct __s_creds c;
+
+    s_get_obj_creds(S_GET_INVOKER(),&c);
+    memset(siginfo, 0, sizeof(*siginfo));
+    siginfo->si_pid = caller->pid;
+    siginfo->si_tid = caller->tid;
+    siginfo->si_uid = c.uid;
+}
+
 int send_task_siginfo(task_t *task,usiginfo_t *info,bool force_delivery,
-                      void *kern_priv)
+                      void *kern_priv,task_t *sender)
 {
   int r,is;
+
+  /* TODO: [mt] remove ERR() after testing ! [R] */
+  if( sender && sender->pid != task->pid &&
+      !s_check_access(S_GET_TASK_OBJ(sender),S_GET_TASK_OBJ(task)) ) {
+    return ERR(-EPERM);
+  }
 
   LOCK_TASK_SIGNALS_INT(task,is);
   r=__send_task_siginfo(task,info,kern_priv,force_delivery);
@@ -162,25 +200,31 @@ int send_task_siginfo(task_t *task,usiginfo_t *info,bool force_delivery,
 
   if( !r ) {
     __send_siginfo_postlogic(task,info);
-  } else if( r == 1 ) {
-    kprintf( "send_task_siginfo(): Ignoring signal %d for %d=%d\n",
-             info->si_signo,task->pid,task->tid);
   }
   return r < 0 ? r : 0;
 }
 
-int send_process_siginfo(pid_t pid,usiginfo_t *siginfo,void *kern_priv)
+int send_process_siginfo(pid_t pid,usiginfo_t *siginfo,void *kern_priv,
+                         task_t *sender, bool broadcast)
 {
   task_t *root=pid_to_task(pid);
   task_t *target=NULL;
   int sig=siginfo->si_signo;
-  int i,is1,ab=SIGRTMAX;
+  int i,is1=0,ab=SIGRTMAX;
   list_node_t *ln;
   bool unlock_childs=false;
 
-  is1 = 0; /* to shut up gcc warning */
   if( !root ) {
-    return -ESRCH;
+    return ERR(-ESRCH);
+  }
+
+  /* All threads share the same MAC label, so we should check only
+   * against the root thread.
+   */
+  if( sender && sender->pid != root->pid &&
+        !s_check_access(S_GET_TASK_OBJ(sender),S_GET_TASK_OBJ(root)) ) {
+    release_task_struct(root);
+    return ERR(-EPERM);
   }
 
   if( process_wide_signal(sig) ) {
@@ -243,6 +287,22 @@ send_signal:
   __send_task_siginfo(target,siginfo,kern_priv,false);
   UNLOCK_TASK_SIGNALS(target);
 
+  if (broadcast) {
+    task_t *t;
+
+    if (!unlock_childs)
+      LOCK_TASK_CHILDS(target);
+
+    list_for_each_entry(&target->group_leader->threads, t, child_list) {
+      LOCK_TASK_SIGNALS(t);
+      __send_task_siginfo(t, siginfo, kern_priv, false);
+      UNLOCK_TASK_SIGNALS(t);
+      __send_siginfo_postlogic(t,siginfo);
+    }
+    UNLOCK_TASK_CHILDS(target);
+    unlock_childs = false;
+  }
+
   if( unlock_childs ) {
     UNLOCK_TASK_CHILDS(root);
   }
@@ -254,40 +314,38 @@ send_signal:
 
 int sys_kill(pid_t pid,int sig,usiginfo_t *sinfo)
 {
-  int r = 0;
+  int r=-EINVAL;
   usiginfo_t k_siginfo;
+  task_t *caller=current_task();
 
   if( !valid_signal(sig) ) {
-    kprintf_dbg("sys_kill: bad signal %d!\n",sig);
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   if( sinfo ) {
     if( copy_from_user(&k_siginfo,sinfo,sizeof(k_siginfo)) ) {
-      return -EFAULT;
+      return ERR(-EFAULT);
     }
   } else {
     memset(&k_siginfo,0,sizeof(k_siginfo));
   }
 
-  k_siginfo.si_signo=sig;
-  k_siginfo.si_errno=0;
-  k_siginfo.si_pid=current_task()->pid;
-  k_siginfo.si_uid=current_task()->uid;
-  k_siginfo.si_code=SI_USER;
+  siginfo_initialize(current_task(), &k_siginfo);
+  k_siginfo.si_signo = sig;
+  k_siginfo.si_code = SI_USER;
 
   if( !pid ) {
     /* Send signal to every process in process group we belong to. */
   } else if( pid > 0 ) {
     /* Send signal to target process. */
-    r=send_process_siginfo(pid,&k_siginfo,NULL);
+    r=send_process_siginfo(pid,&k_siginfo,NULL,caller,false);
   } else if( pid == -1 ) {
     /* Send signal to all processes except the init process. */
   } else {
     /* PID is lesser than -1: send signal to every process in group -PID */
   }
 
-  return r;
+  return ERR(r);
 }
 
 long sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset)
@@ -297,7 +355,7 @@ long sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset)
   int is;
 
   if( how < 0 || how > SIG_SETMASK ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   if( oldset != NULL ) {
@@ -306,13 +364,13 @@ long sys_sigprocmask(int how,sigset_t *set,sigset_t *oldset)
     UNLOCK_TASK_SIGNALS_INT(target,is);
 
     if( copy_to_user(oldset,&kset,sizeof(kset)) ) {
-      return -EFAULT;
+      return ERR(-EFAULT);
     }
   }
 
   if( set != NULL ) {
     if( copy_from_user(&kset,(void *)set,sizeof(kset)) ) {
-      return -EFAULT;
+      return ERR(-EFAULT);
     }
     kset &= ~UNTOUCHABLE_SIGNALS;
 
@@ -346,45 +404,48 @@ long sys_thread_kill(pid_t process,tid_t tid,int sig)
   usiginfo_t k_siginfo;
 
   if( !valid_signal(sig) ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   target=lookup_task(process,tid,0);
   if( !target ) {
-    return -ESRCH;
+    return ERR(-ESRCH);
   }
 
-  memset(&k_siginfo,0,sizeof(k_siginfo));
-  k_siginfo.si_signo=sig;
-  k_siginfo.si_errno=0;
-  k_siginfo.si_pid=current_task()->pid;
-  k_siginfo.si_uid=current_task()->uid;
-  k_siginfo.si_code=SI_USER;
+  siginfo_initialize(current_task(), &k_siginfo);
+  k_siginfo.si_signo = sig;
+  k_siginfo.si_code = SI_USER;
 
-  r=send_task_siginfo(target,&k_siginfo,false,NULL);
+  r=send_task_siginfo(target,&k_siginfo,false,NULL,current_task());
   release_task_struct(target);
-  return r;
+  return ERR(r);
 }
 
 static int sigaction(kern_sigaction_t *sact,kern_sigaction_t *oact,
                      int sig) {
   task_t *caller=current_task();
-  sa_sigaction_t s=sact->a.sa_sigaction;
+  sa_sigaction_t s;
   sq_header_t *removed_signals=NULL;
   int is;
 
   if( !valid_signal(sig) ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
-
-  /* Remove signals that can't be blocked. */
-  sact->sa_mask &= ~UNTOUCHABLE_SIGNALS;
 
   LOCK_TASK_SIGNALS_INT(caller,is);
   if( oact ) {
     *oact=caller->siginfo.handlers->actions[sig];
   }
+  if (sact == NULL) {
+    UNLOCK_TASK_SIGNALS_INT(caller,is);
+    return 0;
+  }
+
+  /* Remove signals that can't be blocked. */
+  sact->sa_mask &= ~UNTOUCHABLE_SIGNALS;
+
   caller->siginfo.handlers->actions[sig]=*sact;
+  s = sact->a.sa_sigaction;
 
   /* POSIX 3.3.1.3 */
   if( s == SIG_IGN || (s == SIG_DFL && def_ignorable(sig)) ) {
@@ -428,8 +489,7 @@ long sys_signal(int sig,sa_handler_t handler)
   return !r ? (long)oact.a.sa_sigaction : r;
 }
 
-int sys_sigaction(int signum,sigaction_t *act,
-                       sigaction_t *oldact)
+int sys_sigaction(int signum,sigaction_t *act,sigaction_t *oldact)
 {
   kern_sigaction_t kact,koact;
   sigaction_t uact;
@@ -437,38 +497,38 @@ int sys_sigaction(int signum,sigaction_t *act,
 
   if( !valid_signal(signum) || signum == SIGKILL ||
       signum == SIGSTOP ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
-  if( !act ) {
-    return -EFAULT;
-  }
+  if( !act )
+    r = sigaction(NULL, oldact ? &koact : NULL, signum);
+  else {
+    if( copy_from_user(&uact,act,sizeof(uact)) ) {
+      return ERR(-EFAULT);
+    }
 
-  if( copy_from_user(&uact,act,sizeof(uact)) ) {
-    return -EFAULT;
-  }
+    /* Transform userspace data to kernel data. */
+    if( uact.sa_flags & SA_SIGINFO ) {
+      kact.a.sa_sigaction=uact.sa_sigaction;
+    } else {
+      kact.a.sa_handler=uact.sa_handler;
+    }
+    if( !kact.a.sa_handler ) {
+      return ERR(-EINVAL);
+    }
 
-  /* Transform userspace data to kernel data. */
-  if( uact.sa_flags & SA_SIGINFO ) {
-    kact.a.sa_sigaction=uact.sa_sigaction;
-  } else {
-    kact.a.sa_handler=uact.sa_handler;
-  }
-  if( !kact.a.sa_handler ) {
-    return -EINVAL;
-  }
+    kact.sa_mask=uact.sa_mask;
+    kact.sa_flags=uact.sa_flags;
 
-  kact.sa_mask=uact.sa_mask;
-  kact.sa_flags=uact.sa_flags;
-
-  r=sigaction(&kact,oldact ? &koact : NULL,signum);
+    r=sigaction(&kact,oldact ? &koact : NULL,signum);
+  }
 
   if( !r && oldact ) {
     if( copy_to_user(oldact,&koact,sizeof(koact)) ) {
       r=-EFAULT;
     }
   }
-  return r;
+  return ERR(r);
 }
 
 sighandlers_t *allocate_signal_handlers(void)
@@ -574,23 +634,23 @@ long sys_sigwaitinfo(sigset_t *set,int *sig,usiginfo_t *info,
   timespec_t ktv,*ptv;
 
   if( !sig && !info ) {
-    return -EFAULT;
+    return ERR(-EFAULT);
   }
 
   if( copy_from_user(&kset,set,sizeof(kset)) ) {
-    return -EFAULT;
+    return ERR(-EFAULT);
   }
 
   if( !kset || (kset & UNTOUCHABLE_SIGNALS) ) {
-    return -EINVAL;
+    return ERR(-EINVAL);
   }
 
   if( timeout ) {
     if( copy_from_user(&ktv,timeout,sizeof(ktv)) ) {
-      return -EFAULT;
+      return ERR(-EFAULT);
     }
     if( !timeval_is_valid(&ktv) ) {
-      return -EINVAL;
+      return ERR(-EINVAL);
     }
     ptv=&ktv;
   } else {
@@ -703,5 +763,30 @@ unlock_signals:
 #endif
 
   UNLOCK_TASK_SIGNALS_INT(caller,is);
-  return r;
+  return ERR(r);
+}
+
+long sys_sigsuspend(const sigset_t *sigmask)
+{
+  task_t *target = current_task();
+  int is;
+  sigset_t mask;
+
+  if (copy_from_user(&mask, (void*)sigmask, sizeof(mask))) {
+    return ERR(-EFAULT);
+  }
+
+  /* Replace process's current blocked signal mask */
+  LOCK_TASK_STRUCT(target);
+  LOCK_TASK_SIGNALS_INT(target, is);
+  target->saved_sigmask = target->siginfo.blocked;
+  target->siginfo.blocked = mask;
+  UNLOCK_TASK_SIGNALS_INT(target, is);
+  set_task_flags(target, TF_RESTORE_SIGMASK);
+  UNLOCK_TASK_STRUCT(target);
+
+  /* Wait for a signal */
+  put_task_into_sleep(target);
+
+  return ERR(-EINTR);
 }

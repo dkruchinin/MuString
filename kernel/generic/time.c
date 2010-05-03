@@ -62,7 +62,7 @@ void setup_time(void)
 
 void timer_interrupt_handler(void *data)
 {
-  if(!cpu_id()) {
+  if (!cpu_id()) {
     timer_tick();
   }
 
