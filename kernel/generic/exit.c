@@ -304,7 +304,7 @@ static void __detach_tracings(task_t *exiter)
   LOCK_TASK_CHILDS(exiter);
   list_for_each_safe(&exiter->trace_children, node, save) {
     child = container_of(node, task_t, trace_list);
-    ptrace_detach(exiter, child, DETACH_FORCE);
+    ptrace_detach(exiter, child, DETACH_FORCE | DETACH_NOLOCK);
   }
   UNLOCK_TASK_CHILDS(exiter);
 }
@@ -444,27 +444,26 @@ static bool try_orphan_child(task_t *child, bool tlock)
 {
   bool r = false;
   task_t *tracer;
-  task_t *parent;
   unsigned int flags = DETACH_FORCE;
 
   if (child->state != TASK_STATE_ZOMBIE || !list_node_is_bound(&child->child_list))
     return false;
 
-  parent = pid_to_task(child->ppid);
   tracer = get_process_tracer(child);
 
   if (!is_thread(child) && tracer) {
     if (current_task()->group_leader == tracer) {
       /* release links taken at process attachment */
-      if (!tlock || (tracer == parent))
+      if (!tlock || (tracer->pid == child->ppid))
         flags |= DETACH_NOLOCK;
 
       ptrace_detach(tracer, child, flags);
-    } else if (tracer != parent) {
+    } else if (tracer->pid != child->ppid) {
       r = !ptrace_reparent(tracer, child);
     }
 
-    if (tracer == parent)
+    /* orphan if the tracer is already the parent of the task */
+    if (tracer->pid == child->ppid)
       r = true;
 
     release_task_struct(tracer);
@@ -476,14 +475,10 @@ static bool try_orphan_child(task_t *child, bool tlock)
     if (is_thread(child)) {
       LOCK_TASK_STRUCT(child);
       child->group_leader->tg_priv->num_threads--;
-      child->group_leader = child;
-      list_init_node(&child->pid_list);
       UNLOCK_TASK_STRUCT(child);
     }
     list_del(&child->child_list);
   }
-
-  release_task_struct(parent);
 
   return r;
 }
@@ -575,7 +570,7 @@ static int __wait_task(task_t *target, task_t *parent, struct wait_info *winfo)
     UNLOCK_TASK_STRUCT(target);
   }
 
-  if( unref ) { /* Remove task's parent reference. */
+   if( unref ) { /* Remove task's parent reference. */
     if (!isthread)
       unhash_task(target);
 
@@ -693,7 +688,7 @@ repeat:
 
   if (!(ret || (options & WNOHANG))) {
     if ((type != WAIT_ANY) && (task->state == TASK_STATE_ZOMBIE)) {
-      ret = -ESRCH;   /* задача уже "собрана" */
+      ret = -ESRCH;   /* the task is already collected */
     } else {
       event_initialize_task(&caller->jointee.e, caller);
       caller->jointee.type = type;
@@ -719,8 +714,9 @@ unlock_parent:
        * be returned (but all pending signals will be delivered, nevertheless).
        */
       LOCK_TASK_CHILDS(parent);
-      if( list_node_is_bound(&caller->jointee.l) )
+      if( list_node_is_bound(&caller->jointee.l) ) {
         list_del(&caller->jointee.l);
+      }
       UNLOCK_TASK_CHILDS(parent);
 
       ret = -EINTR;

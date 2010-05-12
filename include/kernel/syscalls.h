@@ -93,6 +93,7 @@
 #define SC_FREE_DMA            45
 #define SC_PORT_CONTROL        46
 #define SC_PORT_MSG_WRITE      47
+#define SC_PTRACE              48
 
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */

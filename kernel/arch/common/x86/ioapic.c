@@ -87,8 +87,6 @@ static void ioapic_unmask_irq(irq_t irq)
   int napic = irq_pin_map[irq].napic;
   int pin = irq_pin_map[irq].pin;
 
-  kprintf_fault("%s, line %d\n", __func__, __LINE__);
-
   /* read low bytes from redirection table for this irq */
   rd.low = ioapic_read(napic, (uint8_t) (IOAPICRED + pin * 2));
   rd.mask = 0x0;

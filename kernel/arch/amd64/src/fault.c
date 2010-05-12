@@ -105,10 +105,13 @@ static void fill_fault_context(struct fault_ctx *fctx, void *rsp,
 INITCODE void arch_faults_init(void)
 {
   int slot, ist;
+  uint8_t dpl;
 
   for (slot = 0; slot < IDT_NUM_FAULTS; slot++) {
+    /* allow jump to the breakpoint handler from user space */
+    dpl = (slot == FLT_BP) ? SEG_DPL_USER : SEG_DPL_KERNEL;
     ist = get_ist_by_fault(slot);
-    idt_install_gate(slot, SEG_TYPE_INTR, SEG_DPL_KERNEL,
+    idt_install_gate(slot, SEG_TYPE_INTR, dpl,
                      GET_FAULTS_TABLE_ENTRY(slot), ist);
   }
 
@@ -143,7 +146,6 @@ void fault_describe(const char *fname, struct fault_ctx *fctx)
     fault_type = "KERNEL";
   }
 
-  interrupts_disable();
   kprintf_fault("\n================[%s-SPACE %s #%d]================\n",
                 fault_type, fname, fctx->fault_num);
   kprintf_fault("  [CPU #%d] Task: %s (PID=%ld, TID=%ld)\n", cpu_id(),
@@ -175,7 +177,7 @@ void __do_handle_fault(void *rsp, enum fault_idx fault_num)
         panic("Unexpected fault number: %d. Expected fault indices in "
               "range [%d, %d]", fault_num, MIN_FAULT_IDX, MAX_FAULT_IDX);
     }
-    
+
     fill_fault_context(&fctx, rsp, fault_num);
 
     /*
@@ -187,5 +189,5 @@ void __do_handle_fault(void *rsp, enum fault_idx fault_num)
       interrupts_enable();
     }
 
-    fault_handlers[fault_num](&fctx);    
+    fault_handlers[fault_num](&fctx);
 }

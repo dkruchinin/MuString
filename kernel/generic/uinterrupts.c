@@ -195,8 +195,6 @@ long sys_create_irq_counter_array(ulong_t irq_array,ulong_t irqs,
   page_frame_t *pframe;
   ulong_t *kaddr;
 
-  kprintf_fault("%s, line %d\n", __func__, __LINE__);
-
   if( !s_check_system_capability(SYS_CAP_IRQ) ) {
     return ERR(-EPERM);
   }
