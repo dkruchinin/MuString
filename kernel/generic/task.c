@@ -554,15 +554,6 @@ task_create_fault:
 
 void release_task_struct(struct __task_struct *t)
 {
-  /* debug */
-#if 0
-  if (t->pid == 42) {
-    kprintf_fault("[%s, line %d]: t = %p, list_prev = %p, list_next = %p\n",
-                  __func__, __LINE__, t, t->group_leader->child_list.prev,
-                  t->group_leader->child_list.next);
-  }
-#endif
-
   if( atomic_dec_and_test(&t->refcount) ) {
     if( is_thread(t) ) {
       LOCK_TASK_STRUCT(t->group_leader);
@@ -576,13 +567,4 @@ void release_task_struct(struct __task_struct *t)
 
     free_pages_addr(t,1);
   }
-
-  /* debug */
-#if 0
-  if (t->pid == 42) {
-    kprintf_fault("[%s, line %d]: list_prev = %p, list_next = %p\n",
-                  __func__, __LINE__, t->group_leader->child_list.prev,
-                  t->group_leader->child_list.next);
-  }
-#endif
 }
