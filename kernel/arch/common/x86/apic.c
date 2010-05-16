@@ -366,7 +366,11 @@ INITCODE void lapic_timer_init(cpu_id_t cpuid)
   default_hwclock->delay(APIC_CAL_LOOPS * 1000);
   apictick1 = apic_read(APIC_TIMER_CCR);
 
-  delta = (apictick0 - apictick1) * APIC_DIVISOR / APIC_CAL_LOOPS;
+  if (!cpuid)
+    delta = (apictick0 - apictick1) * APIC_DIVISOR / APIC_CAL_LOOPS;
+  else
+    delta = lapic_timer.freq;
+
   val = APIC_LVT_TIMER_MODE | APIC_LVT_MASKED; /* periodic timer mode */
   apic_write(APIC_TIMER_LVTE, val);
 
@@ -382,6 +386,8 @@ INITCODE void lapic_timer_init(cpu_id_t cpuid)
         panic("Failed to register IRQ %s for line %d: [RET = %d]",
               lapic_timer_irq.name, APIC_TIMER_IRQ, ret);
       }
+  } else {
+    lapic_unmask_irq(APIC_TIMER_IRQ);
   }
 }
 
