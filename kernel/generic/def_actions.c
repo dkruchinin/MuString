@@ -55,13 +55,14 @@ void initialize_deffered_actions(void)
 void schedule_deffered_actions(list_head_t *actions)
 {
   percpu_def_actions_t *acts=cpu_actions_host();
+  long is;
   deffered_irq_action_t *a;
 
   if( list_is_empty(actions) ) {
     return;
   }
 
-  spinlock_lock(&acts->lock);
+  spinlock_lock_irqsave(&acts->lock,is);
 
   if( list_is_empty(&acts->pending_actions) ) {
     list_move2head(&acts->pending_actions,actions);
@@ -102,13 +103,14 @@ void schedule_deffered_actions(list_head_t *actions)
     }
   }
 
-  spinlock_unlock(&acts->lock);
+  spinlock_unlock_irqrestore(&acts->lock,is);
 }
 
 void schedule_deffered_action(deffered_irq_action_t *a) {
   percpu_def_actions_t *acts=cpu_actions_host();
+  long is;
 
-  spinlock_lock(&acts->lock);
+  spinlock_lock_irqsave(&acts->lock,is);
 
   if( a->__host ) {
     goto out_unlock; /* Action is already on the list. */
@@ -146,7 +148,7 @@ void schedule_deffered_action(deffered_irq_action_t *a) {
     arch_sched_set_def_works_pending();
   }
 out_unlock:
-  spinlock_unlock(&acts->lock);
+  spinlock_unlock_irqrestore(&acts->lock,is);
 }
 
 void execute_deffered_action(deffered_irq_action_t *a)
@@ -243,15 +245,16 @@ void deschedule_deffered_action(deffered_irq_action_t *a)
 void update_deferred_actions(void)
 {
   percpu_def_actions_t *acts=cpu_actions_host();
+  long is;
   deffered_irq_action_t *action;
 
-  spinlock_lock(&acts->lock);
+  spinlock_lock_irqsave(&acts->lock,is);
   if( !list_is_empty(&acts->pending_actions) ) {
-    action=container_of(list_node_first(&acts->pending_actions),
-                        deffered_irq_action_t,node);
-    if( current_task()->priority >= action->priority ) {
-      arch_sched_set_def_works_pending();
+      action=container_of(list_node_first(&acts->pending_actions),
+                          deffered_irq_action_t,node);
+      if( current_task()->priority >= action->priority ) {
+        arch_sched_set_def_works_pending();
+      }
     }
-  }
-  spinlock_unlock(&acts->lock);
+  spinlock_unlock_irqrestore(&acts->lock,is);
 }
