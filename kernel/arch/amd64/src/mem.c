@@ -268,7 +268,8 @@ static INITCODE void scan_phys_mem(void)
 
   while (mmap < e820_end) {
    if ((mmap->type > 5) || (mmap->type <= 0)) {
-     /*panic*/kprintf("Unknown e820 memory type [%#.10x - %#.10x]: %d",
+     /* in some buggy bioses the last entry might be unknown, ignore it */
+     kprintf("Unknown e820 memory type [%#.10x - %#.10x]: %d\n",
             mmap->base_address, mmap->base_address + mmap->length, mmap->type);
      goto cont_next;
     }
