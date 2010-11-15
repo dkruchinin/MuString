@@ -14,3 +14,11 @@ Project.ede
 bochsrc
 TAGS
 config
+.config
+.config.old
+include/arch
+kconfig/conf
+kconfig/lex.*
+kconfig/mconf
+kconfig/zconf.hash.*
+kconfig/zconf.tab.*
