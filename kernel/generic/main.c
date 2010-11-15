@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2005,2008 Tirra <tirra.newly@gmail.com>
+ * (c) Copyright 2010 Jari OS non-profit org. <http://jarios.org>
  *
  * mstring/generic_api/main.c: main routine, this functions called after bootstrap
  *                          initialization made
@@ -38,6 +39,7 @@
 #include <mstring/gc.h>
 #include <mstring/timer.h>
 #include <mstring/signal.h>
+#include <mstring/limits.h>
 #include <security/security.h>
 
 static void main_routine_stage1(void)
@@ -45,6 +47,7 @@ static void main_routine_stage1(void)
   /* Initialize PICs and setup common interrupt handlers. */
   set_cpu_online(0,1);  /* We're online. */
   sched_add_cpu(0);
+  initialize_limits();
   initialize_ipc();
   initialize_signals();
   initialize_security();
@@ -58,8 +61,8 @@ static void main_routine_stage1(void)
    * is disabled. So we can enable local interrupts since we will
    * receive interrups from the other CPUs via LAPIC upon unleashing
    * the other CPUs.
-   */  
-  setup_time();  
+   */
+  setup_time();
   initialize_swks();
   initialize_security();
 
@@ -69,7 +72,7 @@ static void main_routine_stage1(void)
 
   /* Enter idle loop. */
   kprintf( "CPU #0 is entering idle loop. Current task: %p, CPU ID: %d\n",
-           current_task(), cpu_id() );  
+           current_task(), cpu_id() );
   idle_loop();
 }
 
@@ -78,8 +81,8 @@ void kernel_main(void)
   arch_prepare_system();
   mm_initialize();
   arch_init();
-  irqs_init();  
-  hardware_timers_init();  
+  irqs_init();
+  hardware_timers_init();
   slab_allocator_init();
   vmm_initialize();
   initialize_scheduler();
@@ -92,7 +95,7 @@ void kernel_main(void)
   /* Now we can continue initialization with properly initialized kernel
    * stack frame.
    */
-  
+
   main_routine_stage1();
 }
 
@@ -127,7 +130,7 @@ void main_smpap_routine(void)
   arch_activate_idle_task(cpu);
   cpu++;
   /* Continue CPU initialization in new context. */
-  main_smpap_routine_stage1(cpu - 1);  
+  main_smpap_routine_stage1(cpu - 1);
 }
 #endif
 

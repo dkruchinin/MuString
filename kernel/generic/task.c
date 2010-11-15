@@ -416,7 +416,7 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   task_t *task;
   int r = -ENOMEM;
   page_frame_t *stack_pages;
-  task_limits_t *limits;
+  task_limits_t *limits = NULL;
 
   if ((flags && !parent) ||
       ((flags & CLONE_MM) && (flags & (CLONE_COW | CLONE_POPULATE))) ||
@@ -460,13 +460,15 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
 
   r=-ENOMEM;
   /* Setup limits. */
-  limits = allocate_task_limits();
-  if(limits==NULL) {
-    goto free_stack_pages;
-  } else {
-    set_default_task_limits(limits);
-    task->limits = limits;
-  }
+  if( !(flags & CLONE_MM) || priv == TPL_KERNEL ) {
+    limits = allocate_task_limits();
+    if(limits == NULL) {
+      goto free_stack_pages;
+    } else {
+      set_default_task_limits(limits);
+      task->limits = limits;
+    }
+  } else task->limits = parent->group_leader->limits;
 
   r=__setup_task_ipc(task,parent,flags,attrs);
   if( r ) {
@@ -536,7 +538,7 @@ free_sync_data:
 free_ipc:
   /* TODO: [mt] deallocate task's IPC structure. */
 free_limits:
-  /* TODO: Unmap stack pages here. [mt] */
+  if(limits) destroy_task_limits(limits);
 free_stack_pages:
   /* TODO: Free all stack pages here. [mt] */
 free_mm:
@@ -560,9 +562,10 @@ void release_task_struct(struct __task_struct *t)
       idx_free(&t->group_leader->tg_priv->tid_allocator,t->tid);
       UNLOCK_TASK_STRUCT(t->group_leader);
     } else {
-        LOCK_PID_ARRAY;
-        idx_free(&pid_array, t->pid);
-        UNLOCK_PID_ARRAY;
+      LOCK_PID_ARRAY;
+      idx_free(&pid_array, t->pid);
+      UNLOCK_PID_ARRAY;
+      destroy_task_limits(t->limits);
     }
 
     free_pages_addr(t,1);

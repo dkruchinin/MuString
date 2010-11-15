@@ -16,6 +16,8 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2010 Jari OS non-profit org. <http://jarios.org>
+ * (c) Copyright 2010 Madtirra <madtirra@jarios.org> (namespace related changes)
  *
  * include/mstring/task.h: generic functions for dealing with task creation.
  */
@@ -39,6 +41,7 @@
 #include <ds/idx_allocator.h>
 #include <arch/atomic.h>
 #include <security/security.h>
+#include <mstring/namespace.h>
 
 typedef uint32_t time_slice_t;
 
@@ -353,6 +356,12 @@ typedef struct __task_struct {
   /* Security-related stuff */
   struct __task_s_object *sobject;
 
+  /* namespace related stuff */
+  pid_t rtns_id; /* root ns id, default 1 */
+  uint8_t ns_id; /* namespace ID */
+  uint8_t ns_flags; /* flags ns-related */
+
+  /* misc */
   char short_name[TASK_SHORTNAME_LEN];
 
   /* Arch-dependent context is located here */
