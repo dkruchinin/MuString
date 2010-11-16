@@ -17,12 +17,8 @@
  * (c) Copyright 2010 Jari OS non-profit org. <http://jarios.org>
  * (c) Copyright 2010 Madtirra <madtirra@jarios.org>
  *
- * include/mstring/namespace.h: namespace support
+ * kernel/namespace.c: namespace support
  */
-
-
-#ifndef __NAMESPACE_H__
-#define __NAMESPACE_H__
 
 #include <mstring/types.h>
 #include <mstring/kstack.h>
@@ -39,7 +35,9 @@
 #include <ds/idx_allocator.h>
 #include <arch/atomic.h>
 #include <security/security.h>
+#include <mstring/namespace.h>
 
+#if 0
 #define DEFAULT_NS_CARRIER_PID  1
 
 #define DEFAULT_NS_NAME  "Root NS"
@@ -61,3 +59,12 @@ struct ns_id_attrs {
 };
 
 #endif
+
+void initialize_ns_subsys(void)
+{
+  kprintf("[NS] Init namespace subsystem ... ");
+
+  kprintf("OK\n");
+
+  return;
+}

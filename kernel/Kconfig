@@ -116,6 +116,20 @@ endmenu
 
 endmenu
 
+menu   "Namespace settings"
+
+config ENABLE_NS
+	bool "Enable namespaces"
+	default n
+	help
+	Namespaces is required to support several industry standarts.
+	But also can be used as a security model in several cases.
+	Namespaces allow to separate group of tasks from each other throught 
+	limits and separate namespace carriers. Task from one namespace cannot 
+	access task from other one.
+
+endmenu
+
 menu   "Kernel consoles"
 choice 
        prompt  "Kernel default console"

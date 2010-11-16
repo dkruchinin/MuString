@@ -357,9 +357,7 @@ typedef struct __task_struct {
   struct __task_s_object *sobject;
 
   /* namespace related stuff */
-  pid_t rtns_id; /* root ns id, default 1 */
-  uint8_t ns_id; /* namespace ID */
-  uint8_t ns_flags; /* flags ns-related */
+  struct ns_id_attr *namespace;
 
   /* misc */
   char short_name[TASK_SHORTNAME_LEN];
