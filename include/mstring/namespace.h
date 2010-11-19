@@ -49,6 +49,7 @@ struct namespace {
   ulong_t ns_mm_limit; /* pages per namespace limit */
   pid_t ns_carrier; /* user space namespace carrier */
   task_limits_t *def_limits; /* default limits for the namespace */
+  atomic_t use_count;
   rw_spinlock_t rw_lock; /* rw lock */
   char name[16]; /* namespace short name */
 };
@@ -59,5 +60,11 @@ struct ns_id_attrs {
   uint8_t trans_flag;  /* translator flags, TODO: extend it in future */
   struct namespace *ns;  /* namespace assigned */
 };
+
+void initialize_ns_subsys(void);
+
+struct namespace *alloc_namespace(void);
+
+void destroy_namespace(struct namespace *);
 
 #endif
