@@ -25,31 +25,16 @@
 #include <mstring/wait.h>
 #include <arch/context.h>
 #include <arch/current.h>
-#include <mm/page.h>
-#include <mm/vmm.h>
 #include <mstring/limits.h>
 #include <mstring/sigqueue.h>
-#include <sync/mutex.h>
-#include <mstring/event.h>
-#include <mstring/scheduler.h>
-#include <ds/idx_allocator.h>
+#include <sync/spinlock.h>
 #include <arch/atomic.h>
 #include <security/security.h>
 #include <mstring/namespace.h>
+#include <mm/slab.h>
 
 #if 0
-#define DEFAULT_NS_CARRIER_PID  1
-
 #define DEFAULT_NS_NAME  "Root NS"
-
-struct namespace {
-  uint8_t ns_id;  /* id of the namespace */
-  ulong_t ns_mm_limit; /* pages per namespace limit */
-  pid_t ns_carrier; /* user space namespace carrier */
-  task_limits_t *def_limits; /* default limits for the namespace */
-  rw_spinlock_t rw_lock; /* rw lock */
-  char name[16]; /* namespace short name */
-};
 
 /* this structure used for task_t */
 struct ns_id_attrs {
@@ -60,11 +45,64 @@ struct ns_id_attrs {
 
 #endif
 
+static memcache_t *ns_cache = NULL;
+static memcache_t *ns_attrs_cache = NULL;
+
+static struct namespace *root_ns = NULL;
+
+#define PANIC_PRE  "\n\tinitialize_ns_subsys: "
+
 void initialize_ns_subsys(void)
 {
+  task_limits_t *def_limits = NULL;
+
   kprintf("[NS] Init namespace subsystem ... ");
+
+  ns_cache = create_memcache("NS objects cache", sizeof(struct namespace),
+                             1, MMPOOL_KERN | SMCF_IMMORTAL | SMCF_LAZY);
+  ns_attrs_cache = create_memcache("NS attr objects cache", sizeof(struct ns_id_attrs),
+                             1, MMPOOL_KERN | SMCF_IMMORTAL | SMCF_LAZY);
+
+  if(!ns_cache || !ns_attrs_cache)
+    panic(PANIC_PRE"Failed to initialize memory caches for namespace objects.\n");
+
+  /* create root namespace */
+  if(!(root_ns = alloc_namespace()))
+    panic(PANIC_PRE"Failed to allocate root namespace.\n");
+
+  /* init default namespace */
+  root_ns->ns_carrier = DEFAULT_NS_CARRIER_PID;
+  memcpy(root_ns->name, DEFAULT_NS_NAME, strlen(DEFAULT_NS_NAME));
+
+  if(!(def_limits = allocate_task_limits()))
+    panic(PANIC_PRE"Failed to allocate root namespace default limits.\n");
+  set_default_task_limits(def_limits);
+  root_ns->def_limits = def_limits;
 
   kprintf("OK\n");
 
+  return;
+}
+
+struct namespace *alloc_namespace(void)
+{
+  struct namespace *ns = NULL;
+
+  if((ns = alloc_from_memcache(ns_cache, 0))) {
+    atomic_set(&ns->use_count, 1);
+    rw_spinlock_initialize(&ns->rw_lock, "NS lock");
+
+    memset(ns->name, 0, 16);
+    ns->ns_mm_limit = 0;
+    ns->ns_carrier = 0;
+    ns->ns_id = 0;
+    ns->def_limits = NULL; /* should be initialized later */
+  }
+
+  return ns;
+}
+
+void destroy_namespace(struct namespace *ns)
+{
   return;
 }

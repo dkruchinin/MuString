@@ -40,6 +40,7 @@
 #include <mstring/timer.h>
 #include <mstring/signal.h>
 #include <mstring/limits.h>
+#include <mstring/namespace.h>
 #include <security/security.h>
 
 static void main_routine_stage1(void)
@@ -48,6 +49,7 @@ static void main_routine_stage1(void)
   set_cpu_online(0,1);  /* We're online. */
   sched_add_cpu(0);
   initialize_limits();
+  initialize_ns_subsys();
   initialize_ipc();
   initialize_signals();
   initialize_security();
