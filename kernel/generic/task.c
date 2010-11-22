@@ -477,7 +477,6 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   /* Namespace stuff */
   if(parent->pid == 0) ns = get_root_namespace();
   else ns = parent->namespace->ns;
-  kprintf("parent->pid = %d, pid %d\n", parent->pid, task->pid);
 
   ns_attrs = alloc_ns_attrs(ns);
   if(!ns_attrs) goto free_limits;
@@ -535,7 +534,6 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
 
   if( !(r=__add_to_parent(task,parent,flags,priv)) ) {
     *t = task;
-    kprintf("parent = %d, pid %d\n", task->ppid, task->pid);
     return 0;
   }
 
@@ -583,6 +581,9 @@ void release_task_struct(struct __task_struct *t)
       UNLOCK_PID_ARRAY;
       destroy_task_limits(t->limits);
     }
+
+    /* namespace attrs */
+    destroy_ns_attrs(t->namespace);
 
     free_pages_addr(t,1);
   }
