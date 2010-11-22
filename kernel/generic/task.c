@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2010 MadTirra <madtirra@jarios.org>
  *
  * mstring/generic_api/task.c: generic functions for dealing with task creation.
  */
@@ -38,6 +39,7 @@
 #include <arch/scheduler.h>
 #include <mstring/types.h>
 #include <mstring/process.h>
+#include <mstring/namespace.h>
 #include <config.h>
 
 /* Available PIDs live here. */
@@ -417,6 +419,8 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   int r = -ENOMEM;
   page_frame_t *stack_pages;
   task_limits_t *limits = NULL;
+  struct ns_id_attrs *ns_attrs = NULL;
+  struct namespace *ns = NULL;
 
   if ((flags && !parent) ||
       ((flags & CLONE_MM) && (flags & (CLONE_COW | CLONE_POPULATE))) ||
@@ -470,9 +474,18 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
     }
   } else task->limits = parent->group_leader->limits;
 
+  /* Namespace stuff */
+  if(parent->pid == 0) ns = get_root_namespace();
+  else ns = parent->namespace->ns;
+  kprintf("parent->pid = %d, pid %d\n", parent->pid, task->pid);
+
+  ns_attrs = alloc_ns_attrs(ns);
+  if(!ns_attrs) goto free_limits;
+  else task->namespace = ns_attrs;
+
   r=__setup_task_ipc(task,parent,flags,attrs);
   if( r ) {
-    goto free_limits;
+    goto free_ns_attr;
   }
 
   r=__setup_task_sync_data(task,parent,flags,priv);
@@ -522,34 +535,37 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
 
   if( !(r=__add_to_parent(task,parent,flags,priv)) ) {
     *t = task;
+    kprintf("parent = %d, pid %d\n", task->ppid, task->pid);
     return 0;
   }
 
-free_events:
+ free_events:
   /* [mt] Free events here. */
-free_posix:
+ free_posix:
   /* TODO: [mt] Free POSIX data properly. */
-free_signals:
+ free_signals:
   /* TODO: [mt] Free signals data properly. */
-free_uevents:
+ free_uevents:
   /* TODO: [mt] Free userspace events properly. */
-free_sync_data:
+ free_sync_data:
   /* TODO: [mt] Deallocate task's sync data. */
-free_ipc:
+ free_ipc:
   /* TODO: [mt] deallocate task's IPC structure. */
-free_limits:
+ free_ns_attr:
+  if(ns_attrs) destroy_ns_attrs(ns_attrs);
+ free_limits:
   if(limits) destroy_task_limits(limits);
-free_stack_pages:
+ free_stack_pages:
   /* TODO: Free all stack pages here. [mt] */
-free_mm:
+ free_mm:
   /* TODO: Free mm here. [mt] */
-free_stack:
+ free_stack:
   free_kernel_stack(task->kernel_stack.id);
-free_pid:
+ free_pid:
   /* TODO: free PID/TID here. */
-free_task:
+ free_task:
   /* TODO: Free task struct page here. [mt] */
-task_create_fault:
+ task_create_fault:
   *t = NULL;
   return ERR(r);
 }
