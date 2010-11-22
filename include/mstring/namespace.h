@@ -67,4 +67,10 @@ struct namespace *alloc_namespace(void);
 
 void destroy_namespace(struct namespace *);
 
+struct namespace *get_root_namespace(void);
+
+/* attribute structure ops */
+struct ns_id_attrs *alloc_ns_attrs(struct namespace *);
+void destroy_ns_attrs(struct ns_id_attrs *);
+
 #endif

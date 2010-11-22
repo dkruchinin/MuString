@@ -33,18 +33,6 @@
 #include <mstring/namespace.h>
 #include <mm/slab.h>
 
-#if 0
-#define DEFAULT_NS_NAME  "Root NS"
-
-/* this structure used for task_t */
-struct ns_id_attrs {
-  uint8_t ns_id;  /* used to avoid lock */
-  uint8_t trans_flag;  /* translator flags, TODO: extend it in future */
-  struct namespace *ns;  /* namespace assigned */
-};
-
-#endif
-
 static memcache_t *ns_cache = NULL;
 static memcache_t *ns_attrs_cache = NULL;
 
@@ -84,6 +72,11 @@ void initialize_ns_subsys(void)
   return;
 }
 
+struct namespace *get_root_namespace(void)
+{
+  return root_ns;
+}
+
 struct namespace *alloc_namespace(void)
 {
   struct namespace *ns = NULL;
@@ -100,6 +93,29 @@ struct namespace *alloc_namespace(void)
   }
 
   return ns;
+}
+
+struct ns_id_attrs *alloc_ns_attrs(struct namespace *ns)
+{
+  struct ns_id_attrs *ia = NULL;
+
+  if((ia = alloc_from_memcache(ns_attrs_cache, 0))) {
+    atomic_inc(&ns->use_count);
+
+    ia->ns = ns;
+    ia->ns_id = ns->ns_id;
+    ia->trans_flag = 0;
+  }
+
+  return ia;
+}
+
+void destroy_ns_attrs(struct ns_id_attrs *id)
+{
+  atomic_dec(&id->ns->use_count);
+  memfree(id);
+
+  return;
 }
 
 void destroy_namespace(struct namespace *ns)
