@@ -117,7 +117,7 @@ long sys_open_channel(pid_t pid,ulong_t port,ulong_t flags)
     return ERR(-ESRCH);
   }
 
-#ifndef CONFIG_ENABLE_NS
+#ifdef CONFIG_ENABLE_NS
   /* check for namespace */
   ctask = current_task();
   if((task->namespace->ns_id != ctask->namespace->ns_id) &&

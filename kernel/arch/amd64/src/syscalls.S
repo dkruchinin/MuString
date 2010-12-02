@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2010 Jari OS non-profit org <http://jarios.org>
  *
  * /mstring/amd64/syscalls.S: low level syscall-related, AMD64-specific
  *                        functionality
@@ -85,6 +86,8 @@ syscall_table:
 	.quad   sys_port_control
 	.quad   sys_port_msg_write
 	.quad   sys_ptrace
+	.quad   sys_chg_create_namespace
+	.quad   sys_control_namespace
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

@@ -73,4 +73,8 @@ struct namespace *get_root_namespace(void);
 struct ns_id_attrs *alloc_ns_attrs(struct namespace *);
 void destroy_ns_attrs(struct ns_id_attrs *);
 
+/* top level wrapper (syscalls) */
+int sys_chg_create_namespace(ulong_t, char *);
+int sys_control_namespace(pid_t, int, void *);
+
 #endif

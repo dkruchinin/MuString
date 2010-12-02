@@ -15,6 +15,7 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2010 Jari OS non-profit org <http://jarios.org>
  */
 
 #ifndef __K_SYSCALLS_H__
@@ -32,6 +33,7 @@
 #include <mstring/sync.h>
 #include <mstring/signal.h>
 #include <mstring/kcontrol.h>
+#include <mstring/namespace.h>
 
 #endif
 
@@ -94,6 +96,9 @@
 #define SC_PORT_CONTROL        46
 #define SC_PORT_MSG_WRITE      47
 #define SC_PTRACE              48
+
+#define SC_CHG_CREATE_NAMESPACE  49
+#define SC_CONTROL_NAMESPACE     50
 
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */

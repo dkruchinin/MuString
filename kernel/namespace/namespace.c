@@ -32,6 +32,7 @@
 #include <security/security.h>
 #include <mstring/namespace.h>
 #include <mm/slab.h>
+#include <config.h>
 
 static memcache_t *ns_cache = NULL;
 static memcache_t *ns_attrs_cache = NULL;
@@ -121,4 +122,23 @@ void destroy_ns_attrs(struct ns_id_attrs *id)
 void destroy_namespace(struct namespace *ns)
 {
   return;
+}
+
+/* top level functions */
+int sys_chg_create_namespace(ulong_t ns_mm_limit, char *short_name)
+{
+#ifndef CONFIG_ENABLE_NS
+  return ERR(-ENOSYS);
+#else
+  return 0;
+#endif
+}
+
+int sys_control_namespace(pid_t task, int op_code, void *data)
+{
+#ifndef CONFIG_ENABLE_NS
+  return ERR(-ENOSYS);
+#else
+  return 0;
+#endif
 }
