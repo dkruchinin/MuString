@@ -469,6 +469,13 @@ out:
     info.sender_uid=msg->creds.uid;
     info.sender_gid=msg->creds.gid;
     info.sender_label=msg->creds.mac_label;
+#ifdef CONFIG_ENABLE_NS
+    info.ns_id = msg->sender->namespace->ns_id;
+    info.ns_tr_flag = msg->sender->namespace->trans_flag;
+#else
+    info.ns_id = 0;
+    info.ns_tr_fl = 0;
+#endif
 
     if( copy_to_user(stats,&info,sizeof(info)) ) {
       r=-EFAULT;
