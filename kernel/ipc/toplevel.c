@@ -16,6 +16,8 @@
  *
  * (c) Copyright 2006,2007,2008,2009 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008,2009 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2010 Jari OS non-profit org <http://jarios.org>
+ * (c) Copyright 2010 MadTirra <madtirra@jarios.org> - namespace related changes
  *
  * ipc/toplevel.c: Top-level entrypoints for IPC-related functions.
  */
@@ -32,6 +34,7 @@
 #include <ipc/port.h>
 #include <ipc/channel.h>
 #include <security/security.h>
+#include <config.h>
 
 static long __ipc_port_msg_write(ulong_t port, ulong_t msg_id, iovec_t *iovecs,
                                  ulong_t numvecs,off_t offset, bool wakeup,
@@ -101,6 +104,9 @@ bool valid_iovecs(iovec_t *iovecs, uint32_t num_vecs,long *size)
 long sys_open_channel(pid_t pid,ulong_t port,ulong_t flags)
 {
   task_t *task = pid_to_task(pid);
+#ifdef CONFIG_ENABLE_NS
+  task_t *ctask;
+#endif
   long r;
 
   if( !s_check_system_capability(SYS_CAP_IPC_CHANNEL) ) {
@@ -110,6 +116,14 @@ long sys_open_channel(pid_t pid,ulong_t port,ulong_t flags)
   if (task == NULL) {
     return ERR(-ESRCH);
   }
+
+#ifndef CONFIG_ENABLE_NS
+  /* check for namespace */
+  ctask = current_task();
+  if((task->namespace->ns_id != ctask->namespace->ns_id) &&
+     !ctask->namespace->trans_flag)
+    return ERR(-EPERM);
+#endif
 
   r=ipc_open_channel(current_task(),task,port,flags);
   release_task_struct(task);
