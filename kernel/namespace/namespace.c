@@ -27,6 +27,7 @@
 #include <arch/current.h>
 #include <mstring/limits.h>
 #include <mstring/sigqueue.h>
+#include <mstring/usercopy.h>
 #include <sync/spinlock.h>
 #include <arch/atomic.h>
 #include <security/security.h>
@@ -38,6 +39,8 @@ static memcache_t *ns_cache = NULL;
 static memcache_t *ns_attrs_cache = NULL;
 
 static struct namespace *root_ns = NULL;
+
+static atomic_t ns_count = 0;
 
 #define PANIC_PRE  "\n\tinitialize_ns_subsys: "
 
@@ -121,6 +124,8 @@ void destroy_ns_attrs(struct ns_id_attrs *id)
 
 void destroy_namespace(struct namespace *ns)
 {
+  memfree(ns);
+
   return;
 }
 
@@ -130,7 +135,43 @@ int sys_chg_create_namespace(ulong_t ns_mm_limit, char *short_name)
 #ifndef CONFIG_ENABLE_NS
   return ERR(-ENOSYS);
 #else
-  return 0;
+  int r = 0;
+  struct namespace *ns = NULL;
+  task_t *task=current_task();
+  task_limits_t *def_limits = NULL;
+
+  /* check for the creator */
+  if(task->namespace->ns_id>1) /* allowed only from root namespace */
+    return ERR(-EPERM);
+
+  /* create namespace */
+  if(!(ns = alloc_namespace()))
+    return ERR(-ENOMEM);
+
+  /* init default namespace */
+  ns->ns_carrier = task->pid;
+  if(copy_from_user(ns->name, short_name, 16))
+    return ERR(-EFAULT);
+  ns->ns_mm_limit = ns_mm_limit;
+
+  /* firstly assign default limits */
+  if(!(def_limits = allocate_task_limits())) {
+    destroy_namespace(ns);
+    return ERR(-ENOMEM);
+  }
+  set_default_task_limits(def_limits);
+  ns->def_limits = def_limits;
+
+  /* assign id */
+  atomic_inc(&ns_count);
+  ns->ns_id = (uint8_t)ns_count;
+
+  /* change namespace attrs */
+  task->namespace->ns_id = ns->ns_id;
+  task->namespace->trans_flag = 1; /* carrier allowed to translate */
+  task->namespace->ns = ns;
+
+  return ERR(r);
 #endif
 }
 
@@ -139,6 +180,22 @@ int sys_control_namespace(pid_t task, int op_code, void *data)
 #ifndef CONFIG_ENABLE_NS
   return ERR(-ENOSYS);
 #else
-  return 0;
+  int r = 0;
+
+  switch(op_code) {
+  case NS_CTRL_GET_CARRIER_PID: /* all allowed */
+    if(copy_to_user(data, &current_task()->namespace->ns->ns_carrier,
+                    sizeof(pid_t)))
+      r = -EFAULT;
+    break;
+  case NS_CTRL_REMOVE_TRANS: /* all allowed */
+    current_task()->namespace->trans_flag = 0;
+    break;
+  default:
+    r = -EINVAL;
+    break;
+  }
+
+  return ERR(r);
 #endif
 }

@@ -74,6 +74,11 @@ struct ns_id_attrs *alloc_ns_attrs(struct namespace *);
 void destroy_ns_attrs(struct ns_id_attrs *);
 
 /* top level wrapper (syscalls) */
+
+/* control cmd */
+#define NS_CTRL_GET_CARRIER_PID  0x0
+#define NS_CTRL_REMOVE_TRANS     0x1
+
 int sys_chg_create_namespace(ulong_t, char *);
 int sys_control_namespace(pid_t, int, void *);
 
