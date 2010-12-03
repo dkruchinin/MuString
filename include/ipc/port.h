@@ -94,6 +94,9 @@ typedef struct __port_msg_info {
   uid_t sender_uid;
   uid_t sender_gid;
   mac_label_t sender_label;
+  /* namespace related */
+  uint8_t ns_id;
+  uint8_t ns_tr_flag;
 } port_msg_info_t;
 
 struct __ipc_gen_port;

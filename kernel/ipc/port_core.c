@@ -42,6 +42,7 @@
 #include <mm/page_alloc.h>
 #include <security/util.h>
 #include <mstring/bitwise.h>
+#include <config.h>
 
 #define POST_MESSAGE_DATA_ACCESS_STEP(_p,_m,_r,_woe)    \
   IPC_LOCK_PORT_W(_p);                             \
