@@ -204,6 +204,9 @@ long ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs, iovec_t 
   data_size = MIN(bufsize, iov_size);
   iov_size = iovecs->iov_len;
 
+  if(iov_size + buf_offset > bufsize)
+    return ERR(-E2BIG);
+
   if (offset) {
     if (!start_buf) {
       return ERR(-E2BIG); /* Too big offset. */
