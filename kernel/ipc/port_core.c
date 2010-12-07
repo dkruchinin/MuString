@@ -476,7 +476,7 @@ out:
     info.ns_tr_flag = msg->sender->namespace->trans_flag;
 #else
     info.ns_id = 0;
-    info.ns_tr_fl = 0;
+    info.ns_tr_flag = 0;
 #endif
 
     if( copy_to_user(stats,&info,sizeof(info)) ) {
