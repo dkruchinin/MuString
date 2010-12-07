@@ -156,7 +156,7 @@ static long __port_ctl_append_to_message(ipc_gen_port_t *p,
     /* Adjust extra data pointer in case of errors. */
     msg->extra_data_tail += kgap.d.data.iov_len;
   } else {
-    msg->data_size += r;
+    msg->data_size += kgap.d.data.iov_len;
   }
   unmark_message_waccess(msg);
   IPC_UNLOCK_PORT_W(p);
