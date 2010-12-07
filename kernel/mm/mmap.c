@@ -1255,7 +1255,7 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
 #ifdef CONFIG_ENABLE_NS
     sec_id[4] = caller->namespace->ns_id;
 #endif
-    ret = memobj_method_call(memobj, mmap, memobj, sec_id, PAGE_ALIGN(margs.offset),
+    ret = memobj_method_call(memobj, mmap_check, memobj, sec_id, PAGE_ALIGN(margs.offset),
                              PAGE_ALIGN(margs.size), margs.prot);
     if(ret) goto out;
   }
@@ -1266,8 +1266,7 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
                     vmrflags, PAGE_ALIGN(margs.offset) >> PAGE_WIDTH);
   rwsem_up_write(&vmm->rwsem);
   if(ret && memobj)
-    memobj_method_call(memobj, unmap, memobj, PAGE_ALIGN(margs.offset),
-                       PAGE_ALIGN(margs.size) >> PAGE_WIDTH);
+    memobj_method_call(memobj, unmap_ack, memobj);
 
 out:
   if (victim_task && victim)
@@ -1317,7 +1316,7 @@ int sys_msync(uintptr_t addr, size_t length, int flags)
 
     /* actually we should sync it only in case of write enabled mapping */
     if((vmr->flags & VMR_WRITE)) {
-      ret = memobj_method_call(memobj, msync, memobj, afrom, ato, flags);
+      ret = memobj_method_call(memobj, msync, vmr, afrom, ato, flags);
       if(ret) goto end;
     }
 

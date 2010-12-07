@@ -206,11 +206,67 @@ eof_cycle:
   return 0;
 }
 
-static int proxy_mmap_pages(struct __memobj *memobj, ulong_t sec_id[5], pgoff_t offset,
-                            page_idx_t npages, int proto)
+static int proxy_msync(struct __vmrange *vmr, uintptr_t offset,
+                       ulong_t pages, int flags)
 {
+  memobj_t *memobj = vmr->memobj;
+  vmm_t *vmm = vmr->parent_vmm;
   page_idx_t pidx;
   page_frame_t *page;
+  iovec_t snd_iovec, rcv_iovec;
+  struct mmev_msync msync;
+  int ret = 0, srvret;
+  task_t *server;
+  ipc_channel_t *chan;
+
+  ASSERT(memobj->backend.server != NULL);
+  spinlock_lock_read(&memobj->members_rwlock);
+  server = memobj->backend.server;
+
+  if (vmm != server->task_mm) {
+    grab_task_struct(server);
+    chan = memobj->backend.channel;
+    ipc_pin_channel(chan);
+    spinlock_unlock_read(&memobj->members_rwlock);
+
+    RPD_LOCK_WRITE(&vmm->rpd);
+    pidx = vaddr_to_pidx(&vmm->rpd, offset);
+    if (pidx == PAGE_IDX_INVAL) {
+      RPD_UNLOCK_WRITE(&vmm->rpd);
+      ret = -EINVAL;
+      goto end;
+    }
+
+    page = pframe_by_id(pidx);
+    RPD_UNLOCK_WRITE(&vmm->rpd);
+
+    msync.hdr.event = MMEV_MSYNC;
+    msync.hdr.memobj_id = memobj->id;
+    msync.hdr.private = (long)memobj->private;
+    msync.offset = page->offset;
+    msync.size = PAGE_SIZE;
+
+    snd_iovec.iov_base = (void *)&msync;
+    snd_iovec.iov_len = sizeof(msync);
+    rcv_iovec.iov_base = (void *)&srvret;
+    rcv_iovec.iov_len = sizeof(int);
+
+    ret = ipc_port_send_iov(chan, &snd_iovec, 1, &rcv_iovec, 1);
+    unpin_page_frame(page);
+    if(!ret && srvret) ret = srvret;
+
+  end:
+    release_task_struct(server);
+    ipc_unpin_channel(chan);
+  } else
+    spinlock_unlock_read(&memobj->members_rwlock);
+
+  return ret;
+}
+
+static int proxy_mmap_pages_check(struct __memobj *memobj, ulong_t sec_id[5], uintptr_t offset,
+                                  ulong_t npages, int proto)
+{
   iovec_t snd_iovec, rcv_iovec;
   struct mmev_mmap mmap;
   int ret = 0, srvret;
@@ -225,21 +281,53 @@ static int proxy_mmap_pages(struct __memobj *memobj, ulong_t sec_id[5], pgoff_t 
   ipc_pin_channel(chan);
   spinlock_unlock_read(&memobj->members_rwlock);
 
- 
-    mmap.hdr.event = MMEV_MMAP;
-    mmap.hdr.memobj_id = memobj->id;
-    mmap.hdr.private = (long)memobj->private;
-    mmap.offset = page->offset;
-    mmap.size = PAGE_SIZE;
+  /* we're sending first page and size on pages to allocate */
+  mmap.hdr.event = MMEV_MMAP_CHECK;
+  mmap.hdr.memobj_id = memobj->id;
+  mmap.hdr.private = (long)memobj->private;
+  mmap.offset = offset;
+  mmap.size = npages;
 
-    snd_iovec.iov_base = (void *)&mmap;
-    snd_iovec.iov_len = sizeof(mmap);
-    rcv_iovec.iov_base = (void *)&srvret;
-    rcv_iovec.iov_len = sizeof(int);
+  snd_iovec.iov_base = (void *)&mmap;
+  snd_iovec.iov_len = sizeof(mmap);
+  rcv_iovec.iov_base = (void *)&srvret;
+  rcv_iovec.iov_len = sizeof(int);
 
-    ret = ipc_port_send_iov(chan, &snd_iovec, 1, &rcv_iovec, 1);
-    if(!ret && srvret) ret = srvret;
- 
+  ret = ipc_port_send_iov(chan, &snd_iovec, 1, &rcv_iovec, 1);
+  if(!ret && srvret) ret = srvret;
+
+  release_task_struct(server);
+  ipc_unpin_channel(chan);
+  return ret;
+}
+
+static int proxy_unmap_ack(struct __memobj *memobj)
+{
+  iovec_t snd_iovec, rcv_iovec;
+  struct mmev_hdr unmap_ack;
+  int ret = 0, srvret;
+  task_t *server;
+  ipc_channel_t *chan;
+
+  ASSERT(memobj->backend.server != NULL);
+  spinlock_lock_read(&memobj->members_rwlock);
+  server = memobj->backend.server;
+  grab_task_struct(server);
+  chan = memobj->backend.channel;
+  ipc_pin_channel(chan);
+  spinlock_unlock_read(&memobj->members_rwlock);
+
+  unmap_ack.event = MMEV_MUNMAP;
+  unmap_ack.memobj_id = memobj->id;
+  unmap_ack.private = (long)memobj->private;
+
+  snd_iovec.iov_base = (void *)&unmap_ack;
+  snd_iovec.iov_len = sizeof(unmap_ack);
+  rcv_iovec.iov_base = (void *)&srvret;
+  rcv_iovec.iov_len = sizeof(int);
+
+  ret = ipc_port_send_iov(chan, &snd_iovec, 1, &rcv_iovec, 1);
+  if(!ret && srvret) ret = srvret;
 
   release_task_struct(server);
   ipc_unpin_channel(chan);
@@ -314,7 +402,10 @@ static memobj_ops_t proxy_ops = {
   .cleanup = NULL,
   .insert_page = NULL,
   .delete_page = NULL,
+  .mmap_check = proxy_mmap_pages_check,
+  .unmap_ack = proxy_unmap_ack,
   .truncate = proxy_truncate,
+  .msync = proxy_msync,
 };
 
 int proxy_memobj_initialize(memobj_t *memobj, uint32_t flags)
