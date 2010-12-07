@@ -144,7 +144,6 @@ static long __port_ctl_append_to_message(ipc_gen_port_t *p,
       msg->extra_data_tail -= kgap.d.data.iov_len;
       eptr = (char *)msg->extra_data + msg->extra_data_tail;
       to_copy = IPC_MSG_EXTRA_SIZE - msg->extra_data_tail;
-
       if( copy_from_user(eptr, kgap.d.data.iov_base,kgap.d.data.iov_len ) ) {
         r=-EFAULT;
       }
@@ -202,7 +201,7 @@ static long __port_ctl_cut_from_message(ipc_gen_port_t *p,
 
   /* Make sure we fit into extra buffer. */
   to_cut = MIN(to_cut,IPC_MSG_EXTRA_SIZE - msg->extra_data_tail);
-
+#if 0
   if( to_cut && kgap.d.data.iov_base ) { /* cut-and-store */
     char *eptr = (char *)msg->extra_data + msg->extra_data_tail;
 
@@ -210,7 +209,7 @@ static long __port_ctl_cut_from_message(ipc_gen_port_t *p,
       r=-EFAULT;
     }
   }
-
+#endif
   IPC_LOCK_PORT_W(p);
   if( !r ) {
     msg->extra_data_tail += to_cut;

@@ -421,7 +421,7 @@ static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
 
     if( msg->extra_data && (offset < (IPC_MSG_EXTRA_SIZE - msg->extra_data_tail)) ) {
       char *eptr = (char *)msg->extra_data + msg->extra_data_tail + offset;
-      recv_len=MIN(iovec->iov_len,(IPC_MSG_EXTRA_SIZE - msg->extra_data_tail));
+      recv_len=MIN(iovec->iov_len,(IPC_MSG_EXTRA_SIZE - msg->extra_data_tail - offset));
 
       if( copy_to_user(iovec->iov_base,eptr,recv_len) ) {
         r=-EFAULT;
@@ -432,7 +432,6 @@ static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
       iovec->iov_base = (void *)((char *)iovec->iov_base + recv_len);
       offset = 0;
       r = 0;
-      goto out;
     }
 
     if( !iovec->iov_len ) {
