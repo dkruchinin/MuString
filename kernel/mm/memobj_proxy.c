@@ -1,7 +1,31 @@
 /*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+ * 02111-1307, USA.
+ *
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
+ * (c) Copyright 2010 Jari OS non-profit org. <http://jarios.org>
+ * (c) Copyright 2010 MadTirra <madtirra@jarios.org>
+ *
+ *
+ */
+
+/*
  * TODO:
  * This ugly peace of ... code was written for test purpose. After FS
- * disign is completed, this crap *must* be rewritten.
+ * design is completed, this crap *must* be rewritten.
  */
 
 #include <config.h>
@@ -16,7 +40,7 @@
 
 static int proxy_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
 {
-  memobj_t *memobj = vmr->memobj;  
+  memobj_t *memobj = vmr->memobj;
   struct mmev_fault msg;
   iovec_t snd_iovec, rcv_iovec;
   int ret;
@@ -38,7 +62,7 @@ static int proxy_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
     server = memobj->backend.server;
     if (server)
       grab_task_struct(server);
-    
+
     chan = memobj->backend.channel;
     if (chan)
       ipc_pin_channel(chan);
@@ -55,7 +79,7 @@ static int proxy_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
 
     return -ENOENT;
   }
-  
+
   serv_vmm = server->task_mm;
   msg.hdr.event = MMEV_PAGE_FAULT;
   msg.hdr.private = (long)memobj->private;
@@ -87,7 +111,7 @@ static int proxy_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
     ret = -EINVAL;
     goto out_unlock_srv;
   }
-  
+
   RPD_LOCK_READ(&serv_vmm->rpd);
   pidx = vaddr_to_pidx(&serv_vmm->rpd, rcvaddr);
   if (pidx == PAGE_IDX_INVAL) {
@@ -113,9 +137,9 @@ static int proxy_page_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfmask)
     RPD_UNLOCK_WRITE(&cli_vmm->rpd);
     goto out_unlock_srv;
   }
-  
+
   RPD_UNLOCK_WRITE(&cli_vmm->rpd);
-  
+
 out_unlock_srv:
   rwsem_up_read(&serv_vmm->rwsem);
   release_task_struct(server);
@@ -130,11 +154,11 @@ static int proxy_depopulate_pages(vmrange_t *vmr, uintptr_t va_from, uintptr_t v
   page_idx_t pidx;
   page_frame_t *page;
   iovec_t snd_iovec, rcv_iovec;
-  struct mmev_msync msync;
+  struct mmev_mdep msync;
   int ret, srvret;
   task_t *server;
   ipc_channel_t *chan;
-  
+
   ASSERT(memobj->backend.server != NULL);
   spinlock_lock_read(&memobj->members_rwlock);
   server = memobj->backend.server;
@@ -142,7 +166,7 @@ static int proxy_depopulate_pages(vmrange_t *vmr, uintptr_t va_from, uintptr_t v
   chan = memobj->backend.channel;
   ipc_pin_channel(chan);
   spinlock_unlock_read(&memobj->members_rwlock);
-  
+
   while (va_from < va_to) {
     RPD_LOCK_WRITE(&vmm->rpd);
     pidx = vaddr_to_pidx(&vmm->rpd, va_from);
@@ -156,10 +180,11 @@ static int proxy_depopulate_pages(vmrange_t *vmr, uintptr_t va_from, uintptr_t v
     rmap_unregister_mapping(page, vmm, va_from);
     RPD_UNLOCK_WRITE(&vmm->rpd);
     if (vmm != server->task_mm) {
-      msync.hdr.event = MMEV_MSYNC;
+      msync.hdr.event = MMEV_DEPOPULATE;
       msync.hdr.memobj_id = memobj->id;
       msync.hdr.private = (long)memobj->private;
       msync.offset = page->offset;
+      msync.size = PAGE_SIZE;
 
       snd_iovec.iov_base = (void *)&msync;
       snd_iovec.iov_len = sizeof(msync);
@@ -171,14 +196,54 @@ static int proxy_depopulate_pages(vmrange_t *vmr, uintptr_t va_from, uintptr_t v
       if (ret < 0)
         goto eof_cycle;
     }
-    
-eof_cycle:    
+
+eof_cycle:
     va_from += PAGE_SIZE;
   }
 
   release_task_struct(server);
   ipc_unpin_channel(chan);
   return 0;
+}
+
+static int proxy_mmap_pages(struct __memobj *memobj, ulong_t sec_id[5], pgoff_t offset,
+                            page_idx_t npages, int proto)
+{
+  page_idx_t pidx;
+  page_frame_t *page;
+  iovec_t snd_iovec, rcv_iovec;
+  struct mmev_mmap mmap;
+  int ret = 0, srvret;
+  task_t *server;
+  ipc_channel_t *chan;
+
+  ASSERT(memobj->backend.server != NULL);
+  spinlock_lock_read(&memobj->members_rwlock);
+  server = memobj->backend.server;
+  grab_task_struct(server);
+  chan = memobj->backend.channel;
+  ipc_pin_channel(chan);
+  spinlock_unlock_read(&memobj->members_rwlock);
+
+ 
+    mmap.hdr.event = MMEV_MMAP;
+    mmap.hdr.memobj_id = memobj->id;
+    mmap.hdr.private = (long)memobj->private;
+    mmap.offset = page->offset;
+    mmap.size = PAGE_SIZE;
+
+    snd_iovec.iov_base = (void *)&mmap;
+    snd_iovec.iov_len = sizeof(mmap);
+    rcv_iovec.iov_base = (void *)&srvret;
+    rcv_iovec.iov_len = sizeof(int);
+
+    ret = ipc_port_send_iov(chan, &snd_iovec, 1, &rcv_iovec, 1);
+    if(!ret && srvret) ret = srvret;
+ 
+
+  release_task_struct(server);
+  ipc_unpin_channel(chan);
+  return ret;
 }
 
 static int proxy_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npages)
@@ -189,20 +254,19 @@ static int proxy_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npage
   list_node_t *n, *safe;
   page_frame_t *pages, *p;
   int ret = 0;
-  
-  
+
   if (!memobj->backend.server) {
     return -ENOENT;
   }
   if (vmr->parent_vmm != memobj->backend.server->task_mm)
     return -EINVAL;
-  
+
   pages = alloc_pages(npages, MMPOOL_USER | AF_ZERO);
   if (!pages) {
     ret = -EFAULT;
     goto out;
   }
-  
+
   list_init_head(&h);
   list_set_head(&h, &pages->chain_node);
   RPD_LOCK_WRITE(&vmm->rpd);
@@ -228,7 +292,7 @@ static int proxy_populate_pages(vmrange_t *vmr, uintptr_t addr, page_idx_t npage
     p->offset = addr2pgoff(vmr, addr);
     addr += PAGE_SIZE;
   }
-  
+
   RPD_UNLOCK_WRITE(&vmm->rpd);
 out:
   return ret;
