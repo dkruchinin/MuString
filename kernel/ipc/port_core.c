@@ -431,6 +431,8 @@ static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
       iovec->iov_len -= recv_len;
       iovec->iov_base = (void *)((char *)iovec->iov_base + recv_len);
       offset = 0;
+      r = 0;
+      goto out;
     }
 
     if( !iovec->iov_len ) {
