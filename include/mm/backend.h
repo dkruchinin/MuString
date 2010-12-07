@@ -11,6 +11,9 @@ typedef enum __mm_event {
   MMEV_FREE_PAGE    = 0x04,
   MMEV_MSYNC        = 0x08,
   MMEV_TRUNCATE     = 0x10,
+  MMEV_MMAP         = 0x20,
+  MMEV_MUNMAP       = 0x40,
+  MMEV_DEPOPULATE   = 0x80,
 } mm_event_t;
 
 typedef struct __memobj_backend_t {
@@ -31,9 +34,24 @@ struct mmev_fault {
   pgoff_t offset;
 };
 
-struct mmev_msync {
+struct mmev_mdep {
   struct mmev_hdr hdr;
   pgoff_t offset;
+  ulong_t size;
+};
+
+struct mmev_mmap {
+  struct mmev_hdr hdr;
+  ulong_t sec_id[5];
+  pgoff_t offset;
+  ulong_t size;
+};
+
+struct mmev_msync {
+  struct mmev_hdr hdr;
+  pgoff_t from;
+  ulong_t size;
+  int flags;
 };
 
 #endif /* __BACKEND_H__ */

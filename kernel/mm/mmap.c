@@ -16,6 +16,8 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Dan Kruchinin <dan.kruchinin@gmail.com>
+ * (c) Copyright 2010 Jari OS non-profit org. <http://jarios.org>
+ * (c) Copyright 2010 MadTirra <madtirra@jarios.org>
  *
  * mm/mmap.c - Architecture independend memory mapping API
  *
@@ -39,6 +41,8 @@
 #include <mstring/process.h>
 #include <security/security.h>
 #include <security/util.h>
+#include <mstring/task.h>
+#include <config.h>
 
 #define INVALID_ADDRESS (~0UL)
 
@@ -778,7 +782,7 @@ long vmrange_map(memobj_t *memobj, vmm_t *vmm, uintptr_t addr,
 
 create_vmrange:
   /*
-   * Generic memory object was disigned to collect and handle all anonymous and
+   * Generic memory object was designed to collect and handle all anonymous and
    * physical mappings. Unlike other memory objects it actually doesn't
    * have *real*(I mean tied with anything) offset, but it has to have it
    * in order to be semantically compatible with other types of memory objects.
@@ -1187,6 +1191,7 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
   struct mmap_args margs;
   vmrange_flags_t vmrflags;
   task_t *caller=current_task();
+  ulong_t sec_id[5];
 
   if (likely(!victim)) {
     victim_task = current_task();
@@ -1239,6 +1244,20 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
       ret = -ENOENT;
       goto out;
     }
+    memset(sec_id, 0, sizeof(ulong_t)*5);
+    /* mmap request always going from the caller */
+    sec_id[0] = caller->pid;
+    S_LOCK_OBJECT_R(S_GET_TASK_OBJ(caller));
+    sec_id[1] = S_GET_TASK_OBJ(caller)->creds.uid;
+    sec_id[2] = S_GET_TASK_OBJ(caller)->creds.gid;
+    sec_id[3] = S_GET_TASK_OBJ(caller)->creds.mac_label;
+    S_UNLOCK_OBJECT_R(S_GET_TASK_OBJ(caller));
+#ifdef CONFIG_ENABLE_NS
+    sec_id[4] = caller->namespace->ns_id;
+#endif
+    ret = memobj_method_call(memobj, mmap, memobj, sec_id, PAGE_ALIGN(margs.offset),
+                             PAGE_ALIGN(margs.size));
+    if(ret) goto out;
   }
 
   rwsem_down_write(&vmm->rwsem);
@@ -1246,12 +1265,67 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
                     PAGE_ALIGN(margs.size) >> PAGE_WIDTH,
                     vmrflags, PAGE_ALIGN(margs.offset) >> PAGE_WIDTH);
   rwsem_up_write(&vmm->rwsem);
+  if(ret && memobj)
+    memobj_method_call(memobj, unmap, memobj, PAGE_ALIGN(margs.offset),
+                       PAGE_ALIGN(margs.size) >> PAGE_WIDTH);
 
 out:
   if (victim_task && victim)
     release_task_struct(victim_task);
   if (memobj)
     unpin_memobj(memobj);
+
+  return ret;
+}
+
+int sys_msync(uintptr_t addr, size_t length, int flags)
+{
+  vmrange_set_t vmrs;
+  uintptr_t from = PAGE_ALIGN(addr), to;
+  uintptr_t afrom, ato;
+  task_t *task = current_task();
+  vmm_t *vmm = task->task_mm;
+  memobj_t *memobj;
+  int ret = 0;
+  vmrange_t *vmr;
+
+  to = from + PAGE_ALIGN(length);
+
+  /* we will lock it like writer to avoid side-effects while sync */
+  rwsem_down_write(&vmm->rwsem);
+
+  vmranges_find_covered(vmm, from, to, &vmrs);
+  if(!vmrs.vmr) {
+    ret = ENOMEM;
+    goto end;
+  }
+
+  /* let's go with vm ranges */
+  while(vmrs.vmr) {
+    memobj = vmrs.vmr->memobj;
+    vmr = vmrs.vmr;
+
+    if ((vmr->bounds.space_start < from) &&
+        (vmr->bounds.space_end > to)) {
+      afrom = from;
+      ato = to;
+    } else if (from > vmr->bounds.space_start) {
+      afrom = from;
+      ato = from + (vmr->bounds.space_end - from);
+      from = vmr->bounds.space_end;
+    }
+
+    /* actually we should sync it only in case of write enabled mapping */
+    if((vmr->flags & VMR_WRITE)) {
+      ret = memobj_method_call(memobj, msync, memobj, afrom, ato, flags);
+      if(ret) goto end;
+    }
+
+    vmrange_set_next(&vmrs);
+  }
+
+ end:
+  rwsem_up_write(&vmm->rwsem);
 
   return ret;
 }

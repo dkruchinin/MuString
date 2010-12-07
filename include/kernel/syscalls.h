@@ -100,6 +100,8 @@
 #define SC_CHG_CREATE_NAMESPACE  49
 #define SC_CONTROL_NAMESPACE     50
 
+#define SC_MEMSYNC  51
+
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */
 

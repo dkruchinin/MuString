@@ -66,6 +66,11 @@ typedef struct __memobj_ops {
   int (*depopulate_pages)(struct __vmrange *vmr,
                           uintptr_t va_from, uintptr_t va_to);
   int (*truncate)(struct __memobj *memobj, pgoff_t new_size);
+  int (*unmap)(struct __memobj *memobj, pgoff_t offset, page_idx_t npages);
+  int (*mmap)(struct __memobj *memobj, ulong_t sec_id[5], pgoff_t offset,
+              page_idx_t npages, int proto);
+  int (*msync)(struct __memobj *memobj, pgoff_t offset,
+               page_idx_t npages, int flags);
   void (*cleanup)(struct __memobj *memobj);
 } memobj_ops_t;
 

@@ -88,6 +88,7 @@ syscall_table:
 	.quad   sys_ptrace
 	.quad   sys_chg_create_namespace
 	.quad   sys_control_namespace
+	.quad	sys_msync
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \
