@@ -1256,7 +1256,7 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
     sec_id[4] = caller->namespace->ns_id;
 #endif
     ret = memobj_method_call(memobj, mmap, memobj, sec_id, PAGE_ALIGN(margs.offset),
-                             PAGE_ALIGN(margs.size));
+                             PAGE_ALIGN(margs.size), margs.prot);
     if(ret) goto out;
   }
 
