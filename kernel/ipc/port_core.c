@@ -437,7 +437,7 @@ static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
     /* if we have extra data we should apply it to the read offset from the
      * other data.
      */
-    if(msg->extra_data_tail) offset-=msg->extra_data_tail;
+    if(msg->extra_data_tail && offset) offset-=msg->extra_data_tail;
 
     if( !iovec->iov_len ) {
       r=0;
