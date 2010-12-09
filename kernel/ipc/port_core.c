@@ -413,15 +413,18 @@ static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
 {
   long r;
   size_t recv_len;
+  size_t extra_size = 0;
 
   if( iovec ) {
     if( offset >= msg->data_size ) {
       return ERR(-EINVAL);
     }
 
-    if( msg->extra_data && (offset < (IPC_MSG_EXTRA_SIZE - msg->extra_data_tail)) ) {
+    if(msg->extra_data_tail) extra_size = IPC_MSG_EXTRA_SIZE - msg->extra_data_tail;
+
+    if( msg->extra_data && (offset < extra_size) ) {
       char *eptr = (char *)msg->extra_data + msg->extra_data_tail + offset;
-      recv_len=MIN(iovec->iov_len,(IPC_MSG_EXTRA_SIZE - msg->extra_data_tail - offset));
+      recv_len=MIN(iovec->iov_len,(extra_size - offset));
 
       if( copy_to_user(iovec->iov_base,eptr,recv_len) ) {
         r=-EFAULT;
@@ -437,7 +440,7 @@ static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
     /* if we have extra data we should apply it to the read offset from the
      * other data.
      */
-    if(msg->extra_data_tail && offset) offset-=(IPC_MSG_EXTRA_SIZE - msg->extra_data_tail);
+    if(msg->extra_data_tail && offset) offset-=extra_size;
 
     if( !iovec->iov_len ) {
       r=0;
