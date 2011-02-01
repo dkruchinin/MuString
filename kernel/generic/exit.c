@@ -174,6 +174,18 @@ repeat:
     UNLOCK_TASK_STRUCT(thread);
     UNLOCK_TASK_CHILDS(exiter);
 
+    /*
+     * resume the thread if it is was stopped
+     * due to some traced event
+     */
+    if ((thread->state == TASK_STATE_STOPPED) &&
+        (ptrace_event(thread) != PTRACE_EV_NONE)) {
+      usiginfo_t sinfo;
+
+      sinfo.si_signo = SIGCONT;
+      send_task_siginfo(thread, &sinfo, false, NULL, exiter);
+    }
+
     if( gc ) {
       release_task_struct(thread);
     } else {

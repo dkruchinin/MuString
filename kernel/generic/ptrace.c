@@ -236,7 +236,6 @@ static int ptrace_kill(task_t *child)
 int ptrace_stop(ptrace_event_t event, ulong_t msg)
 {
   task_t *child = current_task();
-  task_t *gleader = child->group_leader;
   bool signaled = false;
 
   /*
@@ -245,9 +244,11 @@ int ptrace_stop(ptrace_event_t event, ulong_t msg)
    * The operation must be atomic to avoid situation when the debugger
    * checks the task state before it is set to STOPPED.
    */
-  LOCK_TASK_STRUCT(gleader);
-  if (!gleader->tracer) {
-    UNLOCK_TASK_STRUCT(gleader);
+  LOCK_TASK_STRUCT(child);
+  if (!child->group_leader->tracer ||
+      check_task_flags(child, TF_GCOLLECTED)) {
+
+    UNLOCK_TASK_STRUCT(child);
     return ERR(-ESRCH);
   }
 
@@ -267,18 +268,18 @@ int ptrace_stop(ptrace_event_t event, ulong_t msg)
   sched_change_task_state(child, TASK_STATE_STOPPED);
 
   /*
-   * It's needed to atomicaly change state to avoid spurious
-   * ptrace calls. On the other hand one should not wakeup
-   * under hold lock to avoid deadlock.
+   * Disable preemption so that to ensure the task will be
+   * running for the time of waking the tracer up
    */
   preempt_disable();
-  UNLOCK_TASK_STRUCT(gleader);
 
   /* проверить, что поток попал в ядро в результате исключения */
   if ((event == PTRACE_EV_TRAP) ||
       ((event == PTRACE_EV_EXIT) && (child->wstat & WSTAT_SIGNALED))) {
     set_task_flags(child, TF_INFAULT);
   }
+
+  UNLOCK_TASK_STRUCT(child);
 
   wakeup_tracer(child);
   preempt_enable();
