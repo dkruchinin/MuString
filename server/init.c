@@ -15,7 +15,8 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
- * (c) Copyright 2005,2008 Tirra <madtirra@jarios.org>
+ * (c) Copyright 2005,2008,2011 Tirra <madtirra@jarios.org>
+ * (c) Copyright 2010,2011 Jari OS ry <http://jarios.org>
  *
  * server/init.c: servers initialization and running
  *
