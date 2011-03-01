@@ -45,6 +45,8 @@
 long initrd_start_page,initrd_num_pages;
 struct server_ops *server_ops = NULL;
 
+#define BOOTENV  "BOOTSTAGE=grub"
+
 #define USER_STACK_SIZE 16
 #ifndef CONFIG_TEST
 
@@ -83,151 +85,200 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
 {
   vmm_t *vmm = task->task_mm;
   uintptr_t code;
-  size_t code_size,data_size,text_size,bss_size;
+  size_t code_size,text_size;
   ulong_t *pp;
   elf_head_t ehead;
   elf_pr_t epr;
   elf_sh_t esh;
-  uintptr_t data_bss,bss_virt,ustack_top;
-  size_t real_code_size=0,real_data_size=0;
-  size_t last_data_size,real_data_offset=0;
-  size_t last_offset,last_sect_size,last_data_offset;
+  int *argc;
+  void *sbss;
+  uintptr_t *argv, *envp;
+  char *arg1, *envp1;
+  uintptr_t ustack_top;
+  /* sections */
+  uintptr_t exec_virt_addr = 0, exec_size = 0, ro_virt_addr = 0, ro_size = 0;
+  uintptr_t rw_virt_addr = 0, rw_size = 0, bss_virt_addr = 0, bss_size = 0;
+  uintptr_t exec_off = 0, ro_off = 0, rw_off = 0, bss_off = 0, rw_size_k;
   long r;
   int i;
   per_task_data_t *ptd;
 
-  code_size = srv->size>>PAGE_WIDTH;
+  code_size = srv->size >> PAGE_WIDTH;
   code_size++;
 
   code = srv->addr;
   code>>=PAGE_WIDTH; /* get page number */
-  pp=pframe_id_to_virt(code);
-    /**
-     * ELF header   
-     * unsigned char e_ident[EI_NIDENT];  ELF64 magic number 
-     * uint16_t e_type;  elf type 
-     * uint16_t e_machine;  elf required architecture 
-     * uint32_t e_version;  elf object file version 
-     * uintptr_t e_entry;  entry point virtual address 
-     * uintptr_t e_phoff;  program header file offset 
-     * uintptr_t e_shoff;  section header file offset 
-     * uint32_t e_flags;  processor specific object tags 
-     * uint16_t e_ehsize;  elf header size in bytes 
-     * uint16_t e_phentsize;  program header table entry size 
-     * uint16_t e_phnum;  program header count 
-     * uint16_t e_shentsize;  section header table entry size 
-     * uint16_t e_shnum;  section header count 
-     * uint16_t e_shstrndx;  section header string table index 
-     */
-  /* read elf headers */
-  memcpy(&ehead,pframe_id_to_virt(code),sizeof(elf_head_t));
-  /* printf elf header info */
-  /*kprintf("ELF header(%s): %d type, %d mach, %d version\n",ehead.e_ident,ehead.e_type,ehead.e_machine,ehead.e_version);
-  kprintf("Entry: %p,Image off: %p,sect off:%p\n",ehead.e_entry,ehead.e_phoff,ehead.e_shoff);*/
 
-  for(i=0;i<ehead.e_phnum;i++) {
+  pp = pframe_id_to_virt(code);
+
+  /* read elf headers */
+  memcpy(&ehead, pframe_id_to_virt(code), sizeof(elf_head_t));
+#if 0
+  /* printf elf header info */
+  kprintf("ELF header(%4s): %d type, %d mach, %d version\n", ehead.e_ident,
+          ehead.e_type, ehead.e_machine, ehead.e_version);
+  kprintf("Entry: %p,Image off: %p,sect off:%p\n", ehead.e_entry, ehead.e_phoff,
+          ehead.e_shoff);
+#endif
+  /* just for info */
+  for(i=0; i<ehead.e_phnum; i++) {
     /* read program size */
-    memcpy(&epr,pframe_id_to_virt(code)+sizeof(ehead)+i*(ehead.e_phentsize),sizeof(epr));
+    memcpy(&epr,pframe_id_to_virt(code) + sizeof(ehead) + i*(ehead.e_phentsize),
+           sizeof(epr));
     /*kprintf("PHeader(%d): offset: %p\nvirt: %p\nphy: %p\n",
-	    i,epr.p_offset,epr.p_vaddr,epr.p_paddr);*/
+      i, epr.p_offset, epr.p_vaddr, epr.p_paddr);*/
 
   }
-  for(i=0;i<ehead.e_shnum;i++) {
-    memcpy(&esh,pframe_id_to_virt(code)+ehead.e_shoff+i*(ehead.e_shentsize),sizeof(esh));
-    if(esh.sh_size!=0) {
-/*      kprintf("SHeader(%d): shaddr: %p\nshoffset:%p\n",i,esh.sh_addr,esh.sh_offset);*/
-      if(esh.sh_flags & ESH_ALLOC && esh.sh_type==SHT_PROGBITS) {
-	if(esh.sh_flags & ESH_EXEC) {
-	  real_code_size+=esh.sh_size;
-	  last_offset=esh.sh_addr;
-	  last_sect_size=esh.sh_size;
-	} else if((esh.sh_flags & ESH_WRITE)) {
-          /* Ignore non page-aligned sections that smell like .data, i.e.
-           * .got, .plt and others
-           */
-          if( (!(esh.sh_addr & (PAGE_SIZE-1)) && !real_data_offset) ||
-	      ((esh.sh_addr & (PAGE_SIZE-1)) && real_data_offset) ) {
-            real_data_size+=esh.sh_size;
-            if(real_data_offset==0)
-              real_data_offset=esh.sh_addr;
-            last_data_offset=esh.sh_addr;
-            last_data_size=esh.sh_size;
-          }
-	} else { /* rodata */
-	  real_code_size+=esh.sh_size;
-	  last_offset=esh.sh_addr;
-	  last_sect_size=esh.sh_size;
+
+  for(i=0; i<ehead.e_shnum; i++) {
+    memcpy(&esh, pframe_id_to_virt(code) + ehead.e_shoff +
+           i*(ehead.e_shentsize), sizeof(esh));
+
+    if(esh.sh_size != 0) {
+      //kprintf("SHeader(%d): shaddr: %p\nshoffset:%p\n",i,esh.sh_addr,esh.sh_offset);
+
+      if((esh.sh_flags & ESH_ALLOC) && (esh.sh_type == SHT_PROGBITS)) {
+	if(esh.sh_flags & ESH_EXEC) { /* text segments */
+          if(!exec_virt_addr) exec_virt_addr = esh.sh_addr;
+          if(!exec_off) exec_off = esh.sh_offset;
+          exec_size += esh.sh_size;
+	} else if((esh.sh_flags & ESH_WRITE)) { /* data segments */
+          if(!rw_virt_addr) rw_virt_addr = esh.sh_addr;
+          if(!rw_off) rw_off = esh.sh_offset;
+          rw_size += esh.sh_size;
+	} else { /* rodata segments */
+          if(!ro_virt_addr) ro_virt_addr = esh.sh_addr;
+          if(!ro_off) ro_off = esh.sh_offset;
+          ro_size += esh.sh_size;
 	}
-/*	atom_usleep(100);*/
-      } else if(esh.sh_flags & ESH_ALLOC && esh.sh_type==SHT_NOBITS) { /* seems to be an bss section */
-	bss_virt=esh.sh_addr; 
-	bss_size=esh.sh_size;
+      } else if(esh.sh_flags & ESH_ALLOC && esh.sh_type==SHT_NOBITS) { /* bss */
+        if(!bss_virt_addr) bss_virt_addr = esh.sh_addr;
+        if(!bss_off) bss_off = esh.sh_offset;
+        bss_size += esh.sh_size;
       }
     }
   }
+#if 0
+  kprintf("Map stats:\n\t text segments: va %p, bo %p, sz %ld\n"
+          "\t rodata segments: va %p, bo %p, sz %ld\n"
+          "\t data segments: va %p, bo %p, sz %ld\n"
+          "\t bss segments: va %p, bo %p, sz %ld\n",
+          exec_virt_addr, exec_off, exec_size, ro_virt_addr, ro_off, ro_size,
+          rw_virt_addr, rw_off, rw_size, bss_virt_addr, bss_off, bss_size);
+#endif
+  /* now we're need to determine ranges */
+  if(PAGE_ALIGN(exec_virt_addr + exec_size) == PAGE_ALIGN(ro_virt_addr)) {
+    /* sysv abi allows to split this segments, but we're won't */
+    ro_virt_addr = PAGE_ALIGN(ro_virt_addr);
+    ro_size -= (ro_virt_addr - (exec_virt_addr + exec_size));
+    ro_off += (ro_virt_addr - (exec_virt_addr + exec_size));
+  }
+  if(PAGE_ALIGN(rw_virt_addr + rw_size) == PAGE_ALIGN(bss_virt_addr)) {
+    /* let's keep virt addr to clean it afterwhile */
+    bss_off = bss_virt_addr;
+    bss_virt_addr = PAGE_ALIGN(bss_virt_addr);
+    bss_size -= (bss_virt_addr - (rw_virt_addr + rw_size));
+  }
+#if 0
+  kprintf("Map stats:\n\t text segments: va %p, bo %p, sz %ld\n"
+          "\t rodata segments: va %p, bo %p, sz %ld\n"
+          "\t data segments: va %p, bo %p, sz %ld\n"
+          "\t bss segments: va %p, bo %p, sz %ld\n",
+          exec_virt_addr, exec_off, exec_size, ro_virt_addr, ro_off, ro_size,
+          rw_virt_addr, rw_off, rw_size, bss_virt_addr, bss_off, bss_size);
+#endif
+  text_size = exec_size>>PAGE_WIDTH;
+  if(exec_size%PAGE_SIZE)    text_size++;
+  code = srv->addr + exec_off;
 
-  /* print debug info */
-/*  kprintf("Code: real size: %d, last_offset= %p, last section size= %d\n",
-	  real_code_size,last_offset,last_sect_size);  code parsed values */
-/*  kprintf("Data: real size: %d, last offset= %p, last section size= %d\nData offset: %p\n",
-	  real_data_size,last_data_offset,last_data_size,real_data_offset);*/
-  /* calculate text */
-  code = srv->addr + 0x1000;
-  text_size=real_code_size>>PAGE_WIDTH;
-  if(real_code_size%PAGE_SIZE)    text_size++;
-  data_bss = srv->addr + real_data_offset-0x1000000;
-/*  kprintf("data bss: %p\n text: %p\n",data_bss,code);*/
-  data_size=real_data_size>>PAGE_WIDTH;
-  if(real_data_size%PAGE_SIZE)    data_size++;
-  /* calculate bss */
-  if(bss_size%PAGE_SIZE) {
-    bss_size>>=PAGE_WIDTH;
-    bss_size++;
-  } else 
-    bss_size>>=PAGE_WIDTH;
-
-  /*  kprintf("elf entry -> %p\n",ehead.e_entry); */
-
-  /*remap pages*/
-  r = vmrange_map(generic_memobj, vmm, USPACE_VADDR_BOTTOM, text_size, VMR_READ | VMR_EXEC | VMR_PRIVATE | VMR_FIXED, 0);
+  r = vmrange_map(generic_memobj, vmm, USPACE_VADDR_BOTTOM, text_size,
+                  VMR_READ | VMR_EXEC | VMR_PRIVATE | VMR_FIXED, 0);
   if (!PAGE_ALIGN(r))
-    panic("Server [#%d]: Failed to create VM range for \"text\" section. (ERR = %d)", num, r);
+    panic("Server [#%d]: Failed to create VM range for \"text\" section. (ERR = %d)",
+          num, r);
 
-  r = mmap_core(vmm, USPACE_VADDR_BOTTOM, code >> PAGE_WIDTH, text_size, KMAP_READ | KMAP_EXEC);
+  r = mmap_core(vmm, USPACE_VADDR_BOTTOM, code >> PAGE_WIDTH,
+                text_size, KMAP_READ | KMAP_EXEC);
   if (r)
     panic("Server [#%d]: Failed to map \"text\" section. (ERR = %d)", num, r);
 
-  if (data_size) {
-    r = vmrange_map(generic_memobj, vmm, real_data_offset, data_size, VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED, 0);
-    if (!PAGE_ALIGN(r))
-      panic("Server [#%d]: Failed to create VM range for \"data\" section. (ERR = %d)", num, r);
+  if (ro_size) {
+    if(ro_size%PAGE_SIZE) {
+      ro_size>>=PAGE_WIDTH;
+      ro_size++;
+    } else
+      ro_size>>=PAGE_WIDTH;
 
-    r = mmap_core(vmm, real_data_offset, data_bss >> PAGE_WIDTH, data_size, KMAP_READ | KMAP_WRITE);
+    r = vmrange_map(generic_memobj, vmm, ro_virt_addr, ro_size,
+                    VMR_READ | VMR_PRIVATE | VMR_FIXED, 0);
+    if (!PAGE_ALIGN(r))
+      panic("Server [#%d]: Failed to create VM range for \"rodata\" section. (ERR = %d)",
+            num, r);
+
+    r = mmap_core(vmm, ro_virt_addr, (srv->addr + ro_off) >> PAGE_WIDTH,
+                  ro_size, KMAP_READ);
     if (r)
-      panic("Server [#%d]: Failed to map \"data\" section. (ERR = %d)", num, r);
+      panic("Server [#%d]: Failed to map \"rodata\" section. (ERR = %d)", num, r);
+  }
+
+  if (rw_size) {
+    rw_size_k = rw_size;
+    if(rw_size%PAGE_SIZE) {
+      rw_size>>=PAGE_WIDTH;
+      rw_size++;
+    } else
+      rw_size>>=PAGE_WIDTH;
+
+    r = vmrange_map(generic_memobj, vmm, PAGE_ALIGN_DOWN(rw_virt_addr), rw_size,
+                    VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED, 0);
+    if (!PAGE_ALIGN(r))
+      panic("Server [#%d]: Failed to create VM range for \"rwdata\" section. (ERR = %d)",
+            num, r);
+
+    r = mmap_core(vmm, PAGE_ALIGN_DOWN(rw_virt_addr), (srv->addr + rw_off) >> PAGE_WIDTH,
+                  rw_size, KMAP_READ | KMAP_WRITE);
+    if (r)
+      panic("Server [#%d]: Failed to map \"rwdata\" section. (ERR = %d)", num, r);
   }
 
   if (bss_size) {
-    /* Create a BSS area. */
-    r = vmrange_map(generic_memobj, vmm, bss_virt, bss_size,
+    if(bss_size%PAGE_SIZE) {
+      bss_size>>=PAGE_WIDTH;
+      bss_size++;
+    } else
+      bss_size>>=PAGE_WIDTH;
+
+    r = vmrange_map(generic_memobj, vmm, bss_virt_addr, bss_size,
                     VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED | VMR_POPULATE, 0);
-    if(!PAGE_ALIGN(r)) {
-      panic("Server [#%d]: Failed to create VM range for \"BSS\" section. (ERR = %d)", num, r);
+    if (!PAGE_ALIGN(r))
+      panic("Server [#%d]: Failed to create VM range for \"bss\" section. (ERR = %d)",
+            num, r);
+
+    /* let's zero small bss chunk */
+    if(PAGE_ALIGN(rw_virt_addr + rw_size_k) == PAGE_ALIGN(bss_off)) {
+      sbss = user_to_kernel_vaddr(task_get_rpd(task), bss_off);
+      memset(sbss, 0, bss_off - (rw_virt_addr + rw_size_k));
     }
   }
+
+  /*remap pages*/
   r = vmrange_map(generic_memobj, vmm, USPACE_VADDR_TOP - 0x40000, USER_STACK_SIZE,
-                  VMR_READ | VMR_WRITE | VMR_STACK | VMR_PRIVATE | VMR_POPULATE | VMR_FIXED, 0);
-  /*r = mmap_core(task_get_rpd(task), USPACE_VA_TOP-0x40000, pframe_number(stack), USER_STACK_SIZE, KMAP_READ | KMAP_WRITE);*/
+                  VMR_READ | VMR_WRITE | VMR_STACK | VMR_PRIVATE | VMR_POPULATE
+                  | VMR_FIXED, 0);
+  /*r = mmap_core(task_get_rpd(task), USPACE_VA_TOP-0x40000,
+    pframe_number(stack), USER_STACK_SIZE, KMAP_READ | KMAP_WRITE);*/
   if (!PAGE_ALIGN(r))
     panic("Server [#%d]: Failed to create VM range for stack. (ERR = %d)", num, r);
+
   /* Now allocate stack space for per-task user data. */
   ustack_top=USPACE_VADDR_TOP-0x40000+(USER_STACK_SIZE<<PAGE_WIDTH);
   ustack_top-=PER_TASK_DATA_SIZE;
+
   ptd=user_to_kernel_vaddr(task_get_rpd(task),ustack_top);
   if( !ptd ) {
     panic("Server [#%d]: Invalid address: %p", num, ustack_top);
   }
-  
+
   ptd->ptd_addr=(uintptr_t)ustack_top;
   r=arch_process_context_control(task,SYS_PR_CTL_SET_PERTASK_DATA,(uintptr_t)ustack_top);
   if(r < 0) {
@@ -235,11 +286,34 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
   }
 
   /* Insufficient return address to prevent task from returning to void. */
-  ustack_top-=sizeof(uintptr_t);
+  ustack_top -= sizeof(uintptr_t);
+  /* setup argc, argv, env */
+  ustack_top -= (5*sizeof(uintptr_t) + strlen(srv->name) + 2*sizeof(char) +
+                 strlen(BOOTENV));
+  argc = user_to_kernel_vaddr(task_get_rpd(task),ustack_top);
+  *argc = 1; /* we're actually set only srv name */
+
+  /* set argv, envp pointers */
+  argv = (uintptr_t *)((char *)argc + sizeof(uintptr_t));
+  *argv = (uintptr_t)((char *)ustack_top + 5*sizeof(uintptr_t));
+  envp = (uintptr_t *)((char *)argv + 2*sizeof(uintptr_t));
+  *envp = (uintptr_t)((char *)ustack_top + 5*sizeof(uintptr_t) +
+                      strlen(srv->name) + sizeof(char));
+
+  /* fill values for argv, envp */
+  arg1 = (char *)((char *)argc + 5*sizeof(uintptr_t));
+  envp1 = (char *)((char *)argc + 5*sizeof(uintptr_t) +
+                   strlen(srv->name) + sizeof(char));
+  memset(arg1, 0, strlen(srv->name) + sizeof(char));
+  memset(envp1, 0, strlen(BOOTENV) + sizeof(char));
+  memcpy(arg1, srv->name, strlen(srv->name));
+  memcpy(envp1, BOOTENV, strlen(BOOTENV));
+
   r=arch_process_context_control(task,SYS_PR_CTL_SET_ENTRYPOINT,ehead.e_entry);
   if (r < 0)
-    panic("Server [#%d]: Failed to set task's entry point(%p). (ERR = %d)", num, ehead.e_entry, r);
-  
+    panic("Server [#%d]: Failed to set task's entry point(%p). (ERR = %d)",
+          num, ehead.e_entry, r);
+
   r=arch_process_context_control(task,SYS_PR_CTL_SET_STACK,ustack_top);
   if (r < 0)
     panic("Server [#%d]: Failed to set task's stack(%p). (ERR = %d)", num, ustack_top, r);
