@@ -169,15 +169,15 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
   /* now we're need to determine ranges */
   if(PAGE_ALIGN(exec_virt_addr + exec_size) == PAGE_ALIGN(ro_virt_addr)) {
     /* sysv abi allows to split this segments, but we're won't */
+    ro_size -= (PAGE_ALIGN(ro_virt_addr) - ro_virt_addr);
+    ro_off += (PAGE_ALIGN(ro_virt_addr) - ro_virt_addr);
     ro_virt_addr = PAGE_ALIGN(ro_virt_addr);
-    ro_size -= (ro_virt_addr - (exec_virt_addr + exec_size));
-    ro_off += (ro_virt_addr - (exec_virt_addr + exec_size));
   }
   if(PAGE_ALIGN(rw_virt_addr + rw_size) == PAGE_ALIGN(bss_virt_addr)) {
     /* let's keep virt addr to clean it afterwhile */
     bss_off = bss_virt_addr;
+    bss_size -= (PAGE_ALIGN(bss_virt_addr) - bss_virt_addr);
     bss_virt_addr = PAGE_ALIGN(bss_virt_addr);
-    bss_size -= (bss_virt_addr - (rw_virt_addr + rw_size));
   }
 #if 0
   kprintf("Map stats:\n\t text segments: va %p, bo %p, sz %ld\n"
@@ -257,7 +257,7 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
     /* let's zero small bss chunk */
     if(PAGE_ALIGN(rw_virt_addr + rw_size_k) == PAGE_ALIGN(bss_off)) {
       sbss = user_to_kernel_vaddr(task_get_rpd(task), bss_off);
-      memset(sbss, 0, bss_off - (rw_virt_addr + rw_size_k));
+      memset(sbss, 0, PAGE_ALIGN(bss_off) - bss_off);
     }
   }
 
