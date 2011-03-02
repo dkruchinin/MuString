@@ -192,13 +192,19 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
   if(exec_size%PAGE_SIZE)    text_size++;
   code = srv->addr + exec_off;
 
+  /* workaround: ld moves text not aligned, therefore text might be more in size */
+  if((USPACE_VADDR_BOTTOM + (text_size << PAGE_WIDTH)) < ro_virt_addr)
+    text_size++;
+
   r = vmrange_map(generic_memobj, vmm, USPACE_VADDR_BOTTOM, text_size,
                   VMR_READ | VMR_EXEC | VMR_PRIVATE | VMR_FIXED, 0);
+  /*kprintf("MMAP: %p to %p (text)\n", USPACE_VADDR_BOTTOM, USPACE_VADDR_BOTTOM +
+    (text_size << PAGE_WIDTH));*/
   if (!PAGE_ALIGN(r))
     panic("Server [#%d]: Failed to create VM range for \"text\" section. (ERR = %d)",
           num, r);
 
-  r = mmap_core(vmm, USPACE_VADDR_BOTTOM, code >> PAGE_WIDTH,
+  r = mmap_core(vmm, USPACE_VADDR_BOTTOM, PAGE_ALIGN_DOWN(code) >> PAGE_WIDTH,
                 text_size, KMAP_READ | KMAP_EXEC);
   if (r)
     panic("Server [#%d]: Failed to map \"text\" section. (ERR = %d)", num, r);
