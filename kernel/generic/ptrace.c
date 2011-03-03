@@ -129,7 +129,7 @@ static void ptrace_cont(task_t *child)
 
   /* clear the SIGSTOP signal if it is pending */
   LOCK_TASK_SIGNALS(child);
-  if (bit_test(&squeue->active_mask, SIGSTOP)) {
+  if (bit_test(squeue->active_mask, SIGSTOP)) {
     sigqueue_remove_item(squeue, SIGSTOP, true);
   }
   UNLOCK_TASK_SIGNALS(child);

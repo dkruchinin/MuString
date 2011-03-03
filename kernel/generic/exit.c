@@ -461,24 +461,25 @@ static bool try_orphan_child(task_t *child, bool tlock)
   if (child->state != TASK_STATE_ZOMBIE || !list_node_is_bound(&child->child_list))
     return false;
 
-  tracer = get_process_tracer(child);
+  if (!is_thread(child)) {
+    tracer = get_process_tracer(child);
+    if (tracer != NULL) {
+      if (current_task()->group_leader == tracer) {
+        /* release links taken at process attachment */
+        if (!tlock || (tracer->pid == child->ppid))
+          flags |= DETACH_NOLOCK;
 
-  if (!is_thread(child) && tracer) {
-    if (current_task()->group_leader == tracer) {
-      /* release links taken at process attachment */
-      if (!tlock || (tracer->pid == child->ppid))
-        flags |= DETACH_NOLOCK;
+        ptrace_detach(tracer, child, flags);
+      } else if (tracer->pid != child->ppid) {
+        r = !ptrace_reparent(tracer, child);
+      }
 
-      ptrace_detach(tracer, child, flags);
-    } else if (tracer->pid != child->ppid) {
-      r = !ptrace_reparent(tracer, child);
+      /* orphan if the tracer is already the parent of the task */
+      if (tracer->pid == child->ppid)
+        r = true;
+
+      release_task_struct(tracer);
     }
-
-    /* orphan if the tracer is already the parent of the task */
-    if (tracer->pid == child->ppid)
-      r = true;
-
-    release_task_struct(tracer);
   } else {
     r = true;
   }
