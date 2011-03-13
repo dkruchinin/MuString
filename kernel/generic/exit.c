@@ -353,6 +353,9 @@ void do_exit(int code,ulong_t flags,long exitval)
 
   __set_exiting_flag(exiter);
 
+  if (event_is_traced(exiter, PTRACE_EV_EXIT) && !(flags & EF_DISINTEGRATE))
+    ptrace_stop(PTRACE_EV_EXIT, 0);
+
   if( !is_thread(exiter) ) { /* All process-related works are performed here. */
     __kill_all_threads(exiter);
 
@@ -416,17 +419,11 @@ void do_exit(int code,ulong_t flags,long exitval)
         __notify_disintegration_done(dreq,__DR_EXITED);
       }
     }
-    if (event_is_traced(exiter, PTRACE_EV_EXIT))
-      ptrace_stop(PTRACE_EV_EXIT, 0);
-
     __exit_resources(exiter,flags);
     __detach_tracings(exiter);
     __unlink_children(exiter);
     __notify_parent(exiter);
   } else { /* is_thread(). */
-    if (event_is_traced(exiter, PTRACE_EV_EXIT))
-      ptrace_stop(PTRACE_EV_EXIT, 0);
-
     __exit_limits(exiter);
     __exit_ipc(exiter);
     __exit_resources(exiter,flags);
