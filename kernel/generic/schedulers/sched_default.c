@@ -25,6 +25,7 @@
 #include <mstring/resource.h>
 #include <mm/vmm.h>
 #include <mm/page_alloc.h>
+#include <mm/slab.h>
 #include <mstring/kstack.h>
 #include <sync/spinlock.h>
 #include <arch/current.h>
@@ -48,6 +49,7 @@
 #include <mstring/def_actions.h>
 #include <config.h>
 
+static memcache_t * sched_task_data_cache; /* slab cache for task data */
 /* Our own scheduler. */
 static struct __scheduler mstring_default_scheduler;
 
@@ -84,18 +86,19 @@ static void __initialize_cpu_sched_data(mstring_sched_cpudata_t *queue, cpu_id_t
 
 static mstring_sched_taskdata_t *__allocate_task_sched_data(void)
 {
-  /* TODO: [mt] Allocate memory via slabs !!!  */
-  page_frame_t *page = alloc_page(MMPOOL_KERN);
-  return (mstring_sched_taskdata_t *)pframe_to_virt(page);
+  return alloc_from_memcache(sched_task_data_cache, 0);
 }
 
 int sched_verbose=0;
 
 static mstring_sched_cpudata_t *__allocate_cpu_sched_data(cpu_id_t cpu) {
   /* TODO: [mt] Allocate memory via slabs !!!  */
-  page_frame_t *page = alloc_pages(16, MMPOOL_KERN | AF_CONTIG);
+  int pages;
+  pages = sizeof(mstring_sched_cpudata_t) / PAGE_SIZE;
+  if (sizeof(mstring_sched_cpudata_t) % PAGE_SIZE)
+    pages++;
+  page_frame_t *page = alloc_pages(pages, MMPOOL_KERN | AF_CONTIG);
   mstring_sched_cpudata_t *cpudata = (mstring_sched_cpudata_t *)pframe_to_virt(page);
-
   if( cpudata != NULL ) {
     __initialize_cpu_sched_data(cpudata, cpu);
   }
@@ -106,6 +109,12 @@ static mstring_sched_cpudata_t *__allocate_cpu_sched_data(cpu_id_t cpu) {
 static void __free_cpu_sched_data(mstring_sched_cpudata_t *data)
 {
   /* TODO: [mt] Free structure via slabs ! */
+  //memfree(data);
+}
+
+static void __free_task_sched_data(mstring_sched_taskdata_t *data)
+{
+  memfree(data);
 }
 
 static void __initialize_cpu_sched_data(mstring_sched_cpudata_t *cpudata, cpu_id_t cpu)
@@ -184,6 +193,25 @@ static inline void __recalculate_timeslice_and_priority(task_t *task)
 
 int sched_verbose1;
 
+static void def_init(void)
+{
+  sched_task_data_cache = create_memcache("Def sched task data",
+                                        sizeof(mstring_sched_taskdata_t),1,
+                                       MMPOOL_KERN | SMCF_IMMORTAL |
+                                       SMCF_LAZY | SMCF_UNIQUE);
+  if( !sched_task_data_cache ) {
+    panic( "Default scheduler init(): Can't create task data memcache !" );
+  }
+/*
+  sched_cpu_data_cache = create_memcache("Def sched cpu data",
+                                        sizeof(mstring_sched_cpudata_t),1,
+                                       MMPOOL_KERN | SMCF_IMMORTAL |
+                                       SMCF_LAZY | SMCF_UNIQUE);
+  if( !sched_cpu_data_cache ) {
+    panic( "Default scheduler init(): Can't create cpu data memcache !" );
+  }*/
+}
+
 static cpu_id_t def_cpus_supported(void){
   return EZA_SCHED_CPUS;
 }
@@ -192,7 +220,7 @@ static int def_add_cpu(cpu_id_t cpu)
 {
   mstring_sched_cpudata_t *cpudata;
   int r;
- 
+
   if(cpu >= EZA_SCHED_CPUS || sched_cpu_data[cpu] != NULL) {
     return -EINVAL;
   }
@@ -409,12 +437,11 @@ static int def_del_task(task_t *task)
     interrupts_enable();
   } else {
     mstring_sched_taskdata_t *sdata=EZA_TASK_SCHED_DATA(task);
-
-    LOCK_CPU_SCHED_DATA(sched_data);
+     LOCK_CPU_SCHED_DATA(sched_data);
     __remove_task_from_array(sdata->array,task);
     sched_data->stats->active_tasks--;
     UNLOCK_CPU_SCHED_DATA(sched_data);
-
+    __free_task_sched_data(sdata);
     gc_schedule_action(&action);
     sched_set_current_need_resched();
 
@@ -458,7 +485,7 @@ static int __change_task_state(task_t *task,task_state_t new_state,
   mstring_sched_cpudata_t *sched_data;
   task_state_t prev_state;
   mstring_sched_taskdata_t *tdata = EZA_TASK_SCHED_DATA(task);
-  
+
   if( task->cpu != cpu_id() ) {
     h=NULL;
   }
@@ -511,7 +538,7 @@ static int __change_task_state(task_t *task,task_state_t new_state,
 
           if( task == sched_data->running_task ) {
             __reschedule_task(task);
-          }          
+          }
           r=0;
         } else if( task->state == TASK_STATE_SLEEPING ) {
           task->state=new_state;
@@ -640,6 +667,7 @@ static int def_change_task_state_deferred(task_t *task, task_state_t state,
 
 static struct __scheduler mstring_default_scheduler = {
   .id = "Eza default scheduler",
+  .init = def_init,
   .cpus_supported = def_cpus_supported,
   .add_cpu = def_add_cpu,
   .scheduler_tick = def_scheduler_tick,

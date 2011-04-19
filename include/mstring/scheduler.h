@@ -23,7 +23,7 @@
  */
 
 #ifndef __SCHEDULER_H__
-#define __SCHEDULER_H__ 
+#define __SCHEDULER_H__
 
 #include <config.h>
 #include <arch/types.h>
@@ -62,6 +62,7 @@ typedef enum __task_state {
 typedef struct __scheduler {
   const char *id;
   list_node_t l;
+  void (*init)(void);
   cpu_id_t (*cpus_supported)(void);
   int (*add_cpu)(cpu_id_t cpu);
   void (*scheduler_tick)(int op);
