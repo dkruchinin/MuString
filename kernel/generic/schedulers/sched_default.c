@@ -92,7 +92,6 @@ static mstring_sched_taskdata_t *__allocate_task_sched_data(void)
 int sched_verbose=0;
 
 static mstring_sched_cpudata_t *__allocate_cpu_sched_data(cpu_id_t cpu) {
-  /* TODO: [mt] Allocate memory via slabs !!!  */
   int pages;
   pages = sizeof(mstring_sched_cpudata_t) / PAGE_SIZE;
   if (sizeof(mstring_sched_cpudata_t) % PAGE_SIZE)
@@ -106,10 +105,13 @@ static mstring_sched_cpudata_t *__allocate_cpu_sched_data(cpu_id_t cpu) {
   return cpudata;
 }
 
+/* This function is just stub for now.
+  It is called only if add_cpu failed after allocating pages
+  for mstring_sched_cpudata_t. If cpu_data allocation will
+  be implemeted via slab, this function should perform slab freing. */
 static void __free_cpu_sched_data(mstring_sched_cpudata_t *data)
 {
-  /* TODO: [mt] Free structure via slabs ! */
-  //memfree(data);
+  /* TODO: [mt] Free allocated pages! */
 }
 
 static void __free_task_sched_data(mstring_sched_taskdata_t *data)
