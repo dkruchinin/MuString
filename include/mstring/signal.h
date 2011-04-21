@@ -219,6 +219,7 @@ int send_process_siginfo(pid_t pid,usiginfo_t *siginfo,void *kern_priv,
 bool update_pending_signals(task_t *task);
 bool __update_pending_signals(task_t *task);
 sighandlers_t * allocate_signal_handlers(void);
+void free_signal_handlers(sighandlers_t * sh);
 void process_sigitem_private(sigq_item_t *sigitem);
 
 void schedule_user_deferred_action(task_t *target,gc_action_t *a,bool force);

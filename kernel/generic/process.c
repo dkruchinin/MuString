@@ -210,6 +210,7 @@ int create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
       }
     } else {
       /* TODO: [mt] deallocate task struct properly. */
+        destroy_task_struct(new_task);
     }
   }
 

@@ -120,6 +120,12 @@ static void __free_irq_counter_array(irq_counter_array_t *array)
   }
 }
 
+void free_task_uspace_events_data (userspace_events_data_t *uevents)
+{
+  if( uevents )
+    memfree(uevents);
+}
+
 struct __userspace_events_data *allocate_task_uspace_events_data(void)
 {
   userspace_events_data_t *uevents=memalloc(sizeof(userspace_events_data_t));

@@ -531,6 +531,14 @@ int sys_sigaction(int signum,sigaction_t *act,sigaction_t *oldact)
   return ERR(r);
 }
 
+void free_signal_handlers(sighandlers_t * sh)
+{
+  if (sh){
+    page_frame_t *pf = virt_to_pframe(sh);
+    free_pages(pf, 1);
+  }
+}
+
 sighandlers_t *allocate_signal_handlers(void)
 {
   sighandlers_t *sh=alloc_pages_addr(1, MMPOOL_KERN);

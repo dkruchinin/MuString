@@ -33,8 +33,8 @@
 
 static kernel_stack_allocator_context_t main_stack_ctx;
 
-#define LOCK_STACK_CTX(ctx) 
-#define UNLOCK_STACK_CTX(ctx) 
+#define LOCK_STACK_CTX(ctx)
+#define UNLOCK_STACK_CTX(ctx)
 
 /* Starting address for kernel stack allocation (will grow down) */
 uintptr_t starting_kernel_stack_address;
@@ -117,7 +117,14 @@ int allocate_kernel_stack(kernel_stack_t *stack)
 
 int free_kernel_stack(bit_idx_t id)
 {
-  /* TODO: [mt] Implement proper kernel stack deallocation. */
+  kernel_stack_chunk_t *chunk;
+
+  LOCK_STACK_CTX(&main_stack_ctx);
+  chunk = container_of( list_node_first(&main_stack_ctx.chunks),
+                                                kernel_stack_chunk_t, l );
+  set_and_test_bit_mem(chunk->bitmap, id);
+  main_stack_ctx.free_items++;
+  UNLOCK_STACK_CTX(&main_stack_ctx);
   return 0;
 }
 

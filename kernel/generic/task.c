@@ -53,6 +53,13 @@ static bool init_launched;
 
 void initialize_process_subsystem(void);
 
+void __free_pid(pid_t pid)
+{
+  LOCK_PID_ARRAY;
+  idx_free(&pid_array, pid);
+  UNLOCK_PID_ARRAY;
+}
+
 static pid_t __allocate_pid(void)
 {
   pid_t pid;
@@ -93,6 +100,21 @@ void initialize_task_subsystem(void)
 
   init_launched=false;
   initialize_process_subsystem();
+}
+
+
+static void __free_pid_and_tid(task_t *task)
+{
+  if (!is_thread(task)){
+    __free_pid(task->pid);
+  }
+  else{
+    LOCK_TASK_STRUCT(task->group_leader);
+    idx_free(&task->group_leader->tg_priv->tid_allocator,task->tid);
+    UNLOCK_TASK_STRUCT(task->group_leader);
+  }
+  task->pid = INVALID_PID;
+  task->tid = 0;
 }
 
 static int __alloc_pid_and_tid(task_t *task,task_t *parent,ulong_t flags,
@@ -231,6 +253,14 @@ static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
   return task;
 }
 
+void __free_task_ipc(task_t *task)
+{
+  if ( !is_thread(task) ) {
+    release_task_ipc(task->ipc);
+  }
+  release_task_ipc_priv(task->ipc_priv);
+}
+
 static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags,
                             task_creation_attrs_t *attrs)
 {
@@ -274,6 +304,15 @@ static int __setup_task_events(task_t *task,task_t *parent,ulong_t flags,
   return 0;
 }
 
+static void __free_task_events(task_t * task)
+{
+  /* We don't need to free task->task_events
+     if task is thread, because task->task_events
+     is just a pointer to parent->task_events in this case */
+  if ((!is_thread(task)) && (task->task_events))
+    memfree(task->task_events);
+}
+
 static int __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags,
                                   task_privelege_t priv)
 {
@@ -314,6 +353,18 @@ static int __setup_task_security(task_t *task,task_t *parent,ulong_t flags,
   return task->sobject ? 0 : ERR(-ENOMEM);
 }
 
+void __free_signals(task_t *task)
+{
+  if ( (task) && (task->siginfo.handlers) ){
+    task->siginfo.blocked = 0;
+    task->siginfo.ignored = DEFAULT_IGNORED_SIGNALS;
+    task->siginfo.pending = 0;
+    if (atomic_dec_and_test(&task->siginfo.handlers->use_count) ){
+      free_signal_handlers(task->siginfo.handlers);
+    }
+  }
+}
+
 static int __setup_signals(task_t *task,task_t *parent,ulong_t flags)
 {
   sighandlers_t *shandlers=NULL;
@@ -348,6 +399,13 @@ static int __setup_signals(task_t *task,task_t *parent,ulong_t flags)
   return 0;
 }
 
+
+static void __free_posix(task_t *task)
+{
+  if ( (!is_thread(task)) && (task->posix_stuff) )
+    release_task_posix_stuff(task->posix_stuff);
+}
+
 static long __setup_posix(task_t *task,task_t *parent,
                           task_privelege_t priv,ulong_t flags)
 {
@@ -362,6 +420,13 @@ static long __setup_posix(task_t *task,task_t *parent,
     }
     return ERR(-ENOMEM);
   }
+}
+
+static void __free_mm(task_t *task)
+{
+  if (task)
+    if(task->task_mm)
+      vmm_destroy(task->task_mm);
 }
 
 static int __initialize_task_mm(task_t *orig, task_t *target, task_creation_flags_t flags,
@@ -411,6 +476,7 @@ static int __initialize_task_mm(task_t *orig, task_t *target, task_creation_flag
   out:
   return ERR(ret);
 }
+
 
 int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t,
                     task_creation_attrs_t *attrs)
@@ -538,34 +604,80 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   }
 
  free_events:
-  /* [mt] Free events here. */
+  __free_task_events(task);
+
  free_posix:
-  /* TODO: [mt] Free POSIX data properly. */
+  __free_posix(task);
+
  free_signals:
-  /* TODO: [mt] Free signals data properly. */
+  __free_signals(task);
+
  free_uevents:
-  /* TODO: [mt] Free userspace events properly. */
+  free_task_uspace_events_data(task->uspace_events);
+
  free_sync_data:
-  /* TODO: [mt] Deallocate task's sync data. */
+  release_task_sync_data(task->sync_data);
+
  free_ipc:
-  /* TODO: [mt] deallocate task's IPC structure. */
+  __free_task_ipc(task);
+
  free_ns_attr:
   if(ns_attrs) destroy_ns_attrs(ns_attrs);
+
  free_limits:
   if(limits) destroy_task_limits(limits);
+
  free_stack_pages:
-  /* TODO: Free all stack pages here. [mt] */
+  free_pages(stack_pages, KERNEL_STACK_PAGES);
+
  free_mm:
-  /* TODO: Free mm here. [mt] */
+  __free_mm(task);
+
  free_stack:
   free_kernel_stack(task->kernel_stack.id);
+
  free_pid:
-  /* TODO: free PID/TID here. */
+  __free_pid_and_tid(task);
+
  free_task:
-  /* TODO: Free task struct page here. [mt] */
+  free_pages_addr(task, 1);
+
  task_create_fault:
   *t = NULL;
   return ERR(r);
+}
+
+
+void destroy_task_struct(struct __task_struct *task)
+{
+  kprintf("*** destroy 1 \n");
+  __free_task_events(task);
+  kprintf("*** destroy 2 \n");
+  __free_posix(task);
+  kprintf("*** destroy 3 \n");
+  __free_signals(task);
+  kprintf("*** destroy 4 \n");
+  free_task_uspace_events_data(task->uspace_events);
+  kprintf("*** destroy 5 \n");
+  release_task_sync_data(task->sync_data);
+  kprintf("*** destroy 6 \n");
+  __free_task_ipc(task);
+  kprintf("*** destroy 7 \n");
+  if(task->namespace) destroy_ns_attrs(task->namespace);
+  kprintf("*** destroy 8 \n");
+  if(task->limits) destroy_task_limits(task->limits);
+  kprintf("*** destroy 9 \n");
+
+  free_pages(virt_to_pframe(task->kernel_stack.low_address), KERNEL_STACK_PAGES);
+  kprintf("*** destroy 11 \n");
+  __free_mm(task);
+  kprintf("*** destroy 12 \n");
+  free_kernel_stack(task->kernel_stack.id);
+  kprintf("*** destroy 13 \n");
+  __free_pid_and_tid(task);
+  kprintf("*** destroy 14 \n");
+  free_pages_addr(task, 1);
+  kprintf("*** destroy 15 \n");
 }
 
 void release_task_struct(struct __task_struct *t)
