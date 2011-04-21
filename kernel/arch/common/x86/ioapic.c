@@ -14,8 +14,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.berlios.de>
- * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
+ * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2008 Tirra <madtirra@jarios.org>
  * (c) Copyright 2008,2009 <gromada@jarios.org>
  *
  * kernel/arch/common/x86/iopapic.c: implements IO APIC support driver.

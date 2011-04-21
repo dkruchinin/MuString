@@ -15,7 +15,7 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
- * (c) Copyright 2005,2008 Tirra <tirra.newly@gmail.com>
+ * (c) Copyright 2005,2008 Tirra <madtirra@jarios.org>
  * (c) Copyright 2010 Jari OS non-profit org. <http://jarios.org>
  *
  * mstring/generic_api/main.c: main routine, this functions called after bootstrap
