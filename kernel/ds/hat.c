@@ -14,8 +14,7 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
- * (c) Copyright 2009 Dan Kruchinin <dk@jarios.org>
+ * (c) Copyright 2011 Alex Firago <melg@jarios.org>
  *
  * ds/hat.c - Hashed array tree(HAT) implementation.
  * For more information bout HAT see:
@@ -25,168 +24,197 @@
 
 #include <config.h>
 #include <mm/slab.h>
-#include <ds/hat.h>
 #include <mstring/errno.h>
 #include <mstring/stddef.h>
 #include <mstring/types.h>
+#include <ds/hat.h>
 
-static memcache_t *buckets_cache = NULL;
+static memcache_t * leaves_cache = NULL;
+static memcache_t * slots_cache = NULL;
 
-static inline int index2heigh(ulong_t idx)
+/* Index computation in HAT's top */
+static inline int get_top_index (hat_t *hat, ulong_t idx)
 {
-  return (BITNUM(idx) / HAT_BUCKET_SHIFT);
+  return (idx) >> hat->power;
 }
 
-static inline int index2slot_id(ulong_t idx, int heigh)
+/* Index computation in leaf */
+static inline int get_leaf_index(hat_t *hat, ulong_t idx)
 {
-  return ((idx >> ((ulong_t)heigh * HAT_BUCKET_SHIFT)) & HAT_BUCKET_MASK);
+  return (idx) & hat->leaf_mask;
 }
 
-static inline hat_bucket_t *create_hat_bucket(void)
+/* Computation of HAT's maximum size with the current power of 2 */
+static inline uint_t get_hat_max_size(hat_t * hat)
 {
-    hat_bucket_t *ret_hb = alloc_from_memcache(buckets_cache, 0);
-  if (!ret_hb)
+  return (1 << (hat->power * 2));
+}
+
+/* HAT leaf allocation */
+static inline hat_leaf_t *create_hat_leaf(uint_t leaf_size)
+{
+  hat_leaf_t * ret_hl = alloc_from_memcache(leaves_cache, 0);
+  if (!ret_hl)
     return NULL;
-
-  memset(ret_hb, 0, sizeof(*ret_hb));
-  return ret_hb;
+  memset(ret_hl, 0, sizeof(*ret_hl));
+  ret_hl->slots = alloc_from_memcache(leaves_cache, 0);
+  if (!ret_hl->slots)
+    return NULL;
+  return ret_hl;
 }
 
-static int expand_tree(hat_t *hat, int new_heigh)
+/* HAT leaf deallocation */
+static inline void __delete_hat_leaf(hat_leaf_t *leaf)
 {
-  hat_bucket_t *hb;
-  int h = hat->tree_heigh;
-
-  while (h < new_heigh) {
-    hb = create_hat_bucket();
-    if (!hb)
-      return -ENOMEM;  
-    if (likely(hat->root_bucket != NULL)) {
-      hb->slots[0] = hat->root_bucket;
-      hb->num_items = 1;
-    }
-
-    hat->root_bucket = hb;
-    h++;
+  if(leaf){
+    if(leaf->slots)
+      memfree(leaf->slots);
+    memfree(leaf);
   }
-  
-  hat->tree_heigh = new_heigh;
+}
+
+/* HAT initialization */
+int hat_initialize(hat_t *hat, ulong_t size)
+{
+
+  if(!hat)
+    return -EINVAL;
+  if (size > HAT_MAX_SIZE)
+    return -EINVAL;
+
+  /* Compute power of 2 needed for the given size */
+  hat->power = bit_find_msf(size);
+
+  if (!is_powerof2(size))
+  hat->power++;
+
+  if (!leaves_cache) {
+    leaves_cache = create_memcache("HAT leaves", sizeof(hat_leaf_t), 1,
+                                    MMPOOL_KERN | SMCF_IMMORTAL | SMCF_LAZY);
+  if (!leaves_cache) {
+      panic("Can not create buckets memory cache for HAT leaves! (failed to allocate %zd bytes)",
+            sizeof(leaves_cache));
+    }
+  }
+
+  if (!slots_cache) {
+    slots_cache = create_memcache("HAT slots", sizeof(void *) * (1 << hat->power), 1,
+                                    MMPOOL_KERN | SMCF_IMMORTAL | SMCF_LAZY);
+  if (!slots_cache) {
+      panic("Can not create buckets memory cache for HAT slots ! (failed to allocate %zd bytes)",
+            sizeof(void *) * (1 << hat->power));
+    }
+  }
+
+
+  hat->leaf_mask = (1 << hat->power) - 1;
+  hat->size = size;
+  hat->num_items = 0;
+  hat->top = NULL;
   return 0;
 }
 
-void hat_initialize(hat_t *hat)
-{
-  CT_ASSERT(is_powerof2(HAT_BUCKET_SLOTS));
-  CT_ASSERT(sizeof(hat_bucket_t) <= SLAB_OBJECT_MAX_SIZE);
-  if (!buckets_cache) {
-    buckets_cache = create_memcache("HAT", sizeof(hat_bucket_t), 1,
-                                    MMPOOL_KERN | SMCF_IMMORTAL | SMCF_LAZY);
-    if (!buckets_cache) {
-      panic("Can not create buckets memory cache for HAT! (failed to allocate %zd bytes)",
-            sizeof(hat_bucket_t));
-    }
-  }
-  
-  hat->tree_heigh = -1;
-  hat->root_bucket = NULL;
-}
-
+/* Insert item in the hat at idx position */
 int hat_insert(hat_t *hat, ulong_t idx, void *item)
 {
-  int ret = 0;
-  int heigh = index2heigh(idx), i;
-  hat_bucket_t *hb, *parent_hb;
+  int leaf_id, top_id;
+  hat_leaf_t * leaf;
+  if (!hat)
+    return -EINVAL;
+  /* Check if idx is valid */
+  if (idx > get_hat_max_size(hat))
+    return -EINVAL;
 
-  ASSERT(heigh < HAT_HEIGH_MAX);
-  if (unlikely(hat->tree_heigh < heigh)) {
-    ret = expand_tree(hat, heigh);
-    if (ret)
-      return ret;
+  /* If top doesn't exist, we must create it */
+  if (!hat->top)
+  {
+    leaf = create_hat_leaf((1 << hat->power));
+    if (!leaf)
+      return -ENOMEM;
+    hat->top = leaf;
   }
 
-  parent_hb = hat->root_bucket;
-  while (heigh) {
-    i = index2slot_id(idx, heigh);
-    hb = parent_hb->slots[i];
-    if (!hb) {
-      hb = create_hat_bucket();
-      if (!hb)
-        return -ENOMEM;
-
-      parent_hb->slots[i] = hb;
-      parent_hb->num_items++;
-    }
-
-    parent_hb = hb;
-    heigh--;
+  top_id = get_top_index(hat, idx);
+  leaf = hat->top->slots[top_id];
+  /* If the leaf at given position doesn't exist, we must create it */
+  if (!leaf)
+  {
+    leaf = create_hat_leaf((1 << hat->power));
+    if (!leaf)
+      return -ENOMEM;
+    hat->top->slots[top_id] = leaf;
   }
-
-  i = index2slot_id(idx, 0);
-  if (parent_hb->slots[i] != NULL)
-    return -EEXIST;
-
-  parent_hb->slots[i] = item;
-  parent_hb->num_items++;
-  return ret;
+  leaf_id = get_leaf_index(hat, idx);
+  leaf->slots[leaf_id] = item;
+  leaf->num_items++;
+  hat->num_items++;
+  return 0;
 }
 
-void *hat_lookup(hat_t *hat, ulong_t idx)
+/* Clear all items in the HAT, delete all leaves */
+void hat_clear(hat_t *hat)
 {
-  hat_bucket_t *hb;
-  int h;
+  int i;
+  if ( (!hat) || (!hat->top))
+    return;
 
-  if (index2heigh(idx) > hat->tree_heigh)
-    return NULL;
-  
-  hb = hat->root_bucket;
-  h = hat->tree_heigh;
-  while (hb && (h > 0))
-    hb = hb->slots[index2slot_id(idx, h--)];
-
-  if (!hb)
-    return NULL;
-
-  return hb->slots[index2slot_id(idx, 0)];
+  for (i = 0; i < (1<<hat->power); i++){
+    if(hat->top->slots[i])
+      __delete_hat_leaf(hat->top->slots[i]);
+  }
+  hat->num_items = 0;
 }
 
-void *hat_delete(hat_t *hat, ulong_t idx)
+/* Search item in the hat by index */
+void* hat_lookup(hat_t *hat, ulong_t idx)
 {
-  void *path[HAT_HEIGH_MAX];
-  hat_bucket_t *hb;
-  void *ret;  
-  int h, i;
+  hat_leaf_t *leaf;
+  int leaf_id, top_id;
 
-  if (index2heigh(idx) > hat->tree_heigh)
+  if ( (!hat) || (!hat->top) || (idx > get_hat_max_size(hat)) )
     return NULL;
 
-  h = hat->tree_heigh;
-  hb = hat->root_bucket;
-  while (h > 0) {
-    path[h] = hb;
-    i = index2slot_id(idx, h);
-    hb = hb->slots[i];
-    if (!hb)
-      return NULL;
-    
-    h--;  
-  }
+  top_id = get_top_index(hat, idx);
+  leaf = hat->top->slots[top_id];
+  if (!leaf)
+    return NULL;
 
-  i = index2slot_id(idx, 0);
-  ret = hb->slots[i];
-  hb->slots[i] = NULL;
-  h = 0;
-  while (h <= hat->tree_heigh) {
-    hb = path[h++];
-    if (--hb->num_items > 0)
-      break;
-
-    memfree(hb);
-  }
-  if ((h >= hat->tree_heigh) && (hb == hat->root_bucket)) {
-    hat->tree_heigh = -1;
-    hat->root_bucket = NULL;
-  }
-
-  return ret;
+  leaf_id = get_leaf_index(hat, idx);
+  return leaf->slots[leaf_id];
 }
 
+/* Delete item from HAT */
+void hat_delete(hat_t *hat, ulong_t idx)
+{
+  hat_leaf_t *leaf;
+  int leaf_id, top_id;
+  if ( (!hat) || (!hat->top) || (!hat->num_items) || (idx > get_hat_max_size(hat)) )
+    return;
+
+  top_id = get_top_index(hat, idx);
+  leaf = hat->top->slots[top_id];
+  if (!leaf)
+    return;
+
+  leaf_id = get_leaf_index(hat, idx);
+
+  leaf->slots[leaf_id] = NULL;
+  leaf->num_items--;
+  hat->num_items--;
+  if(!leaf->num_items){
+    /* there is no items in the slots,
+      so we can delete this leaf */
+    __delete_hat_leaf(leaf);
+  }
+}
+
+/* Destroy hat_t structure */
+void hat_destroy(hat_t *hat)
+{
+  if (!hat)
+    return;
+  hat_clear(hat);
+  __delete_hat_leaf(hat->top);
+  destroy_memcache(leaves_cache);
+  destroy_memcache(slots_cache);
+}

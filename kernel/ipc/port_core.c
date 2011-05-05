@@ -202,7 +202,7 @@ ipc_port_message_t *ipc_create_port_message_iov_v(ipc_channel_t *channel, iovec_
         *err = r;
         goto free_message;
       }
-      
+
       msg->num_send_bufs = snd_numvecs;
       msg->snd_buf = snd_bufs;
     }
@@ -229,7 +229,7 @@ ipc_port_message_t *ipc_create_port_message_iov_v(ipc_channel_t *channel, iovec_
           *err = r;
           goto free_message;
         }
-        
+
         msg->rcv_buf = rcv_bufs;
         msg->num_recv_buffers = rcv_numvecs;
         /* Fallthrough. */
@@ -362,7 +362,7 @@ static long __transfer_reply_data_iov(ipc_port_message_t *msg,
       for(i=0,rlen=reply_len;i<numvecs && rlen;i++,reply_iov++) {
         to_copy=MIN(rlen,reply_iov->iov_len);
 
-        if( from_server ) {          
+        if( from_server ) {
           r=copy_from_user(rcv_buf,reply_iov->iov_base,to_copy);
         } else {
           r=copy_to_user(reply_iov->iov_base,rcv_buf,to_copy);
@@ -402,7 +402,7 @@ out:
   if (r) {
     return ERR(r);
   }
-  
+
   return processed;
 }
 
@@ -506,19 +506,19 @@ int ipc_close_port(task_ipc_t *ipc,ulong_t port)
   }
 
   LOCK_IPC(ipc);
-  if( !ipc->ports || port > ipc->max_port_num ) {
+  if( hat_is_empty(&ipc->ports) || port > ipc->max_port_num ) {
     r=-EMFILE;
     goto out_unlock;
   }
 
   IPC_LOCK_PORTS(ipc);
-  p=ipc->ports[port];
+  p = hat_lookup(&ipc->ports, port);
   if( p ) {
     IPC_LOCK_PORT_W(p);
     shutdown=atomic_dec_and_test(&p->own_count);
     if(shutdown) {
       p->flags |= IPC_PORT_SHUTDOWN;
-      ipc->ports[port]=NULL;
+      hat_delete(&ipc->ports, port);
     }
     IPC_UNLOCK_PORT_W(p);
   }
@@ -558,31 +558,35 @@ long ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
       return ERR(-EINVAL);
   }
 
-  LOCK_IPC(ipc);
-
-  if(ipc->num_ports >= owner->limits->limits[LIMIT_IPC_MAX_PORTS]) {
+  if(ipc->num_ports >= get_limit(owner->limits, LIMIT_PORTS)){
     r=-EMFILE;
-    goto out_unlock;
+    goto out;
   }
 
   if( !queue_size ) {  /* Default queue size. */
-    queue_size=owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES];
+    queue_size = get_limit(owner->limits, LIMIT_PORT_MESSAGES);
   }
-
-  if( queue_size > owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES] ) {
+  else if( queue_size > get_limit(owner->limits, LIMIT_PORT_MESSAGES) ) {
     r=-EINVAL;
-    goto out_unlock;
+    goto out;
   }
 
+  LOCK_IPC(ipc);
   /* First port created ? */
-  if( !ipc->ports ) {
+  /*if( !ipc->ports ) {
     r = -ENOMEM;
-    ipc->ports=allocate_ipc_memory(sizeof(ipc_gen_port_t *)*CONFIG_IPC_DEFAULT_PORTS);
+    port_num = get_limit(owner->limits, LIMIT_MAX_PORTS);
+    ipc->ports = allocate_ipc_memory(sizeof(ipc_gen_port_t *) * port_num);
     if( !ipc->ports ) {
       goto out_unlock;
     }
-    ipc->allocated_ports=CONFIG_IPC_DEFAULT_PORTS;
+    ipc->allocated_ports = port_num;
   } else if( ipc->num_ports >= ipc->allocated_ports ) {
+    r=-EMFILE;
+    goto out_unlock;
+  }*/
+
+  if( ipc->num_ports >= ipc->allocated_ports ) {
     r=-EMFILE;
     goto out_unlock;
   }
@@ -594,30 +598,28 @@ long ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
   }
 
   /* Ok, it seems that we can create a new port. */
-  r = __allocate_port(&port,flags,queue_size,owner);
+  r = __allocate_port(&port, flags, queue_size, owner);
   if( r != 0 ) {
     goto free_id;
   }
 
   /* Install new port. */
   IPC_LOCK_PORTS(ipc);
-  ipc->ports[id] = port;
+  hat_insert(&ipc->ports, id, &port);
   ipc->num_ports++;
 
   if( id > ipc->max_port_num ) {
-    ipc->max_port_num=id;
+    ipc->max_port_num = id;
   }
   IPC_UNLOCK_PORTS(ipc);
-
   r = id;
   UNLOCK_IPC(ipc);
-  release_task_ipc(ipc);
   return ERR(r);
 free_id:
-  idx_free(&ipc->ports_array,id);
+  idx_free(&ipc->ports_array, id);
 out_unlock:
   UNLOCK_IPC(ipc);
-  release_task_ipc(ipc);
+out:
   return ERR(r);
 }
 
@@ -819,11 +821,11 @@ ipc_gen_port_t *ipc_get_port(task_t *task,ulong_t port,long *e)
   LOCK_TASK_MEMBERS(task);
   ipc=task->ipc;
 
-  if( ipc && ipc->ports ) {
+  if( ipc && (!hat_is_empty(&ipc->ports)) ) {
     IPC_LOCK_PORTS(ipc);
-    if(port < task->limits->limits[LIMIT_IPC_MAX_PORTS] &&
-       ipc->ports[port] != NULL) {
-      p = ipc->ports[port];
+    p = hat_lookup(&ipc->ports, port);
+    if( ( port < get_limit(task->limits, LIMIT_PORTS) ) &&
+       p != NULL) {
       if( !(p->flags & IPC_PORT_SHUTDOWN) ) {
         REF_PORT(p);
         r=0;

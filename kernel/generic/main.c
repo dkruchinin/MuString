@@ -48,8 +48,7 @@ static void main_routine_stage1(void)
   /* Initialize PICs and setup common interrupt handlers. */
   set_cpu_online(0,1);  /* We're online. */
   sched_add_cpu(0);
-  initialize_limits();
-  initialize_ns_subsys();
+
   initialize_ipc();
   initialize_signals();
   initialize_security();
@@ -67,7 +66,6 @@ static void main_routine_stage1(void)
   setup_time();
   initialize_swks();
   initialize_security();
-
   /* OK, we can proceed. */
   spawn_percpu_threads();
   server_run_tasks();
@@ -87,6 +85,8 @@ void kernel_main(void)
   hardware_timers_init();
   slab_allocator_init();
   vmm_initialize();
+  initialize_limits();
+  initialize_ns_subsys();
   initialize_scheduler();
 
   software_timers_init();

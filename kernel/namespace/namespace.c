@@ -38,7 +38,7 @@
 static memcache_t *ns_cache = NULL;
 static memcache_t *ns_attrs_cache = NULL;
 
-static struct namespace *root_ns = NULL;
+struct namespace *root_ns = NULL;
 
 static atomic_t ns_count = 0;
 
@@ -70,7 +70,7 @@ void initialize_ns_subsys(void)
     panic(PANIC_PRE"Failed to allocate root namespace default limits.\n");
   set_default_task_limits(def_limits);
   root_ns->def_limits = def_limits;
-
+  root_ns->ns_pid_limit = CONFIG_MAX_PID_NUMBER;
   kprintf("OK\n");
 
   return;
@@ -88,11 +88,14 @@ struct namespace *alloc_namespace(void)
   if((ns = alloc_from_memcache(ns_cache, 0))) {
     atomic_set(&ns->use_count, 1);
     rw_spinlock_initialize(&ns->rw_lock, "NS lock");
-
+    spinlock_initialize(&ns->pid_array_lock, "NS PID array");
+    if ( idx_allocator_init(&ns->pid_array, CONFIG_MAX_PID_NUMBER) < 0 )
+      return NULL;
     memset(ns->name, 0, 16);
     ns->ns_mm_limit = 0;
     ns->ns_carrier = 0;
     ns->ns_id = 0;
+    ns->pid_count = 0;
     ns->def_limits = NULL; /* should be initialized later */
   }
 
@@ -105,7 +108,6 @@ struct ns_id_attrs *alloc_ns_attrs(struct namespace *ns)
 
   if((ia = alloc_from_memcache(ns_attrs_cache, 0))) {
     atomic_inc(&ns->use_count);
-
     ia->ns = ns;
     ia->ns_id = ns->ns_id;
     ia->trans_flag = 0;
@@ -130,7 +132,7 @@ void destroy_namespace(struct namespace *ns)
 }
 
 /* top level functions */
-int sys_chg_create_namespace(ulong_t ns_mm_limit, char *short_name)
+int sys_chg_create_namespace(ulong_t ns_mm_limit, ulong_t ns_pid_limit, char *short_name)
 {
 #ifndef CONFIG_ENABLE_NS
   return ERR(-ENOSYS);
@@ -141,13 +143,23 @@ int sys_chg_create_namespace(ulong_t ns_mm_limit, char *short_name)
   task_limits_t *def_limits = NULL;
 
   /* check for the creator */
-  if(task->namespace->ns_id>1) /* allowed only from root namespace */
+  if(task->namespace->ns_id > 1) /* allowed only from root namespace */
     return ERR(-EPERM);
 
   /* create namespace */
   if(!(ns = alloc_namespace()))
     return ERR(-ENOMEM);
 
+  /* check PID limit */
+  if (ns_pid_limit > CONFIG_MAX_PID_NUMBER)
+    return ERR(-EINVAL);
+
+  /* init pid allocator */
+  r = idx_allocator_init(&ns->pid_array, ns_pid_limit);
+  if (r < 0) {
+    return ERR(-ENOMEM);
+  }
+  ns->ns_pid_limit = ns_pid_limit;
   /* init default namespace */
   ns->ns_carrier = task->pid;
   if(copy_from_user(ns->name, short_name, 16))

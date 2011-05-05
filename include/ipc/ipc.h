@@ -9,6 +9,7 @@
 #include <arch/arch_ipc.h>
 #include <ipc/channel.h>
 #include <ipc/port.h>
+#include <ds/hat.h>
 
 /* Blocking mode */
 #define IPC_BLOCKED_ACCESS  0x01
@@ -44,15 +45,17 @@ typedef struct __task_ipc {
 
   /* port-related stuff. */
   ulong_t num_ports,max_port_num;
-  ipc_gen_port_t **ports;
+  hat_t ports;
+  //ipc_gen_port_t **ports;
   idx_allocator_t ports_array;
   int allocated_ports;
   spinlock_t port_lock;
 
   /* Channels-related stuff. */
+  hat_t channels;
   idx_allocator_t channel_array;
   ulong_t num_channels,max_channel_num;
-  ipc_channel_t **channels;
+  //ipc_channel_t **channels;
   spinlock_t channel_lock;
   int allocated_channels;
 } task_ipc_t;
