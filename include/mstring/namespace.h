@@ -40,26 +40,37 @@
 #include <arch/atomic.h>
 #include <security/security.h>
 
+/* Maximum number of processes per namespace */
+#define CONFIG_MAX_PID_NUMBER 32767
+
 #define DEFAULT_NS_CARRIER_PID  1
 
 #define DEFAULT_NS_NAME  "Root NS"
 
 struct namespace {
-  uint8_t ns_id;  /* id of the namespace */
-  ulong_t ns_mm_limit; /* pages per namespace limit */
-  pid_t ns_carrier; /* user space namespace carrier */
-  task_limits_t *def_limits; /* default limits for the namespace */
+  uint8_t ns_id;              /* id of the namespace */
+  ulong_t ns_mm_limit;        /* pages per namespace limit */
+  pid_t ns_carrier;           /* user space namespace carrier */
+  task_limits_t *def_limits;  /* default limits for the namespace */
   atomic_t use_count;
-  rw_spinlock_t rw_lock; /* rw lock */
-  char name[16]; /* namespace short name */
+  rw_spinlock_t rw_lock;      /* rw lock */
+
+  ulong_t ns_pid_limit;       /* processes per namespace limit */
+  idx_allocator_t pid_array;  /* Array of PIDs for the given namespace */
+  spinlock_t pid_array_lock;  /* Lock for PID array */
+  ulong_t pid_count;          /* Current number of processes in the namespace */
+  char name[16];              /* namespace short name */
 };
 
 /* this structure used for task_t */
 struct ns_id_attrs {
-  uint8_t ns_id;  /* used to avoid lock */
-  uint8_t trans_flag;  /* translator flags, TODO: extend it in future */
-  struct namespace *ns;  /* namespace assigned */
+  uint8_t ns_id;        /* used to avoid lock */
+  uint8_t trans_flag;   /* translator flags, TODO: extend it in future */
+  struct namespace *ns; /* namespace assigned */
 };
+
+/* Root namespace struct */
+extern struct namespace *root_ns;
 
 void initialize_ns_subsys(void);
 
@@ -79,7 +90,7 @@ void destroy_ns_attrs(struct ns_id_attrs *);
 #define NS_CTRL_GET_CARRIER_PID  0x0
 #define NS_CTRL_REMOVE_TRANS     0x1
 
-int sys_chg_create_namespace(ulong_t, char *);
+int sys_chg_create_namespace(ulong_t, ulong_t, char *);
 int sys_control_namespace(pid_t, int, void *);
 
 #endif

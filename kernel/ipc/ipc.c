@@ -31,18 +31,18 @@ static void __close_ipc_resources(task_ipc_t *ipc)
   uint32_t i;
 
   /* Close all open ports. */
-  if( ipc->ports ) {
-    for(i=0;i<=ipc->max_port_num;i++) {
-      if( ipc->ports[i] ) {
-        ipc_close_port(ipc,i);
+  if( !hat_is_empty(&ipc->ports) ) {
+    for( i = 0; i <= ipc->max_port_num; i++) {
+      if( hat_lookup(&ipc->ports, i) ) {
+        ipc_close_port(ipc, i);
       }
     }
   }
 
   /* Close all channels. */
-  if( ipc->channels ) {
-    for(i=0;i<=ipc->max_channel_num;i++) {
-      if( ipc->channels[i] ) {
+  if( !hat_is_empty(&ipc->channels)) {
+    for(i=0; i<=ipc->max_channel_num; i++) {
+      if( hat_lookup(&ipc->channels, i) ) {
         ipc_close_channel(ipc,i);
       }
     }
@@ -54,7 +54,9 @@ void release_task_ipc(task_ipc_t *ipc)
   if( atomic_dec_and_test(&ipc->use_count) ) {
       __close_ipc_resources(ipc);
     idx_allocator_destroy(&ipc->ports_array);
-    idx_allocator_destroy(&ipc->channel_array);   
+    idx_allocator_destroy(&ipc->channel_array);
+    hat_destroy(&ipc->ports);
+    hat_destroy(&ipc->channels);
     memfree(ipc);
   }
 }
@@ -79,23 +81,29 @@ int setup_task_ipc(task_t *task)
   if( task->ipc ) {
     ipc=NULL;
   } else {
-    ipc=memalloc(sizeof(*ipc));
+    ipc = memalloc(sizeof(*ipc));
     if( !ipc ) {
         return ERR(-ENOMEM);
-    }
+  }
+
     memset(ipc,0,sizeof(task_ipc_t));
     atomic_set(&ipc->use_count,1);
+
+    if ( hat_initialize(&ipc->channels, get_limit(task->limits, LIMIT_CHANNELS)) ||
+         hat_initialize(&ipc->ports, get_limit(task->limits, LIMIT_PORTS)) )
+      goto free_ipc;
+
     spinlock_initialize(&ipc->port_lock, "Port");
     spinlock_initialize(&ipc->channel_lock, "Channel");
     mutex_initialize(&ipc->mutex);
 
-    if( idx_allocator_init(&ipc->ports_array,CONFIG_IPC_DEFAULT_PORTS) ||
-        idx_allocator_init(&ipc->channel_array,CONFIG_IPC_DEFAULT_CHANNELS) ) {
+    if( idx_allocator_init(&ipc->ports_array, CONFIG_TASK_PORTS_LIMIT_MAX) ||
+        idx_allocator_init(&ipc->channel_array, CONFIG_TASK_CHANNELS_LIMIT_MAX) ) {
       goto free_ipc;
     }
   }
 
-  ipc_priv=alloc_from_memcache(ipc_priv_data_cache, 0);
+  ipc_priv = alloc_from_memcache(ipc_priv_data_cache, 0);
   if( !ipc_priv ) {
     goto free_ipc;
   } else {
@@ -170,7 +178,8 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
 {
   long i,r=-ENOMEM;
   task_ipc_t *tipc;
-
+  ipc_gen_port_t *tport;
+  ipc_channel_t *tchan;
   if( ipc ) {
     if( setup_task_ipc(rcpt) ) {
         return ERR(-ENOMEM);
@@ -178,19 +187,20 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
 
     tipc=rcpt->ipc;
     LOCK_IPC(ipc);
-    if( ipc->ports ) { /* Duplicate all open ports. */
-      tipc->ports=allocate_ipc_memory(ipc->allocated_ports*sizeof(ipc_gen_port_t *));
-      if( !tipc->ports ) {
+    if( !hat_is_empty(&ipc->ports) ) { /* Duplicate all open ports. */
+
+      if( hat_initialize(&tipc->ports, ipc->ports.size) != 0 ) {
         goto out_unlock;
       }
       tipc->allocated_ports=ipc->allocated_ports;
-      tipc->max_port_num=ipc->max_port_num;
+      tipc->max_port_num = ipc->max_port_num;
       tipc->num_ports = ipc->num_ports;
 
-      for(i=0;i<=ipc->max_port_num;i++) {
-        if( ipc->ports[i] ) {
-          tipc->ports[i]=ipc_clone_port(ipc->ports[i]);
-          if( !tipc->ports[i] ) {
+      for(i = 0; i <= ipc->max_port_num; i++) {
+        tport = hat_lookup(&ipc->ports, i);
+        if(tport) {
+          hat_insert(&tipc->ports, i, ipc_clone_port(tport));
+          if( !hat_lookup(&tipc->ports, i) ) {
             UNLOCK_IPC(ipc);
             goto put_ports;
           }
@@ -199,9 +209,9 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
       }
     }
 
-    if( ipc->channels ) { /* Duplicate all open channels. */
-      tipc->channels=allocate_ipc_memory(ipc->allocated_channels*sizeof(ipc_channel_t *));
-      if( !tipc->channels ) {
+    if( !hat_is_empty(&ipc->channels) ) { /* Duplicate all open channels. */
+
+      if( hat_initialize(&tipc->channels, ipc->channels.size) != 0 ) {
         UNLOCK_IPC(ipc);
         goto put_ports;
       }
@@ -209,10 +219,11 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
       tipc->max_channel_num=ipc->max_channel_num;
       tipc->num_channels = ipc->num_channels;
 
-      for(i=0;i<=ipc->max_channel_num;i++) {
-        if( ipc->channels[i] ) {
-          tipc->channels[i]=ipc_clone_channel(ipc->channels[i],tipc);
-          if( !tipc->channels[i] ) {
+      for(i=0; i<=ipc->max_channel_num; i++) {
+        tchan = hat_lookup(&ipc->channels, i);
+        if( tchan ) {
+          hat_insert(&tipc->channels, i, ipc_clone_channel(tchan, tipc));
+          if( !hat_lookup(&tipc->ports, i) ) {
             UNLOCK_IPC(ipc);
             goto put_channels;
           }
@@ -227,19 +238,20 @@ out_unlock:
   UNLOCK_IPC(ipc);
   return ERR(r);
 put_channels:
-  for(i=0;i<tipc->allocated_channels;i++) {
-    if( tipc->channels[i] ) {
-      memfree(tipc->channels[i]);
+  for( i = 0; i < tipc->allocated_channels; i++) {
+    tchan = hat_lookup(&tipc->channels, i);
+    if( tchan ) {
+      memfree(&tchan);
     }
   }
-  free_ipc_memory(tipc->channels,tipc->allocated_channels*sizeof(ipc_channel_t *));
+
 put_ports:
-  for(i=0;i<tipc->allocated_ports;i++) {
-    if( tipc->ports[i] ) {
-      tipc->ports[i]->port_ops->destructor(tipc->ports[i]);
+  for( i = 0; i < tipc->allocated_ports; i++) {
+    tport = hat_lookup(&tipc->ports, i);
+    if( tport) {
+      tport->port_ops->destructor(tport);
     }
   }
-  free_ipc_memory(tipc->ports,tipc->allocated_ports*sizeof(ipc_gen_port_t *));
   release_task_ipc(tipc);
   return ERR(-ENOMEM);
 }

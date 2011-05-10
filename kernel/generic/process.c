@@ -96,8 +96,8 @@ task_t *lookup_task_thread(task_t *p,tid_t tid)
 {
   list_node_t *n;
   task_t *t,*target=NULL;
-
-  if( tid && tid < CONFIG_THREADS_PER_PROCESS ) {
+// TODO
+  if( tid && tid < get_limit(p->limits, LIMIT_TRHEADS)) {
     LOCK_TASK_CHILDS(p);
     list_for_each(&p->threads,n) {
       t=container_of(n,task_t,child_list);

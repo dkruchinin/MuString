@@ -102,6 +102,9 @@
 
 #define SC_MEMSYNC  51
 
+#define SC_SET_TASK_LIMITS    52
+#define SC_GET_TASK_LIMITS    53
+
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */
 
