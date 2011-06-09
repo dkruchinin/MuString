@@ -37,7 +37,7 @@
 #define HAT_MAX_SIZE (1UL << HAT_MAX_POWER)
 #define HAT_DEFAULT_SIZE (1UL << HAT_DEFAULT_POWER)
 
-#define hat_is_empty(hat)  ((hat)->num_items > 0)
+#define hat_is_empty(hat)  ((hat)->num_items == 0)
 
 /**
  * @struct hat_leaf_t
