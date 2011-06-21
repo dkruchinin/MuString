@@ -512,8 +512,11 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
 #ifndef CONFIG_ENABLE_NS
   ns = get_root_namespace();
 #else
-  if(parent->pid == 0) ns = get_root_namespace();
-  else ns = parent->namespace->ns;
+  if(parent) {
+    if((parent->pid == 0) || (priv == TPL_KERNEL)) ns = get_root_namespace();
+    else ns = parent->namespace->ns;
+  } else
+    ns = get_root_namespace();
 #endif
 
   /* Check if have free PID in the namespace */
@@ -573,9 +576,11 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
     if(limits == NULL) {
       goto free_stack_pages;
     } else {
+      task->limits = limits;
       /* we must inherit default limits from the namespace
         if namespace support is on */
-#ifndef CONFIG_ENABLE_NS
+#ifdef CONFIG_ENABLE_NS
+      /* FIXME: copy task limits from namespace defaults */
       task->limits = get_task_limits(ns->def_limits);
 #else
       set_default_task_limits(task->limits);
