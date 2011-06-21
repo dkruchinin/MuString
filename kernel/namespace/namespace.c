@@ -189,9 +189,6 @@ int sys_chg_create_namespace(ulong_t ns_mm_limit, ulong_t ns_pid_limit, char *sh
 
 int sys_control_namespace(pid_t task, int op_code, void *data)
 {
-#ifndef CONFIG_ENABLE_NS
-  return ERR(-ENOSYS);
-#else
   int r = 0;
 
   switch(op_code) {
@@ -209,5 +206,4 @@ int sys_control_namespace(pid_t task, int op_code, void *data)
   }
 
   return ERR(r);
-#endif
 }
