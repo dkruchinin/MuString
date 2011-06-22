@@ -228,6 +228,8 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
       panic("Server [#%d]: Failed to map \"rodata\" section. (ERR = %d)", num, r);
   }
 
+  /* fucking, ugly workaround, new ELF parser found a problem with other part of kernel */
+  rw_size += (rw_virt_addr - PAGE_ALIGN_DOWN(rw_virt_addr));
   if (rw_size) {
     rw_size_k = rw_size;
     if(rw_size%PAGE_SIZE) {
