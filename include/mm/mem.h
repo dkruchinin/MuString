@@ -139,8 +139,8 @@ static inline void pin_page_frame(page_frame_t *pf)
 static inline bool valid_user_address_range(uintptr_t va_start,
                                             uintptr_t length)
 {
-    return ((va_start >= USPACE_VADDR_BOTTOM) &&
-            ((va_start + length) <= USPACE_VADDR_TOP));
+  return ((va_start >= USPACE_VADDR_BOTTOM) &&
+          ((va_start + length) <= USPACE_VADDR_TOP));
 }
 
 static inline void *user_to_kernel_vaddr(rpd_t *rpd, uintptr_t addr)

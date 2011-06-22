@@ -82,38 +82,64 @@ out:
   return ret;
 }
 
-static void __create_task_mm(task_t *task, int num, init_server_t *srv)
+struct bin_map {
+  ulong_t bin_addr;
+  ulong_t virt_addr;
+  ulong_t size;
+  uint32_t flags;
+  uint32_t type;
+  struct bin_map *next;
+  struct bin_map *prev;
+};
+
+/* memalloc / memfree */
+
+static struct bin_map *__add_bm_region(struct bin_map *cur,
+                                       struct bin_map *new)
 {
-  vmm_t *vmm = task->task_mm;
-  uintptr_t code;
-  size_t code_size,text_size;
-  ulong_t *pp;
+  cur->next = new;
+  new->next = NULL;
+  new->prev = cur;
+
+  return new;
+}
+
+static void __destroy_bin_map(struct bin_map *root)
+{
+  struct bin_map *cur;
+
+  while(root!=NULL) {
+    cur = root;
+    root = cur->next;
+    memfree(cur);
+  }
+
+  return;
+}
+
+static struct bin_map *__get_elf_map(task_t *task, init_server_t *srv)
+{
+  char *addr;
   elf_head_t ehead;
   elf_pr_t epr;
   elf_sh_t esh;
-  int *argc;
-  void *sbss;
-  uintptr_t *argv, *envp;
-  char *arg1, *envp1;
-  uintptr_t ustack_top;
-  /* sections */
-  uintptr_t exec_virt_addr = 0, exec_size = 0, ro_virt_addr = 0, ro_size = 0;
-  uintptr_t rw_virt_addr = 0, rw_size = 0, bss_virt_addr = 0, bss_size = 0;
-  uintptr_t exec_off = 0, ro_off = 0, rw_off = 0, bss_off = 0, rw_size_k;
-  long r;
+  struct bin_map *root, *cur = NULL, *new = NULL;
   int i;
-  per_task_data_t *ptd;
 
-  code_size = srv->size >> PAGE_WIDTH;
-  code_size++;
-
-  code = srv->addr;
-  code>>=PAGE_WIDTH; /* get page number */
-
-  pp = pframe_id_to_virt(code);
+  addr = pframe_id_to_virt((srv->addr)>>PAGE_WIDTH);
 
   /* read elf headers */
-  memcpy(&ehead, pframe_id_to_virt(code), sizeof(elf_head_t));
+  memcpy(&ehead, addr, sizeof(elf_head_t));
+
+  /* FIXME: add ELF header check */
+
+  root = memalloc(sizeof(struct bin_map));
+  if(!root) return NULL;
+  else {
+    root->next = NULL;
+    root->prev = NULL;
+  }
+
 #if 0
   /* printf elf header info */
   kprintf("ELF header(%4s): %d type, %d mach, %d version\n", ehead.e_ident,
@@ -121,161 +147,163 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
   kprintf("Entry: %p,Image off: %p,sect off:%p\n", ehead.e_entry, ehead.e_phoff,
           ehead.e_shoff);
 #endif
-  /* just for info */
-  for(i=0; i<ehead.e_phnum; i++) {
-    /* read program size */
-    memcpy(&epr,pframe_id_to_virt(code) + sizeof(ehead) + i*(ehead.e_phentsize),
-           sizeof(epr));
-    /*kprintf("PHeader(%d): offset: %p\nvirt: %p\nphy: %p\n",
-      i, epr.p_offset, epr.p_vaddr, epr.p_paddr);*/
-
-  }
 
   for(i=0; i<ehead.e_shnum; i++) {
-    memcpy(&esh, pframe_id_to_virt(code) + ehead.e_shoff +
+    memcpy(&esh, addr + ehead.e_shoff +
            i*(ehead.e_shentsize), sizeof(esh));
 
-    if(esh.sh_size != 0) {
-      //kprintf("SHeader(%d): shaddr: %p\nshoffset:%p\n",i,esh.sh_addr,esh.sh_offset);
+    if((esh.sh_size != 0) && ((esh.sh_flags & ESH_ALLOC) &&
+                              ((esh.sh_type == SHT_PROGBITS) ||
+                               (esh.sh_type == SHT_NOBITS)))) {
 
-      if((esh.sh_flags & ESH_ALLOC) && (esh.sh_type == SHT_PROGBITS)) {
-	if(esh.sh_flags & ESH_EXEC) { /* text segments */
-          if(!exec_virt_addr) exec_virt_addr = esh.sh_addr;
-          if(!exec_off) exec_off = esh.sh_offset;
-          exec_size += esh.sh_size;
-	} else if((esh.sh_flags & ESH_WRITE)) { /* data segments */
-          if(!rw_virt_addr) rw_virt_addr = esh.sh_addr;
-          if(!rw_off) rw_off = esh.sh_offset;
-          rw_size += esh.sh_size;
-	} else { /* rodata segments */
-          if(!ro_virt_addr) ro_virt_addr = esh.sh_addr;
-          if(!ro_off) ro_off = esh.sh_offset;
-          ro_size += esh.sh_size;
-	}
-      } else if(esh.sh_flags & ESH_ALLOC && esh.sh_type==SHT_NOBITS) { /* bss */
-        if(!bss_virt_addr) bss_virt_addr = esh.sh_addr;
-        if(!bss_off) bss_off = esh.sh_offset;
-        bss_size += esh.sh_size;
+      if(!cur) {
+        root->virt_addr = esh.sh_addr;
+        root->bin_addr = srv->addr + esh.sh_offset;
+        root->size = esh.sh_size;
+        root->type = esh.sh_type;
+        root->flags = esh.sh_flags;
+
+        cur = root;
+      } else {
+        if(!(new = memalloc(sizeof(struct bin_map))))
+          return NULL;
+
+        new->virt_addr = esh.sh_addr;
+        new->bin_addr = srv->addr + esh.sh_offset;
+        new->size = esh.sh_size;
+        new->type = esh.sh_type;
+        new->flags = esh.sh_flags;
+
+        cur = __add_bm_region(cur, new);
       }
     }
+
   }
+
+  /* split areas */
+  cur = root;
+  while(cur->next != NULL) {
+    /* might be splitted */
+    if((PAGE_ALIGN_DOWN(cur->virt_addr + cur->size) ==
+        PAGE_ALIGN_DOWN(cur->next->virt_addr)) && (cur->type == cur->next->type)) {
+
+      cur->size += cur->next->size;
+      new = cur->next;
+      cur->next = cur->next->next;
+      if(cur->next)
+        cur->next->prev = cur;
+      memfree(new);
+    } else cur = cur->next;
+  }
+
 #if 0
-  kprintf("Map stats:\n\t text segments: va %p, bo %p, sz %ld\n"
-          "\t rodata segments: va %p, bo %p, sz %ld\n"
-          "\t data segments: va %p, bo %p, sz %ld\n"
-          "\t bss segments: va %p, bo %p, sz %ld\n",
-          exec_virt_addr, exec_off, exec_size, ro_virt_addr, ro_off, ro_size,
-          rw_virt_addr, rw_off, rw_size, bss_virt_addr, bss_off, bss_size);
+  cur = root;
+  while(cur) {
+    kprintf("Got section:\n");
+    kprintf("\tType: ");
+    if(cur->type == SHT_NOBITS) kprintf("Absent in image\n");
+    else kprintf("Exist in image\n");
+    kprintf("\tVirt addr: %p, size %ld, img_addr %p\n", cur->virt_addr,
+            cur->size, cur->bin_addr);
+
+    cur = cur->next;
+  }
 #endif
-  /* now we're need to determine ranges */
-  if(PAGE_ALIGN(exec_virt_addr + exec_size) == PAGE_ALIGN(ro_virt_addr)) {
-    /* sysv abi allows to split this segments, but we're won't */
-    ro_size -= (PAGE_ALIGN(ro_virt_addr) - ro_virt_addr);
-    ro_off += (PAGE_ALIGN(ro_virt_addr) - ro_virt_addr);
-    ro_virt_addr = PAGE_ALIGN(ro_virt_addr);
-  }
-  if(PAGE_ALIGN(rw_virt_addr + rw_size) == PAGE_ALIGN(bss_virt_addr)) {
-    /* let's keep virt addr to clean it afterwhile */
-    bss_off = bss_virt_addr;
-    bss_size -= (PAGE_ALIGN(bss_virt_addr) - bss_virt_addr);
-    bss_virt_addr = PAGE_ALIGN(bss_virt_addr);
-  }
-#if 0
-  kprintf("Map stats:\n\t text segments: va %p, bo %p, sz %ld\n"
-          "\t rodata segments: va %p, bo %p, sz %ld\n"
-          "\t data segments: va %p, bo %p, sz %ld\n"
-          "\t bss segments: va %p, bo %p, sz %ld\n",
-          exec_virt_addr, exec_off, exec_size, ro_virt_addr, ro_off, ro_size,
-          rw_virt_addr, rw_off, rw_size, bss_virt_addr, bss_off, bss_size);
-#endif
-  text_size = exec_size>>PAGE_WIDTH;
-  if(exec_size%PAGE_SIZE)    text_size++;
-  code = srv->addr + exec_off;
 
-  /* workaround: ld moves text not aligned, therefore text might be more in size */
-  if((USPACE_VADDR_BOTTOM + (text_size << PAGE_WIDTH)) < ro_virt_addr)
-    text_size++;
+  return root;
+}
 
-  r = vmrange_map(generic_memobj, vmm, USPACE_VADDR_BOTTOM, text_size,
-                  VMR_READ | VMR_EXEC | VMR_PRIVATE | VMR_FIXED, 0);
-  /*kprintf("MMAP: %p to %p (text)\n", USPACE_VADDR_BOTTOM, USPACE_VADDR_BOTTOM +
-    (text_size << PAGE_WIDTH));*/
-  if (!PAGE_ALIGN(r))
-    panic("Server [#%d]: Failed to create VM range for \"text\" section. (ERR = %d)",
-          num, r);
+static ulong_t __get_elf_entry(task_t *task, init_server_t *srv)
+{
+  char *addr;
+  elf_head_t ehead;
 
-  r = mmap_core(vmm, USPACE_VADDR_BOTTOM, PAGE_ALIGN_DOWN(code) >> PAGE_WIDTH,
-                text_size, KMAP_READ | KMAP_EXEC);
-  if (r)
-    panic("Server [#%d]: Failed to map \"text\" section. (ERR = %d)", num, r);
+  addr = pframe_id_to_virt((srv->addr)>>PAGE_WIDTH);
 
-  if (ro_size) {
-    if(ro_size%PAGE_SIZE) {
-      ro_size>>=PAGE_WIDTH;
-      ro_size++;
-    } else
-      ro_size>>=PAGE_WIDTH;
+  /* read elf headers */
+  memcpy(&ehead, addr, sizeof(elf_head_t));
 
-    r = vmrange_map(generic_memobj, vmm, ro_virt_addr, ro_size,
-                    VMR_READ | VMR_PRIVATE | VMR_FIXED, 0);
-    if (!PAGE_ALIGN(r))
-      panic("Server [#%d]: Failed to create VM range for \"rodata\" section. (ERR = %d)",
-            num, r);
+  return ehead.e_entry;
+}
 
-    r = mmap_core(vmm, ro_virt_addr, (srv->addr + ro_off) >> PAGE_WIDTH,
-                  ro_size, KMAP_READ);
-    if (r)
-      panic("Server [#%d]: Failed to map \"rodata\" section. (ERR = %d)", num, r);
-  }
+static void __create_task_mm(task_t *task, int num, init_server_t *srv)
+{
+  struct bin_map *emap = __get_elf_map(task,srv);
+  per_task_data_t *ptd;
+  vmm_t *vmm = task->task_mm;
+  ulong_t entry = __get_elf_entry(task,srv);
+  struct bin_map *cur = emap;
+  ulong_t sseek = 0, psize;
+  void *sbss;
+  int r, flags, kflags;
+  int *argc;
+  uintptr_t ustack_top;
+  uintptr_t *argv, *envp;
+  char *arg1, *envp1;
 
-  /* fucking, ugly workaround, new ELF parser found a problem with other part of kernel */
-  rw_size += (rw_virt_addr - PAGE_ALIGN_DOWN(rw_virt_addr));
-  if (rw_size) {
-    rw_size_k = rw_size;
-    if(rw_size%PAGE_SIZE) {
-      rw_size>>=PAGE_WIDTH;
-      rw_size++;
-    } else
-      rw_size>>=PAGE_WIDTH;
+  if(!emap)
+    panic("[Service start] Cannot load ELF map of module %d\n", num);
 
-    r = vmrange_map(generic_memobj, vmm, PAGE_ALIGN_DOWN(rw_virt_addr), rw_size,
-                    VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED, 0);
-    if (!PAGE_ALIGN(r))
-      panic("Server [#%d]: Failed to create VM range for \"rwdata\" section. (ERR = %d)",
-            num, r);
+  /* map image sections */
+  while(cur) {
+    /* check for override */
+    if(cur->prev && (cur->virt_addr <
+                     PAGE_ALIGN(cur->prev->virt_addr + cur->prev->size))) {
+      sseek = PAGE_ALIGN(cur->virt_addr) - cur->virt_addr;
+      cur->bin_addr += sseek;
+      cur->virt_addr = PAGE_ALIGN(cur->virt_addr);
+      cur->size -= sseek;
 
-    r = mmap_core(vmm, PAGE_ALIGN_DOWN(rw_virt_addr), (srv->addr + rw_off) >> PAGE_WIDTH,
-                  rw_size, KMAP_READ | KMAP_WRITE);
-    if (r)
-      panic("Server [#%d]: Failed to map \"rwdata\" section. (ERR = %d)", num, r);
-  }
-
-  if (bss_size) {
-    if(bss_size%PAGE_SIZE) {
-      bss_size>>=PAGE_WIDTH;
-      bss_size++;
-    } else
-      bss_size>>=PAGE_WIDTH;
-
-    r = vmrange_map(generic_memobj, vmm, bss_virt_addr, bss_size,
-                    VMR_READ | VMR_WRITE | VMR_PRIVATE | VMR_FIXED | VMR_POPULATE, 0);
-    if (!PAGE_ALIGN(r))
-      panic("Server [#%d]: Failed to create VM range for \"bss\" section. (ERR = %d)",
-            num, r);
-
-    /* let's zero small bss chunk */
-    if(PAGE_ALIGN(rw_virt_addr + rw_size_k) == PAGE_ALIGN(bss_off)) {
-      sbss = user_to_kernel_vaddr(task_get_rpd(task), bss_off);
-      memset(sbss, 0, PAGE_ALIGN(bss_off) - bss_off);
+      /* if it's NO_BITS section it should be zeroed */
+      if(cur->type == SHT_NOBITS) {
+        sbss = user_to_kernel_vaddr(task_get_rpd(task), PAGE_ALIGN_DOWN(cur->virt_addr -
+                                                                        sseek));
+        memset((sbss + PAGE_SIZE) - sseek, 0, sseek);
+      }
     }
+
+    /* create vm range for this region */
+    flags = VMR_PRIVATE | VMR_FIXED;
+    kflags = 0;
+    if(cur->flags & ESH_EXEC) {
+      flags |= VMR_EXEC;
+      kflags |= KMAP_EXEC;
+    }
+
+    flags |= VMR_READ;
+    kflags |= KMAP_READ;
+
+    if(cur->flags & ESH_WRITE) {
+      flags |= VMR_WRITE;
+      kflags |= KMAP_WRITE;
+    }
+    if(cur->flags == SHT_NOBITS) flags |= VMR_POPULATE;
+
+    psize = (cur->size + (cur->virt_addr - PAGE_ALIGN_DOWN(cur->virt_addr)))
+      >> PAGE_WIDTH;
+    if(psize<<PAGE_WIDTH < (cur->size + (cur->virt_addr -
+                                         PAGE_ALIGN_DOWN(cur->virt_addr)))) psize++;
+
+    r = vmrange_map(generic_memobj, vmm, PAGE_ALIGN_DOWN(cur->virt_addr), psize,
+                    flags, 0);
+    if(!PAGE_ALIGN(r))
+      panic("Server [#%d]: Failed to create VM range for section. (ERR = %d)", num, r);
+
+    if(cur->type == SHT_PROGBITS) {
+      r = mmap_core(vmm, PAGE_ALIGN_DOWN(cur->virt_addr),
+                    PAGE_ALIGN_DOWN(cur->bin_addr) >> PAGE_WIDTH, psize, kflags);
+      if(r)
+        panic("Server [#%d]: Failed to map section. (ERR = %d)", num, r);
+    }
+
+    cur = cur->next;
   }
 
-  /*remap pages*/
+  /* map stack pages */
   r = vmrange_map(generic_memobj, vmm, USPACE_VADDR_TOP - 0x40000, USER_STACK_SIZE,
                   VMR_READ | VMR_WRITE | VMR_STACK | VMR_PRIVATE | VMR_POPULATE
                   | VMR_FIXED, 0);
-  /*r = mmap_core(task_get_rpd(task), USPACE_VA_TOP-0x40000,
-    pframe_number(stack), USER_STACK_SIZE, KMAP_READ | KMAP_WRITE);*/
+
   if (!PAGE_ALIGN(r))
     panic("Server [#%d]: Failed to create VM range for stack. (ERR = %d)", num, r);
 
@@ -296,6 +324,7 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
 
   /* Insufficient return address to prevent task from returning to void. */
   ustack_top -= sizeof(uintptr_t);
+
   /* setup argc, argv, env */
   ustack_top -= (5*sizeof(uintptr_t) + strlen(srv->name) + 2*sizeof(char) +
                  strlen(BOOTENV));
@@ -318,14 +347,16 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
   memcpy(arg1, srv->name, strlen(srv->name));
   memcpy(envp1, BOOTENV, strlen(BOOTENV));
 
-  r=arch_process_context_control(task,SYS_PR_CTL_SET_ENTRYPOINT,ehead.e_entry);
+  r=arch_process_context_control(task,SYS_PR_CTL_SET_ENTRYPOINT,entry);
   if (r < 0)
     panic("Server [#%d]: Failed to set task's entry point(%p). (ERR = %d)",
-          num, ehead.e_entry, r);
+          num, entry, r);
 
   r=arch_process_context_control(task,SYS_PR_CTL_SET_STACK,ustack_top);
   if (r < 0)
-    panic("Server [#%d]: Failed to set task's stack(%p). (ERR = %d)", num, ustack_top, r);
+    panic("Server [#%d]: Failed to set task's stack(%p). (ERR = %d)", num,
+          ustack_top, r);
+  return;
 }
 
 static void __server_task_runner(void *data)
