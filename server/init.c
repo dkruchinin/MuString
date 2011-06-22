@@ -155,15 +155,10 @@ static struct bin_map *__get_elf_map(task_t *task, init_server_t *srv)
     if((esh.sh_size != 0) && ((esh.sh_flags & ESH_ALLOC) &&
                               ((esh.sh_type == SHT_PROGBITS) ||
                                (esh.sh_type == SHT_NOBITS)))) {
-      kprintf("Got section:\n");
-      kprintf("\tType: ");
-      if(esh.sh_type == SHT_NOBITS) kprintf("Absent in image\n");
-      else kprintf("Exist in image\n");
-      kprintf("\tVirt addr: %p, size %ld\n", esh.sh_addr, esh.sh_size);
 
       if(!cur) {
         root->virt_addr = esh.sh_addr;
-        root->bin_addr = esh.sh_offset;
+        root->bin_addr = srv->addr + esh.sh_offset;
         root->size = esh.sh_size;
         root->type = esh.sh_type;
         root->flags = esh.sh_flags;
@@ -174,7 +169,7 @@ static struct bin_map *__get_elf_map(task_t *task, init_server_t *srv)
           return NULL;
 
         new->virt_addr = esh.sh_addr;
-        new->bin_addr = esh.sh_offset;
+        new->bin_addr = srv->addr + esh.sh_offset;
         new->size = esh.sh_size;
         new->type = esh.sh_type;
         new->flags = esh.sh_flags;
@@ -191,9 +186,7 @@ static struct bin_map *__get_elf_map(task_t *task, init_server_t *srv)
     /* might be splitted */
     if((PAGE_ALIGN_DOWN(cur->virt_addr + cur->size) ==
         PAGE_ALIGN_DOWN(cur->next->virt_addr)) && (cur->type == cur->next->type)) {
-      kprintf("SPLIT!:");
-      kprintf("newsize %ld + %ld (%ld)\n", cur->size, cur->next->size,
-              cur->size + cur->next->size);
+
       cur->size += cur->next->size;
       new = cur->next;
       cur->next = cur->next->next;
@@ -203,6 +196,7 @@ static struct bin_map *__get_elf_map(task_t *task, init_server_t *srv)
     } else cur = cur->next;
   }
 
+#if 0
   cur = root;
   while(cur) {
     kprintf("Got section:\n");
@@ -214,6 +208,7 @@ static struct bin_map *__get_elf_map(task_t *task, init_server_t *srv)
 
     cur = cur->next;
   }
+#endif
 
   return root;
 }
@@ -227,14 +222,6 @@ static ulong_t __get_elf_entry(task_t *task, init_server_t *srv)
 
   /* read elf headers */
   memcpy(&ehead, addr, sizeof(elf_head_t));
-
-#if 0
-  /* printf elf header info */
-  kprintf("ELF header(%4s): %d type, %d mach, %d version\n", ehead.e_ident,
-          ehead.e_type, ehead.e_machine, ehead.e_version);
-  kprintf("Entry: %p,Image off: %p,sect off:%p\n", ehead.e_entry, ehead.e_phoff,
-          ehead.e_shoff);
-#endif
 
   return ehead.e_entry;
 }
@@ -266,13 +253,11 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
       cur->bin_addr += sseek;
       cur->virt_addr = PAGE_ALIGN(cur->virt_addr);
       cur->size -= sseek;
-      kprintf("sseek = %p\n", sseek);
 
       /* if it's NO_BITS section it should be zeroed */
       if(cur->type == SHT_NOBITS) {
         sbss = user_to_kernel_vaddr(task_get_rpd(task), PAGE_ALIGN_DOWN(cur->virt_addr -
                                                                         sseek));
-        kprintf("sbss = %p\n", (sbss + PAGE_SIZE) - sseek);
         memset((sbss + PAGE_SIZE) - sseek, 0, sseek);
       }
     }
@@ -296,17 +281,8 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
 
     psize = (cur->size + (cur->virt_addr - PAGE_ALIGN_DOWN(cur->virt_addr)))
       >> PAGE_WIDTH;
-    kprintf("psize = %d\n", psize);
     if(psize<<PAGE_WIDTH < (cur->size + (cur->virt_addr -
                                          PAGE_ALIGN_DOWN(cur->virt_addr)))) psize++;
-
-    kprintf("Mapping region at %p %d pages\n", PAGE_ALIGN_DOWN(cur->virt_addr),
-            psize);
-    kprintf("VMMAP flags:");
-    if(flags & VMR_WRITE) kprintf("W");
-    if(flags & VMR_EXEC) kprintf("E");
-    if(flags & VMR_READ) kprintf("R");
-    kprintf("\n");
 
     r = vmrange_map(generic_memobj, vmm, PAGE_ALIGN_DOWN(cur->virt_addr), psize,
                     flags, 0);
@@ -316,13 +292,6 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
     if(cur->type == SHT_PROGBITS) {
       r = mmap_core(vmm, PAGE_ALIGN_DOWN(cur->virt_addr),
                     PAGE_ALIGN_DOWN(cur->bin_addr) >> PAGE_WIDTH, psize, kflags);
-      kprintf("MAP bin: %p to %p binary with %d pages\n", cur->virt_addr, cur->bin_addr,
-              psize);
-      kprintf("MAP kflags:");
-      if(kflags & KMAP_WRITE) kprintf("W");
-      if(kflags & KMAP_EXEC) kprintf("E");
-      if(kflags & KMAP_READ) kprintf("R");
-      kprintf("\n");
       if(r)
         panic("Server [#%d]: Failed to map section. (ERR = %d)", num, r);
     }
@@ -355,6 +324,7 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
 
   /* Insufficient return address to prevent task from returning to void. */
   ustack_top -= sizeof(uintptr_t);
+
   /* setup argc, argv, env */
   ustack_top -= (5*sizeof(uintptr_t) + strlen(srv->name) + 2*sizeof(char) +
                  strlen(BOOTENV));
@@ -383,7 +353,6 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
           num, entry, r);
 
   r=arch_process_context_control(task,SYS_PR_CTL_SET_STACK,ustack_top);
-  kprintf("ustack_top = %p\n", ustack_top);
   if (r < 0)
     panic("Server [#%d]: Failed to set task's stack(%p). (ERR = %d)", num,
           ustack_top, r);
