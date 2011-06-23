@@ -82,6 +82,49 @@ out:
   return ret;
 }
 
+static char **__get_argvs(char *cmd, int *argc)
+{
+  char *ln = cmd, *lp;
+  int as = 1, i = 0;
+  char **argv_list = NULL;
+
+  while(*ln) {
+    ln += sizeof(char);
+    if(*ln == ' ') as++;
+  }
+
+  if(!(argv_list = memalloc(sizeof(uintptr_t)*as))) {
+  __enomem:
+    panic("[Service init] Cannot allocate memory.\n");
+  }
+
+  *argc = as;
+
+  if(as == 1) {
+    argv_list[0] = memalloc(strlen(cmd) + sizeof(char));
+    if(!argv_list[0]) goto __enomem;
+    memset(argv_list[0], 0, strlen(cmd) + sizeof(char));
+    memcpy(argv_list[0], cmd, strlen(cmd) + sizeof(char));
+  } else {
+    ln = cmd; lp = cmd;
+    while(true) {
+      if(*ln == ' ' || *ln == '\0') {
+        argv_list[i] = memalloc(sizeof(char)*(ln - lp) + sizeof(char));
+        if(!argv_list[i]) goto __enomem;
+        memset(argv_list[i], 0, sizeof(char)*(ln - lp) + sizeof(char));
+        memcpy(argv_list[i], lp, sizeof(char)*(ln - lp));
+
+        lp = ln + sizeof(char); i++;
+      }
+      if(*ln != '\0') ln += sizeof(char);
+      else break;
+    }
+
+  }
+
+  return argv_list;
+}
+
 static void __create_task_mm(task_t *task, int num, init_server_t *srv)
 {
   struct bin_map *emap = get_elf_map(task,srv);
@@ -178,29 +221,33 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
     panic("Server [#%d]: Failed to set pertask data(%p). (ERR = %d)", num, ustack_top, r);
   }
 
+  int args_n = 0, i, al = 0;
+  char **argvs = NULL;
+
+  argvs = __get_argvs(srv->name, &args_n);
   /* Insufficient return address to prevent task from returning to void. */
   ustack_top -= sizeof(uintptr_t);
 
   /* setup argc, argv, env */
-  ustack_top -= (5*sizeof(uintptr_t) + strlen(srv->name) + 2*sizeof(char) +
+  ustack_top -= ((3 + args_n)*sizeof(uintptr_t) + strlen(srv->name) + 2*sizeof(char) +
                  strlen(BOOTENV));
-  argc = user_to_kernel_vaddr(task_get_rpd(task),ustack_top);
-  *argc = 1; /* we're actually set only srv name */
+  argc = user_to_kernel_vaddr(task_get_rpd(task), ustack_top);
+  *argc = args_n; /* we're actually set only srv name */
 
-  /* set argv, envp pointers */
   argv = (uintptr_t *)((char *)argc + sizeof(uintptr_t));
-  *argv = (uintptr_t)((char *)ustack_top + 5*sizeof(uintptr_t));
-  envp = (uintptr_t *)((char *)argv + 2*sizeof(uintptr_t));
-  *envp = (uintptr_t)((char *)ustack_top + 5*sizeof(uintptr_t) +
+  for(i = 0; i < args_n; i++) {
+    argv[i] = (uintptr_t)((char *)ustack_top + ((3 + args_n)*sizeof(uintptr_t) + al));
+    arg1 = user_to_kernel_vaddr(task_get_rpd(task), (uintptr_t) argv[i]);
+    memcpy(arg1, argvs[i], strlen(argvs[i]));
+    al += (sizeof(char) + strlen(argvs[i]));
+  }
+  /* set argv, envp pointers */
+  envp = (uintptr_t *)((char *)argv + (1 + args_n)*sizeof(uintptr_t));
+  *envp = (uintptr_t)((char *)ustack_top + (3 + args_n)*sizeof(uintptr_t) +
                       strlen(srv->name) + sizeof(char));
 
   /* fill values for argv, envp */
-  arg1 = (char *)((char *)argc + 5*sizeof(uintptr_t));
-  envp1 = (char *)((char *)argc + 5*sizeof(uintptr_t) +
-                   strlen(srv->name) + sizeof(char));
-  memset(arg1, 0, strlen(srv->name) + sizeof(char));
-  memset(envp1, 0, strlen(BOOTENV) + sizeof(char));
-  memcpy(arg1, srv->name, strlen(srv->name));
+  envp1 = user_to_kernel_vaddr(task_get_rpd(task), (uintptr_t) *envp);
   memcpy(envp1, BOOTENV, strlen(BOOTENV));
 
   r=arch_process_context_control(task,SYS_PR_CTL_SET_ENTRYPOINT,entry);
