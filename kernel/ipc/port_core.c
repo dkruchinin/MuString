@@ -572,8 +572,8 @@ long ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
   }
 
   LOCK_IPC(ipc);
-  /* First port created ? */
-  /*if( !ipc->ports ) {
+  /* First port created ? *//*
+  if( !get_ports_count(ipc) ) {
     r = -ENOMEM;
     port_num = get_limit(owner->limits, LIMIT_MAX_PORTS);
     ipc->ports = allocate_ipc_memory(sizeof(ipc_gen_port_t *) * port_num);
@@ -584,8 +584,8 @@ long ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
   } else if( ipc->num_ports >= ipc->allocated_ports ) {
     r=-EMFILE;
     goto out_unlock;
-  }*/
-
+  }
+*/
   if( ipc->num_ports >= ipc->allocated_ports ) {
     r=-EMFILE;
     goto out_unlock;

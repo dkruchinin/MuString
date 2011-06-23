@@ -76,17 +76,22 @@ static inline void __delete_hat_leaf(hat_leaf_t *leaf)
 /* HAT initialization */
 int hat_initialize(hat_t *hat, ulong_t size)
 {
-
+  ulong_t pow;
   if(!hat)
     return -EINVAL;
   if (size > HAT_MAX_SIZE)
     return -EINVAL;
 
   /* Compute power of 2 needed for the given size */
-  hat->power = bit_find_msf(size);
+  pow = bit_find_msf(size);
 
   if (!is_powerof2(size))
-  hat->power++;
+    pow++;
+
+  hat->power = pow / 2;
+
+  if ( (pow % 2) > 0)
+    hat->power++;
 
   if (!leaves_cache) {
     leaves_cache = create_memcache("HAT leaves", sizeof(hat_leaf_t), 1,
@@ -96,6 +101,7 @@ int hat_initialize(hat_t *hat, ulong_t size)
             sizeof(leaves_cache));
     }
   }
+
 
   if (!slots_cache) {
     slots_cache = create_memcache("HAT slots", sizeof(void *) * (1 << hat->power), 1,

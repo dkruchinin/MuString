@@ -33,8 +33,8 @@
 #include <mstring/types.h>
 
 #define HAT_DEFAULT_POWER 5
-#define HAT_MAX_POWER 12
-#define HAT_MAX_SIZE (1UL << HAT_MAX_POWER)
+#define HAT_MAX_POWER 7 /* 128 * 128 */
+#define HAT_MAX_SIZE (1UL << HAT_MAX_POWER) * (1UL << HAT_MAX_POWER)
 #define HAT_DEFAULT_SIZE (1UL << HAT_DEFAULT_POWER)
 
 #define hat_is_empty(hat)  ((hat)->num_items == 0)

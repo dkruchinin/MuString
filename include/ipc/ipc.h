@@ -59,6 +59,8 @@ typedef struct __task_ipc {
   spinlock_t channel_lock;
   int allocated_channels;
 } task_ipc_t;
+#define get_ports_count(I)    (I->ports->num_items)
+#define get_channels_count(I) (I->channels->num_items)
 
 typedef struct __task_ipc_priv {
   /* Cached singletones for synchronous operations. */

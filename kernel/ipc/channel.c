@@ -189,6 +189,10 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
     goto out_unlock;
   }*/
 
+  if( ipc->num_channels >= ipc->allocated_channels ) {
+    r=-EMFILE;
+    goto out_unlock;
+  }
   id = idx_allocate(&ipc->channel_array);
   if( id == IDX_INVAL ) {
     r=-EMFILE;

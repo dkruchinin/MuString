@@ -89,9 +89,13 @@ int setup_task_ipc(task_t *task)
     memset(ipc,0,sizeof(task_ipc_t));
     atomic_set(&ipc->use_count,1);
 
-    if ( hat_initialize(&ipc->channels, get_limit(task->limits, LIMIT_CHANNELS)) ||
-         hat_initialize(&ipc->ports, get_limit(task->limits, LIMIT_PORTS)) )
+    if ( hat_initialize(&ipc->channels, CONFIG_TASK_CHANNELS_LIMIT_MAX))
       goto free_ipc;
+    ipc->allocated_channels = CONFIG_TASK_CHANNELS_LIMIT_MAX;
+
+    if ( hat_initialize(&ipc->ports, CONFIG_TASK_PORTS_LIMIT_MAX) )
+      goto free_ipc;
+    ipc->allocated_ports = CONFIG_TASK_PORTS_LIMIT_MAX;
 
     spinlock_initialize(&ipc->port_lock, "Port");
     spinlock_initialize(&ipc->channel_lock, "Channel");
@@ -189,10 +193,10 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
     LOCK_IPC(ipc);
     if( !hat_is_empty(&ipc->ports) ) { /* Duplicate all open ports. */
 
-      if( hat_initialize(&tipc->ports, ipc->ports.size) != 0 ) {
+     /* if( hat_initialize(&tipc->ports, ipc->ports.size) != 0 ) {
         goto out_unlock;
-      }
-      tipc->allocated_ports=ipc->allocated_ports;
+      } */
+      //tipc->allocated_ports=ipc->allocated_ports;
       tipc->max_port_num = ipc->max_port_num;
       tipc->num_ports = ipc->num_ports;
 
@@ -211,11 +215,11 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
 
     if( !hat_is_empty(&ipc->channels) ) { /* Duplicate all open channels. */
 
-      if( hat_initialize(&tipc->channels, ipc->channels.size) != 0 ) {
+     /* if( hat_initialize(&tipc->channels, ipc->channels.size) != 0 ) {
         UNLOCK_IPC(ipc);
         goto put_ports;
-      }
-      tipc->allocated_channels=ipc->allocated_channels;
+      }*/
+      //tipc->allocated_channels=ipc->allocated_channels;
       tipc->max_channel_num=ipc->max_channel_num;
       tipc->num_channels = ipc->num_channels;
 
