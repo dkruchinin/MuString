@@ -57,7 +57,8 @@ static inline hat_leaf_t *create_hat_leaf(uint_t leaf_size)
   if (!ret_hl)
     return NULL;
   memset(ret_hl, 0, sizeof(*ret_hl));
-  ret_hl->slots = alloc_from_memcache(leaves_cache, 0);
+  ret_hl->slots = alloc_from_memcache(slots_cache, 0);
+  memset(ret_hl->slots, 0, sizeof(*ret_hl->slots));
   if (!ret_hl->slots)
     return NULL;
   return ret_hl;
