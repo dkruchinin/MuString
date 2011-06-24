@@ -605,7 +605,7 @@ long ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
 
   /* Install new port. */
   IPC_LOCK_PORTS(ipc);
-  hat_insert(&ipc->ports, id, &port);
+  hat_insert(&ipc->ports, id, port);
   ipc->num_ports++;
 
   if( id > ipc->max_port_num ) {
