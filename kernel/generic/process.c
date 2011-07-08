@@ -194,18 +194,17 @@ int create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
         if( attrs && attrs->task_attrs.run_immediately == __ATTR_ON ) {
           /*
            * Stop the new thread if the clone event is traced
-           * TODO [dg]: add the same functionality for fork too
+           * TODO [dg]: add the same functionality for fork as well
            */
            if ((flags & CLONE_MM) && event_is_traced(new_task, PTRACE_EV_CLONE)) {
              usiginfo_t uinfo;
 
              memset(&uinfo, 0, sizeof(uinfo));
              uinfo.si_signo = SIGSTOP;
-             set_ptrace_event(new_task, PTRACE_EV_STOPPED);
              send_task_siginfo(new_task, &uinfo, false, NULL, current_task());
            }
 
-          sched_change_task_state(new_task, TASK_STATE_RUNNABLE);
+           sched_change_task_state(new_task, TASK_STATE_RUNNABLE);
         }
       }
     } else {

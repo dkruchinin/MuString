@@ -127,6 +127,10 @@ static void ptrace_cont(task_t *child)
 {
   sigqueue_t *squeue = &child->siginfo.sigqueue;
 
+  // !!! DEBUG
+   kprintf("[KERNEL, %s, line %d]: tid = %d\n",
+           __func__, __LINE__, child->tid);
+
   /* clear the SIGSTOP signal if it is pending */
   LOCK_TASK_SIGNALS(child);
   if (bit_test(squeue->active_mask, SIGSTOP)) {
@@ -237,6 +241,10 @@ int ptrace_stop(ptrace_event_t event, ulong_t msg)
 {
   task_t *child = current_task();
   bool signaled = false;
+
+  // !!! DEBUG
+  kprintf("[KERNEL, %s, line %d]: tid = %d, event = %d, msg = %lu\n",
+          __func__, __LINE__, child->tid, event, msg);
 
   /*
    * yield CPU to a debugger

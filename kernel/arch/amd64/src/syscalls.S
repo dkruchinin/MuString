@@ -154,18 +154,18 @@ return_from_syscall:
 	  /* Before returning from syscall we should check for pending works.
 	   * Note that %rax contains return code.
 	   */
-      mov %gs:CPU_SCHED_STAT_USER_WORKS_OFFT, %rbx
+    mov %gs:CPU_SCHED_STAT_USER_WORKS_OFFT, %rbx
 
 	  cmpq $0, (%rbx)
 	  je no_works_after_syscall
 
-      pushq %rax
+    pushq %rax
 	  movq $__SYCALL_UWORK, %rdi
 	  movq %rax, %rsi
 	  movq %rsp, %rdx
-      addq $8, %rdx
+    addq $8, %rdx
 	  callq handle_uworks
-      popq %rax
+    popq %rax
 
 no_works_after_syscall:
 	  RESTORE_GPRS
@@ -174,10 +174,10 @@ no_works_after_syscall:
 	  cli
 	  addq $8,%rsp /* Simulate our extra 'push %rax' */
 	  RESTORE_USER_SEGMENT_REGISTERS
-      pushq %rax
+    pushq %rax
 	  movl %gs:(CPU_SCHED_STAT_USER_GS_OFFT), %eax
 	  swapgs
 	  movl %eax, %gs
-      popq %rax
-      orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
-      iretq
+    popq %rax
+    orq $(1 << 9),HW_INTERRUPT_CTX_RFLAGS_OFFT(%rsp)
+    iretq

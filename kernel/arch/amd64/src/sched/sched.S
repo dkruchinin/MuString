@@ -26,9 +26,9 @@
 
 .globl kthread_fork_path
 kthread_fork_path:
-        RESTORE_ALL
-        popq %rax
-        iretq
+    RESTORE_ALL
+    popq %rax
+    iretq
 
 .globl user_fork_path_test
 user_fork_path_test:
@@ -36,6 +36,22 @@ user_fork_path_test:
 
 .globl user_fork_path
 user_fork_path:
+    /* Before returning from fork we should check for pending works.
+     * Note that %rax contains return code.
+     */
+    sti
+    mov %gs:CPU_SCHED_STAT_USER_WORKS_OFFT, %rbx
+
+    cmpq $0, (%rbx)
+    je no_works_after_fork
+    pushq %rax
+    movq $__SYCALL_UWORK, %rdi
+    movq %rax, %rsi
+    movq %rsp, %rdx
+    addq $8, %rdx
+    callq handle_uworks
+    popq %rax
+no_works_after_fork:
     xorq %rax,%rax
 resume_userspace:
     RESTORE_ALL    
