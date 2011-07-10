@@ -747,11 +747,12 @@ long ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
 recv_cycle:
   /* Main 'Receive' cycle. */
   msg=NULL;
+  IPC_LOCK_PORT_W(port);
   if( task_was_interrupted(owner) ) {
-      return ERR(-EINTR);
+    IPC_UNLOCK_PORT_W(port);
+    return ERR(-EINTR);
   }
 
-  IPC_LOCK_PORT_W(port);
   if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
     if( !port->avail_messages ) {
       /* No incoming messages: sleep (if requested). */
@@ -766,6 +767,11 @@ recv_cycle:
         r=waitqueue_push_intr(&port->waitqueue,&w);
 
         IPC_UNLOCK_PORT_W(port);
+
+        if (task_was_interrupted(owner)) {
+          waitqueue_delete(&w, WQ_DELETE_SIMPLE);
+          r = -EINTR;
+        }
         if( !r ) {
           goto recv_cycle;
         } else {

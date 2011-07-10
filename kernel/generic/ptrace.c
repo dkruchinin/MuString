@@ -111,7 +111,7 @@ static int ptrace_attach(task_t *tracer, task_t *child)
 
   if (!ret && (child->state != TASK_STATE_JUST_BORN)) {
     /*
-     * now, one can to stop the target process
+     * now, one can stop the target process
      */
 
     usiginfo_t sinfo;
@@ -266,8 +266,8 @@ int ptrace_stop(ptrace_event_t event, ulong_t msg)
     child->last_signum = SIGTRAP;   /* signal emulation for ptracer */
   } else {
     /*
-     * на время трассировки запретить считывание события для
-     * других ожидающих, кроме отладчика
+     * for the time of tracing disable event pick up for everything
+     * except the tracer
      */
     signaled = true;
     child->wstat = 0;
@@ -281,7 +281,7 @@ int ptrace_stop(ptrace_event_t event, ulong_t msg)
    */
   preempt_disable();
 
-  /* проверить, что поток попал в ядро в результате исключения */
+  /* check if the tread has became into the kernel due to an exception */
   if ((event == PTRACE_EV_TRAP) ||
       ((event == PTRACE_EV_EXIT) && (child->wstat & WSTAT_SIGNALED))) {
     set_task_flags(child, TF_INFAULT);

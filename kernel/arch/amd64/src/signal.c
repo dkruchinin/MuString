@@ -109,7 +109,7 @@ static void __perform_default_action(int sig)
     sched_change_task_state(t, TASK_STATE_STOPPED);
 
     if (task_traced(t))
-          set_ptrace_event(t, PTRACE_EV_STOPPED);
+      set_ptrace_event(t, PTRACE_EV_STOPPED);
 
     t->wstat = WSTAT_STOPPED;
     t->last_signum = SIGSTOP;
