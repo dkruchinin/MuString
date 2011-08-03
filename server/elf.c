@@ -150,7 +150,7 @@ struct bin_map *get_elf_map(task_t *task, init_server_t *srv)
     if(cur->type == SHT_NOBITS) kprintf("Absent in image\n");
     else kprintf("Exist in image\n");
     kprintf("\tVirt addr: %p, size %ld, img_addr %p\n", cur->virt_addr,
-            cur->size, cur->bin_addr);
+            cur->size, cur->bin_addr - srv->addr);
 
     cur = cur->next;
   }

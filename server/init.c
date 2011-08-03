@@ -176,19 +176,29 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
       flags |= VMR_WRITE;
       kflags |= KMAP_WRITE;
     }
-    if(cur->flags == SHT_NOBITS) flags |= VMR_POPULATE;
+    if(cur->type == SHT_NOBITS) flags |= VMR_POPULATE;
 
     psize = (cur->size + (cur->virt_addr - PAGE_ALIGN_DOWN(cur->virt_addr)))
       >> PAGE_WIDTH;
     if(psize<<PAGE_WIDTH < (cur->size + (cur->virt_addr -
                                          PAGE_ALIGN_DOWN(cur->virt_addr)))) psize++;
 
+#if 0
+    kprintf("Mapping vmrange %p - %p\n", PAGE_ALIGN_DOWN(cur->virt_addr),
+            PAGE_ALIGN_DOWN(cur->virt_addr) + (psize << PAGE_WIDTH));
+#endif
     r = vmrange_map(generic_memobj, vmm, PAGE_ALIGN_DOWN(cur->virt_addr), psize,
                     flags, 0);
     if(!PAGE_ALIGN(r))
       panic("Server [#%d]: Failed to create VM range for section. (ERR = %d)", num, r);
 
     if(cur->type == SHT_PROGBITS) {
+#if 0
+      kprintf("Mapping range %p - %p (%p - %p)\n", PAGE_ALIGN_DOWN(cur->bin_addr),
+              PAGE_ALIGN_DOWN(cur->bin_addr) + (psize << PAGE_WIDTH),
+              PAGE_ALIGN_DOWN(cur->bin_addr - srv->addr),
+              PAGE_ALIGN_DOWN(cur->bin_addr - srv->addr) + (psize << PAGE_WIDTH));
+#endif
       r = mmap_core(vmm, PAGE_ALIGN_DOWN(cur->virt_addr),
                     PAGE_ALIGN_DOWN(cur->bin_addr) >> PAGE_WIDTH, psize, kflags);
       if(r)
@@ -320,7 +330,7 @@ static void __server_task_runner(void *data)
 #ifdef CONFIG_CORESERVERS_PERCPU_LAUNCH
       t=sn % CONFIG_NRCPUS;
 
-      if( t != cpu_id() ){ 
+      if( t != cpu_id() ){
         sched_move_task_to_cpu(server,t);
       }
 #endif
