@@ -176,7 +176,8 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
       flags |= VMR_WRITE;
       kflags |= KMAP_WRITE;
     }
-    if(cur->type == SHT_NOBITS) flags |= VMR_POPULATE;
+    if((cur->type == SHT_NOBITS) ||
+       (cur->flags & ESH_WRITE)) flags |= VMR_POPULATE;
 
     psize = (cur->size + (cur->virt_addr - PAGE_ALIGN_DOWN(cur->virt_addr)))
       >> PAGE_WIDTH;
@@ -193,14 +194,28 @@ static void __create_task_mm(task_t *task, int num, init_server_t *srv)
       panic("Server [#%d]: Failed to create VM range for section. (ERR = %d)", num, r);
 
     if(cur->type == SHT_PROGBITS) {
+      if(cur->flags & ESH_WRITE) {
 #if 0
-      kprintf("Mapping range %p - %p (%p - %p)\n", PAGE_ALIGN_DOWN(cur->bin_addr),
-              PAGE_ALIGN_DOWN(cur->bin_addr) + (psize << PAGE_WIDTH),
-              PAGE_ALIGN_DOWN(cur->bin_addr - srv->addr),
-              PAGE_ALIGN_DOWN(cur->bin_addr - srv->addr) + (psize << PAGE_WIDTH));
+        kprintf("Copying to %p kaddr (%p uaddr) from %p baddr(%p kaddr) (%ld size)\n",
+                user_to_kernel_vaddr(task_get_rpd(task), PAGE_ALIGN_DOWN(cur->virt_addr)),
+                PAGE_ALIGN_DOWN(cur->virt_addr), PAGE_ALIGN_DOWN(cur->bin_addr),
+                pframe_id_to_virt((PAGE_ALIGN_DOWN(cur->bin_addr))>>PAGE_WIDTH), psize << PAGE_WIDTH);
 #endif
-      r = mmap_core(vmm, PAGE_ALIGN_DOWN(cur->virt_addr),
-                    PAGE_ALIGN_DOWN(cur->bin_addr) >> PAGE_WIDTH, psize, kflags);
+        memcpy((void *)user_to_kernel_vaddr(task_get_rpd(task),
+                                            PAGE_ALIGN_DOWN(cur->virt_addr)),
+               (const void *)pframe_id_to_virt((PAGE_ALIGN_DOWN(cur->bin_addr))>>PAGE_WIDTH),
+               psize << PAGE_WIDTH);
+        r = 0;
+      } else {
+#if 0
+        kprintf("Mapping range %p - %p (%p - %p)\n", PAGE_ALIGN_DOWN(cur->bin_addr),
+                PAGE_ALIGN_DOWN(cur->bin_addr) + (psize << PAGE_WIDTH),
+                PAGE_ALIGN_DOWN(cur->bin_addr - srv->addr),
+                PAGE_ALIGN_DOWN(cur->bin_addr - srv->addr) + (psize << PAGE_WIDTH));
+#endif
+        r = mmap_core(vmm, PAGE_ALIGN_DOWN(cur->virt_addr),
+                      PAGE_ALIGN_DOWN(cur->bin_addr) >> PAGE_WIDTH, psize, kflags);
+      }
       if(r)
         panic("Server [#%d]: Failed to map section. (ERR = %d)", num, r);
     }

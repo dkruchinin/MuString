@@ -636,7 +636,7 @@ long sys_fork(void)
   task_t *new,*caller=current_task();
   long r;
   task_creation_attrs_t tca;
-
+  /*  kprintf("%s: %d at %s\n", __FILE__, __LINE__, __FUNCTION__);*/
   if( !__check_creation_perm(FORK_FLAGS) ) {
     return ERR(-EPERM);
   }
@@ -648,6 +648,7 @@ long sys_fork(void)
   tca.exec_attrs.per_task_data=caller->ptd;
 
   r=create_task(current_task(),FORK_FLAGS,TPL_USER,&new,&tca);
+
   if( !r ) {
     r=new->pid;
   }
