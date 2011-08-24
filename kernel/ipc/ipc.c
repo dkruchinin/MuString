@@ -227,7 +227,7 @@ long replicate_ipc(task_ipc_t *ipc,task_t *rcpt)
         tchan = hat_lookup(&ipc->channels, i);
         if( tchan ) {
           hat_insert(&tipc->channels, i, ipc_clone_channel(tchan, tipc));
-          if( !hat_lookup(&tipc->ports, i) ) {
+          if( !hat_lookup(&tipc->channels, i) ) {
             UNLOCK_IPC(ipc);
             goto put_channels;
           }
