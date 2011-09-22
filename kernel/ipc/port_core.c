@@ -16,6 +16,8 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2010 Alfeiks <madtirra@jarios.org>
+ * (c) Copyright 2011 Jari OS ry <http://jarios.org>
  *
  * ipc/port_core.c: implementation of core IPC ports logic.
  *
@@ -409,11 +411,13 @@ out:
 static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
                                                 iovec_t *iovec, ulong_t numvecs,
                                                 port_msg_info_t *stats,
-                                                ulong_t offset)
+                                                ulong_t offset, ulong_t *sz)
 {
   long r;
   size_t recv_len;
   size_t extra_size = 0;
+   
+  *sz = 0;
 
   if( iovec ) {
     if( offset >= msg->data_size ) {
@@ -429,7 +433,7 @@ static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
       if( copy_to_user(iovec->iov_base,eptr,recv_len) ) {
         r=-EFAULT;
         goto out;
-      }
+      } else *sz += recv_len;
 
       iovec->iov_len -= recv_len;
       iovec->iov_base = (void *)((char *)iovec->iov_base + recv_len);
@@ -454,7 +458,7 @@ static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
       r=copy_to_user((void *)iovec->iov_base,msg->send_buffer+offset,recv_len);
       if( r > 0 ) {
         r=-EFAULT;
-      }
+      } else *sz += recv_len;
     } else {
       /* Long message - process it via IPC buffers.
        */
@@ -626,7 +630,7 @@ out:
 long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
                        iovec_t *rcv_iov,ulong_t numvecs,ulong_t offset) {
   ipc_port_message_t *msg = NULL;
-  long r = 0;
+  long r = 0; ulong_t sz;
 
   IPC_LOCK_PORT_W(port);
   if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
@@ -643,11 +647,11 @@ long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
   IPC_UNLOCK_PORT_W(port);
 
   if( !r ) {
-    r=__transfer_message_data_to_receiver(msg,rcv_iov,numvecs,NULL,offset);
+    r=__transfer_message_data_to_receiver(msg,rcv_iov,numvecs,NULL,offset, &sz);
     POST_MESSAGE_DATA_ACCESS_STEP(port,msg,r,false);
   }
 
-  return ERR(r);
+  return sz;
 }
 
 static long __map_and_write_indirect_message(ipc_port_message_t *msg,
@@ -739,6 +743,7 @@ long ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
                       port_msg_info_t *msg_info)
 {
   long r=-EINVAL;
+  ulong_t sz;
   ipc_port_message_t *msg;
   task_t *owner=current_task();
 
@@ -791,7 +796,7 @@ recv_cycle:
 
 out:
   if( msg != NULL ) {
-    r=__transfer_message_data_to_receiver(msg,iovec,numvec,msg_info,0);
+    r=__transfer_message_data_to_receiver(msg,iovec,numvec,msg_info,0, &sz);
 
     /* OK, message was successfully transferred, so remove it from the port
      * in case it is a non-blocking transfer.
