@@ -180,16 +180,16 @@ endmenu
 
 endmenu
 
-menu   "Namespace settings"
+menu   "Domains support settings"
 
-config ENABLE_NS
-	bool "Enable namespaces"
+config ENABLE_DOMAIN
+	bool "Enable domains"
 	default n
 	help
-	Namespaces is required to support several industry standarts.
+	Domains is required to support several industry standarts.
 	But also can be used as a security model in several cases.
-	Namespaces allow to separate group of tasks from each other throught 
-	limits and separate namespace carriers. Task from one namespace cannot 
+	Domains allow to separate group of tasks from each other throught 
+	limits and separate domain holders. Task from one domain cannot 
 	access task from other one.
 
 endmenu

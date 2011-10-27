@@ -1252,8 +1252,8 @@ long sys_mmap(pid_t victim, memobj_id_t memobj_id, struct mmap_args *uargs)
     sec_id[2] = S_GET_TASK_OBJ(caller)->creds.gid;
     sec_id[3] = S_GET_TASK_OBJ(caller)->creds.mac_label;
     S_UNLOCK_OBJECT_R(S_GET_TASK_OBJ(caller));
-#ifdef CONFIG_ENABLE_NS
-    sec_id[4] = caller->namespace->ns_id;
+#ifdef CONFIG_ENABLE_DOMAIN
+    sec_id[4] = caller->domain->dm_id;
 #endif
     ret = memobj_method_call(memobj, mmap_check, memobj, sec_id, PAGE_ALIGN(margs.offset),
                              PAGE_ALIGN(margs.size), margs.prot);

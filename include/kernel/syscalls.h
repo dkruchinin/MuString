@@ -33,7 +33,7 @@
 #include <mstring/sync.h>
 #include <mstring/signal.h>
 #include <mstring/kcontrol.h>
-#include <mstring/namespace.h>
+#include <mstring/domain.h>
 
 #endif
 
@@ -97,8 +97,8 @@
 #define SC_PORT_MSG_WRITE      47
 #define SC_PTRACE              48
 
-#define SC_CHG_CREATE_NAMESPACE  49
-#define SC_CONTROL_NAMESPACE     50
+#define SC_CHG_CREATE_DOMAIN   49
+#define SC_CONTROL_DOMAIN      50
 
 #define SC_MEMSYNC  51
 

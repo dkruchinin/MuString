@@ -40,7 +40,7 @@
 #include <mstring/timer.h>
 #include <mstring/signal.h>
 #include <mstring/limits.h>
-#include <mstring/namespace.h>
+#include <mstring/domain.h>
 #include <security/security.h>
 
 static void main_routine_stage1(void)
@@ -86,7 +86,7 @@ void kernel_main(void)
   slab_allocator_init();
   vmm_initialize();
   initialize_limits();
-  initialize_ns_subsys();
+  initialize_domain_subsys();
   initialize_scheduler();
 
   software_timers_init();

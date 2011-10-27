@@ -14,10 +14,10 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * (c) Copyright 2010 Jari OS non-profit org. <http://jarios.org>
- * (c) Copyright 2010 Madtirra <madtirra@jarios.org>
+ * (c) Copyright 2010,2011 Jari OS non-profit org. <http://jarios.org>
+ * (c) Copyright 2010,2011 Madtirra <madtirra@jarios.org>
  *
- * kernel/namespace.c: namespace support
+ * kernel/domain/domain.c: domains support
  */
 
 #include <mstring/types.h>
@@ -31,70 +31,70 @@
 #include <sync/spinlock.h>
 #include <arch/atomic.h>
 #include <security/security.h>
-#include <mstring/namespace.h>
+#include <mstring/domain.h>
 #include <mm/slab.h>
 #include <config.h>
 
 static memcache_t *ns_cache = NULL;
 static memcache_t *ns_attrs_cache = NULL;
 
-struct namespace *root_ns = NULL;
+struct domain *root_domain = NULL;
 
 static atomic_t ns_count = 0;
 
-#define PANIC_PRE  "\n\tinitialize_ns_subsys: "
+#define PANIC_PRE  "\n\tinitialize_domain_subsys: "
 
-void initialize_ns_subsys(void)
+void initialize_domain_subsys(void)
 {
   task_limits_t *def_limits = NULL;
 
-  kprintf("[NS] Init namespace subsystem ... ");
+  kprintf("[NS] Init domains subsystem ... ");
 
-  ns_cache = create_memcache("NS objects cache", sizeof(struct namespace),
+  ns_cache = create_memcache("Domain objects cache", sizeof(struct domain),
                              1, MMPOOL_KERN | SMCF_IMMORTAL | SMCF_LAZY);
-  ns_attrs_cache = create_memcache("NS attr objects cache", sizeof(struct ns_id_attrs),
+  ns_attrs_cache = create_memcache("Domain attr objects cache", sizeof(struct dm_id_attrs),
                              1, MMPOOL_KERN | SMCF_IMMORTAL | SMCF_LAZY);
 
   if(!ns_cache || !ns_attrs_cache)
-    panic(PANIC_PRE"Failed to initialize memory caches for namespace objects.\n");
+    panic(PANIC_PRE"Failed to initialize memory caches for domain objects.\n");
 
-  /* create root namespace */
-  if(!(root_ns = alloc_namespace()))
-    panic(PANIC_PRE"Failed to allocate root namespace.\n");
+  /* create root domain */
+  if(!(root_domain = alloc_domain_struct()))
+    panic(PANIC_PRE"Failed to allocate root domain.\n");
 
   /* init default namespace */
-  root_ns->ns_carrier = DEFAULT_NS_CARRIER_PID;
-  memcpy(root_ns->name, DEFAULT_NS_NAME, strlen(DEFAULT_NS_NAME));
+  root_domain->dm_holder = DEFAULT_DOMAIN_HOLDER_PID;
+  memcpy(root_domain->name, DEFAULT_DOMAIN_NAME, strlen(DEFAULT_DOMAIN_NAME));
 
   if(!(def_limits = allocate_task_limits()))
-    panic(PANIC_PRE"Failed to allocate root namespace default limits.\n");
+    panic(PANIC_PRE"Failed to allocate root domain default limits.\n");
   set_default_task_limits(def_limits);
-  root_ns->def_limits = def_limits;
-  root_ns->ns_pid_limit = CONFIG_MAX_PID_NUMBER;
+  root_domain->def_limits = def_limits;
+  root_domain->domain_pid_limit = CONFIG_MAX_PID_NUMBER;
   kprintf("OK\n");
 
   return;
 }
 
-struct namespace *get_root_namespace(void)
+struct domain *get_root_domain(void)
 {
-  return root_ns;
+  return root_domain;
 }
 
-struct namespace *alloc_namespace(void)
+struct domain *alloc_domain_struct(void)
 {
-  struct namespace *ns = NULL;
+  struct domain *ns = NULL;
 
   if((ns = alloc_from_memcache(ns_cache, 0))) {
     atomic_set(&ns->use_count, 1);
-    rw_spinlock_initialize(&ns->rw_lock, "NS lock");
-    spinlock_initialize(&ns->pid_array_lock, "NS PID array");
+    rw_spinlock_initialize(&ns->rw_lock, "DOMAIN lock");
+    spinlock_initialize(&ns->pid_array_lock, "DOMAIN PID array");
     if ( idx_allocator_init(&ns->pid_array, CONFIG_MAX_PID_NUMBER) < 0 )
       return NULL;
     memset(ns->name, 0, 16);
-    ns->ns_mm_limit = 0;
-    ns->ns_carrier = 0;
-    ns->ns_id = 0;
+    ns->dm_mm_limit = 0;
+    ns->dm_holder = 0;
+    ns->dm_id = 0;
     ns->pid_count = 0;
     ns->def_limits = NULL; /* should be initialized later */
   }
@@ -102,29 +102,29 @@ struct namespace *alloc_namespace(void)
   return ns;
 }
 
-struct ns_id_attrs *alloc_ns_attrs(struct namespace *ns)
+struct dm_id_attrs *alloc_dm_attrs(struct domain *ns)
 {
-  struct ns_id_attrs *ia = NULL;
+  struct dm_id_attrs *ia = NULL;
 
   if((ia = alloc_from_memcache(ns_attrs_cache, 0))) {
     atomic_inc(&ns->use_count);
-    ia->ns = ns;
-    ia->ns_id = ns->ns_id;
+    ia->domain = ns;
+    ia->dm_id = ns->dm_id;
     ia->trans_flag = 0;
   }
 
   return ia;
 }
 
-void destroy_ns_attrs(struct ns_id_attrs *id)
+void destroy_dm_attrs(struct dm_id_attrs *id)
 {
-  atomic_dec(&id->ns->use_count);
+  atomic_dec(&id->domain->use_count);
   memfree(id);
 
   return;
 }
 
-void destroy_namespace(struct namespace *ns)
+void destroy_domain(struct domain *ns)
 {
   memfree(ns);
 
@@ -132,22 +132,22 @@ void destroy_namespace(struct namespace *ns)
 }
 
 /* top level functions */
-int sys_chg_create_namespace(ulong_t ns_mm_limit, ulong_t ns_pid_limit, char *short_name)
+int sys_chg_create_domain(ulong_t ns_mm_limit, ulong_t ns_pid_limit, char *short_name)
 {
-#ifndef CONFIG_ENABLE_NS
+#ifndef CONFIG_ENABLE_DOMAIN
   return ERR(-ENOSYS);
 #else
   int r = 0;
-  struct namespace *ns = NULL;
-  task_t *task=current_task();
+  struct domain *ns = NULL;
+  task_t *task = current_task();
   task_limits_t *def_limits = NULL;
 
   /* check for the creator */
-  if(task->namespace->ns_id > 1) /* allowed only from root namespace */
+  if(task->domain->dm_id > 1) /* allowed only from root namespace */
     return ERR(-EPERM);
 
   /* create namespace */
-  if(!(ns = alloc_namespace()))
+  if(!(ns = alloc_domain_struct()))
     return ERR(-ENOMEM);
 
   /* check PID limit */
@@ -159,16 +159,16 @@ int sys_chg_create_namespace(ulong_t ns_mm_limit, ulong_t ns_pid_limit, char *sh
   if (r < 0) {
     return ERR(-ENOMEM);
   }
-  ns->ns_pid_limit = ns_pid_limit;
+  ns->domain_pid_limit = ns_pid_limit;
   /* init default namespace */
-  ns->ns_carrier = task->pid;
+  ns->dm_holder = task->pid;
   if(copy_from_user(ns->name, short_name, 16))
     return ERR(-EFAULT);
-  ns->ns_mm_limit = ns_mm_limit;
+  ns->dm_mm_limit = ns_mm_limit;
 
   /* firstly assign default limits */
   if(!(def_limits = allocate_task_limits())) {
-    destroy_namespace(ns);
+    destroy_domain(ns);
     return ERR(-ENOMEM);
   }
   set_default_task_limits(def_limits);
@@ -176,29 +176,29 @@ int sys_chg_create_namespace(ulong_t ns_mm_limit, ulong_t ns_pid_limit, char *sh
 
   /* assign id */
   atomic_inc(&ns_count);
-  ns->ns_id = (uint8_t)ns_count;
+  ns->dm_id = (uint8_t)ns_count;
 
   /* change namespace attrs */
-  task->namespace->ns_id = ns->ns_id;
-  task->namespace->trans_flag = 1; /* carrier allowed to translate */
-  task->namespace->ns = ns;
+  task->domain->dm_id = ns->dm_id;
+  task->domain->trans_flag = 1; /* carrier allowed to translate */
+  task->domain->domain = ns;
 
   return ERR(r);
 #endif
 }
 
-int sys_control_namespace(pid_t task, int op_code, void *data)
+int sys_control_domain(pid_t task, int op_code, void *data)
 {
   int r = 0;
 
   switch(op_code) {
-  case NS_CTRL_GET_CARRIER_PID: /* all allowed */
-    if(copy_to_user(data, &current_task()->namespace->ns->ns_carrier,
+  case DOMAIN_CTRL_GET_HOLDER_PID: /* all allowed */
+    if(copy_to_user(data, &current_task()->domain->domain->dm_holder,
                     sizeof(pid_t)))
       r = -EFAULT;
     break;
-  case NS_CTRL_REMOVE_TRANS: /* all allowed */
-    current_task()->namespace->trans_flag = 0;
+  case DOMAIN_CTRL_REMOVE_TRANS: /* all allowed */
+    current_task()->domain->trans_flag = 0;
     break;
   default:
     r = -EINVAL;

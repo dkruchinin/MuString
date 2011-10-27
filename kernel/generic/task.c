@@ -39,13 +39,13 @@
 #include <arch/scheduler.h>
 #include <mstring/types.h>
 #include <mstring/process.h>
-#include <mstring/namespace.h>
+#include <mstring/domain.h>
 #include <config.h>
 
 static bool init_launched;
 
 /* Macros for dealing with PID array locks. */
-/* NOTE if CONFIG_ENABLE_NS is not set, we have
+/* NOTE if CONFIG_ENABLE_DOMAIN is not set, we have
    only one namespace */
 #define LOCK_PID_ARRAY(ns) spinlock_lock(&ns->pid_array_lock)
 #define UNLOCK_PID_ARRAY(ns) spinlock_unlock(&ns->pid_array_lock)
@@ -53,7 +53,7 @@ static bool init_launched;
 
 void initialize_process_subsystem(void);
 
-static void __free_pid(struct namespace * ns, pid_t pid)
+static void __free_pid(struct domain * ns, pid_t pid)
 {
   if (ns){
     LOCK_PID_ARRAY(ns);
@@ -62,7 +62,7 @@ static void __free_pid(struct namespace * ns, pid_t pid)
   }
 }
 
-static pid_t __allocate_pid(struct namespace * ns)
+static pid_t __allocate_pid(struct domain * ns)
 {
   pid_t pid;
   if (ns){
@@ -80,14 +80,14 @@ void initialize_task_subsystem(void)
   /* Sanity check: allocate PID 0 for idle tasks, so the next available PID
    * will be 1 (init).
    */
-  idle = __allocate_pid(root_ns);
+  idle = __allocate_pid(root_domain);
   if(idle != 0) {
     panic( "initialize_task_subsystem(): Can't allocate PID for idle task ! (%d returned)\n",
            idle );
   }
 
   /* Reserve a PID for the init task. */
-  idle = __allocate_pid(root_ns);
+  idle = __allocate_pid(root_domain);
   if(idle != 1) {
     panic( "initialize_task_subsystem(): Can't allocate PID for Init task ! (%d returned)\n",
            idle );
@@ -101,9 +101,9 @@ void initialize_task_subsystem(void)
 static void __free_pid_and_tid(task_t *task)
 {
   if (!is_thread(task)){
-    __free_pid(task->namespace->ns, task->pid);
+    __free_pid(task->domain->domain, task->pid);
     if (!is_kernel_thread(task))
-      task->namespace->ns->pid_count--;
+      task->domain->domain->pid_count--;
   }
   else {
     LOCK_TASK_STRUCT(task->group_leader);
@@ -123,15 +123,15 @@ static int __alloc_pid_and_tid(task_t *task,task_t *parent,ulong_t flags,
 
   /* Allocate PID first. */
   if( flags & TASK_INIT ) {
-    LOCK_PID_ARRAY(root_ns);
+    LOCK_PID_ARRAY(root_domain);
     if( !init_launched ) {
       pid = 1;
-      root_ns->pid_count++;
+      root_domain->pid_count++;
       init_launched = true;
     } else {
       r =- EINVAL;
     }
-    UNLOCK_PID_ARRAY(root_ns);
+    UNLOCK_PID_ARRAY(root_domain);
   } else {
     if( (flags & CLONE_MM) && priv != TPL_KERNEL ) {
       pid = parent->pid;
@@ -139,9 +139,9 @@ static int __alloc_pid_and_tid(task_t *task,task_t *parent,ulong_t flags,
       tid = idx_allocate(&parent->group_leader->tg_priv->tid_allocator);
       UNLOCK_TASK_STRUCT(parent);
     } else {
-      pid = __allocate_pid(task->namespace->ns);
+      pid = __allocate_pid(task->domain->domain);
       if (pid != IDX_INVAL)
-        root_ns->pid_count++;
+        root_domain->pid_count++;
     }
   }
 
@@ -491,8 +491,8 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   int r = -ENOMEM;
   page_frame_t *stack_pages;
   task_limits_t *limits = NULL;
-  struct ns_id_attrs *ns_attrs = NULL;
-  struct namespace *ns = NULL;
+  struct dm_id_attrs *ns_attrs = NULL;
+  struct domain *ns = NULL;
 
   if ((flags && !parent) ||
       ((flags & CLONE_MM) && (flags & (CLONE_COW | CLONE_POPULATE))) ||
@@ -509,20 +509,20 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   /* If namespace support is not configured,
      we have only one namespace for all the tasks */
 
-#ifndef CONFIG_ENABLE_NS
-  ns = get_root_namespace();
+#ifndef CONFIG_ENABLE_DOMAIN
+  ns = get_root_domain();
 #else
   if(parent) {
-    if((parent->pid == 0) || (priv == TPL_KERNEL)) ns = get_root_namespace();
-    else ns = parent->namespace->ns;
+    if((parent->pid == 0) || (priv == TPL_KERNEL)) ns = get_root_domain();
+    else ns = parent->domain->domain;
   } else
-    ns = get_root_namespace();
+    ns = get_root_domain();
 #endif
 
   /* Check if have free PID in the namespace */
   if ( !(flags & CLONE_MM) && (priv != TPL_KERNEL) )
   {
-    if ( ns->pid_count >= ns->ns_pid_limit )
+    if ( ns->pid_count >= ns->domain_pid_limit )
     {
       return ERR(-ENOMEM);
     }
@@ -530,15 +530,15 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
 
   /* TODO: [mt] Add memory limit check. */
   /* goto task_create_fault; */
-  task = __allocate_task_struct(flags,priv);
+  task = __allocate_task_struct(flags, priv);
   if( !task ) {
     r = -ENOMEM;
     goto task_create_fault;
   }
 
-  ns_attrs = alloc_ns_attrs(ns);
+  ns_attrs = alloc_dm_attrs(ns);
   if(!ns_attrs) goto free_task;
-  else task->namespace = ns_attrs;
+  else task->domain = ns_attrs;
 
   r=__alloc_pid_and_tid(task, parent, flags, priv);
   if( r ) {
@@ -579,7 +579,7 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
       task->limits = limits;
       /* we must inherit default limits from the namespace
         if namespace support is on */
-#ifdef CONFIG_ENABLE_NS
+#ifdef CONFIG_ENABLE_DOMAIN
       /* FIXME: copy task limits from namespace defaults */
       task->limits = get_task_limits(ns->def_limits);
 #else
@@ -678,7 +678,7 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   __free_pid_and_tid(task);
 
  free_ns_attr:
-  if(ns_attrs) destroy_ns_attrs(ns_attrs);
+  if(ns_attrs) destroy_dm_attrs(ns_attrs);
 
  free_task:
   free_pages_addr(task, 1);
@@ -697,7 +697,7 @@ void destroy_task_struct(struct __task_struct *task)
   free_task_uspace_events_data(task->uspace_events);
   release_task_sync_data(task->sync_data);
   __free_task_ipc(task);
-  if(task->namespace) destroy_ns_attrs(task->namespace);
+  if(task->domain) destroy_dm_attrs(task->domain);
   if(task->limits) destroy_task_limits(task->limits);
 
   free_pages(virt_to_pframe((void*)task->kernel_stack.low_address), KERNEL_STACK_PAGES);
@@ -715,11 +715,11 @@ void release_task_struct(struct __task_struct *t)
       idx_free(&t->group_leader->tg_priv->tid_allocator,t->tid);
       UNLOCK_TASK_STRUCT(t->group_leader);
     } else {
-      __free_pid(t->namespace->ns, t->pid);
+      __free_pid(t->domain->domain, t->pid);
       destroy_task_limits(t->limits);
     }
     /* namespace attrs */
-    destroy_ns_attrs(t->namespace);
+    destroy_dm_attrs(t->domain);
     free_pages_addr(t,1);
   }
 }

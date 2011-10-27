@@ -558,7 +558,7 @@ long sys_task_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
         return caller->ppid;
       } else { /* TODO: make check for ns ids */
         task = lookup_task(pid, 0, lookup_flags);
-        if((caller->namespace->ns->ns_carrier == caller->pid) && task) {
+        if((caller->domain->domain->dm_holder == caller->pid) && task) {
           //release_task_struct(task);
           return task->ppid;
         }

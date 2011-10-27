@@ -14,10 +14,10 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * (c) Copyright 2010 Jari OS non-profit org. <http://jarios.org>
- * (c) Copyright 2010 Madtirra <madtirra@jarios.org>
+ * (c) Copyright 2010,2011 Jari OS non-profit org. <http://jarios.org>
+ * (c) Copyright 2010,2011 Madtirra <madtirra@jarios.org>
  *
- * include/mstring/namespace.h: namespace support
+ * include/mstring/domain.h: domain support
  */
 
 
@@ -43,54 +43,54 @@
 /* Maximum number of processes per namespace */
 #define CONFIG_MAX_PID_NUMBER 32767
 
-#define DEFAULT_NS_CARRIER_PID  1
+#define DEFAULT_DOMAIN_HOLDER_PID  1
 
-#define DEFAULT_NS_NAME  "Root NS"
+#define DEFAULT_DOMAIN_NAME  "Root DOMAIN"
 
-struct namespace {
-  uint8_t ns_id;              /* id of the namespace */
-  ulong_t ns_mm_limit;        /* pages per namespace limit */
-  pid_t ns_carrier;           /* user space namespace carrier */
-  task_limits_t *def_limits;  /* default limits for the namespace */
+struct domain {
+  uint8_t dm_id;              /* id of the domain */
+  ulong_t dm_mm_limit;        /* pages per domain limit */
+  pid_t dm_holder;            /* user space domain holder */
+  task_limits_t *def_limits;  /* default limits for the domain */
   atomic_t use_count;
   rw_spinlock_t rw_lock;      /* rw lock */
 
-  ulong_t ns_pid_limit;       /* processes per namespace limit */
-  idx_allocator_t pid_array;  /* Array of PIDs for the given namespace */
+  ulong_t domain_pid_limit;   /* processes per domain limit */
+  idx_allocator_t pid_array;  /* Array of PIDs for the given domain */
   spinlock_t pid_array_lock;  /* Lock for PID array */
-  ulong_t pid_count;          /* Current number of processes in the namespace */
-  char name[16];              /* namespace short name */
+  ulong_t pid_count;          /* Current number of processes in the domain */
+  char name[16];              /* domain short name */
 };
 
 /* this structure used for task_t */
-struct ns_id_attrs {
-  uint8_t ns_id;        /* used to avoid lock */
-  uint8_t trans_flag;   /* translator flags, TODO: extend it in future */
-  struct namespace *ns; /* namespace assigned */
+struct dm_id_attrs {
+  uint8_t dm_id;         /* used to avoid lock */
+  uint8_t trans_flag;    /* translator flags, TODO: extend it in future */
+  struct domain *domain; /* domain assigned */
 };
 
 /* Root namespace struct */
-extern struct namespace *root_ns;
+extern struct domain *root_domain;
 
-void initialize_ns_subsys(void);
+void initialize_domain_subsys(void);
 
-struct namespace *alloc_namespace(void);
+struct domain *alloc_domain_struct(void);
 
-void destroy_namespace(struct namespace *);
+void destroy_domain(struct domain *);
 
-struct namespace *get_root_namespace(void);
+struct domain *get_root_domain(void);
 
 /* attribute structure ops */
-struct ns_id_attrs *alloc_ns_attrs(struct namespace *);
-void destroy_ns_attrs(struct ns_id_attrs *);
+struct dm_id_attrs *alloc_dm_attrs(struct domain *);
+void destroy_dm_attrs(struct dm_id_attrs *);
 
 /* top level wrapper (syscalls) */
 
 /* control cmd */
-#define NS_CTRL_GET_CARRIER_PID  0x0
-#define NS_CTRL_REMOVE_TRANS     0x1
+#define DOMAIN_CTRL_GET_HOLDER_PID  0x0
+#define DOMAIN_CTRL_REMOVE_TRANS     0x1
 
-int sys_chg_create_namespace(ulong_t, ulong_t, char *);
-int sys_control_namespace(pid_t, int, void *);
+int sys_chg_create_domain(ulong_t, ulong_t, char *);
+int sys_control_domain(pid_t, int, void *);
 
 #endif

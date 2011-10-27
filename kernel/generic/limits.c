@@ -107,7 +107,7 @@ long sys_get_limit(uint8_t ns_id, pid_t pid, uint_t index)
 {
   task_t *task = NULL;
   long r;
-#ifndef CONFIG_ENABLE_NS
+#ifndef CONFIG_ENABLE_DOMAIN
   if (pid==INVALID_PID)
     task = current_task();
   else
@@ -129,7 +129,7 @@ long sys_get_limit(uint8_t ns_id, pid_t pid, uint_t index)
 int sys_set_limit(uint8_t ns_id, pid_t pid, uint_t index, ulong_t limit)
 {
   task_t *task = NULL;
-#ifndef CONFIG_ENABLE_NS
+#ifndef CONFIG_ENABLE_DOMAIN
   task = current_task();
   if (!task->pid == DEFAULT_NS_CARRIER_PID)
     return ERR(-EPERM);

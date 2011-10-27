@@ -483,9 +483,9 @@ out:
     info.sender_uid=msg->creds.uid;
     info.sender_gid=msg->creds.gid;
     info.sender_label=msg->creds.mac_label;
-#ifdef CONFIG_ENABLE_NS
-    info.ns_id = msg->sender->namespace->ns_id;
-    info.ns_tr_flag = msg->sender->namespace->trans_flag;
+#ifdef CONFIG_ENABLE_DOMAIN
+    info.ns_id = msg->sender->domain->dm_id;
+    info.ns_tr_flag = msg->sender->domain->trans_flag;
 #else
     info.ns_id = 0;
     info.ns_tr_flag = 0;
