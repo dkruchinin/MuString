@@ -15,9 +15,11 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
+ * (c) Copyright 2010-2011 Jari OS ry <http://jarios.org>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2010 Madtirra <madtirra@jarios.org>
  *
- * mstring/generic_api/signal.c: generic code of kernel signal delivery subsystem.
+ * kernel/generic/signal.c: generic code of kernel signal delivery subsystem.
  */
 
 #include <mstring/types.h>
@@ -314,12 +316,22 @@ send_signal:
 
 int sys_kill(pid_t pid,int sig,usiginfo_t *sinfo)
 {
-  int r=-EINVAL;
+  int r = -EINVAL;
   usiginfo_t k_siginfo;
-  task_t *caller=current_task();
+  task_t *caller = current_task(), *affected;
 
   if( !valid_signal(sig) ) {
     return ERR(-EINVAL);
+  }
+
+  if((pid != caller->pid)) {
+#ifdef CONFIG_ENABLE_DOMAIN
+    affected = pid_to_task(pid);
+    if(affected->domain->dm_id != caller->domain->dm_id)
+      return ERR(-EPERM);
+#endif
+    if(caller->pid != caller->domain->domain->dm_holder)
+      return ERR(-EPERM);
   }
 
   if( sinfo ) {
@@ -330,15 +342,16 @@ int sys_kill(pid_t pid,int sig,usiginfo_t *sinfo)
     memset(&k_siginfo,0,sizeof(k_siginfo));
   }
 
-  siginfo_initialize(current_task(), &k_siginfo);
+  siginfo_initialize(caller, &k_siginfo);
   k_siginfo.si_signo = sig;
   k_siginfo.si_code = SI_USER;
 
+  /* FIXME: remove cases with 0, -1 etc ... */
   if( !pid ) {
     /* Send signal to every process in process group we belong to. */
   } else if( pid > 0 ) {
     /* Send signal to target process. */
-    r=send_process_siginfo(pid,&k_siginfo,NULL,caller,false);
+    r = send_process_siginfo(pid, &k_siginfo, NULL, caller, false);
   } else if( pid == -1 ) {
     /* Send signal to all processes except the init process. */
   } else {
