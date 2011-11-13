@@ -82,7 +82,6 @@ static int __setup_trampoline_ctx(struct signal_context *__user ctx,
 
 static void __perform_default_action(int sig)
 {
-  int sm=_BM(sig);
   task_t *t = current_task();
 
 #ifdef CONFIG_DEBUG_SIGNALS
@@ -90,11 +89,10 @@ static void __perform_default_action(int sig)
           current_task()->pid,current_task()->tid,sig);
 #endif
 
-  if( sm & LETHAL_SIGNALS ) {
+  if( is_lethal_signal(sig) ) {
 #ifdef CONFIG_DEBUG_SIGNALS
     kprintf("TERMINATE\n");
 #endif
-    t->wstat = WSTAT_SIGNALED;
     t->last_signum = sig;
     do_exit(0,0,0);
   }
@@ -112,7 +110,10 @@ static void __perform_default_action(int sig)
       set_ptrace_event(t, PTRACE_EV_STOPPED);
 
     t->wstat = WSTAT_STOPPED;
-    t->last_signum = SIGSTOP;
+    // do not overwrite a lethal signal record so as in would be collected
+    if (!is_lethal_signal(sig)) {
+      t->last_signum = SIGSTOP;
+    }
 
     /*
      * It's needed to atomicaly change state to avoid spurious

@@ -424,6 +424,20 @@ void do_exit(int code,ulong_t flags,long exitval)
     __unlink_children(exiter);
     __notify_parent(exiter);
   } else { /* is_thread(). */
+    if (is_lethal_signal(exiter->last_signum)) {
+      usiginfo_t info;
+
+      /*
+       * The thread is being terminated abnormally. So, force termination of the whole
+       * thread group. This must be done exactly at this point. If the group is killed
+       * before the debugger handles this abnormal termination, it may pick up this lethal
+       * signal for another thread.
+       */
+      memset(&info, 0, sizeof(info));
+      info.si_signo = exiter->last_signum;
+      send_task_siginfo(exiter->group_leader, &info, true, NULL, NULL);
+    }
+
     __exit_limits(exiter);
     __exit_ipc(exiter);
     __exit_resources(exiter,flags);
@@ -431,8 +445,7 @@ void do_exit(int code,ulong_t flags,long exitval)
 
   zombify_task(exiter);
   exiter->exit_val = exitval;
-  if (!(exiter->wstat & WSTAT_SIGNALED))
-    exiter->wstat = WSTAT_EXITED;
+  exiter->wstat = (is_lethal_signal(exiter->last_signum)) ? WSTAT_SIGNALED : WSTAT_EXITED;
 
   wakeup_waiters(exiter);
   LOCK_TASK_STRUCT(exiter);
@@ -541,6 +554,7 @@ static int __wait_task(task_t *target, task_t *parent, struct wait_info *winfo)
   bool isthread = is_thread(target);
 
   LOCK_TASK_STRUCT(target);
+
   if (!dump_pt_event(caller, target, &winfo->stat.status)) {
     if( target->cwaiter == __UNUSABLE_PTR &&
         !(isthread && check_task_flags(target, TF_GCOLLECTED))) {

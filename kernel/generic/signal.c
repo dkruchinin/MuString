@@ -105,20 +105,8 @@ static int __send_task_siginfo(task_t *task,usiginfo_t *info,
   int r;
   bool send_signal;
 
-  if (sig == SIGCONT && !(task->state & (TASK_STATE_RUNNING | TASK_STATE_RUNNABLE))) {
-    /* resume the task */
-    LOCK_TASK_STRUCT(task);
-    set_ptrace_event(task, PTRACE_EV_NONE);
-    task->wstat = WSTAT_CONTINUED;
-    task->last_signum = SIGCONT;
-    task->last_siginfo = NULL;
-    UNLOCK_TASK_STRUCT(task);
-
-    wakeup_waiters(task);
-    sched_change_task_state_deferred(task, TASK_STATE_RUNNABLE,
-                                     __continue_state_check, task);
+  if (sig == SIGCONT)
     return 0;
-  }
 
   if( force_delivery ) {
     sa_sigaction_t act=task->siginfo.handlers->actions[sig].a.sa_sigaction;
@@ -158,17 +146,44 @@ static int __send_task_siginfo(task_t *task,usiginfo_t *info,
 
 static void __send_siginfo_postlogic(task_t *task,usiginfo_t *info)
 {
-  if( update_pending_signals(task) && task != current_task() ) {
+  int sig = info->si_signo;
+
+  if (sig == SIGCONT && !(task->state & (TASK_STATE_RUNNING | TASK_STATE_RUNNABLE))) {
+      /* resume the task */
+      LOCK_TASK_STRUCT(task);
+      set_ptrace_event(task, PTRACE_EV_NONE);
+      task->wstat = WSTAT_CONTINUED;
+      // do not overwrite a lethal signal record so as it would be collected
+      if (!is_lethal_signal(sig)) {
+        task->last_signum = SIGCONT;
+        task->last_siginfo = NULL;
+      }
+      UNLOCK_TASK_STRUCT(task);
+
+      wakeup_waiters(task);
+      sched_change_task_state_deferred(task, TASK_STATE_RUNNABLE,
+                                       __continue_state_check, task);
+  } else if( update_pending_signals(task) && task != current_task() ) {
     /* Need to wake up the receiver. */
     struct __def_sig_data sd;
     ulong_t state=TASK_STATE_SLEEPING | TASK_STATE_STOPPED;
 
-    sd.blocked=&task->siginfo.blocked;
-    sd.pending=&task->siginfo.pending;
-    sd.sig=info->si_signo;
-    sched_change_task_state_deferred_mask(task,TASK_STATE_RUNNABLE,
-                                          __deferred_sig_check,&sd,
-                                          state);
+    /*
+     * The stopped process should not be activated for SIGSTOP because it may have been
+     * signaled and stopped in do_exit(). It will not been stopped again in this case because
+     * it will not have a chance to switch to user space. The debugger may lose a chance to
+     * get info about a reason of the termination.
+     */
+    if (!(sig == SIGSTOP &&
+          state == TASK_STATE_STOPPED)) {
+
+      sd.blocked=&task->siginfo.blocked;
+      sd.pending=&task->siginfo.pending;
+      sd.sig=sig;
+      sched_change_task_state_deferred_mask(task,TASK_STATE_RUNNABLE,
+                                            __deferred_sig_check,&sd,
+                                            state);
+    }
   }
 }
 

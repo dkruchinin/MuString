@@ -127,10 +127,6 @@ static void ptrace_cont(task_t *child)
 {
   sigqueue_t *squeue = &child->siginfo.sigqueue;
 
-  // !!! DEBUG
-   kprintf("[KERNEL, %s, line %d]: tid = %d\n",
-           __func__, __LINE__, child->tid);
-
   /* clear the SIGSTOP signal if it is pending */
   LOCK_TASK_SIGNALS(child);
   if (bit_test(squeue->active_mask, SIGSTOP)) {
@@ -240,11 +236,6 @@ static int ptrace_kill(task_t *child)
 int ptrace_stop(ptrace_event_t event, ulong_t msg)
 {
   task_t *child = current_task();
-  bool signaled = false;
-
-  // !!! DEBUG
-  kprintf("[KERNEL, %s, line %d]: tid = %d, event = %d, msg = %lu\n",
-          __func__, __LINE__, child->tid, event, msg);
 
   /*
    * yield CPU to a debugger
@@ -262,15 +253,8 @@ int ptrace_stop(ptrace_event_t event, ulong_t msg)
 
   set_ptrace_event(child, event);
   child->pt_data.msg = msg;
-  if (!(child->wstat & WSTAT_SIGNALED)) {
+  if (!is_lethal_signal(child->last_signum)) {
     child->last_signum = SIGTRAP;   /* signal emulation for ptracer */
-  } else {
-    /*
-     * for the time of tracing disable event pick up for everything
-     * except the tracer
-     */
-    signaled = true;
-    child->wstat = 0;
   }
 
   sched_change_task_state(child, TASK_STATE_STOPPED);
@@ -291,10 +275,6 @@ int ptrace_stop(ptrace_event_t event, ulong_t msg)
 
   wakeup_tracer(child);
   preempt_enable();
-
-  /* здесь задача уже вновь запущена отладчиком */
-  if (signaled)
-    child->wstat = WSTAT_SIGNALED;
 
   return 0;
 }

@@ -230,4 +230,10 @@ static inline bool task_was_interrupted(task_t *t) {
         deliverable_signals_present(&t->siginfo);
 }
 
+static inline bool is_lethal_signal(int sig)
+{
+  return (_BM(sig) & LETHAL_SIGNALS);
+}
+
+
 #endif
