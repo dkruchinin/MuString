@@ -1,12 +1,4 @@
 menu "IPC settings"
 
-config IPC_DEFAULT_CHANNELS
-       int "Default maximum number of open channels per-process"
-       default "128"
-
-config IPC_DEFAULT_PORTS
-       int "Default maximum number of created IPC ports per-process"
-       default "32"
-
 endmenu
 

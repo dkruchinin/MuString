@@ -15,7 +15,7 @@
  * 02111-1307, USA.
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
- * (c) Copyright 2005,2008 Tirra <tirra.newly@gmail.com>
+ * (c) Copyright 2005,2008 Tirra <madtirra@jarios.org>
  * (c) Copyright 2010 Jari OS non-profit org. <http://jarios.org>
  *
  * mstring/generic_api/main.c: main routine, this functions called after bootstrap
@@ -40,7 +40,7 @@
 #include <mstring/timer.h>
 #include <mstring/signal.h>
 #include <mstring/limits.h>
-#include <mstring/namespace.h>
+#include <mstring/domain.h>
 #include <security/security.h>
 
 static void main_routine_stage1(void)
@@ -48,8 +48,7 @@ static void main_routine_stage1(void)
   /* Initialize PICs and setup common interrupt handlers. */
   set_cpu_online(0,1);  /* We're online. */
   sched_add_cpu(0);
-  initialize_limits();
-  initialize_ns_subsys();
+
   initialize_ipc();
   initialize_signals();
   initialize_security();
@@ -67,7 +66,6 @@ static void main_routine_stage1(void)
   setup_time();
   initialize_swks();
   initialize_security();
-
   /* OK, we can proceed. */
   spawn_percpu_threads();
   server_run_tasks();
@@ -87,6 +85,8 @@ void kernel_main(void)
   hardware_timers_init();
   slab_allocator_init();
   vmm_initialize();
+  initialize_limits();
+  initialize_domain_subsys();
   initialize_scheduler();
 
   software_timers_init();

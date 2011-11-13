@@ -86,9 +86,11 @@ syscall_table:
 	.quad   sys_port_control
 	.quad   sys_port_msg_write
 	.quad   sys_ptrace
-	.quad   sys_chg_create_namespace
-	.quad   sys_control_namespace
+	.quad   sys_chg_create_domain
+	.quad   sys_control_domain
 	.quad	sys_msync
+	.quad	sys_set_limit
+	.quad	sys_get_limit
 
 /* Don't change the order of these macros. */
 #define NUM_OF_SYSCALLS \

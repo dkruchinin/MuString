@@ -189,7 +189,6 @@ int kernel_thread(void (*fn)(void *), void *data, task_t **out_task)
 
   r = create_task(current_task(),KERNEL_THREAD_FLAGS,TPL_KERNEL,&newtask,
                   NULL);
-
   if(r >= 0) {
     /* Prepare entrypoint for this kernel thread.
      * Currently this thread is set up to be executed from 'kernel_thread_helper()'.

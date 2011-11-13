@@ -16,6 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2005,2008 Tirra <madtirra@jarios.org>
+ * (c) Copyright 2011 Jari OS ry <http://jarios.org>
  *
  * include/kernel/elf.h: elf defines
  *
@@ -55,7 +56,7 @@
 #define ELF_MAGIC  0x464C457F
 
 /* elf image header */
-typedef struct __elf64_t 
+typedef struct __elf64_t
 {
   unsigned char e_ident[EI_NIDENT]; /* ELF64 magic number */
   uint16_t e_type; /* elf type */
@@ -98,5 +99,25 @@ typedef struct {
   ulong_t sh_addralign; /* section alignment */
   size_t sh_entsize; /* entry size if section holds table*/
 } elf64_sh_t;
+
+struct bin_map {
+  ulong_t bin_addr;
+  ulong_t virt_addr;
+  ulong_t size;
+  uint32_t flags;
+  uint32_t type;
+  struct bin_map *next;
+  struct bin_map *prev;
+};
+
+/* helper functions */
+
+#include <server.h>
+
+void destroy_bin_map(struct bin_map *root);
+
+struct bin_map *get_elf_map(task_t *task, init_server_t *srv);
+
+ulong_t get_elf_entry(task_t *task, init_server_t *srv);
 
 #endif /* __KERNEL_ELF_H__*/

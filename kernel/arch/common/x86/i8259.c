@@ -16,7 +16,7 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
- * (c) Copyright 2008 Tirra <tirra.newly@gmail.com>
+ * (c) Copyright 2008 Tirra <madtirra@jarios.org>
  *
  * eza/amd64/i8259.c: implements Intel I8259A Programmable Interrupt Controller.
  *

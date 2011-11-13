@@ -2,13 +2,15 @@
 2) Implement spinlocks debug facility. (done ??)
 3) Make support of uniprocessor systems
 4) Make cpurelax (partially done)
-5) Move I/O APIC from userspace to kernel space. (done)
-6) Make proper and clear SMP migration
-7) Improve kernel test framework in order to support
+5) Make proper and clear SMP migration
+6) Improve kernel test framework in order to support
 requirenment based and stress tests
-8) Protect DMA and PHYISCAL mappings
-9) Think about using of AMD64 hardware debug and performance
+7) Protect DMA and PHYISCAL mappings
+8) Think about using of AMD64 hardware debug and performance
 registers.
-10) BOGOMIPS+RDTSC support ...
-11) Namespace support
-12) memobj proper and full events
+9) BOGOMIPS+RDTSC support ...
+
+Already done:
+1) Move I/O APIC from userspace to kernel space. (done)
+2) Namespace support (done)
+3) memobj proper and full events (done)

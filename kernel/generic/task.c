@@ -39,96 +39,119 @@
 #include <arch/scheduler.h>
 #include <mstring/types.h>
 #include <mstring/process.h>
-#include <mstring/namespace.h>
+#include <mstring/domain.h>
 #include <config.h>
 
-/* Available PIDs live here. */
-static idx_allocator_t pid_array;
-static spinlock_t pid_array_lock;
 static bool init_launched;
 
 /* Macros for dealing with PID array locks. */
-#define LOCK_PID_ARRAY spinlock_lock(&pid_array_lock)
-#define UNLOCK_PID_ARRAY spinlock_unlock(&pid_array_lock)
+/* NOTE if CONFIG_ENABLE_DOMAIN is not set, we have
+   only one namespace */
+#define LOCK_PID_ARRAY(ns) spinlock_lock(&ns->pid_array_lock)
+#define UNLOCK_PID_ARRAY(ns) spinlock_unlock(&ns->pid_array_lock)
+
 
 void initialize_process_subsystem(void);
 
-static pid_t __allocate_pid(void)
+static void __free_pid(struct domain * ns, pid_t pid)
+{
+  if (ns){
+    LOCK_PID_ARRAY(ns);
+    idx_free(&ns->pid_array, pid);
+    UNLOCK_PID_ARRAY(ns);
+  }
+}
+
+static pid_t __allocate_pid(struct domain * ns)
 {
   pid_t pid;
-
-  LOCK_PID_ARRAY;
-  pid = idx_allocate(&pid_array);
-  UNLOCK_PID_ARRAY;
-
+  if (ns){
+    LOCK_PID_ARRAY(ns);
+    pid = idx_allocate(&ns->pid_array);
+    UNLOCK_PID_ARRAY(ns);
+  }
   return pid;
 }
 
 void initialize_task_subsystem(void)
 {
   pid_t idle;
-  int ret;
-
-  spinlock_initialize(&pid_array_lock, "PID array");
-  ret = idx_allocator_init(&pid_array, NUM_PIDS);
-  if (ret < 0) {
-    panic("Can't initialize PID idx_allocator. [RET = %d]!", ret);
-  }
 
   /* Sanity check: allocate PID 0 for idle tasks, so the next available PID
    * will be 1 (init).
    */
-  idle=__allocate_pid();
+  idle = __allocate_pid(root_domain);
   if(idle != 0) {
     panic( "initialize_task_subsystem(): Can't allocate PID for idle task ! (%d returned)\n",
            idle );
   }
 
   /* Reserve a PID for the init task. */
-  idle=__allocate_pid();
+  idle = __allocate_pid(root_domain);
   if(idle != 1) {
     panic( "initialize_task_subsystem(): Can't allocate PID for Init task ! (%d returned)\n",
            idle );
   }
 
-  init_launched=false;
+  init_launched = false;
   initialize_process_subsystem();
+}
+
+
+static void __free_pid_and_tid(task_t *task)
+{
+  if (!is_thread(task)){
+    __free_pid(task->domain->domain, task->pid);
+    if (!is_kernel_thread(task))
+      task->domain->domain->pid_count--;
+  }
+  else {
+    LOCK_TASK_STRUCT(task->group_leader);
+    idx_free(&task->group_leader->tg_priv->tid_allocator,task->tid);
+    UNLOCK_TASK_STRUCT(task->group_leader);
+  }
+  task->pid = INVALID_PID;
+  task->tid = 0;
 }
 
 static int __alloc_pid_and_tid(task_t *task,task_t *parent,ulong_t flags,
                                task_privelege_t priv)
 {
-  pid_t pid=INVALID_PID;
-  tid_t tid=0;
-  int r=-ENOMEM;
+  pid_t pid = INVALID_PID;
+  tid_t tid = 0;
+  int r =- ENOMEM;
 
   /* Allocate PID first. */
   if( flags & TASK_INIT ) {
-    LOCK_PID_ARRAY;
+    LOCK_PID_ARRAY(root_domain);
     if( !init_launched ) {
-      pid=1;
-      init_launched=true;
+      pid = 1;
+      root_domain->pid_count++;
+      init_launched = true;
     } else {
-      r=-EINVAL;
+      r =- EINVAL;
     }
-    UNLOCK_PID_ARRAY;
+    UNLOCK_PID_ARRAY(root_domain);
   } else {
     if( (flags & CLONE_MM) && priv != TPL_KERNEL ) {
-      pid=parent->pid;
+      pid = parent->pid;
       LOCK_TASK_STRUCT(parent);
-      tid=idx_allocate(&parent->group_leader->tg_priv->tid_allocator);
+      tid = idx_allocate(&parent->group_leader->tg_priv->tid_allocator);
       UNLOCK_TASK_STRUCT(parent);
     } else {
-      pid=__allocate_pid();
+      pid = __allocate_pid(task->domain->domain);
+      if (pid != IDX_INVAL)
+        root_domain->pid_count++;
     }
   }
 
-  if( pid == INVALID_PID || tid == IDX_INVAL ) {
+  if( pid == IDX_INVAL || tid == IDX_INVAL ) {
     return ERR(r);
   }
 
-  task->pid=pid;
-  task->tid=tid;
+
+  task->pid = pid;
+  task->tid = tid;
   return 0;
 }
 
@@ -161,7 +184,7 @@ static int __add_to_parent(task_t *task,task_t *parent,ulong_t flags,
       UNLOCK_TASK_CHILDS(parent);
     }
   } else {
-    task->ppid=0;
+    task->ppid = 0;
   }
   return ERR(r);
 }
@@ -176,12 +199,12 @@ void cleanup_thread_data(gc_action_t *action)
 
 static tg_leader_private_t *__allocate_tg_data(task_privelege_t priv)
 {
-  tg_leader_private_t *d=memalloc(sizeof(*d));
+  tg_leader_private_t *d = memalloc(sizeof(*d));
 
   if( d ) {
     memset(d,0,sizeof(*d));
     if( priv != TPL_KERNEL ) {
-       if(idx_allocator_init(&d->tid_allocator,CONFIG_THREADS_PER_PROCESS) ) {
+       if(idx_allocator_init(&d->tid_allocator, CONFIG_TASK_THREADS_LIMIT_MAX) ) {
          memfree(d);
          return NULL;
        } else {
@@ -220,15 +243,23 @@ static task_t *__allocate_task_struct(ulong_t flags,task_privelege_t priv)
     atomic_set(&task->refcount,TASK_INITIAL_REFCOUNT); /* One extra ref is for 'wait()' */
     task->flags = 0;
     task->group_leader=task;
-    task->cpu_affinity_mask=ONLINE_CPUS_MASK;
+    task->cpu_affinity_mask = ONLINE_CPUS_MASK;
 
-    task->uworks_data.cancel_state=PTHREAD_CANCEL_ENABLE;
-    task->uworks_data.cancel_type=PTHREAD_CANCEL_DEFERRED;
+    task->uworks_data.cancel_state = PTHREAD_CANCEL_ENABLE;
+    task->uworks_data.cancel_type = PTHREAD_CANCEL_DEFERRED;
     list_init_head(&task->uworks_data.def_uactions);
 
     strcpy(task->short_name,"<N/A>");
   }
   return task;
+}
+
+void __free_task_ipc(task_t *task)
+{
+  if ( !is_thread(task) ) {
+    release_task_ipc(task->ipc);
+  }
+  release_task_ipc_priv(task->ipc_priv);
 }
 
 static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags,
@@ -237,20 +268,25 @@ static int __setup_task_ipc(task_t *task,task_t *parent,ulong_t flags,
   int r;
 
   if( flags & CLONE_IPC ) {
+
     if( !parent->ipc ) {
       return ERR(-EINVAL);
     }
-    task->ipc=parent->ipc;
-    r=setup_task_ipc(task);
+
+    task->ipc = parent->ipc;
+    r = setup_task_ipc(task);
     if( !r ) {
       get_task_ipc(parent);
     }
+
   } else {
+
     if( flags & CLONE_REPL_IPC ) {
-      r=replicate_ipc(parent->ipc,task);
+      r = replicate_ipc(parent->ipc,task);
     } else {
-      r=setup_task_ipc(task);
+      r = setup_task_ipc(task);
     }
+
   }
   return ERR(r);
 }
@@ -259,7 +295,7 @@ static int __setup_task_events(task_t *task,task_t *parent,ulong_t flags,
                                task_privelege_t priv)
 {
   if( !(flags & CLONE_MM) || priv == TPL_KERNEL ) {
-    task->task_events=memalloc(sizeof(task_events_t));
+    task->task_events = memalloc(sizeof(task_events_t));
     if( !task->task_events ) {
       return ERR(-ENOMEM);
     }
@@ -272,6 +308,15 @@ static int __setup_task_events(task_t *task,task_t *parent,ulong_t flags,
     atomic_inc(&task->task_events->refcount);
   }
   return 0;
+}
+
+static void __free_task_events(task_t * task)
+{
+  /* We don't need to free task->task_events
+     if task is thread, because task->task_events
+     is just a pointer to parent->task_events in this case */
+  if ((!is_thread(task)) && (task->task_events))
+    memfree(task->task_events);
 }
 
 static int __setup_task_sync_data(task_t *task,task_t *parent,ulong_t flags,
@@ -314,6 +359,18 @@ static int __setup_task_security(task_t *task,task_t *parent,ulong_t flags,
   return task->sobject ? 0 : ERR(-ENOMEM);
 }
 
+void __free_signals(task_t *task)
+{
+  if ( (task) && (task->siginfo.handlers) ){
+    task->siginfo.blocked = 0;
+    task->siginfo.ignored = DEFAULT_IGNORED_SIGNALS;
+    task->siginfo.pending = 0;
+    if (atomic_dec_and_test(&task->siginfo.handlers->use_count) ){
+      free_signal_handlers(task->siginfo.handlers);
+    }
+  }
+}
+
 static int __setup_signals(task_t *task,task_t *parent,ulong_t flags)
 {
   sighandlers_t *shandlers=NULL;
@@ -348,6 +405,13 @@ static int __setup_signals(task_t *task,task_t *parent,ulong_t flags)
   return 0;
 }
 
+
+static void __free_posix(task_t *task)
+{
+  if ( (!is_thread(task)) && (task->posix_stuff) )
+    release_task_posix_stuff(task->posix_stuff);
+}
+
 static long __setup_posix(task_t *task,task_t *parent,
                           task_privelege_t priv,ulong_t flags)
 {
@@ -362,6 +426,13 @@ static long __setup_posix(task_t *task,task_t *parent,
     }
     return ERR(-ENOMEM);
   }
+}
+
+static void __free_mm(task_t *task)
+{
+  if (task)
+    if(task->task_mm)
+      vmm_destroy(task->task_mm);
 }
 
 static int __initialize_task_mm(task_t *orig, task_t *target, task_creation_flags_t flags,
@@ -412,6 +483,7 @@ static int __initialize_task_mm(task_t *orig, task_t *target, task_creation_flag
   return ERR(ret);
 }
 
+
 int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t **t,
                     task_creation_attrs_t *attrs)
 {
@@ -419,25 +491,58 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   int r = -ENOMEM;
   page_frame_t *stack_pages;
   task_limits_t *limits = NULL;
-  struct ns_id_attrs *ns_attrs = NULL;
-  struct namespace *ns = NULL;
+  struct dm_id_attrs *ns_attrs = NULL;
+  struct domain *ns = NULL;
 
   if ((flags && !parent) ||
       ((flags & CLONE_MM) && (flags & (CLONE_COW | CLONE_POPULATE))) ||
       ((flags & (CLONE_COW | CLONE_POPULATE)) == (CLONE_COW | CLONE_POPULATE))) {
     return ERR(-EINVAL);
   }
+
+  /* If the task we're going to create is a thread,
+     we must ensure that thread-limit is not reached yet */
+  if ( (flags & CLONE_MM) && (priv != TPL_KERNEL) &&
+       (parent->group_leader->tg_priv->num_threads >= get_limit(parent->limits, LIMIT_TRHEADS) ))
+    return ERR(-ENOMEM);
+  /* Namespace stuff */
+  /* If namespace support is not configured,
+     we have only one namespace for all the tasks */
+
+#ifndef CONFIG_ENABLE_DOMAIN
+  ns = get_root_domain();
+#else
+  if(parent) {
+    if((parent->pid == 0) || (priv == TPL_KERNEL)) ns = get_root_domain();
+    else ns = parent->domain->domain;
+  } else
+    ns = get_root_domain();
+#endif
+
+  /* Check if have free PID in the namespace */
+  if ( !(flags & CLONE_MM) && (priv != TPL_KERNEL) )
+  {
+    if ( ns->pid_count >= ns->domain_pid_limit )
+    {
+      return ERR(-ENOMEM);
+    }
+  }
+
   /* TODO: [mt] Add memory limit check. */
   /* goto task_create_fault; */
-  task=__allocate_task_struct(flags,priv);
+  task = __allocate_task_struct(flags, priv);
   if( !task ) {
     r = -ENOMEM;
     goto task_create_fault;
   }
 
-  r=__alloc_pid_and_tid(task,parent,flags,priv);
+  ns_attrs = alloc_dm_attrs(ns);
+  if(!ns_attrs) goto free_task;
+  else task->domain = ns_attrs;
+
+  r=__alloc_pid_and_tid(task, parent, flags, priv);
   if( r ) {
-    goto free_task;
+    goto free_ns_attr;
   }
 
   /* Create kernel stack for the new task. */
@@ -463,28 +568,30 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   }
 
   r=-ENOMEM;
+
+
   /* Setup limits. */
   if( !(flags & CLONE_MM) || priv == TPL_KERNEL ) {
     limits = allocate_task_limits();
     if(limits == NULL) {
       goto free_stack_pages;
     } else {
-      set_default_task_limits(limits);
       task->limits = limits;
+      /* we must inherit default limits from the namespace
+        if namespace support is on */
+#ifdef CONFIG_ENABLE_DOMAIN
+      /* FIXME: copy task limits from namespace defaults */
+      task->limits = get_task_limits(ns->def_limits);
+#else
+      set_default_task_limits(task->limits);
+#endif
     }
   } else task->limits = parent->group_leader->limits;
 
-  /* Namespace stuff */
-  if(parent->pid == 0) ns = get_root_namespace();
-  else ns = parent->namespace->ns;
-
-  ns_attrs = alloc_ns_attrs(ns);
-  if(!ns_attrs) goto free_limits;
-  else task->namespace = ns_attrs;
 
   r=__setup_task_ipc(task,parent,flags,attrs);
   if( r ) {
-    goto free_ns_attr;
+    goto free_limits;
   }
 
   r=__setup_task_sync_data(task,parent,flags,priv);
@@ -538,34 +645,66 @@ int create_new_task(task_t *parent,ulong_t flags,task_privelege_t priv, task_t *
   }
 
  free_events:
-  /* [mt] Free events here. */
+  __free_task_events(task);
+
  free_posix:
-  /* TODO: [mt] Free POSIX data properly. */
+  __free_posix(task);
+
  free_signals:
-  /* TODO: [mt] Free signals data properly. */
+  __free_signals(task);
+
  free_uevents:
-  /* TODO: [mt] Free userspace events properly. */
+  free_task_uspace_events_data(task->uspace_events);
+
  free_sync_data:
-  /* TODO: [mt] Deallocate task's sync data. */
+  release_task_sync_data(task->sync_data);
+
  free_ipc:
-  /* TODO: [mt] deallocate task's IPC structure. */
- free_ns_attr:
-  if(ns_attrs) destroy_ns_attrs(ns_attrs);
+  __free_task_ipc(task);
+
  free_limits:
   if(limits) destroy_task_limits(limits);
+
  free_stack_pages:
-  /* TODO: Free all stack pages here. [mt] */
+  free_pages(stack_pages, KERNEL_STACK_PAGES);
+
  free_mm:
-  /* TODO: Free mm here. [mt] */
+  __free_mm(task);
+
  free_stack:
   free_kernel_stack(task->kernel_stack.id);
+
  free_pid:
-  /* TODO: free PID/TID here. */
+  __free_pid_and_tid(task);
+
+ free_ns_attr:
+  if(ns_attrs) destroy_dm_attrs(ns_attrs);
+
  free_task:
-  /* TODO: Free task struct page here. [mt] */
+  free_pages_addr(task, 1);
+
  task_create_fault:
   *t = NULL;
   return ERR(r);
+}
+
+
+void destroy_task_struct(struct __task_struct *task)
+{
+  __free_task_events(task);
+  __free_posix(task);
+  __free_signals(task);
+  free_task_uspace_events_data(task->uspace_events);
+  release_task_sync_data(task->sync_data);
+  __free_task_ipc(task);
+  if(task->domain) destroy_dm_attrs(task->domain);
+  if(task->limits) destroy_task_limits(task->limits);
+
+  free_pages(virt_to_pframe((void*)task->kernel_stack.low_address), KERNEL_STACK_PAGES);
+  __free_mm(task);
+  free_kernel_stack(task->kernel_stack.id);
+  __free_pid_and_tid(task);
+  free_pages_addr(task, 1);
 }
 
 void release_task_struct(struct __task_struct *t)
@@ -576,15 +715,11 @@ void release_task_struct(struct __task_struct *t)
       idx_free(&t->group_leader->tg_priv->tid_allocator,t->tid);
       UNLOCK_TASK_STRUCT(t->group_leader);
     } else {
-      LOCK_PID_ARRAY;
-      idx_free(&pid_array, t->pid);
-      UNLOCK_PID_ARRAY;
+      __free_pid(t->domain->domain, t->pid);
       destroy_task_limits(t->limits);
     }
-
     /* namespace attrs */
-    destroy_ns_attrs(t->namespace);
-
+    destroy_dm_attrs(t->domain);
     free_pages_addr(t,1);
   }
 }

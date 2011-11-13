@@ -41,7 +41,7 @@
 #include <ds/idx_allocator.h>
 #include <arch/atomic.h>
 #include <security/security.h>
-#include <mstring/namespace.h>
+#include <mstring/domain.h>
 
 typedef uint32_t time_slice_t;
 
@@ -350,14 +350,14 @@ typedef struct __task_struct {
   struct __posix_stuff *posix_stuff;
   tg_leader_private_t *tg_priv;
 
-  /* Userspace works-reated stuff. */
+  /* Userspace works-related stuff. */
   uworks_data_t uworks_data;
 
   /* Security-related stuff */
   struct __task_s_object *sobject;
 
   /* namespace related stuff */
-  struct ns_id_attrs *namespace;
+  struct dm_id_attrs *domain;
 
   /* misc */
   char short_name[TASK_SHORTNAME_LEN];
@@ -555,7 +555,7 @@ void exit_task_events(struct __task_struct *target);
 
 #define grab_task_struct(t) atomic_inc(&(t)->refcount)
 #define __release_task_struct(t) atomic_dec(&(t)->refcount)
-
+void destroy_task_struct(struct __task_struct *task);
 void release_task_struct(struct __task_struct *t);
 
 void wakeup_tracer(task_t *task);

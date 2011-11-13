@@ -1,2 +1,2 @@
-obj-y += init.o
+obj-y += init.o elf.o
 

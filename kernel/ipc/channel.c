@@ -51,11 +51,11 @@ ipc_channel_t *ipc_get_channel(task_t *task,ulong_t ch_id)
   task_ipc_t *ipc=get_task_ipc(task);
 
   if( ipc ) {
-    if( ipc->channels ) {
+    if( !hat_is_empty(&ipc->channels) ) {
       IPC_LOCK_CHANNELS(ipc);
-      if(ch_id < task->limits->limits[LIMIT_IPC_MAX_CHANNELS] &&
-         ipc->channels[ch_id] != NULL) {
-        c=ipc->channels[ch_id];
+      c = hat_lookup(&ipc->channels, ch_id);
+      if( ch_id < get_limit(task->limits, LIMIT_CHANNELS) &&
+         c != NULL) {
         ipc_pin_channel(c);
       }
       IPC_UNLOCK_CHANNELS(ipc);
@@ -75,13 +75,13 @@ void ipc_destroy_channel(ipc_channel_t *channel)
 int ipc_open_channel_raw(ipc_gen_port_t *server_port, ulong_t flags, ipc_channel_t **out_channel)
 {
   ipc_channel_t *channel = NULL;
-  int ret = 0;  
+  int ret = 0;
 
   if(__check_port_flags(server_port, flags)) {
     ret = -EINVAL;
     goto out;
   }
-  
+
   channel = __allocate_channel(server_port, flags);
   if (!channel) {
     ret = -ENOMEM;
@@ -108,10 +108,10 @@ void ipc_unref_channel(ipc_channel_t *channel,ulong_t c)
     ipc_unpin_channel(channel);
   } else {
     IPC_LOCK_CHANNELS(channel->ipc);
-    if(ipc->channels) {
+    if(!hat_is_empty(&ipc->channels)) {
       if( atomic_sub_and_test(&channel->use_count,c) ) {
         shutdown=true;
-        ipc->channels[channel->id]=NULL;
+        hat_delete(&ipc->channels, channel->id);
         ipc->num_channels--;
         idx_free(&ipc->channel_array,channel->id);
       } else {
@@ -164,7 +164,7 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
   }
 
   LOCK_IPC(ipc);
-  if(ipc->num_channels >= owner->limits->limits[LIMIT_IPC_MAX_CHANNELS]) {
+  if(ipc->num_channels >= get_limit(owner->limits, LIMIT_CHANNELS)) {
     r=-EMFILE;
     goto out_unlock;
   }
@@ -176,8 +176,8 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
   r = ipc_open_channel_raw(server_port, flags, &channel);
   if (r)
     goto out_put_port;
-
-  if( !ipc->channels ) { /* First channel opened ? */
+/*
+  if( ipc->channels ) {
     r = -ENOMEM;
     ipc->channels=allocate_ipc_memory(sizeof(ipc_channel_t *)*CONFIG_IPC_DEFAULT_CHANNELS);
     if( !ipc->channels ) {
@@ -187,19 +187,23 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
   } else if( ipc->num_channels >= ipc->allocated_channels ) {
     r=-EMFILE;
     goto out_unlock;
-  }
+  }*/
 
+  if( ipc->num_channels >= ipc->allocated_channels ) {
+    r=-EMFILE;
+    goto out_unlock;
+  }
   id = idx_allocate(&ipc->channel_array);
   if( id == IDX_INVAL ) {
     r=-EMFILE;
     goto out_put_port;
   }
 
-  channel->id=id;
-  channel->ipc=ipc;
+  channel->id = id;
+  channel->ipc = ipc;
 
   IPC_LOCK_CHANNELS(ipc);
-  ipc->channels[id]=channel;
+  hat_insert(&ipc->channels, id, channel);
   ipc->num_channels++;
 
   if( id > ipc->max_channel_num ) {
@@ -209,12 +213,12 @@ int ipc_open_channel(task_t *owner,task_t *server,ulong_t port,
 
   r=id;
   goto out_unlock;
-  
+
 out_put_port:
   ipc_put_port(server_port);
   if (channel)
     ipc_destroy_channel(channel);
-  
+
 out_unlock:
   UNLOCK_IPC(ipc);
   release_task_ipc(ipc);

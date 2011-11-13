@@ -96,8 +96,8 @@ task_t *lookup_task_thread(task_t *p,tid_t tid)
 {
   list_node_t *n;
   task_t *t,*target=NULL;
-
-  if( tid && tid < CONFIG_THREADS_PER_PROCESS ) {
+// TODO
+  if( tid && tid < get_limit(p->limits, LIMIT_TRHEADS)) {
     LOCK_TASK_CHILDS(p);
     list_for_each(&p->threads,n) {
       t=container_of(n,task_t,child_list);
@@ -209,6 +209,7 @@ int create_task(task_t *parent,ulong_t flags,task_privelege_t priv,
       }
     } else {
       /* TODO: [mt] deallocate task struct properly. */
+        destroy_task_struct(new_task);
     }
   }
 
@@ -554,6 +555,12 @@ long sys_task_control(pid_t pid, tid_t tid, ulong_t cmd, ulong_t arg)
     case SYS_PR_CTL_GETPPID:
       if( !pid ) {
         return caller->ppid;
+      } else { /* TODO: make check for ns ids */
+        task = lookup_task(pid, 0, lookup_flags);
+        if((caller->domain->domain->dm_holder == caller->pid) && task) {
+          //release_task_struct(task);
+          return task->ppid;
+        }
       }
       return ERR(-EINVAL);
 
@@ -634,7 +641,7 @@ long sys_fork(void)
   task_t *new,*caller=current_task();
   long r;
   task_creation_attrs_t tca;
-
+  /*  kprintf("%s: %d at %s\n", __FILE__, __LINE__, __FUNCTION__);*/
   if( !__check_creation_perm(FORK_FLAGS) ) {
     return ERR(-EPERM);
   }
@@ -646,6 +653,7 @@ long sys_fork(void)
   tca.exec_attrs.per_task_data=caller->ptd;
 
   r=create_task(current_task(),FORK_FLAGS,TPL_USER,&new,&tca);
+
   if( !r ) {
     r=new->pid;
   }

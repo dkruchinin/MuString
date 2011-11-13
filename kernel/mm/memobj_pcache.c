@@ -43,6 +43,7 @@
 #define PCACHE_DBG(fmt, args...)
 #endif /* CONFIG_DEBUG_PCACHE */
 
+#define PCACHE_SIZE 4096
 struct pcache {
   hat_t pagecache;
   rwsem_t rwlock;
@@ -67,7 +68,7 @@ static inline void __add_dirty_page(vmrange_t *vmr, page_frame_t *page)
                 current_task()->pid, pframe_number(page), page->offset);
   list_add2tail(&priv->dirty_pages, &page->node);
   priv->num_dirty_pages++;
-#endif 
+#endif
 }
 
 static inline int __mmap_page_paranoic(memobj_t *memobj, vmm_t *vmm, page_frame_t *page,
@@ -113,7 +114,7 @@ static int __mmap_cached_page(vmrange_t *vmr, uintptr_t addr,
 
       if (!new_page)
         return -ENOMEM;
-      
+
       copy_page_frame(new_page, page);
       pin_page_frame(new_page);
       new_page->offset = page->offset;
@@ -137,7 +138,7 @@ static int prepare_backended_page(memobj_t *memobj, pgoff_t offset, uint32_t pfm
   ipc_channel_t *channel;
   struct memobj_remote_request req;
   struct memobj_remote_answer answ;
-  struct pcache_private *priv;  
+  struct pcache_private *priv;
   iovec_t snd_iovec, rcv_iovec;
   int ret;
 
@@ -148,7 +149,7 @@ static int prepare_backended_page(memobj_t *memobj, pgoff_t offset, uint32_t pfm
   req.type = MREQ_TYPE_GETPAGE;
   req.fault_mask = MFAULT_NP | MFAULT_READ;
   req.fault_mask |= !!(pfmask & PFLT_WRITE) << pow2(MFAULT_WRITE);
-  
+
   memset(&answ, 0, sizeof(answ));
 
   snd_iovec.iov_base = (void *)&req;
@@ -270,7 +271,7 @@ static int handle_not_present_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
         /* TODO DK: page *must* be marked as dirty */
         return ret;
       }
-      
+
       /*
        * If page is not belong to private mapping *and* if fault occured
        * on read, allocated page must be inserted in a cache.
@@ -291,14 +292,14 @@ static int handle_not_present_fault(vmrange_t *vmr, uintptr_t addr, uint32_t pfm
         if (likely(!(vmr->flags & VMR_PRIVATE))) {
           unpin_page_frame(page);
           page = hat_lookup(&pcache->pagecache, offset);
-          ASSERT(page != NULL);            
+          ASSERT(page != NULL);
         }
         else {
           page_frame_t *new_page = page;
 
           page = hat_lookup(&pcache->pagecache, offset);
           ASSERT_DBG(page != NULL);
-          
+
           new_page->flags &= ~PF_SHARED;
           copy_page_frame(new_page, page);
         }
@@ -366,7 +367,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr,
     vmm_t *vmm = vmr->parent_vmm;
     page_idx_t pidx;
     pde_t *pde;
-    
+
     RPD_LOCK_WRITE(&vmm->rpd);
     pidx = __vaddr_to_pidx(&vmm->rpd, addr, &pde);
     if (unlikely(pidx == PAGE_IDX_INVAL)) {
@@ -382,7 +383,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr,
     }
     else {
       if (unlikely(ptable_to_kmap_flags(pde_get_flags(pde)) & KMAP_WRITE)) {
-        /* Somebody already remapped page */        
+        /* Somebody already remapped page */
         RPD_UNLOCK_WRITE(&vmm->rpd);
         return 0;
       }
@@ -391,7 +392,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr,
       if (likely(!(vmr->flags & VMR_PRIVATE))) {
         rwsem_down_read(&pcache->rwlock);
         ASSERT_DBG(hat_lookup(&pcache->pagecache, offset) != NULL);
-        
+
         ret = mmap_page(&vmm->rpd, addr, pframe_number(page), vmr->flags);
         if (!ret) {
           lock_page_frame(page, PF_LOCK);
@@ -429,7 +430,7 @@ static int pcache_handle_page_fault(vmrange_t *vmr,
           ret = rmap_register_anon(new_page, vmm, addr);
           unlock_page_frame(new_page, PF_LOCK);
         }
-        
+
         PCACHE_DBG("#PF on write [COW]: New page %#x, addr = %p, offs = %#x. [RET = %p]\n",
                    pframe_number(new_page), addr, offset, ret);
 
@@ -452,7 +453,7 @@ static memobj_ops_t pcache_ops = {
 int pagecache_memobj_initialize(memobj_t *memobj, uint32_t flags)
 {
   struct pcache *pcache;
-  
+
   if ((flags & MMO_FLG_BACKENDED) &&
       (flags & (MMO_FLG_SPIRIT | MMO_FLG_STICKY))) {
     return -EINVAL;
@@ -463,7 +464,8 @@ int pagecache_memobj_initialize(memobj_t *memobj, uint32_t flags)
   if (!pcache)
     return -ENOMEM;
 
-  hat_initialize(&pcache->pagecache);
+  if ( hat_initialize(&pcache->pagecache, PCACHE_SIZE) != 0)
+    return -ENOMEM;
   list_init_head(&pcache->dirty_pages);
   pcache->num_dirty_pages = 0;
   rwsem_initialize(&pcache->rwlock);

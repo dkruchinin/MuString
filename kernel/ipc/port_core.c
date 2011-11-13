@@ -16,6 +16,8 @@
  *
  * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
  * (c) Copyright 2008 Michael Tsymbalyuk <mtzaurus@gmail.com>
+ * (c) Copyright 2010 Alfeiks <madtirra@jarios.org>
+ * (c) Copyright 2011 Jari OS ry <http://jarios.org>
  *
  * ipc/port_core.c: implementation of core IPC ports logic.
  *
@@ -202,7 +204,7 @@ ipc_port_message_t *ipc_create_port_message_iov_v(ipc_channel_t *channel, iovec_
         *err = r;
         goto free_message;
       }
-      
+
       msg->num_send_bufs = snd_numvecs;
       msg->snd_buf = snd_bufs;
     }
@@ -229,7 +231,7 @@ ipc_port_message_t *ipc_create_port_message_iov_v(ipc_channel_t *channel, iovec_
           *err = r;
           goto free_message;
         }
-        
+
         msg->rcv_buf = rcv_bufs;
         msg->num_recv_buffers = rcv_numvecs;
         /* Fallthrough. */
@@ -362,7 +364,7 @@ static long __transfer_reply_data_iov(ipc_port_message_t *msg,
       for(i=0,rlen=reply_len;i<numvecs && rlen;i++,reply_iov++) {
         to_copy=MIN(rlen,reply_iov->iov_len);
 
-        if( from_server ) {          
+        if( from_server ) {
           r=copy_from_user(rcv_buf,reply_iov->iov_base,to_copy);
         } else {
           r=copy_to_user(reply_iov->iov_base,rcv_buf,to_copy);
@@ -402,18 +404,20 @@ out:
   if (r) {
     return ERR(r);
   }
-  
+
   return processed;
 }
 
 static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
                                                 iovec_t *iovec, ulong_t numvecs,
                                                 port_msg_info_t *stats,
-                                                ulong_t offset)
+                                                ulong_t offset, ulong_t *sz)
 {
   long r;
   size_t recv_len;
   size_t extra_size = 0;
+   
+  *sz = 0;
 
   if( iovec ) {
     if( offset >= msg->data_size ) {
@@ -429,7 +433,7 @@ static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
       if( copy_to_user(iovec->iov_base,eptr,recv_len) ) {
         r=-EFAULT;
         goto out;
-      }
+      } else *sz += recv_len;
 
       iovec->iov_len -= recv_len;
       iovec->iov_base = (void *)((char *)iovec->iov_base + recv_len);
@@ -454,7 +458,7 @@ static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
       r=copy_to_user((void *)iovec->iov_base,msg->send_buffer+offset,recv_len);
       if( r > 0 ) {
         r=-EFAULT;
-      }
+      } else *sz += recv_len;
     } else {
       /* Long message - process it via IPC buffers.
        */
@@ -479,9 +483,9 @@ out:
     info.sender_uid=msg->creds.uid;
     info.sender_gid=msg->creds.gid;
     info.sender_label=msg->creds.mac_label;
-#ifdef CONFIG_ENABLE_NS
-    info.ns_id = msg->sender->namespace->ns_id;
-    info.ns_tr_flag = msg->sender->namespace->trans_flag;
+#ifdef CONFIG_ENABLE_DOMAIN
+    info.ns_id = msg->sender->domain->dm_id;
+    info.ns_tr_flag = msg->sender->domain->trans_flag;
 #else
     info.ns_id = 0;
     info.ns_tr_flag = 0;
@@ -506,19 +510,19 @@ int ipc_close_port(task_ipc_t *ipc,ulong_t port)
   }
 
   LOCK_IPC(ipc);
-  if( !ipc->ports || port > ipc->max_port_num ) {
+  if( hat_is_empty(&ipc->ports) || port > ipc->max_port_num ) {
     r=-EMFILE;
     goto out_unlock;
   }
 
   IPC_LOCK_PORTS(ipc);
-  p=ipc->ports[port];
+  p = hat_lookup(&ipc->ports, port);
   if( p ) {
     IPC_LOCK_PORT_W(p);
     shutdown=atomic_dec_and_test(&p->own_count);
     if(shutdown) {
       p->flags |= IPC_PORT_SHUTDOWN;
-      ipc->ports[port]=NULL;
+      hat_delete(&ipc->ports, port);
     }
     IPC_UNLOCK_PORT_W(p);
   }
@@ -558,31 +562,35 @@ long ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
       return ERR(-EINVAL);
   }
 
-  LOCK_IPC(ipc);
-
-  if(ipc->num_ports >= owner->limits->limits[LIMIT_IPC_MAX_PORTS]) {
+  if(ipc->num_ports >= get_limit(owner->limits, LIMIT_PORTS)){
     r=-EMFILE;
-    goto out_unlock;
+    goto out;
   }
 
   if( !queue_size ) {  /* Default queue size. */
-    queue_size=owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES];
+    queue_size = get_limit(owner->limits, LIMIT_PORT_MESSAGES);
   }
-
-  if( queue_size > owner->limits->limits[LIMIT_IPC_MAX_PORT_MESSAGES] ) {
+  else if( queue_size > get_limit(owner->limits, LIMIT_PORT_MESSAGES) ) {
     r=-EINVAL;
-    goto out_unlock;
+    goto out;
   }
 
-  /* First port created ? */
-  if( !ipc->ports ) {
+  LOCK_IPC(ipc);
+  /* First port created ? *//*
+  if( !get_ports_count(ipc) ) {
     r = -ENOMEM;
-    ipc->ports=allocate_ipc_memory(sizeof(ipc_gen_port_t *)*CONFIG_IPC_DEFAULT_PORTS);
+    port_num = get_limit(owner->limits, LIMIT_MAX_PORTS);
+    ipc->ports = allocate_ipc_memory(sizeof(ipc_gen_port_t *) * port_num);
     if( !ipc->ports ) {
       goto out_unlock;
     }
-    ipc->allocated_ports=CONFIG_IPC_DEFAULT_PORTS;
+    ipc->allocated_ports = port_num;
   } else if( ipc->num_ports >= ipc->allocated_ports ) {
+    r=-EMFILE;
+    goto out_unlock;
+  }
+*/
+  if( ipc->num_ports >= ipc->allocated_ports ) {
     r=-EMFILE;
     goto out_unlock;
   }
@@ -594,37 +602,35 @@ long ipc_create_port(task_t *owner,ulong_t flags,ulong_t queue_size)
   }
 
   /* Ok, it seems that we can create a new port. */
-  r = __allocate_port(&port,flags,queue_size,owner);
+  r = __allocate_port(&port, flags, queue_size, owner);
   if( r != 0 ) {
     goto free_id;
   }
 
   /* Install new port. */
   IPC_LOCK_PORTS(ipc);
-  ipc->ports[id] = port;
+  hat_insert(&ipc->ports, id, port);
   ipc->num_ports++;
 
   if( id > ipc->max_port_num ) {
-    ipc->max_port_num=id;
+    ipc->max_port_num = id;
   }
   IPC_UNLOCK_PORTS(ipc);
-
   r = id;
   UNLOCK_IPC(ipc);
-  release_task_ipc(ipc);
   return ERR(r);
 free_id:
-  idx_free(&ipc->ports_array,id);
+  idx_free(&ipc->ports_array, id);
 out_unlock:
   UNLOCK_IPC(ipc);
-  release_task_ipc(ipc);
+out:
   return ERR(r);
 }
 
 long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
                        iovec_t *rcv_iov,ulong_t numvecs,ulong_t offset) {
   ipc_port_message_t *msg = NULL;
-  long r = 0;
+  long r = 0; ulong_t sz;
 
   IPC_LOCK_PORT_W(port);
   if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
@@ -641,11 +647,11 @@ long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
   IPC_UNLOCK_PORT_W(port);
 
   if( !r ) {
-    r=__transfer_message_data_to_receiver(msg,rcv_iov,numvecs,NULL,offset);
+    r=__transfer_message_data_to_receiver(msg,rcv_iov,numvecs,NULL,offset, &sz);
     POST_MESSAGE_DATA_ACCESS_STEP(port,msg,r,false);
   }
 
-  return ERR(r);
+  return sz;
 }
 
 static long __map_and_write_indirect_message(ipc_port_message_t *msg,
@@ -737,6 +743,7 @@ long ipc_port_receive(ipc_gen_port_t *port, ulong_t flags,
                       port_msg_info_t *msg_info)
 {
   long r=-EINVAL;
+  ulong_t sz;
   ipc_port_message_t *msg;
   task_t *owner=current_task();
 
@@ -795,7 +802,7 @@ recv_cycle:
 
 out:
   if( msg != NULL ) {
-    r=__transfer_message_data_to_receiver(msg,iovec,numvec,msg_info,0);
+    r=__transfer_message_data_to_receiver(msg,iovec,numvec,msg_info,0, &sz);
 
     /* OK, message was successfully transferred, so remove it from the port
      * in case it is a non-blocking transfer.
@@ -825,11 +832,11 @@ ipc_gen_port_t *ipc_get_port(task_t *task,ulong_t port,long *e)
   LOCK_TASK_MEMBERS(task);
   ipc=task->ipc;
 
-  if( ipc && ipc->ports ) {
+  if( ipc && (!hat_is_empty(&ipc->ports)) ) {
     IPC_LOCK_PORTS(ipc);
-    if(port < task->limits->limits[LIMIT_IPC_MAX_PORTS] &&
-       ipc->ports[port] != NULL) {
-      p = ipc->ports[port];
+    p = hat_lookup(&ipc->ports, port);
+    if( ( port < get_limit(task->limits, LIMIT_PORTS) ) &&
+       p != NULL) {
       if( !(p->flags & IPC_PORT_SHUTDOWN) ) {
         REF_PORT(p);
         r=0;

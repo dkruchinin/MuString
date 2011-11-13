@@ -33,7 +33,7 @@
 #include <mstring/sync.h>
 #include <mstring/signal.h>
 #include <mstring/kcontrol.h>
-#include <mstring/namespace.h>
+#include <mstring/domain.h>
 
 #endif
 
@@ -97,10 +97,13 @@
 #define SC_PORT_MSG_WRITE      47
 #define SC_PTRACE              48
 
-#define SC_CHG_CREATE_NAMESPACE  49
-#define SC_CONTROL_NAMESPACE     50
+#define SC_CHG_CREATE_DOMAIN   49
+#define SC_CONTROL_DOMAIN      50
 
 #define SC_MEMSYNC  51
+
+#define SC_SET_TASK_LIMITS    52
+#define SC_GET_TASK_LIMITS    53
 
 #ifndef __ASM__
 typedef uint32_t shm_id_t; /* FIXME: remove after merging */

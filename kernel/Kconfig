@@ -44,6 +44,75 @@ config AUTOREMOVE_ORPHANS
 
 endmenu
 
+menu "Task limits settings"
+
+menu "Upper limits"
+config TASK_THREADS_LIMIT_MAX
+     int "Upper limit for maximum number of threads for a userspace process."
+     range 1 1024
+     default "128"
+
+config TASK_CHANNELS_LIMIT_MAX
+     int "Upper limit for maximum number of open channels per-process."
+     range 4  4096
+     default "2048"
+     
+config TASK_PORTS_LIMIT_MAX
+     int "Upper limit for maximum number of created IPC ports per-process."
+     range 4  512
+     default "64"
+
+config TASK_MESSAGES_LIMIT_MAX 
+     int "Upper limit for maximum number messages per port"
+     range 4 1024
+     default "512"
+
+config TASK_MEMORY_LIMIT_MAX
+     int "Upper limit for maximum number of pages allocated for a task"
+     range 32 1024
+     default "128"
+
+config TASK_TIMERS_LIMIT_MAX
+    int "Upper limit for maximum number of created timers per-process"
+    range 4 512
+    default "128"
+    
+endmenu
+
+menu "Current limits"
+     
+config TASK_THREADS_LIMIT
+     int "Maximum number of threads for a userspace process."
+     range 4  TASK_THREADS_LIMIT_MAX
+     default "64"
+
+config TASK_CHANNELS_LIMIT
+     int "Default maximum number of open channels per-process"
+     range 4 TASK_CHANNELS_LIMIT_MAX
+     default "128"
+
+config TASK_PORTS_LIMIT
+     int "Default maximum number of created IPC ports per-process"
+     range 4  TASK_PORTS_LIMIT_MAX
+     default "32"
+
+config TASK_MESSAGES_LIMIT
+     int "Default maximum number messages per port"
+     range 4  TASK_MESSAGES_LIMIT_MAX
+     default "512"
+
+config TASK_MEMORY_LIMIT
+     int "Default maximum number of pages allocated for task"
+     range 32 TASK_MEMORY_LIMIT_MAX
+     default "128"
+
+config TASK_TIMERS_LIMIT
+    int "Default maximum number of created timers per-process"
+    range 4 TASK_TIMERS_LIMIT_MAX
+    default "128"
+endmenu
+endmenu
+
 menu "Scheduler settings"
 
 config TRACE_CURRENT
@@ -53,11 +122,6 @@ config TRACE_CURRENT
        By turning this option on kernel stores TID of the currently executed task
        in a special array variable defined as follows:
             tid_t __current_cpu_task[CONFIG_NRCPUS]
-
-config THREADS_PER_PROCESS
-       int "Maximum number of threads for a userspace process."
-       range 4  128
-       default 64
 
 endmenu
 
@@ -116,16 +180,16 @@ endmenu
 
 endmenu
 
-menu   "Namespace settings"
+menu   "Domains support settings"
 
-config ENABLE_NS
-	bool "Enable namespaces"
+config ENABLE_DOMAIN
+	bool "Enable domains"
 	default n
 	help
-	Namespaces is required to support several industry standarts.
+	Domains is required to support several industry standarts.
 	But also can be used as a security model in several cases.
-	Namespaces allow to separate group of tasks from each other throught 
-	limits and separate namespace carriers. Task from one namespace cannot 
+	Domains allow to separate group of tasks from each other throught 
+	limits and separate domain holders. Task from one domain cannot 
 	access task from other one.
 
 endmenu

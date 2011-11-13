@@ -14,39 +14,76 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  * 02111-1307, USA.
  *
- * (c) Copyright 2006,2007,2008 MString Core Team <http://mstring.jarios.org>
- * (c) Copyright 2009 Dan Kruchinin <dk@jarios.org>
+ * (c) Copyright 2011 Alex Firago <melg@jarios.org>
  *
- * include/ds/hat.h - Hashed array tree(HAT) API definitions.
  * For more information bout HAT see:
  * "HATs: Hashed array trees", Dr. Dobb's Journal by Sitarski, Edward (September 1996)
- *
  */
 
-#ifndef __HAT_H__
-#define __HAT_H__
+/**
+ * @file include/ds/hat.h
+ * For more information bout HAT see:
+ * "HATs: Hashed array trees", Dr. Dobb's Journal by Sitarski, Edward (September 1996)
+ * @author Alex Firago
+ */
+#ifndef _HAT_H_
+#define _HAT_H_
 
 #include <config.h>
 #include <mstring/types.h>
 
-#define HAT_BUCKET_SHIFT 6
-#define HAT_BUCKET_SLOTS (1UL << HAT_BUCKET_SHIFT)
-#define HAT_BUCKET_MASK  (HAT_BUCKET_SLOTS - 1)
-#define HAT_HEIGH_MAX 31
+#define HAT_DEFAULT_POWER 5
+#define HAT_MAX_POWER 7 /* 128 * 128 */
+#define HAT_MAX_SIZE (1UL << HAT_MAX_POWER) * (1UL << HAT_MAX_POWER)
+#define HAT_DEFAULT_SIZE (1UL << HAT_DEFAULT_POWER)
 
-typedef struct __hat_bucket {  
-  void *slots[HAT_BUCKET_SLOTS];
-  int num_items;
-} hat_bucket_t;
+#define hat_is_empty(hat)  ((hat)->num_items == 0)
 
-typedef struct __hat {  
-  hat_bucket_t *root_bucket;
-  int tree_heigh;
+/**
+ * @struct hat_leaf_t
+ * Hashed array tree's universal abstract container
+ */
+typedef struct __hat_leaf {
+  void **slots;  /**< Slots for pointers to abstract data*/
+  int num_items; /**< Total number items in slots */
+} hat_leaf_t;
+
+/**
+ * @struct hat_t
+ * Hashed array tree
+ */
+typedef struct __hat {
+  hat_leaf_t *top;   /**< Top leaf containing pointers to other leaves */
+  ulong_t num_items; /**< Total number of items in the HAT */
+  ulong_t power;      /**< Power of 2 used in this HAT */
+  ulong_t size;       /**< Size of HAT */
+  ulong_t leaf_mask; /**< Mask used for index calculation */
 } hat_t;
 
-void hat_initialize(hat_t *hat);
-int hat_insert(hat_t *hat, ulong_t idx, void *item);
-void *hat_lookup(hat_t *hat, ulong_t idx);
-void *hat_delete(hat_t *hat, ulong_t idx);
 
-#endif /* __HAT_H__ */
+/**
+ * @brief Initialize @hat with @size.
+ *
+ * @param size - Number of bytes to allocate
+ * @return 0 on success, -EINVAL if @hat is NULL or @size is greater than HAT_MAX_SIZE.
+ * @note @hat will be initialized with nearest power of 2
+ */
+int hat_initialize(hat_t *hat, ulong_t size);
+
+/**
+ * @brief Insert @item in the @hat at @idx position.
+ * @return 0 on success,
+ *    -EINVAL if @hat is NULL or @idx is greater than current hat max size.
+ *    -ENOMEM if memory allocation for leaves wasn't successfull
+ */
+int hat_insert(hat_t *hat, ulong_t idx, void *item);
+void  hat_clear(hat_t *hat);
+
+/**
+ * @brief Locate item in the @hat by @idx index.
+ * @return pointer to item on success, NULL otherwise.
+ */
+void* hat_lookup(hat_t *hat, ulong_t idx);
+void  hat_delete(hat_t *hat, ulong_t idx);
+void hat_destroy(hat_t *hat);
+#endif

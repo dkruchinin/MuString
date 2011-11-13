@@ -12,6 +12,11 @@ posix_stuff_t *get_task_posix_stuff(task_t *task)
 
 void release_task_posix_stuff(posix_stuff_t *stuff)
 {
+  if (stuff)
+  {
+    idx_allocator_destroy(&stuff->posix_ids);
+    memfree(stuff);
+  }
 }
 
 posix_stuff_t *allocate_task_posix_stuff(void)

@@ -70,7 +70,7 @@ long sys_timer_create(clockid_t clockid,struct sigevent *evp,
 
   LOCK_POSIX_STUFF_W(stuff);
   r=-EAGAIN;
-  if( ++stuff->timers > CONFIG_POSIX_MAX_TIMERS ) {
+  if( ++stuff->timers > get_limit(caller->limits, LIMIT_TIMERS) ) {
     goto out;
   }
   id=posix_allocate_obj_id(stuff);

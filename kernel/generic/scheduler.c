@@ -119,7 +119,7 @@ bool sched_register_scheduler(scheduler_t *sched)
      || sched->setup_idle_task == NULL || sched->reset == NULL ) {
     return false;
   }
-
+  sched->init();
   sched->reset();
 
   LOCK_SCHEDULER_LIST;

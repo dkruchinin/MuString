@@ -104,7 +104,7 @@ bool valid_iovecs(iovec_t *iovecs, uint32_t num_vecs,long *size)
 long sys_open_channel(pid_t pid,ulong_t port,ulong_t flags)
 {
   task_t *task = pid_to_task(pid);
-#ifdef CONFIG_ENABLE_NS
+#ifdef CONFIG_ENABLE_DOMAIN
   task_t *ctask;
 #endif
   long r;
@@ -117,11 +117,11 @@ long sys_open_channel(pid_t pid,ulong_t port,ulong_t flags)
     return ERR(-ESRCH);
   }
 
-#ifdef CONFIG_ENABLE_NS
+#ifdef CONFIG_ENABLE_DOMAIN
   /* check for namespace */
   ctask = current_task();
-  if((task->namespace->ns_id != ctask->namespace->ns_id) &&
-     !ctask->namespace->trans_flag)
+  if((task->domain->dm_id != ctask->domain->dm_id) &&
+     !ctask->domain->trans_flag)
     return ERR(-EPERM);
 #endif
 
