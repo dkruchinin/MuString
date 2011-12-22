@@ -131,7 +131,7 @@ int sys_set_limit(uint8_t ns_id, pid_t pid, uint_t index, ulong_t limit)
   task_t *task = NULL;
 #ifndef CONFIG_ENABLE_DOMAIN
   task = current_task();
-  if (!task->pid == DEFAULT_NS_CARRIER_PID)
+  if (!task->pid == DEFAULT_DOMAIN_HOLDER_PID)
     return ERR(-EPERM);
 
   task = lookup_task(pid, 0, 0);
