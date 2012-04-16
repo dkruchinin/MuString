@@ -416,7 +416,7 @@ static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
   long r;
   size_t recv_len;
   size_t extra_size = 0;
-   
+
   *sz = 0;
 
   if( iovec ) {
@@ -447,7 +447,7 @@ static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
     if(msg->extra_data_tail && offset) offset-=extra_size;
 
     if( !iovec->iov_len ) {
-      r=0;
+      r = 0;
       goto out;
     }
 
@@ -455,21 +455,23 @@ static long __transfer_message_data_to_receiver(ipc_port_message_t *msg,
     if( msg->data_size <= IPC_BUFFERED_PORT_LENGTH ) {
       /* Short message - copy it from the send buffer.
        */
-      r=copy_to_user((void *)iovec->iov_base,msg->send_buffer+offset,recv_len);
+      r = copy_to_user((void *)iovec->iov_base, msg->send_buffer + offset,
+                       recv_len);
       if( r > 0 ) {
-        r=-EFAULT;
+        r = -EFAULT;
       } else *sz += recv_len;
     } else {
       /* Long message - process it via IPC buffers.
        */
-      r=ipc_transfer_buffer_data_iov(msg->snd_buf,msg->num_send_bufs,
-                                     iovec,numvecs,offset,false);
+      r = ipc_transfer_buffer_data_iov(msg->snd_buf, msg->num_send_bufs,
+                                       iovec, numvecs, offset, false);
       if( r > 0 ) {
-        r=0;
+        *sz += r;
+        r = 0;
       }
     }
   } else {
-    r=0;
+    r = 0;
   }
 
 out:
@@ -492,7 +494,7 @@ out:
 #endif
 
     if( copy_to_user(stats,&info,sizeof(info)) ) {
-      r=-EFAULT;
+      r = -EFAULT;
     }
   }
 
@@ -636,19 +638,19 @@ long ipc_port_msg_read(struct __ipc_gen_port *port,ulong_t msg_id,
   if( !(port->flags & IPC_PORT_SHUTDOWN) ) {
     msg=port->msg_ops->lookup_message(port,msg_id);
     if( msg == __MSG_WAS_DEQUEUED ) { /* Client got lost. */
-      r=-ENXIO;
+      r = -ENXIO;
     } else if( msg ) {
       msg->state=MSG_STATE_DATA_UNDER_ACCESS;
-      r=0;
+      r = 0;
     } else {
-      r=-EINVAL;
+      r = -EINVAL;
     }
   }
   IPC_UNLOCK_PORT_W(port);
 
   if( !r ) {
-    r=__transfer_message_data_to_receiver(msg,rcv_iov,numvecs,NULL,offset, &sz);
-    POST_MESSAGE_DATA_ACCESS_STEP(port,msg,r,false);
+    r = __transfer_message_data_to_receiver(msg,rcv_iov,numvecs,NULL,offset, &sz);
+    POST_MESSAGE_DATA_ACCESS_STEP(port, msg, r, false);
   }
 
   return sz;
@@ -905,6 +907,7 @@ long ipc_port_send_iov(ipc_channel_t *channel, iovec_t snd_kiovecs[], ulong_t sn
   msg->rcv_knumvecs = rcv_numvecs;
   ret = ipc_port_send_iov_core(port, msg, channel_in_blocked_mode(channel),
                                rcv_kiovecs, rcv_numvecs, rcv_size);
+
 out:
   if (port) {
     ipc_put_port(port);
@@ -925,13 +928,13 @@ long ipc_port_send_iov_core(ipc_gen_port_t *port,
 
   if( !msg_ops->insert_message ||
       (sync_send && !msg_ops->dequeue_message) ) {
-      return ERR(-EINVAL);
+    return ERR(-EINVAL);
   }
 
   event_set_task(&msg->event,sender);
 
   IPC_LOCK_PORT_W(port);
-  r=(port->flags & IPC_BLOCKED_ACCESS) | sync_send;
+  r = (port->flags & IPC_BLOCKED_ACCESS) | sync_send;
   if( r ) {
     /* In case of synchronous message passing both channel and port
      * must be in synchronous mode.

@@ -143,7 +143,7 @@ long sys_create_port( ulong_t flags, ulong_t queue_size )
 
   if( !s_check_system_capability(SYS_CAP_IPC_PORT) ) {
     return ERR(-EPERM);
-  }  
+  }
 
   /* TODO: [mt] Check if caller can create unblocked ports. */
   //flags |= IPC_BLOCKED_ACCESS;
@@ -225,6 +225,7 @@ long sys_port_send_iov_v(ulong_t channel,
 
   ret = ipc_port_send_iov(c, snd_kiovecs, snd_numvecs, rcv_kiovecs, rcv_numvecs);
   ipc_put_channel(c);
+
   return ERR(ret);
 }
 

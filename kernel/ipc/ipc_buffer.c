@@ -180,7 +180,7 @@ long ipc_transfer_buffer_data_iov(ipc_buffer_t *bufs, uint32_t numbufs, iovec_t 
   long r, processed, buf_offset = offset;
   ipc_buffer_t *start_buf = NULL;
 
-  processed=0;
+  processed = 0;
   for (bufsize = 0, to_copy = 0; to_copy < numbufs; to_copy++) {
     bufsize += bufs[to_copy].length;
     if (offset) {
