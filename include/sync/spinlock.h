@@ -35,8 +35,9 @@
 #include <mstring/assert.h>
 #include <mstring/types.h>
 
-#ifdef CONFIG_SMP
 #include <arch/spinlock.h>
+#ifdef CONFIG_SMP
+//#include <arch/spinlock.h>
 #include <sync/spinlock_smp.h>
 #else /* CONFIG_SMP */
 #include <sync/spinlock_up.h>

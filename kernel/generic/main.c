@@ -55,7 +55,9 @@ static void main_routine_stage1(void)
   initialize_gc();
 
   initialize_resources();
+#ifdef CONFIG_SMP
   arch_smp_init();
+#endif
   interrupts_enable();
 
   /* Since the PIC is initialized, all interrupts from the hardware

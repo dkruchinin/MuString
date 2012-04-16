@@ -98,7 +98,9 @@ static void __gc_thread_logic(void *arg)
 }
 
 static actor_t __percpu_threads[NUM_PERCPU_THREADS] = {
+#ifdef CONFIG_SMP
   migration_thread,
+#endif
   __gc_thread_logic,
 };
 

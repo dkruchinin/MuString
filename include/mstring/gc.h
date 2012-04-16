@@ -100,8 +100,10 @@ typedef struct __migration_action_t {
 
 int schedule_task_migration(migration_action_t *a,cpu_id_t cpu);
 
-void cleanup_thread_data(gc_action_t *action);
+//void cleanup_thread_data(gc_action_t *action);
 
 #endif
+
+void cleanup_thread_data(gc_action_t *action);
 
 #endif

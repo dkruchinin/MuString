@@ -53,7 +53,7 @@ typedef unsigned long lock_t;
 #define __aligned(x) __attribute__ ((aligned(x)))
 
 #ifndef UNUSED
-#define UNUSED(istr) ((void)(instr))
+#define UNUSED(instr) ((void)(instr))
 #endif /* UNUSED */
 
 #ifdef CONFIG_TRACE_ERRORS
