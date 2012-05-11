@@ -161,6 +161,12 @@ ifneq ($(NOBUILDIMG),y)
 	@echo "*********************************************************************************"
 endif
 
+image2: vmuielf
+ifneq ($(NOBUILDIMG),y) 
+# Creates a 512 MB bootable ext2 HD image: OS default geometry
+	./scripts/mkimage.sh ./boot2.img ./vmuielf
+endif
+
 $(VERFILE):	
 	$(Q)$(ECHO) "#ifndef __VERSION_H__" > $(VERFILE)
 	$(Q)$(ECHO) "#define __VERSION_H__" >> $(VERFILE)
